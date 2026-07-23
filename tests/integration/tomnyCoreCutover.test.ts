@@ -1,4 +1,4 @@
-﻿import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import type { ContextStore } from '@/process/agentRuntime/contextStore';
 import type { ContextDocument } from '@/process/agentRuntime/contextTypes';

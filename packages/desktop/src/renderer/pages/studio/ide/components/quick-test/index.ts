@@ -1,1 +1,1 @@
-﻿export { default } from './QuickTestInsightsModal';
+export { default } from './QuickTestInsightsModal';

@@ -37,7 +37,7 @@ export function initSystemSettingsBridge(): void {
   // Set "keep awake" — toggle prevent-display-sleep blocker.
   // getKeepAwake is served by the backend via HTTP; only the setter remains
   // because it drives the local power.preventDisplaySleep blocker.
-﻿  ipcBridge.systemSettings.getCloseToTray.provider(async () => {
+  ipcBridge.systemSettings.getCloseToTray.provider(async () => {
     return (await ProcessConfig.get('system.closeToTray')) ?? false;
   });
 
@@ -78,7 +78,7 @@ export function initSystemSettingsBridge(): void {
     }
   });
 
-﻿  ipcBridge.systemSettings.getSaveUploadToWorkspace.provider(async () => {
+  ipcBridge.systemSettings.getSaveUploadToWorkspace.provider(async () => {
     return (await ProcessConfig.get('upload.saveToWorkspace')) ?? false;
   });
 
@@ -102,7 +102,7 @@ export function initSystemSettingsBridge(): void {
     // This must happen before the potentially slow main-process i18n switch.
     ipcBridge.systemSettings.languageChanged.emit({ language });
     _languageChangeListener?.(language);
-﻿
+
     await ProcessConfig.set('language', language);
 
 

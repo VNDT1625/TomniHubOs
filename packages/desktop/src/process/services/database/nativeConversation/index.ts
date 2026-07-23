@@ -1,4 +1,4 @@
-﻿export { registerNativeConversationBridge } from './bridge';
+export { registerNativeConversationBridge } from './bridge';
 export { NativeConversationRepository, type NativeConversationSnapshot } from './repository';
 export {
   NativeConversationService,

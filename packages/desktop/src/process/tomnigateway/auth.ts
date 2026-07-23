@@ -1,4 +1,4 @@
-﻿/**
+/**
  * @license
  * Copyright 2025 Tomni
  * SPDX-License-Identifier: Apache-2.0

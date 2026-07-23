@@ -55,7 +55,7 @@ export const actionQueryText = (tool: string, input: unknown): string | undefine
   return query ? clean(query) : undefined;
 };
 
-const filePattern = /(?:^|[`"'\s(\[])((?:[A-Za-z0-9_.-]+[\\/])+[A-Za-z0-9_.-]+\.(?:ts|tsx|js|jsx|mjs|cjs|rs|json|md|css|scss|sql|toml|yaml|yml))(?:[`"'\s):\],]|$)/gi;
+const filePattern = /(?:^|[`"'\s([])((?:[A-Za-z0-9_.-]+[\\/])+[A-Za-z0-9_.-]+\.(?:ts|tsx|js|jsx|mjs|cjs|rs|json|md|css|scss|sql|toml|yaml|yml))(?:[`"'\s):\],]|$)/gi;
 
 const collectFiles = (text: string, ledger: ActionEvidenceLedger): void => {
   for (const match of text.matchAll(filePattern)) addUnique(ledger.files, match[1]);

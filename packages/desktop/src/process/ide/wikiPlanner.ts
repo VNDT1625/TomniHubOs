@@ -373,7 +373,7 @@ const testTokens = (value: string): string[] => {
   const words = normalizeWikiPath(value)
     .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
     .toLowerCase()
-    .replace(/\.[^.\/]+$/g, ' ')
+    .replace(/\.[^./]+$/g, ' ')
     .split(/[^a-z0-9]+/)
     .filter((word) => word.length > 2 && !TEST_TOKEN_STOPWORDS.has(word));
   return [...new Set(words)];
