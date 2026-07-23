@@ -1,4 +1,4 @@
-﻿import { access, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import { access, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { simpleGit, type SimpleGit } from 'simple-git';
 import type {
@@ -106,7 +106,7 @@ export class NativeSnapshotService {
     if (await this.isGit(workspace))
       return this.git(workspace)
         .show([`HEAD:${file}`])
-        .catch(() => null);
+        .catch((): null => null);
     const snapshot = this.memory.get(workspace);
     const value = snapshot?.baseline.get(file);
     return value ? value.toString('utf8') : null;

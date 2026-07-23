@@ -32,7 +32,17 @@
 import { randomUUID } from 'node:crypto';
 import type { NodeExecutorMap } from './nodeExecutors';
 import { conditionFromConfig, evaluateCondition, resolveValue } from './conditions';
-import type { NodeContext, RunEvent, Workflow, WorkflowNode } from './automationTypes';
+import type {
+  ApprovalDecision,
+  ApprovalRequest,
+  NodeAccessMode,
+  NodeContext,
+  NodeExecutionMode,
+  RunEvent,
+  Workflow,
+  WorkflowCheckpointStore,
+  WorkflowNode,
+} from './automationTypes';
 
 /** Options for a single {@link IWorkflowEngine.run}. */
 export type RunOptions = {
@@ -42,6 +52,8 @@ export type RunOptions = {
   runId?: string;
   /** Seed value for the first node's `input` (e.g. a webhook/trigger payload). */
   input?: unknown;
+  /** Resume this run from its latest persisted top-level checkpoint. */
+  resume?: boolean;
 };
 
 /** Outcome of a workflow run. */
@@ -68,6 +80,12 @@ export type WorkflowEngineDeps = {
   maxDepth?: number;
   /** Max total leaf-node executions per run (guards runaway loops). Default 10000. */
   maxSteps?: number;
+  /** Human approval provider used by `control.approval`. */
+  requestApproval?: (request: ApprovalRequest, signal?: AbortSignal) => Promise<ApprovalDecision>;
+  /** Agent Core execution route for nodes marked `agent` or hybrid fallbacks. */
+  executeWithAgent?: (node: WorkflowNode, context: NodeContext, signal?: AbortSignal) => Promise<unknown>;
+  /** Optional persistence adapter for resumable top-level workflow runs. */
+  checkpointStore?: WorkflowCheckpointStore;
 };
 
 /** Public contract of the workflow engine. */
@@ -93,6 +111,7 @@ const CONTROL_KINDS = new Set<string>([
   'control.tryCatch',
   'control.filter',
   'control.merge',
+  'control.approval',
   'control.stop',
 ]);
 
@@ -114,7 +133,23 @@ export const createWorkflowEngine = (deps: WorkflowEngineDeps): IWorkflowEngine 
       const signal = options?.signal;
       deps.emit({ type: 'run-start', runId, at: now() });
 
-      const state = { steps: 0 };
+      const checkpoint =
+        options?.resume && deps.checkpointStore ? await deps.checkpointStore.load(workflow.id, runId) : null;
+      const state = {
+        steps: 0,
+        agentSteps: checkpoint?.agentSteps ?? 0,
+        estimatedTokens: checkpoint?.estimatedTokens ?? 0,
+        completedNodeIds: checkpoint?.completedNodeIds ?? [],
+      };
+      if (checkpoint) {
+        deps.emit({
+          type: 'run-resumed',
+          runId,
+          nextNodeIndex: checkpoint.nextNodeIndex,
+          completedNodeIds: checkpoint.completedNodeIds,
+          at: now(),
+        });
+      }
 
       /** Run an ordered list of nodes, threading output→input. Returns last output. */
       const runPipeline = async (nodes: WorkflowNode[], seed: unknown, depth: number): Promise<unknown> => {
@@ -133,9 +168,13 @@ export const createWorkflowEngine = (deps: WorkflowEngineDeps): IWorkflowEngine 
         return runLeaf(node, input);
       };
 
-      /** Run a leaf action via the executor map, honouring its `onError` policy. */
+      /** Run a leaf action via deterministic execution, Agent Core, or hybrid fallback. */
       const runLeaf = async (node: WorkflowNode, input: unknown): Promise<unknown> => {
         if (++state.steps > maxSteps) throw new Error(`Automation exceeded max steps (${maxSteps}).`);
+        const mode = resolveExecutionMode(node);
+        const access = resolveAccessMode(node);
+        enforceSafeAccess(workflow, node, access);
+        deps.emit({ type: 'node-routed', runId, nodeId: node.id, mode, access, at: now() });
         deps.emit({ type: 'node-start', runId, nodeId: node.id, name: node.name, at: now() });
         const ctx: NodeContext = { input };
         const retries = Math.max(0, node.onError?.retries ?? 0);
@@ -146,7 +185,22 @@ export const createWorkflowEngine = (deps: WorkflowEngineDeps): IWorkflowEngine 
           try {
             // Control kinds never reach here; cast narrows to a leaf executor key.
             const executor = deps.executors[node.kind as keyof NodeExecutorMap];
-            const output = await executor(node, ctx, signal);
+            let output: unknown;
+            if (mode === 'agent') {
+              if (!deps.executeWithAgent) throw new Error('Agent Core executor is not configured.');
+              consumeAgentBudget(workflow, node, state);
+              output = await deps.executeWithAgent(node, ctx, signal);
+            } else if (mode === 'hybrid') {
+              try {
+                output = await executor(node, ctx, signal);
+              } catch (error) {
+                if (!deps.executeWithAgent) throw error;
+                consumeAgentBudget(workflow, node, state);
+                output = await deps.executeWithAgent(node, ctx, signal);
+              }
+            } else {
+              output = await executor(node, ctx, signal);
+            }
             deps.emit({ type: 'node-finish', runId, nodeId: node.id, ok: true, output, at: now() });
             return output;
           } catch (error) {
@@ -217,6 +271,32 @@ export const createWorkflowEngine = (deps: WorkflowEngineDeps): IWorkflowEngine 
               output = input;
               break;
             }
+            case 'control.approval': {
+              if (!deps.requestApproval) throw new Error('Approval provider is not configured.');
+              const rawMessage = typeof node.config.message === 'string' ? node.config.message : node.name;
+              const message = rawMessage.replaceAll('{{input}}', stringifyInput(input));
+              const timeoutMs =
+                typeof node.config.timeoutMs === 'number' && Number.isFinite(node.config.timeoutMs)
+                  ? Math.max(0, node.config.timeoutMs)
+                  : undefined;
+              deps.emit({ type: 'approval-requested', runId, nodeId: node.id, message, at: now() });
+              const decision = await requestApprovalWithTimeout(
+                deps.requestApproval,
+                { runId, nodeId: node.id, name: node.name, message, input, timeoutMs },
+                signal
+              );
+              deps.emit({
+                type: 'approval-resolved',
+                runId,
+                nodeId: node.id,
+                approved: decision.approved,
+                reason: decision.reason,
+                at: now(),
+              });
+              if (!decision.approved) throw new Error(decision.reason || 'Approval rejected.');
+              output = input;
+              break;
+            }
             case 'control.stop': {
               deps.emit({ type: 'node-finish', runId, nodeId: node.id, ok: true, output: input, at: now() });
               throw new StopRun();
@@ -261,11 +341,30 @@ export const createWorkflowEngine = (deps: WorkflowEngineDeps): IWorkflowEngine 
         return { items: results, count: results.length };
       };
 
-      // ---- run the top-level pipeline ----
+      // ---- run the top-level pipeline with resumable checkpoints ----
       let ok = true;
-      let finalOutput: unknown;
+      let finalOutput: unknown = checkpoint?.output ?? options?.input;
+      const startIndex = checkpoint?.nextNodeIndex ?? 0;
       try {
-        finalOutput = await runPipeline(workflow.nodes, options?.input, 0);
+        for (let index = startIndex; index < workflow.nodes.length; index++) {
+          if (signal?.aborted) throw new StopRun();
+          const currentNode = workflow.nodes[index];
+          finalOutput = await runNode(currentNode, finalOutput, 0);
+          state.completedNodeIds.push(currentNode.id);
+          if (deps.checkpointStore) {
+            await deps.checkpointStore.save({
+              workflowId: workflow.id,
+              runId,
+              nextNodeIndex: index + 1,
+              output: finalOutput,
+              completedNodeIds: [...state.completedNodeIds],
+              agentSteps: state.agentSteps,
+              estimatedTokens: state.estimatedTokens,
+              updatedAt: now(),
+            });
+            deps.emit({ type: 'checkpoint-saved', runId, nextNodeIndex: index + 1, at: now() });
+          }
+        }
       } catch (error) {
         if (error instanceof StopRun) {
           ok = !signal?.aborted; // a deliberate stop is success; an abort is not.
@@ -274,10 +373,70 @@ export const createWorkflowEngine = (deps: WorkflowEngineDeps): IWorkflowEngine 
         }
       }
 
+      if (ok && deps.checkpointStore) await deps.checkpointStore.clear(workflow.id, runId);
       deps.emit({ type: 'run-finish', runId, ok, at: now() });
       return { runId, ok, output: finalOutput };
     },
   };
+};
+
+const resolveExecutionMode = (node: WorkflowNode): NodeExecutionMode =>
+  node.execution?.mode ?? 'deterministic';
+
+const resolveAccessMode = (node: WorkflowNode): NodeAccessMode => {
+  if (node.execution?.access) return node.execution.access;
+  if (node.kind === 'action.browser') return 'browser';
+  if (node.kind === 'action.filesystem' || node.kind.startsWith('action.app.')) return 'local';
+  if (node.kind === 'action.company' || node.kind === 'action.conversation') return 'mcp';
+  return 'api';
+};
+
+const enforceSafeAccess = (workflow: Workflow, node: WorkflowNode, access: NodeAccessMode): void => {
+  if (access !== 'browser' || !node.execution?.requiresWebsiteLogin) return;
+  const loginPolicy = workflow.knowledge?.security?.websiteLogin ?? 'forbid';
+  if (loginPolicy === 'allow') return;
+  if (loginPolicy === 'approval-required') {
+    throw new Error('Authenticated browser access requires an explicit approval step before this node.');
+  }
+  throw new Error('Authenticated browser access is forbidden; use a local, API, or MCP connector instead.');
+};
+
+type AgentBudgetState = { agentSteps: number; estimatedTokens: number };
+
+const consumeAgentBudget = (workflow: Workflow, node: WorkflowNode, state: AgentBudgetState): void => {
+  const tokenPolicy = workflow.knowledge?.tokenPolicy;
+  const nextAgentSteps = state.agentSteps + 1;
+  const estimatedTokens = Math.max(0, node.execution?.estimatedTokens ?? 0);
+  const nextEstimatedTokens = state.estimatedTokens + estimatedTokens;
+  if (tokenPolicy?.maxAgentSteps != null && nextAgentSteps > tokenPolicy.maxAgentSteps) {
+    throw new Error(`Automation exceeded max Agent Core steps (${tokenPolicy.maxAgentSteps}).`);
+  }
+  if (tokenPolicy?.maxEstimatedTokens != null && nextEstimatedTokens > tokenPolicy.maxEstimatedTokens) {
+    throw new Error(`Automation exceeded estimated token budget (${tokenPolicy.maxEstimatedTokens}).`);
+  }
+  state.agentSteps = nextAgentSteps;
+  state.estimatedTokens = nextEstimatedTokens;
+};
+
+const stringifyInput = (input: unknown): string => {
+  if (typeof input === 'string') return input;
+  try {
+    return JSON.stringify(input);
+  } catch {
+    return String(input);
+  }
+};
+
+const requestApprovalWithTimeout = async (
+  provider: (request: ApprovalRequest, signal?: AbortSignal) => Promise<ApprovalDecision>,
+  request: ApprovalRequest,
+  signal?: AbortSignal
+): Promise<ApprovalDecision> => {
+  if (!request.timeoutMs || request.timeoutMs <= 0) return provider(request, signal);
+  return Promise.race([
+    provider(request, signal),
+    delay(request.timeoutMs, signal).then(() => ({ approved: false, reason: 'Approval timed out.' })),
+  ]);
 };
 
 /** Pull an array out of an object by path (`a.b`) for `control.loop` forEach. */

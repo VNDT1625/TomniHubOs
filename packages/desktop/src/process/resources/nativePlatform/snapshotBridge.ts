@@ -1,4 +1,4 @@
-﻿import { bridge } from '@office-ai/platform';
+import { bridge } from '@office-ai/platform';
 import type { CompareResult, FileChangeOperation, SnapshotInfo } from '@/common/types/platform/fileSnapshot';
 import { NativeSnapshotService } from './snapshotService';
 
@@ -26,7 +26,10 @@ export const registerNativeSnapshotBridge = (service = new NativeSnapshotService
   nativeSnapshotChannels.compare.provider(({ workspace }) => service.compare(workspace));
   nativeSnapshotChannels.baseline.provider(({ workspace, file_path }) => service.baseline(workspace, file_path));
   nativeSnapshotChannels.info.provider(({ workspace }) => service.getInfo(workspace));
-  nativeSnapshotChannels.dispose.provider(({ workspace }) => service.dispose(workspace));
+  nativeSnapshotChannels.dispose.provider(({ workspace }) => {
+    service.dispose(workspace);
+    return Promise.resolve();
+  });
   nativeSnapshotChannels.stage.provider(({ workspace, file_path }) => service.stage(workspace, file_path));
   nativeSnapshotChannels.stageAll.provider(({ workspace }) => service.stage(workspace));
   nativeSnapshotChannels.unstage.provider(({ workspace, file_path }) => service.unstage(workspace, file_path));

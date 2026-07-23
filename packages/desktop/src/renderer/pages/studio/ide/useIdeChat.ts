@@ -137,8 +137,7 @@ export const resolveIdeChatActiveIdAfterClose = (tabs: readonly IdeChatTab[], cl
 
 /** What the caller picks when opening a new tab. */
 export type IdeChatLauncher =
-  | { kind: 'cli'; agent: AgentMetadata }
-  | { kind: 'preset'; assistant: Assistant; language: string };
+  { kind: 'cli'; agent: AgentMetadata } | { kind: 'preset'; assistant: Assistant; language: string };
 
 export type IdeChatCloudWorkspace = {
   workspaceId: string;
@@ -172,10 +171,10 @@ export type UseIdeChat = {
   setPlanningEnabled: (enabled: boolean) => void;
 };
 
-/** A persisted tab record (id + the ephemeral memory id bound to it). */
+/** A persisted tab record (id + the session-scoped Save id bound to it). */
 type PersistedTab = { id: string; memId: string };
 
-/** Generate a fresh ephemeral session-memory id for a new tab. */
+/** Generate a fresh session-scoped Save id for a new tab. */
 const newMemId = (): string => {
   try {
     if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
@@ -245,8 +244,23 @@ const buildWorkspacePrimer = (
   rootPath: string,
   rules: readonly string[],
   planningEnabled: boolean,
-  memId: string
-): string => buildWorkspacePrimerShared({ rootPath, rules, planningEnabled, sessionMemoryId: memId });
+  memId: string,
+  repoSecrets: readonly { alias: string; description: string; status: 'set' | 'needs_value' }[] = [],
+  repoSecretCombos: readonly {
+    comboId: string;
+    comboLabel: string;
+    description: string;
+    keys: readonly { alias: string; status: 'set' | 'needs_value' }[];
+  }[] = []
+): string =>
+  buildWorkspacePrimerShared({
+    rootPath,
+    rules,
+    planningEnabled,
+    sessionMemoryId: memId,
+    repoSecrets,
+    repoSecretCombos,
+  });
 
 /**
  * Resolve the built-in IDE MCP server (`aionui-ide`, an in-process SSE host
@@ -401,13 +415,11 @@ export const useIdeChat = (rootPath: string | null, options: IdeChatOptions = {}
             );
           }
         });
-        const restored = entries.map(
-          ({ conversation, index }): IdeChatTab => ({
-            id: conversation.id,
-            title: conversation.name ?? `Chat ${index + 1}`,
-            memId: ids[index]?.memId ?? newMemId(),
-          })
-        );
+        const restored = entries.map(({ conversation, index }): IdeChatTab => ({
+          id: conversation.id,
+          title: conversation.name ?? `Chat ${index + 1}`,
+          memId: ids[index]?.memId ?? newMemId(),
+        }));
         setTabs(restored);
         // A create/delete event also triggers this reconciliation. Do not reset
         // a valid user selection to the first tab while it is running.
@@ -469,12 +481,18 @@ export const useIdeChat = (rootPath: string | null, options: IdeChatOptions = {}
         // ── IDE guide injection (best-effort, < 1s) ─────────────────────────
         // A new tab does not have a task yet, so do not rank/select files from
         // the KG here. Inject only the workspace operating guide + project
-        // rules + the ephemeral session-memory binding; task-specific context is
+        // rules + the session-scoped Save binding; task-specific context is
         // built later from the user's message.
         try {
-          const rulesResult = await ideClient.rulesLoad(rootPath).catch((): null => null);
+          const [rulesResult, repoSecretsResult, repoSecretCombosResult] = await Promise.all([
+            ideClient.rulesLoad(rootPath).catch((): null => null),
+            ideClient.repoSecretList(rootPath).catch((): null => null),
+            ideClient.repoSecretComboList(rootPath).catch((): null => null),
+          ]);
           const rules = rulesResult?.ok ? rulesResult.data : [];
-          const primer = buildWorkspacePrimer(rootPath, rules, planningEnabled, memId);
+          const repoSecrets = repoSecretsResult?.ok ? repoSecretsResult.data.filter((secret) => !secret.comboId) : [];
+          const repoSecretCombos = repoSecretCombosResult?.ok ? repoSecretCombosResult.data : [];
+          const primer = buildWorkspacePrimer(rootPath, rules, planningEnabled, memId, repoSecrets, repoSecretCombos);
           const cloudGuide = options.cloudWorkspace ? buildCloudWorkspaceGuide(options.cloudWorkspace) : '';
           const injection = cloudGuide ? `${cloudGuide}\n\n${primer}` : primer;
           const existing = typeof params.extra?.preset_context === 'string' ? params.extra.preset_context : '';
@@ -491,12 +509,13 @@ export const useIdeChat = (rootPath: string | null, options: IdeChatOptions = {}
         const existing = Array.isArray(params.extra.selected_session_mcp_servers)
           ? params.extra.selected_session_mcp_servers
           : [];
-        params.extra.selected_session_mcp_servers = mergeIdeSessionMcpServers(
+        const sessionMcpServers = mergeIdeSessionMcpServers(
           existing,
           mcpCatalog.ideServer,
           cloudServer,
           mcpCatalog.browserServer
         );
+        params.extra.selected_session_mcp_servers = sessionMcpServers;
         params.extra.surface = 'ide';
         params.extra.surface_version = 1;
         params.extra.ide_memory_id = memId;
@@ -506,7 +525,8 @@ export const useIdeChat = (rootPath: string | null, options: IdeChatOptions = {}
           withIdeToolRules(typeof params.extra.preset_rules === 'string' ? params.extra.preset_rules : '')
         );
         const cloudRules = options.cloudWorkspace ? buildCloudWorkspaceGuide(options.cloudWorkspace) : '';
-        params.extra.preset_rules = cloudRules ? `${cloudRules}\n\n${baseRules}` : baseRules;
+        const ideRules = cloudRules ? `${cloudRules}\n\n${baseRules}` : baseRules;
+        params.extra.preset_rules = ideRules;
         const conv = await ipcBridge.conversation.create.invoke(params);
         if (!conv?.id) return null;
         if (strictMode) await enforceStrictIdeSessionMode(conv.id);
@@ -553,7 +573,7 @@ export const useIdeChat = (rootPath: string | null, options: IdeChatOptions = {}
       setTabs(next);
       persist(next);
       if (activeId === id) setActiveId(resolveIdeChatActiveIdAfterClose(tabs, id));
-      // Wipe this tab's ephemeral session memory (close the tab → memory gone).
+      // Wipe this tab's persisted Save (explicit close → session memory gone).
       if (closing?.memId) await ideClient.memoryClear(closing.memId).catch((): undefined => undefined);
       await ipcBridge.conversation.remove.invoke({ id }).catch((): undefined => undefined);
       emitter.emit('chat.history.refresh');

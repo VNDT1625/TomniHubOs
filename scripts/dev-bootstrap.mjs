@@ -1,13 +1,91 @@
 #!/usr/bin/env node
 import { execSync, spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { existsSync, readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import process from 'node:process';
+import { fileURLToPath } from 'node:url';
 
 const DEFAULT_PORTS = [5173, 9230];
 const KILLABLE_NAMES = new Set(['electron', 'aionui', 'aionui.exe']);
 
 const log = (...args) => console.log('[dev-bootstrap]', ...args);
 const warn = (...args) => console.warn('[dev-bootstrap]', ...args);
+
+const require = createRequire(import.meta.url);
+const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const packageJson = require('../package.json');
+const { manifestMatches: tomnyCliManifestMatches } = require('../packages/shared-scripts/src/prepare-tomny-cli.js');
+const {
+  binaryName: tomnyRuntimeBinaryName,
+  hashRuntimeSources,
+  isReusableArtifact: isReusableTomnyRuntime,
+  targetTriple: tomnyRuntimeTargetTriple,
+} = require('../packages/shared-scripts/src/prepare-tomny-runtime.js');
+
+function readJson(filePath) {
+  try {
+    return JSON.parse(readFileSync(filePath, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+function sha256File(filePath) {
+  if (!existsSync(filePath)) return 'missing';
+  return createHash('sha256').update(readFileSync(filePath)).digest('hex');
+}
+
+function reportArtifact(name, current, binaryPath, manifest) {
+  const report = current ? log : warn;
+  report(
+    `${name} artifact: ${current ? 'current' : 'STALE'}; sha256=${sha256File(binaryPath)}; builtAt=${manifest?.builtAt ?? 'missing'}`
+  );
+}
+
+function inspectTomnyArtifacts() {
+  const triple = tomnyRuntimeTargetTriple(process.platform, process.arch);
+  if (!triple) {
+    warn(`Tomny artifacts: unsupported development target ${process.platform}-${process.arch}`);
+    return;
+  }
+
+  const runtimeKey = `${process.platform}-${process.arch}`;
+  const cliDir = path.join(PROJECT_ROOT, 'resources', 'bundled-tomny-cli', runtimeKey);
+  const cliBinary = path.join(cliDir, process.platform === 'win32' ? 'tomny.exe' : 'tomny');
+  const cliManifestPath = path.join(cliDir, 'manifest.json');
+  const cliManifest = readJson(cliManifestPath);
+  const cliCurrent = tomnyCliManifestMatches(
+    cliManifestPath,
+    cliBinary,
+    packageJson.tomnyCliVersion,
+    packageJson.tomnyCliCommit,
+    triple
+  );
+  reportArtifact('Tomny CLI', cliCurrent, cliBinary, cliManifest);
+
+  const runtimeDir = path.join(PROJECT_ROOT, 'packages', 'tomny-runtime');
+  const runtimeArtifactDir = path.join(PROJECT_ROOT, 'resources', 'bundled-tomny-runtime', runtimeKey);
+  const runtimeBinary = path.join(runtimeArtifactDir, tomnyRuntimeBinaryName(process.platform));
+  const runtimeManifestPath = path.join(runtimeArtifactDir, 'manifest.json');
+  const runtimeManifest = readJson(runtimeManifestPath);
+  const runtimeCurrent =
+    existsSync(runtimeDir) &&
+    isReusableTomnyRuntime({
+      manifestPath: runtimeManifestPath,
+      binaryPath: runtimeBinary,
+      sourceHash: hashRuntimeSources(runtimeDir),
+      triple,
+    });
+  reportArtifact('Tomny Runtime', runtimeCurrent, runtimeBinary, runtimeManifest);
+
+  if (!cliCurrent || !runtimeCurrent) {
+    warn(
+      'Run "bun run prepare:dev" before restarting Electron; stale artifacts are not loaded automatically by an already-running process.'
+    );
+  }
+}
 
 function run(command) {
   return execSync(command, { stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8' }).trim();
@@ -131,6 +209,8 @@ function cleanupByName() {
 
 function doctor() {
   log(`platform=${process.platform} node=${process.version}`);
+
+  inspectTomnyArtifacts();
   try {
     log(`bun=${run('bun --version')}`);
   } catch {

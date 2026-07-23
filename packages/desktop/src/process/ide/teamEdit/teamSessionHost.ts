@@ -26,6 +26,7 @@
 
 import * as path from 'node:path';
 import { promises as fsp } from 'node:fs';
+import type { CreateViuPreviewFeedbackInput, ViuPreviewFeedbackEvent, ViuTeamPreviewPackage } from '@/common/viu';
 import type { TeamEditService, TeamEditSnapshot, GuardedWriteResult, GuardedEditResult } from './teamEditService';
 import { createTeamRequestQueue, type TeamRequestQueue, type TeamRequestQueueStatus } from './teamRequestQueue';
 import type { FileLease } from './teamEditCoordinator';
@@ -78,6 +79,18 @@ export type TeamSessionHost = {
   leavePeer: (rootPath: string, token: string) => void;
   /** Current presence/leases/activity snapshot. */
   snapshot: (rootPath: string) => TeamEditSnapshot;
+  /** List immutable previews available to authenticated Team peers. */
+  listPreviews: (rootPath: string) => readonly ViuTeamPreviewPackage[];
+  /** Open the exact immutable preview package. */
+  getPreview: (rootPath: string, packageId: string) => ViuTeamPreviewPackage;
+  /** Append peer feedback with the authenticated identity enforced by the HTTP layer. */
+  appendPreviewFeedback: (
+    rootPath: string,
+    packageId: string,
+    input: CreateViuPreviewFeedbackInput
+  ) => ViuPreviewFeedbackEvent;
+  /** List append-only feedback for a preview package. */
+  listPreviewFeedback: (rootPath: string, packageId: string) => readonly ViuPreviewFeedbackEvent[];
   /** Claim/renew a lease on behalf of a peer. */
   claim: (
     rootPath: string,
@@ -198,6 +211,10 @@ export const createTeamSessionHost = (deps: TeamSessionHostDeps): TeamSessionHos
     joinPeer,
     leavePeer,
     snapshot: (rootPath) => deps.team.snapshot(rootPath),
+    listPreviews: (rootPath) => deps.team.listPreviews(rootPath),
+    getPreview: (rootPath, packageId) => deps.team.getPreview(rootPath, packageId, 'user-preview'),
+    appendPreviewFeedback: (rootPath, packageId, input) => deps.team.appendPreviewFeedback(rootPath, packageId, input),
+    listPreviewFeedback: (rootPath, packageId) => deps.team.listPreviewFeedback(rootPath, packageId),
     claim: (rootPath, token, relPath, intent) => deps.team.claim(rootPath, token, relPath, intent),
     release: (rootPath, token, relPath) => deps.team.release(rootPath, token, relPath),
     listDir,

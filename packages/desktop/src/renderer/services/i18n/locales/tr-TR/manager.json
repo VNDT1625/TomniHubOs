@@ -413,6 +413,123 @@
     "open": "aç",
     "close": "kapat"
   },
+  "workspace": {
+    "controlCenter": "Kontrol merkezi",
+    "navigation": "Yönetici gezinmesi",
+    "system": "Sistem",
+    "todayCommand": "Bugünün kontrol merkezi",
+    "overviewTitle": "Önemli olanı görün, günü ileri taşıyın.",
+    "overviewSubtitle": "Görevler, takvim, bilgi ve canlı Tomny Core etkinliği için odaklı görünüm.",
+    "viewAll": "Tümünü görüntüle",
+    "viewCalendar": "Takvimi aç",
+    "openCore": "Core'u aç",
+    "nav": {
+      "overview": "Genel bakış",
+      "core": "Tomny Core"
+    },
+    "descriptions": {
+      "overview": "Öncelikler, ilerleme ve canlı sistem etkinliği",
+      "tasks": "Çalışmayı planlayın, önceliklendirin ve tamamlayın",
+      "schedule": "Sabit ve esnek zaman bloklarını koordine edin",
+      "daily": "Günü tazeyken kaydedin",
+      "learn": "Bağlantılı bir bilgi tabanı oluşturun",
+      "data": "Belgeleri, kaynakları ve özetleri düzenleyin",
+      "core": "Yerel hedefleri, çalışmaları ve otomasyonları inceleyin"
+    },
+    "metrics": {
+      "activeTasks": "Aktif görevler",
+      "overdue": "{{count}} gecikmiş",
+      "eventsToday": "Bugünkü etkinlikler",
+      "nextAt": "Sıradaki {{time}}",
+      "clearDay": "Başka etkinlik yok",
+      "notes": "Notlar",
+      "knowledgeBase": "Tüm bilgi tabanında",
+      "activeRuns": "Aktif Core çalışmaları"
+    },
+    "focus": {
+      "title": "Odak kuyruğu",
+      "subtitle": "Gecikmiş ve yüksek etkili işler önce",
+      "completion": "Genel tamamlanma",
+      "empty": "Acil iş yok."
+    },
+    "timeline": {
+      "title": "Bugünün zaman çizelgesi",
+      "subtitle": "Sıradaki sabit ve esnek bloklar",
+      "empty": "Bugünkü takviminiz boş."
+    },
+    "recent": {
+      "title": "Son bilgiler",
+      "subtitle": "En son değişen notlar ve belgeler",
+      "empty": "Henüz yeni not yok."
+    },
+    "corePulse": {
+      "title": "Core Nabzı",
+      "subtitle": "Yerel çalışma zamanı ve otomasyon hazırlığı",
+      "targets": "Hazır hedefler",
+      "sessions": "Oturumlar",
+      "automations": "Otomasyonlar",
+      "completion": "%{{rate}} tamamlanma"
+    }
+  },
+  "core": {
+    "title": "Tomny Core işlemleri",
+    "subtitle": "Çalışma zamanı sağlığı, aktif işler, hedefler ve kalıcı otomasyonlar için yerel kontrol yüzeyi.",
+    "nativeRuntime": "Yerel çalışma zamanı",
+    "loading": "Tomny Core'a bağlanılıyor…",
+    "unavailableTitle": "Tomny Core yanıt vermiyor",
+    "unavailableDescription": "Yönetici verileri kullanılabilir. Masaüstü çalışma zamanını yeniden başlatın veya Core başladıktan sonra tekrar deneyin.",
+    "status": {
+      "loading": "Core başlıyor",
+      "offline": "Core çevrimdışı",
+      "healthy": "Core sağlıklı",
+      "degraded": "Core kısıtlı",
+      "unhealthy": "Core sağlıksız"
+    },
+    "actions": {
+      "refresh": "Yenile",
+      "cancel": "Çalışmayı iptal et",
+      "runNow": "Şimdi çalıştır",
+      "runSuccess": "Otomasyon başlatıldı",
+      "cancelSuccess": "Çalışma iptal edildi",
+      "failed": "Core işlemi başarısız"
+    },
+    "metrics": {
+      "health": "Çalışma zamanı sağlığı",
+      "checked": "{{count}} kontrol",
+      "targets": "Hazır hedefler",
+      "ofTotal": "keşfedilen {{total}} içinden",
+      "activeRuns": "Aktif çalışmalar",
+      "sessions": "{{count}} oturum",
+      "automations": "Etkin otomasyonlar",
+      "scheduledTotal": "Toplam {{count}} zamanlama"
+    },
+    "health": {
+      "title": "Çalışma zamanı doktoru",
+      "subtitle": "Sağlık kontrolleri ve yürütme güvenilirliği",
+      "completionRate": "Tamamlanma oranı",
+      "noReport": "Henüz tanılama raporu yok."
+    },
+    "runs": {
+      "title": "Aktif çalışmalar",
+      "subtitle": "Yeni Core üzerinden çalışan işler",
+      "empty": "Aktif Core çalışması yok.",
+      "started": "{{time}} tarihinde başladı"
+    },
+    "automations": {
+      "title": "Kalıcı otomasyonlar",
+      "subtitle": "Yeniden deneme ve yaşam döngüsü durumuna sahip yerel zamanlamalar",
+      "empty": "Core otomasyonu oluşturulmadı.",
+      "enabled": "Etkin",
+      "disabled": "Devre dışı",
+      "manual": "Manuel",
+      "intervalMinutes": "Her {{count}} dk"
+    },
+    "targets": {
+      "title": "Çalışma zamanı hedefleri",
+      "subtitle": "Yerleşik, ACP, CLI ve uzak yürütme bağdaştırıcıları",
+      "models": "{{count}} model"
+    }
+  },
   "quickAdd": {
     "placeholder": "Görev ekle — \"Rapor yarın 5pm !high #work\"",
     "hint": "İpucu: !high · #etiket · \"yarın 5pm\" / \"Pzt 9am\" otomatik algılanır.",

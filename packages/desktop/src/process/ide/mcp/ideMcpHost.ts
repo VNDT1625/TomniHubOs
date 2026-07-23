@@ -27,6 +27,7 @@
 import * as http from 'node:http';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { createStreamableHttpRouter } from '@process/omni-gateway/omniGatewayStreamableHttp';
 
 import { BUILTIN_IDE_NAME } from './ideServer';
 
@@ -40,6 +41,8 @@ const MESSAGE_PATH = '/message';
 export type IdeMcpHost = {
   /** The loopback base URL of the SSE endpoint. */
   url: string;
+  /** The loopback Streamable HTTP endpoint used by Codex app-server. */
+  mcpUrl: string;
   /** The loopback base URL of the health endpoint. */
   healthUrl: string;
   /** The port the loopback server listens on. */
@@ -59,6 +62,10 @@ export type IdeMcpHostOptions = {
   health?: Record<string, string | number | boolean | null>;
   /** Allow POST /shutdown for standalone sidecar stop commands. */
   allowShutdown?: boolean;
+  /** Optional loopback JSON-RPC handler used by the browser Studio IDE. */
+  handleUiRpc?: (request: { method: string; params?: Record<string, unknown> }) => Promise<unknown>;
+  /** Browser origins allowed to call the local UI RPC endpoint. */
+  allowedUiOrigins?: string[];
 };
 
 /** Module-level singleton so repeated bootstraps reuse one host. */
@@ -78,6 +85,7 @@ export const startIdeMcpHost = async (options: IdeMcpHostOptions): Promise<IdeMc
 
   /** Active transports keyed by their session id, for routing POSTed messages. */
   const transports = new Map<string, SSEServerTransport>();
+  const streamableHttp = createStreamableHttpRouter<void>({ buildMcpServer: () => buildServer() });
 
   const server = http.createServer((req, res) => {
     void handle(req, res);
@@ -86,12 +94,62 @@ export const startIdeMcpHost = async (options: IdeMcpHostOptions): Promise<IdeMc
   const handle = async (req: http.IncomingMessage, res: http.ServerResponse): Promise<void> => {
     const url = new URL(req.url ?? '/', 'http://127.0.0.1');
 
+    if (url.pathname === '/ui-rpc') {
+      const origin = req.headers.origin;
+      const allowedOrigins = options.allowedUiOrigins ?? [];
+      const originAllowed = !origin || allowedOrigins.includes(origin);
+      if (!originAllowed) {
+        res
+          .writeHead(403, { 'content-type': 'application/json; charset=utf-8' })
+          .end('{"ok":false,"error":"Origin denied"}');
+        return;
+      }
+      if (origin) {
+        res.setHeader('access-control-allow-origin', origin);
+        res.setHeader('vary', 'Origin');
+      }
+      res.setHeader('access-control-allow-methods', 'POST, OPTIONS');
+      res.setHeader('access-control-allow-headers', 'content-type, x-tomni-local-rpc');
+      if (req.method === 'OPTIONS') {
+        res.writeHead(204).end();
+        return;
+      }
+      if (req.method !== 'POST' || !options.handleUiRpc || req.headers['x-tomni-local-rpc'] !== '1') {
+        res.writeHead(404).end();
+        return;
+      }
+      try {
+        const chunks: Buffer[] = [];
+        let size = 0;
+        for await (const chunk of req) {
+          const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+          size += buffer.length;
+          if (size > 2 * 1024 * 1024) throw new Error('Browser IDE request is too large.');
+          chunks.push(buffer);
+        }
+        const request = JSON.parse(Buffer.concat(chunks).toString('utf8')) as {
+          method: string;
+          params?: Record<string, unknown>;
+        };
+        const data = await options.handleUiRpc(request);
+        res
+          .writeHead(200, { 'content-type': 'application/json; charset=utf-8' })
+          .end(JSON.stringify({ ok: true, data }));
+      } catch (error) {
+        res
+          .writeHead(400, { 'content-type': 'application/json; charset=utf-8' })
+          .end(JSON.stringify({ ok: false, error: error instanceof Error ? error.message : String(error) }));
+      }
+      return;
+    }
+
     if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/health')) {
       const body = JSON.stringify(
         {
           ok: true,
           server: serverName,
           url: host?.url,
+          mcpUrl: host?.mcpUrl,
           healthUrl: host?.healthUrl,
           port: host?.port,
           activeSessions: transports.size,
@@ -110,6 +168,11 @@ export const startIdeMcpHost = async (options: IdeMcpHostOptions): Promise<IdeMc
       setTimeout(() => {
         void stopIdeMcpHost().then(() => process.exit(0));
       }, 20);
+      return;
+    }
+
+    if (url.pathname === '/mcp') {
+      await streamableHttp.handleRequest(req, res, undefined);
       return;
     }
 
@@ -157,6 +220,7 @@ export const startIdeMcpHost = async (options: IdeMcpHostOptions): Promise<IdeMc
 
   const currentHost: IdeMcpHost = {
     url: `http://127.0.0.1:${port}${SSE_PATH}`,
+    mcpUrl: `http://127.0.0.1:${port}/mcp`,
     healthUrl: `http://127.0.0.1:${port}/health`,
     port,
     close: () =>

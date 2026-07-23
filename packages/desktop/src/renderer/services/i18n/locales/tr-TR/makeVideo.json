@@ -87,6 +87,31 @@
     "duration": "Klip süresi",
     "supportsEndFrame": "Bu model başlangıç + bitiş karesi enterpolasyonunu destekler"
   },
+  "editor": {
+    "storyboard": "Hikâye panosu",
+    "timeline": "Zaman çizelgesi",
+    "noPreview": "Önizlemek için oynatma kafasını bir video klibin üzerine taşıyın.",
+    "inspector": "Klip denetçisi",
+    "selectClip": "Zaman çizelgesinden bir klip seçin.",
+    "trackLabel": "İz",
+    "start": "Başlangıç (saniye)",
+    "duration": "Süre (saniye)",
+    "volume": "Ses düzeyi",
+    "split": "Böl",
+    "delete": "Sil",
+    "play": "Oynat",
+    "pause": "Duraklat",
+    "undo": "Geri al",
+    "redo": "Yinele",
+    "zoom": "Yakınlaştır",
+    "save": "Zaman çizelgesini kaydet",
+    "snapping": "Yapışma",
+    "ripple": "Dalgalı düzenleme",
+    "transitionIn": "Giriş geçişi",
+    "transitionOut": "Çıkış geçişi",
+    "transition": { "cut": "Kesme", "fade": "Solma", "dissolve": "Çözülme" },
+    "track": { "video": "Video", "voice": "Ses", "music": "Müzik", "sfx": "Efekt", "subtitle": "Altyazı" }
+  },
   "export": {
     "success": "Video dışa aktarıldı: {{path}}"
   }

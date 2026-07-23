@@ -32,11 +32,11 @@
   --paper: var(--bg-1);
   --paper-soft: var(--bg-2);
   --paper-hover: var(--bg-hover);
-  --ink: var(--text-primary);
-  --ink-2: var(--text-secondary);
-  --ink-3: var(--bg-6);
-  --line: var(--border-base);
-  --line-strong: var(--bg-4);
+  --ink: var(--color-text-1);
+  --ink-2: var(--color-text-2);
+  --ink-3: var(--color-text-3);
+  --line: var(--color-border-2);
+  --line-strong: var(--color-border-3);
   --mgr-hairline: var(--line);
 
   background: var(--canvas);
@@ -487,5 +487,1952 @@
 @media (prefers-reduced-motion: reduce) {
   .rightPanel {
     transition: none;
+  }
+}
+
+/* ----------------------------------------------------------------------- *
+ * 2026 control-centre shell.
+ * ----------------------------------------------------------------------- */
+.managerShell {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  background:
+    radial-gradient(circle at 76% -12%, var(--mgr-accent-light-1, transparent), transparent 34%), var(--canvas);
+}
+
+.managerSidebar {
+  width: 232px;
+  flex: 0 0 232px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 12px 12px;
+  border-right: 1px solid var(--line);
+  background: color-mix(in srgb, var(--paper) 94%, var(--mgr-accent, transparent) 6%);
+}
+
+.sidebarBrand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 6px 10px;
+}
+
+.sidebarBrandMark {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  color: var(--mgr-accent, var(--primary));
+  background: var(--mgr-accent-light-1, var(--paper-soft));
+  border: 1px solid var(--mgr-accent-light-2, var(--line));
+}
+
+.sidebarBrandCopy {
+  min-width: 0;
+}
+
+.sidebarBrandTitle {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.sidebarBrandSubtitle {
+  margin-top: 1px;
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+.sidebarQuickTools {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 34px;
+  gap: 6px;
+}
+
+.sidebarQuickTools :global(.arco-btn) {
+  min-width: 0;
+  border-radius: 8px;
+  border-color: var(--line);
+  background: var(--paper-soft);
+}
+
+.sidebarShortcut {
+  font-size: 10px;
+  color: var(--ink-3);
+  margin-left: auto;
+}
+
+.sidebarNav {
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+.sidebarNavGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sidebarGroupLabel {
+  padding: 8px 10px 2px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.65px;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.sidebarNavButton {
+  justify-content: flex-start !important;
+  min-height: 36px;
+  padding: 0 10px !important;
+  border-radius: 8px !important;
+  color: var(--ink-2) !important;
+}
+
+.sidebarNavButton:hover {
+  color: var(--ink) !important;
+  background: var(--paper-hover) !important;
+}
+
+.sidebarNavButtonActive {
+  color: var(--mgr-accent, var(--primary)) !important;
+  background: var(--mgr-accent-light-1, var(--paper-soft)) !important;
+  box-shadow: inset 2px 0 0 var(--mgr-accent, var(--primary));
+}
+
+.sidebarNavLabel {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebarCount {
+  min-width: 20px;
+  height: 19px;
+  padding: 0 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--ink-2);
+  background: var(--paper-soft);
+  border: 1px solid var(--line);
+}
+
+.sidebarCountDanger {
+  color: rgb(var(--danger-6));
+  background: rgb(var(--danger-1));
+  border-color: rgb(var(--danger-2));
+}
+
+.sidebarFooter {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  font-size: 11px;
+  color: var(--ink-3);
+  background: var(--paper-soft);
+  border: 1px solid var(--line);
+}
+
+.coreDot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 8px;
+  border-radius: 50%;
+  background: var(--ink-3);
+  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 12%, transparent);
+}
+
+.coreDotHealthy {
+  background: rgb(var(--success-6));
+}
+
+.coreDotDegraded {
+  background: rgb(var(--warning-6));
+}
+
+.coreDotUnhealthy,
+.coreDotUnavailable,
+.coreDotOffline {
+  background: rgb(var(--danger-6));
+}
+
+.coreDotLoading {
+  background: var(--ink-3);
+}
+
+.managerContent {
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.managerLoading,
+.bridgeNotice,
+.coreLoading {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bridgeNotice {
+  flex-direction: column;
+  gap: 14px;
+  padding: 28px;
+  color: var(--ink-2);
+  text-align: center;
+}
+
+.managerTopbar {
+  min-height: 58px;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 9px 22px;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--paper) 88%, transparent);
+  backdrop-filter: blur(12px);
+}
+
+.managerTopbarCopy {
+  min-width: 0;
+}
+
+.managerBreadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.managerBreadcrumb strong {
+  color: var(--ink);
+  font-weight: 650;
+}
+
+.managerSectionDescription {
+  margin-top: 2px;
+  font-size: 11.5px;
+  color: var(--ink-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.managerTopbarActions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.managerTopbarActions :global(.arco-btn) {
+  border-radius: 8px;
+  color: var(--ink-2);
+}
+
+.managerSectionBody {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.dashboardScroll {
+  height: 100%;
+  overflow-y: auto;
+  padding: 22px;
+}
+
+.dashboardHero,
+.coreHeader {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 18px;
+}
+
+.coreIdentity {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+
+.coreIdentityIcon {
+  width: 68px;
+  height: 68px;
+  flex: 0 0 68px;
+  object-fit: contain;
+  filter: drop-shadow(0 10px 24px color-mix(in srgb, #7b3cff 30%, transparent));
+}
+
+.coreNavIcon {
+  display: block;
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+}
+
+@media (max-width: 620px) {
+  .coreIdentity {
+    align-items: flex-start;
+  }
+
+  .coreIdentityIcon {
+    width: 52px;
+    height: 52px;
+    flex-basis: 52px;
+  }
+}
+
+.dashboardHeroCopy {
+  max-width: 720px;
+}
+
+.dashboardEyebrow {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 8px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.65px;
+  text-transform: uppercase;
+  color: var(--mgr-accent, var(--primary));
+}
+
+.dashboardTitle {
+  margin: 0;
+  font-size: clamp(24px, 3vw, 34px);
+  line-height: 1.08;
+  letter-spacing: -1.15px;
+  font-weight: 720;
+  color: var(--ink);
+}
+
+.dashboardSubtitle {
+  margin: 8px 0 0;
+  max-width: 680px;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--ink-2);
+}
+
+.dashboardHeroActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.metricGrid,
+.coreMetricGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.metricCard,
+.coreMetricCard {
+  min-width: 0;
+  min-height: 132px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto auto;
+  align-content: start;
+  column-gap: 10px;
+  padding: 15px;
+  text-align: left;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--paper) 94%, var(--mgr-accent, transparent) 6%);
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  transition:
+    border-color 0.14s ease,
+    transform 0.14s ease,
+    background 0.14s ease;
+}
+
+.metricCard:hover {
+  transform: translateY(-1px);
+  border-color: var(--mgr-accent-light-2, var(--line-strong));
+  background: var(--paper);
+}
+
+.metricIcon {
+  grid-row: 1 / span 3;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  color: var(--mgr-accent, var(--primary));
+  background: var(--mgr-accent-light-1, var(--paper-soft));
+}
+
+.metricValue {
+  font-size: 27px;
+  line-height: 1;
+  font-weight: 720;
+  letter-spacing: -0.8px;
+}
+
+.metricLabel {
+  margin-top: 7px;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.metricMeta {
+  margin-top: 5px;
+  font-size: 10.5px;
+  color: var(--ink-3);
+}
+
+.dashboardGrid,
+.coreLayout {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.dashboardPanel {
+  min-width: 0;
+  padding: 15px;
+  border-radius: 13px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+}
+
+.dashboardPanelHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 13px;
+}
+
+.dashboardPanelTitle {
+  font-size: 13.5px;
+  font-weight: 680;
+  color: var(--ink);
+}
+
+.dashboardPanelSubtitle {
+  margin-top: 2px;
+  font-size: 10.5px;
+  color: var(--ink-3);
+}
+
+.progressSummary {
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  border-radius: 9px;
+  background: var(--paper-soft);
+}
+
+.progressSummaryTop,
+.coreCompletion > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 7px;
+  font-size: 11px;
+  color: var(--ink-2);
+}
+
+.dashboardList {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.dashboardListRow,
+.timelineRow,
+.coreRunRow,
+.coreAutomationRow {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 8px;
+  border-radius: 9px;
+}
+
+.dashboardListRow:hover,
+.timelineRow:hover,
+.coreRunRow:hover,
+.coreAutomationRow:hover {
+  background: var(--paper-hover);
+}
+
+.dashboardListIcon {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  color: var(--ink-2);
+  background: var(--paper-soft);
+}
+
+.dashboardListCopy {
+  min-width: 0;
+  flex: 1;
+}
+
+.dashboardListTitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  font-weight: 580;
+  color: var(--ink);
+}
+
+.dashboardListMeta {
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10.5px;
+  color: var(--ink-3);
+}
+
+.dashboardEmpty {
+  min-height: 108px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+.timelineTime {
+  width: 45px;
+  flex: 0 0 45px;
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--ink-2);
+}
+
+.timelineLine {
+  width: 2px;
+  height: 28px;
+  flex: 0 0 2px;
+  border-radius: 2px;
+  background: var(--mgr-accent-light-2, var(--line-strong));
+}
+
+.corePulsePanel {
+  background: linear-gradient(135deg, var(--mgr-accent-light-1, transparent), transparent 55%), var(--paper);
+}
+
+.corePulseGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.corePulseGrid > div {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 11px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--paper) 78%, transparent);
+  border: 1px solid var(--line);
+}
+
+.corePulseGrid span {
+  font-size: 10px;
+  color: var(--ink-3);
+}
+
+.corePulseGrid strong {
+  font-size: 20px;
+  color: var(--ink);
+}
+
+.corePulseStatus {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 11px;
+  font-size: 11px;
+  color: var(--ink-2);
+}
+
+.corePulseRate {
+  margin-left: auto;
+  color: var(--ink-3);
+}
+
+.coreUnavailable {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 13px 15px;
+  color: rgb(var(--danger-6));
+  border-radius: 10px;
+  border: 1px solid rgb(var(--danger-2));
+  background: rgb(var(--danger-1));
+}
+
+.coreUnavailable div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.coreUnavailable span {
+  font-size: 11px;
+  color: var(--ink-2);
+}
+
+.coreMetricCard {
+  display: flex;
+  flex-direction: column;
+  min-height: 108px;
+}
+
+.coreMetricCard > span {
+  font-size: 10.5px;
+  color: var(--ink-3);
+}
+
+.coreMetricCard > strong {
+  margin-top: 9px;
+  font-size: 24px;
+  color: var(--ink);
+}
+
+.coreMetricCard > small {
+  margin-top: auto;
+  font-size: 10px;
+  color: var(--ink-3);
+}
+
+.coreCompletion {
+  padding: 11px 12px;
+  margin-bottom: 8px;
+  border-radius: 9px;
+  background: var(--paper-soft);
+}
+
+.coreCheckList {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.coreCheckRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 8px;
+  border-radius: 8px;
+}
+
+.coreCheckRow:hover {
+  background: var(--paper-hover);
+}
+
+.coreCheckRow > span {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+}
+
+.coreCheckRow strong,
+.coreCheckRow small {
+  display: block;
+}
+
+.coreCheckRow strong {
+  font-size: 11.5px;
+  font-weight: 560;
+  color: var(--ink);
+}
+
+.coreCheckRow small {
+  margin-top: 2px;
+  font-size: 9.5px;
+  color: var(--ink-3);
+}
+
+.coreCheckPass {
+  color: rgb(var(--success-6));
+  background: rgb(var(--success-1));
+}
+
+.coreCheckProblem {
+  color: rgb(var(--warning-6));
+  background: rgb(var(--warning-1));
+}
+
+.coreRunPulse {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 9px;
+  border-radius: 50%;
+  background: var(--mgr-accent, var(--primary));
+  box-shadow: 0 0 0 4px var(--mgr-accent-light-1, transparent);
+  animation: coreRunPulse 1.8s ease-in-out infinite;
+}
+
+@keyframes coreRunPulse {
+  50% {
+    opacity: 0.45;
+    transform: scale(0.82);
+  }
+}
+
+.coreRunPreview {
+  margin-top: 5px;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: var(--ink-2);
+}
+
+.coreWidePanel {
+  grid-column: 1 / -1;
+}
+
+.coreTable {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.coreAutomationTime {
+  min-width: 145px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  color: var(--ink-3);
+}
+
+.coreTargetGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.coreTargetCard {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px;
+  border-radius: 9px;
+  background: var(--paper-soft);
+  border: 1px solid var(--line);
+}
+
+.coreTargetCard > div {
+  min-width: 0;
+}
+
+.coreTargetCard strong,
+.coreTargetCard small {
+  display: block;
+}
+
+.coreTargetCard strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--ink);
+}
+
+.coreTargetCard small {
+  margin-top: 2px;
+  font-size: 9.5px;
+  color: var(--ink-3);
+}
+
+.coreTargetCard p {
+  margin: 6px 0 0;
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--ink-2);
+}
+
+.scheduleEmptyState {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  color: var(--mgr-accent, var(--primary));
+  background: linear-gradient(120deg, var(--mgr-accent-light-1, transparent), transparent 60%), var(--paper);
+}
+
+.scheduleEmptyState > div:nth-child(2) {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.scheduleEmptyState strong {
+  font-size: 12.5px;
+  color: var(--ink);
+}
+
+.scheduleEmptyState span {
+  font-size: 10.5px;
+  color: var(--ink-2);
+}
+
+.scheduleEmptyActions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.calendarViewport {
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+  box-shadow: 0 12px 28px -28px var(--ink);
+}
+
+.calendarGrid {
+  --calendar-days: 7;
+  display: grid;
+  grid-template-columns: 58px repeat(var(--calendar-days), minmax(118px, 1fr));
+  grid-template-rows: 52px var(--calendar-height);
+  min-width: 0;
+}
+
+.calendarGridWeek {
+  min-width: 980px;
+}
+
+.calendarGridDay {
+  min-width: 520px;
+}
+
+.calendarCorner {
+  position: sticky;
+  top: 0;
+  left: 0;
+  z-index: 6;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background: var(--paper);
+}
+
+.calendarDayHeader {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 7px 8px;
+  border-bottom: 1px solid var(--line);
+  border-left: 1px solid var(--line);
+  color: var(--ink-3);
+  background: color-mix(in srgb, var(--paper) 94%, transparent);
+  backdrop-filter: blur(10px);
+}
+
+.calendarDayHeader span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.45px;
+  text-transform: uppercase;
+}
+
+.calendarDayHeader strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+  font-size: 11.5px;
+  color: var(--ink-2);
+}
+
+.calendarToday {
+  color: var(--mgr-accent, var(--primary));
+  background: color-mix(in srgb, var(--paper) 82%, var(--mgr-accent-light-1, transparent) 18%);
+}
+
+.calendarToday strong {
+  color: var(--mgr-accent, var(--primary));
+}
+
+.calendarTimeAxis {
+  position: sticky;
+  left: 0;
+  z-index: 4;
+  border-right: 1px solid var(--line);
+  background: var(--paper);
+}
+
+.calendarTimeAxis span {
+  position: absolute;
+  right: 8px;
+  font-size: 9.5px;
+  line-height: 14px;
+  color: var(--ink-3);
+}
+
+.calendarDayColumn {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  border-left: 1px solid var(--line);
+  background: color-mix(in srgb, var(--paper) 97%, var(--canvas) 3%);
+}
+
+.calendarHourLine {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 0;
+  border-top: 1px solid var(--line);
+  pointer-events: none;
+}
+
+.calendarCurrentTime {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 3;
+  height: 1px;
+  background: rgb(var(--danger-6));
+  pointer-events: none;
+}
+
+.calendarCurrentTime::before {
+  content: '';
+  position: absolute;
+  left: -3px;
+  top: -3px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgb(var(--danger-6));
+}
+
+.calendarEventPosition {
+  position: absolute;
+  z-index: 2;
+  min-width: 0;
+}
+
+.calendarEventButton {
+  width: 100% !important;
+  height: 100% !important;
+  min-width: 0 !important;
+  display: flex !important;
+  align-items: stretch !important;
+  justify-content: flex-start !important;
+  padding: 5px 7px !important;
+  overflow: hidden;
+  text-align: left !important;
+  white-space: normal !important;
+  border: 1px solid var(--line) !important;
+  border-left: 3px solid var(--calendar-event-rail) !important;
+  border-radius: 7px !important;
+  color: var(--ink) !important;
+  background: var(--paper-soft) !important;
+  box-shadow: 0 8px 18px -18px var(--ink);
+}
+
+.calendarEventButton:hover,
+.calendarEventButton:focus-visible {
+  border-color: var(--calendar-event-rail) !important;
+  background: var(--paper) !important;
+  box-shadow: 0 10px 20px -16px var(--ink);
+}
+
+.calendarEventFixed {
+  background: color-mix(in srgb, var(--paper) 90%, rgb(var(--warning-1)) 10%) !important;
+}
+
+.calendarEventFlexible {
+  background: color-mix(in srgb, var(--paper) 90%, var(--mgr-accent-light-1, transparent) 10%) !important;
+}
+
+.calendarEventButton :global(.arco-btn-content) {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+}
+
+.calendarEventHeading {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.calendarEventHeading strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10.5px;
+  line-height: 1.2;
+  font-weight: 680;
+}
+
+.calendarEventAccentIcon {
+  flex-shrink: 0;
+  color: var(--mgr-accent, var(--primary));
+}
+
+.calendarEventTime,
+.calendarEventLocation {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 9px;
+  line-height: 1.25;
+  color: var(--ink-2);
+}
+
+.calendarEventLocation {
+  color: var(--ink-3);
+}
+
+.coreCheckCopy {
+  min-width: 0;
+  flex: 1;
+}
+
+@media (max-width: 1280px) and (min-width: 861px) {
+  .managerSidebar {
+    width: 72px;
+    flex-basis: 72px;
+    padding: 14px 9px 10px;
+  }
+
+  .sidebarBrand {
+    justify-content: center;
+    padding: 2px 0 8px;
+  }
+
+  .sidebarBrandCopy,
+  .sidebarGroupLabel,
+  .sidebarNavLabel,
+  .sidebarShortcut,
+  .sidebarFooter > span:last-child {
+    display: none;
+  }
+
+  .sidebarQuickTools {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebarQuickTools :global(.arco-btn),
+  .sidebarNavButton {
+    width: 100% !important;
+    justify-content: center !important;
+    padding: 0 !important;
+  }
+
+  .sidebarNavButton {
+    position: relative;
+  }
+
+  .sidebarNavButton :global(.arco-btn-icon) {
+    margin: 0 !important;
+  }
+
+  .sidebarCount {
+    position: absolute;
+    top: 2px;
+    right: 1px;
+    min-width: 15px;
+    height: 15px;
+    padding: 0 4px;
+    font-size: 8px;
+  }
+
+  .sidebarNavButton .coreDot {
+    position: absolute;
+    right: 6px;
+    bottom: 6px;
+    width: 6px;
+    height: 6px;
+    flex-basis: 6px;
+  }
+
+  .sidebarFooter {
+    justify-content: center;
+    padding: 9px;
+  }
+}
+
+@media (max-width: 1180px) {
+  .metricGrid,
+  .coreMetricGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .coreTargetGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 860px) {
+  .managerShell {
+    flex-direction: column;
+  }
+
+  .managerSidebar {
+    width: 100%;
+    flex: 0 0 auto;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 8px 12px;
+    padding: 9px 12px;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .sidebarBrand {
+    grid-row: 1;
+    padding: 0;
+  }
+
+  .sidebarBrandSubtitle,
+  .sidebarFooter,
+  .sidebarQuickTools,
+  .sidebarGroupLabel {
+    display: none;
+  }
+
+  .sidebarNav {
+    grid-column: 1 / -1;
+    flex-direction: row;
+    overflow-x: auto;
+    padding: 0;
+  }
+
+  .sidebarNavGroup {
+    flex-direction: row;
+  }
+
+  .sidebarNavButton {
+    width: auto !important;
+    flex: 0 0 auto;
+  }
+
+  .sidebarNavLabel {
+    flex: 0 0 auto;
+  }
+
+  .managerTopbar {
+    min-height: 48px;
+    padding: 7px 14px;
+  }
+
+  .managerSectionDescription {
+    display: none;
+  }
+
+  .dashboardScroll {
+    padding: 16px;
+  }
+
+  .dashboardGrid,
+  .coreLayout {
+    grid-template-columns: 1fr;
+  }
+
+  .coreWidePanel {
+    grid-column: auto;
+  }
+
+  .dashboardHero,
+  .coreHeader {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 620px) {
+  .metricGrid,
+  .coreMetricGrid,
+  .coreTargetGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboardHeroActions {
+    width: 100%;
+  }
+
+  .dashboardHeroActions :global(.arco-btn) {
+    flex: 1;
+  }
+
+  .scheduleEmptyState {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .scheduleEmptyActions {
+    width: 100%;
+  }
+
+  .scheduleEmptyActions :global(.arco-btn) {
+    flex: 1;
+  }
+
+  .coreAutomationRow {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .coreAutomationTime {
+    min-width: 0;
+    margin-left: 40px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .metricCard,
+  .coreRunPulse {
+    transition: none;
+    animation: none;
+  }
+}
+
+/* ----------------------------------------------------------------------- *
+ * Manager surface reset — compact application chrome, not a nested app.
+ * This final layer intentionally overrides the earlier vertical-sidebar
+ * treatment. The global AionUi sidebar already owns primary navigation; the
+ * Manager only needs a lightweight workspace switcher.
+ * ----------------------------------------------------------------------- */
+.root {
+  letter-spacing: 0;
+  font-family:
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    'Noto Sans',
+    Arial,
+    sans-serif !important;
+  font-kerning: normal;
+  text-rendering: optimizeLegibility;
+}
+
+.root :global(.arco-btn),
+.root :global(.arco-input),
+.root :global(.arco-select),
+.root :global(.arco-tag) {
+  font-family: inherit;
+}
+
+.managerShell {
+  flex-direction: column;
+  background: var(--canvas);
+}
+
+.managerSidebar {
+  width: 100%;
+  height: 64px;
+  flex: 0 0 64px;
+  min-height: 64px;
+  flex-direction: row;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 16px;
+  border-right: 0;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--paper) 97%, var(--mgr-accent, transparent) 3%);
+}
+
+.sidebarBrand {
+  flex: 0 0 auto;
+  min-width: 178px;
+  gap: 9px;
+  padding: 0;
+}
+
+.sidebarBrandMark {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+}
+
+.sidebarBrandTitle {
+  font-size: 13px;
+  line-height: 1.2;
+  font-weight: 700;
+}
+
+.sidebarBrandSubtitle {
+  margin-top: 2px;
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.sidebarNav {
+  flex: 1;
+  flex-direction: row;
+  align-items: center;
+  gap: 0;
+  padding: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+.sidebarNav::-webkit-scrollbar {
+  display: none;
+}
+
+.sidebarNavGroup {
+  width: max-content;
+  flex-direction: row;
+  align-items: center;
+  gap: 3px;
+}
+
+.sidebarNavButton {
+  width: auto !important;
+  min-height: 36px;
+  flex: 0 0 auto;
+  justify-content: center !important;
+  gap: 7px;
+  padding: 0 11px !important;
+  border: 1px solid transparent !important;
+  border-radius: 9px !important;
+  color: var(--ink-2) !important;
+  font-size: 12px !important;
+  font-weight: 560 !important;
+}
+
+.sidebarNavButton :global(.arco-btn-icon) {
+  margin: 0 !important;
+}
+
+.sidebarNavButton:hover {
+  color: var(--ink) !important;
+  background: var(--paper-hover) !important;
+}
+
+.sidebarNavButtonActive {
+  color: var(--mgr-accent, var(--primary)) !important;
+  border-color: var(--mgr-accent-light-2, var(--line)) !important;
+  background: var(--mgr-accent-light-1, var(--paper-soft)) !important;
+  box-shadow: none;
+}
+
+.sidebarNavLabel {
+  flex: 0 0 auto;
+  max-width: 110px;
+  text-align: center;
+}
+
+.sidebarCount {
+  min-width: 17px;
+  height: 17px;
+  padding: 0 5px;
+  font-size: 9px;
+  line-height: 17px;
+}
+
+.sidebarNavButton .coreDot {
+  width: 6px;
+  height: 6px;
+  flex-basis: 6px;
+  box-shadow: none;
+}
+
+.sidebarQuickTools {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.sidebarQuickTools :global(.arco-btn) {
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+  padding: 0;
+  color: var(--ink-2);
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+}
+
+.sidebarQuickTools :global(.arco-btn:hover) {
+  color: var(--ink);
+  background: var(--paper-hover);
+}
+
+.sidebarGroupLabel,
+.sidebarFooter,
+.sidebarShortcut {
+  display: none;
+}
+
+.sidebarSectionLabel {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.managerContent {
+  width: 100%;
+}
+
+.managerTopbar {
+  min-height: 50px;
+  padding: 8px 22px;
+  background: var(--paper);
+  backdrop-filter: none;
+}
+
+.managerBreadcrumb {
+  gap: 6px;
+  font-size: 11px;
+}
+
+.managerSectionDescription {
+  margin-top: 1px;
+  font-size: 11px;
+}
+
+.managerTopbarActions {
+  display: none;
+}
+
+.dashboardScroll {
+  padding: 16px 22px 28px;
+}
+
+.dashboardHero {
+  align-items: center;
+  margin-bottom: 12px;
+  padding: 18px 20px;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  background: linear-gradient(120deg, var(--mgr-accent-light-1, transparent), transparent 58%), var(--paper);
+}
+
+.dashboardHeroCopy {
+  max-width: 760px;
+}
+
+.dashboardEyebrow {
+  margin-bottom: 5px;
+  font-size: 10px;
+  letter-spacing: 0.2px;
+  text-transform: none;
+}
+
+.dashboardTitle {
+  font-size: clamp(20px, 2.1vw, 26px);
+  line-height: 1.18;
+  letter-spacing: -0.45px;
+  font-weight: 720;
+}
+
+.dashboardSubtitle {
+  margin-top: 5px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.dashboardHeroActions {
+  flex: 0 0 auto;
+}
+
+.dashboardHeroActions :global(.arco-btn) {
+  height: 36px;
+  border-radius: 9px;
+  font-size: 12px;
+}
+
+.metricGrid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 9px;
+  margin-bottom: 10px;
+}
+
+.metricCard {
+  min-height: 88px;
+  grid-template-columns: 32px minmax(0, 1fr);
+  grid-template-rows: auto auto auto;
+  column-gap: 10px;
+  padding: 12px !important;
+  border-radius: 12px;
+  background: var(--paper);
+}
+
+.metricIcon {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+}
+
+.metricValue {
+  font-size: 23px;
+  letter-spacing: -0.45px;
+}
+
+.metricLabel {
+  margin-top: 3px;
+  font-size: 11.5px;
+}
+
+.metricMeta {
+  margin-top: 2px;
+  font-size: 9.5px;
+}
+
+.dashboardGrid {
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.dashboardGrid > .dashboardPanel:nth-child(1),
+.dashboardGrid > .dashboardPanel:nth-child(3) {
+  grid-column: span 7;
+}
+
+.dashboardGrid > .dashboardPanel:nth-child(2),
+.dashboardGrid > .dashboardPanel:nth-child(4) {
+  grid-column: span 5;
+}
+
+.dashboardPanel {
+  padding: 14px;
+  border-radius: 12px;
+  background: var(--paper);
+  box-shadow: none;
+}
+
+.dashboardPanelHeader {
+  margin-bottom: 10px;
+}
+
+.dashboardPanelTitle {
+  font-size: 12.5px;
+  font-weight: 680;
+}
+
+.dashboardPanelSubtitle {
+  font-size: 9.5px;
+}
+
+.progressSummary {
+  padding: 9px 10px;
+  margin-bottom: 6px;
+}
+
+.dashboardListRow,
+.timelineRow,
+.coreRunRow,
+.coreAutomationRow {
+  padding: 8px 7px;
+}
+
+.dashboardEmpty {
+  min-height: 72px;
+  flex-direction: row;
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 10px 8px;
+  text-align: left;
+}
+
+.dashboardEmpty :global(.arco-btn) {
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+
+.corePulseGrid > div {
+  padding: 9px;
+}
+
+.corePulseGrid strong {
+  font-size: 18px;
+}
+
+.workspaceScroll {
+  height: 100%;
+  overflow-y: auto;
+  padding: 18px 22px 30px;
+}
+
+.workspaceColumn {
+  width: min(1180px, 100%);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.workspaceToolbar {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--paper) 96%, transparent);
+  backdrop-filter: blur(12px);
+}
+
+.workspaceToolbar :global(.arco-input-inner-wrapper),
+.workspaceToolbar :global(.arco-select-view),
+.workspaceToolbar :global(.arco-btn) {
+  min-height: 34px;
+  border-radius: 8px;
+}
+
+.workspaceList,
+.workspaceCompleted,
+.dailyGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.workspaceCompleted {
+  margin-top: 4px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.workspaceSectionLabel {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.workspaceEmpty,
+.workspaceEmptyCompact {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--ink-3);
+  border: 1px dashed var(--line-strong);
+  border-radius: 12px;
+  background: var(--paper-soft);
+}
+
+.workspaceEmpty {
+  min-height: 112px;
+  padding: 20px;
+}
+
+.workspaceEmptyCompact {
+  min-height: 64px;
+  padding: 14px;
+  font-size: 12px;
+  text-align: center;
+}
+
+.workspaceCardGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.dataCard {
+  min-height: 154px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-radius: 12px;
+  background: var(--paper);
+}
+
+.dataCard:hover {
+  border-color: var(--mgr-accent-light-2, var(--line-strong));
+  box-shadow: 0 8px 28px color-mix(in srgb, var(--ink) 6%, transparent);
+}
+
+.learnWorkspace {
+  height: 100%;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(250px, 300px) minmax(0, 1fr);
+  gap: 12px;
+  padding: 14px;
+  background: var(--canvas);
+}
+
+.learnSidebar,
+.learnDetailPane,
+.learnGraphPane {
+  min-height: 0;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--paper);
+  overflow: hidden;
+}
+
+.learnSidebar {
+  display: flex;
+  flex-direction: column;
+}
+
+.learnSidebarControls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-bottom: 1px solid var(--line);
+  background: var(--paper-soft);
+}
+
+.learnSidebarControls :global(.arco-input-inner-wrapper),
+.learnSidebarControls :global(.arco-btn),
+.learnSidebarControls :global(.arco-radio-group) {
+  border-radius: 8px;
+}
+
+.learnNoteList {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+}
+
+.learnNoteList .listItem {
+  padding: 10px;
+  border: 1px solid transparent;
+}
+
+.learnNoteList .listItemActive {
+  border-color: var(--mgr-accent-light-2, var(--line));
+  box-shadow: none;
+}
+
+.learnDetailPane {
+  overflow-y: auto;
+}
+
+.learnGraphPane {
+  padding: 14px;
+}
+
+.learnSelectHint {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  color: var(--ink-3);
+  text-align: center;
+}
+
+@media (max-width: 1180px) {
+  .sidebarBrand {
+    min-width: 0;
+  }
+
+  .sidebarBrandSubtitle {
+    display: none;
+  }
+
+  .sidebarNavButton {
+    padding-inline: 9px !important;
+  }
+
+  .dashboardGrid > .dashboardPanel:nth-child(n) {
+    grid-column: span 6;
+  }
+
+  .workspaceCardGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .managerSidebar {
+    height: auto;
+    min-height: 58px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 6px 10px;
+    padding: 8px 12px;
+  }
+
+  .sidebarBrand {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .sidebarQuickTools {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .sidebarNav {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .managerTopbar {
+    min-height: 44px;
+    padding: 6px 14px;
+  }
+
+  .dashboardScroll {
+    padding: 12px 14px 22px;
+  }
+
+  .dashboardHero {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 13px;
+    padding: 15px;
+  }
+
+  .metricGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dashboardGrid > .dashboardPanel:nth-child(n) {
+    grid-column: 1 / -1;
+  }
+
+  .workspaceScroll {
+    padding: 12px 14px 22px;
+  }
+
+  .learnWorkspace {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(210px, 36%) minmax(0, 1fr);
+    padding: 12px 14px 22px;
+  }
+}
+
+@media (max-width: 560px) {
+  .sidebarBrandCopy {
+    display: none;
+  }
+
+  .sidebarNavLabel {
+    display: none;
+  }
+
+  .sidebarNavButton {
+    position: relative;
+    width: 38px !important;
+    padding: 0 !important;
+  }
+
+  .sidebarCount {
+    position: absolute;
+    top: 1px;
+    right: 1px;
+  }
+
+  .metricGrid,
+  .workspaceCardGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .workspaceToolbar {
+    align-items: stretch;
+  }
+
+  .workspaceToolbar :global(.arco-input-inner-wrapper),
+  .workspaceToolbar :global(.arco-select),
+  .workspaceToolbar :global(.arco-btn) {
+    width: 100% !important;
+    max-width: none !important;
+  }
+
+  .workspaceEmpty {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .dashboardHeroActions {
+    width: 100%;
+  }
+
+  .dashboardHeroActions :global(.arco-btn) {
+    flex: 1;
   }
 }

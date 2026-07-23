@@ -546,11 +546,14 @@ export const useQuickRun = (rootPath: string | null, options: QuickRunOptions = 
         setPhase('needs-input');
         return;
       }
-      if (selected !== 'web' || services.length === 0) {
+      const shouldRunCustomServices = selection.mode === 'custom' && (selection.serviceIds?.length ?? 0) > 0;
+      if ((selected !== 'web' && !shouldRunCustomServices) || services.length === 0) {
         await launch(recipe);
         return;
       }
 
+      const selectedServiceIds = new Set(selection.serviceIds ?? []);
+      const desktopRecipeSelected = selected === 'desktop' && selectedServiceIds.has('desktop-executable');
       let chosen: RunService[];
       if (selection.mode === 'interface') {
         chosen = services.filter((service) => service.kind === 'frontend' && !service.orchestrator).slice(0, 1);
@@ -571,10 +574,9 @@ export const useQuickRun = (rootPath: string | null, options: QuickRunOptions = 
         chosen = [...localServices, ...containerFallbacks];
         if (chosen.length === 0) chosen = services.filter((service) => !service.orchestrator);
       } else {
-        const selectedIds = new Set(selection.serviceIds ?? []);
-        chosen = services.filter((service) => selectedIds.has(service.id) && !service.orchestrator);
+        chosen = services.filter((service) => selectedServiceIds.has(service.id) && !service.orchestrator);
       }
-      if (chosen.length === 0) {
+      if (chosen.length === 0 && !desktopRecipeSelected) {
         setPhase('needs-input');
         return;
       }
@@ -583,16 +585,23 @@ export const useQuickRun = (rootPath: string | null, options: QuickRunOptions = 
         0,
         chosen.findIndex((service) => service.kind === 'frontend' || service.orchestrator)
       );
-      const ordered = [chosen[primaryIndex], ...chosen.filter((_, index) => index !== primaryIndex)];
-      const recipes = ordered.map<ResolvedRecipe>((service) => ({
-        platform: 'web',
-        command: service.command,
-        cwd: service.cwd,
-        url: service.url,
-        title: service.name,
-        manual: false,
-      }));
-      const browserFacing = ordered[0].kind === 'frontend' || Boolean(ordered[0].orchestrator);
+      const ordered =
+        chosen.length > 0 ? [chosen[primaryIndex], ...chosen.filter((_, index) => index !== primaryIndex)] : [];
+      const recipes = [
+        ...(desktopRecipeSelected ? [recipe] : []),
+        ...ordered.map<ResolvedRecipe>((service) => ({
+          platform: selected,
+          command: service.command,
+          cwd: service.cwd,
+          url: service.url,
+          title: service.name,
+          manual: false,
+        })),
+      ];
+      const browserFacing =
+        selected === 'web' &&
+        ordered.length > 0 &&
+        (ordered[0].kind === 'frontend' || Boolean(ordered[0].orchestrator));
       await launch(recipes[0], recipes.slice(1), browserFacing);
     },
     [recipe, selected, services, launch]

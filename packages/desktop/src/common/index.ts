@@ -6,4 +6,4 @@
 
 export * as ipcBridge from './adapter/ipcBridge';
 export { conversation } from './adapter/ipcBridge';
-export type { AionrsContextBranch, AionrsContextSnapshot } from './adapter/ipcBridge';
+export type { AionrsContextBranch, AionrsContextResult, AionrsContextSnapshot } from './adapter/ipcBridge';

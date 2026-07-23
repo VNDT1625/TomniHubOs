@@ -22,21 +22,19 @@ const VALID_MODES = new Set<CoreBootMode>(['tomny', 'compat', 'legacy']);
 
 /**
  * Resolves the desktop core cutover policy without touching the legacy binary.
- * Tomny is the desktop default; HTTP compatibility must be explicitly enabled.
+ * Compatibility mode is the desktop default until every HTTP-dependent feature is native to Tomni Core.
  */
 export function resolveCoreBootPolicy(input: ResolveCoreBootPolicyInput = {}): CoreBootPolicy {
   const requested = input.requestedMode?.trim().toLowerCase();
   if (requested && !VALID_MODES.has(requested as CoreBootMode)) {
-    throw new Error(`Invalid Tomny core boot mode ${input.requestedMode}. Expected one of: tomny, compat, legacy.`);
+    throw new Error(`Invalid Tomni Core boot mode ${input.requestedMode}. Expected one of: tomny, compat, legacy.`);
   }
 
-  const requiresLegacyFeature = input.isWebUIMode === true || input.isResetPasswordMode === true;
-  const mode = (requested || (requiresLegacyFeature ? 'legacy' : 'tomny')) as CoreBootMode;
-  if (requiresLegacyFeature && mode === 'tomny') {
-    throw new Error('WebUI and password reset require --core-mode=legacy or TOMNY_CORE_BOOT_MODE=legacy.');
-  }
+  // WebUI and password reset are served by the native Tomni Gateway. Surface
+  // flags no longer widen the compatibility-backend requirement.
+  const mode = (requested || 'compat') as CoreBootMode;
 
-  if (requiresLegacyFeature || mode === 'legacy') {
+  if (mode === 'legacy') {
     return { mode: 'legacy', startLegacyBackend: true, requireLegacyBackend: true };
   }
   if (mode === 'compat') {

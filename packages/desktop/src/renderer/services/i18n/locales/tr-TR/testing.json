@@ -160,5 +160,153 @@
     "toolCompleted": "{{tool}} completed",
     "toolFailed": "{{tool}} failed",
     "toolWorkspace": "Workspace: {{workspace}}"
+  },
+  "benchmark": {
+    "tab": "Benchmark",
+    "title": "Agent benchmark",
+    "subtitle": "Run the same two-prompt suite across Tomny, Claude Code, and Codex, then compare verified results.",
+    "liveContract": "Live IPC",
+    "suite": {
+      "title": "Suite definition",
+      "hint": "Keep the task identical so each runner starts from a comparable brief.",
+      "selectPlaceholder": "Select a saved suite",
+      "selectLabel": "Saved benchmark suite",
+      "nameLabel": "Suite name",
+      "namePlaceholder": "e.g. Repair and verify the sign-in flow"
+    },
+    "prompts": {
+      "firstLabel": "Prompt 1 · implement",
+      "firstName": "Implementation prompt",
+      "firstPlaceholder": "Describe the issue and the change every runner should make.",
+      "secondLabel": "Prompt 2 · review",
+      "secondName": "Review prompt",
+      "secondPlaceholder": "Ask every runner to inspect, test, and refine its first-pass result."
+    },
+    "verification": {
+      "label": "Verification command",
+      "placeholder": "e.g. bunx vitest run tests/unit/auth.test.ts",
+      "hint": "When provided, this command should fail before the agent works and pass afterward."
+    },
+    "runner": {
+      "tomny": "Tomny",
+      "claude": "Claude Code",
+      "codex": "Codex"
+    },
+    "runnerDescription": {
+      "tomny": "Integrated IDE agent through the Tomny runtime.",
+      "claude": "Isolated native Claude CLI session.",
+      "codex": "Isolated native Codex CLI session."
+    },
+    "runners": {
+      "title": "Runner lanes",
+      "hint": "Each selected runner needs its own isolated workspace.",
+      "selectedCount": "{{count}} selected",
+      "available": "Available",
+      "unavailable": "Unavailable",
+      "notProbed": "Not probed",
+      "detail": "Runner availability details",
+      "enabledLabel": "Enable {{runner}}",
+      "modelLabel": "Model",
+      "modelPlaceholder": "Runner default",
+      "modelAriaLabel": "Model for {{runner}}",
+      "workspaceLabel": "Workspace",
+      "workspacePlaceholder": "Absolute path to an isolated workspace",
+      "workspaceAriaLabel": "Workspace for {{runner}}"
+    },
+    "actions": {
+      "newSuite": "New suite",
+      "probe": "Probe runners",
+      "retry": "Retry",
+      "save": "Save suite",
+      "startSelected": "Start selected",
+      "refreshHistory": "Refresh history",
+      "rerun": "Rerun this runner",
+      "cancelRun": "Cancel run"
+    },
+    "history": {
+      "title": "Run history",
+      "hint": "Live progress and persisted results for the selected suite.",
+      "empty": "No benchmark runs for this suite yet.",
+      "rerunBadge": "Rerun",
+      "changedFiles": "{{count}} changed file(s)"
+    },
+    "metrics": {
+      "hint": "Token figures retain their reporting provenance; unavailable values stay unknown.",
+      "duration": "Duration",
+      "ttft": "TTFT",
+      "inputTokens": "Input tokens",
+      "outputTokens": "Output tokens",
+      "cachedTokens": "Cached tokens",
+      "totalTokens": "Total tokens",
+      "provenance": "Token provenance"
+    },
+    "provenance": {
+      "reported": "Reported",
+      "estimated": "Estimated",
+      "unavailable": "Unavailable"
+    },
+    "status": {
+      "queued": "Queued",
+      "preparing": "Preparing",
+      "running": "Running",
+      "verifying": "Verifying",
+      "completed": "Completed",
+      "passed": "Passed",
+      "failed": "Failed",
+      "error": "Error",
+      "cancelled": "Cancelled",
+      "interrupted": "Interrupted"
+    },
+    "messages": {
+      "probeComplete": "Runner probe complete.",
+      "saved": "Benchmark suite saved.",
+      "started": "Started {{count}} runner(s).",
+      "rerunStarted": "Rerun started for one runner.",
+      "cancelled": "Cancellation requested."
+    },
+    "errors": {
+      "loadSuites": "Could not load benchmark suites.",
+      "loadRuns": "Could not load benchmark history.",
+      "probe": "Could not probe benchmark runners.",
+      "save": "Could not save the benchmark suite.",
+      "start": "Could not start the selected runners.",
+      "rerun": "Could not rerun this runner.",
+      "cancel": "Could not cancel this run.",
+      "cancelNotActive": "This run is no longer active.",
+      "runnerUnavailable": "{{runner}} is unavailable. Probe again after installing or configuring it.",
+      "requiredFields": "Enter a suite name and both prompts.",
+      "selectRunner": "Enable at least one runner.",
+      "workspaceRequired": "Enter a workspace for every enabled runner."
+    },
+    "runMetrics": {
+      "modelRequests": "Model requests",
+      "toolCalls": "Tool calls",
+      "toolFailures": "Tool failures",
+      "quickTestCalls": "Quick Test calls"
+    },
+    "checks": {
+      "precheck": "Precheck",
+      "postVerification": "Post-verification",
+      "notRun": "Not run",
+      "timedOut": "Timed out",
+      "expectedFailure": "Expected failure",
+      "unexpectedPass": "Unexpected pass",
+      "passed": "Passed",
+      "failed": "Failed"
+    },
+    "runDetails": {
+      "details": "Run details",
+      "turnsEmpty": "No turn response has been recorded yet.",
+      "response": "Final response",
+      "changedFilesTitle": "Changed files",
+      "diffTitle": "Patch",
+      "exitCode": "Exit code",
+      "batchId": "Batch ID",
+      "comparisonKey": "Comparison key",
+      "suiteRevision": "Suite revision",
+      "sourceFingerprint": "Source fingerprint",
+      "sessionId": "Session ID",
+      "errorTitle": "Run error"
+    }
   }
 }

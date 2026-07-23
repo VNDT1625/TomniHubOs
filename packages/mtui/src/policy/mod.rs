@@ -86,6 +86,8 @@ struct PolicySessionFile {
 const IGNORED_POLICY_PATHS: &[&str] = &[
     ".git/",
     ".mtui/",
+    ".tomni/understand/",
+    ".omni/understand/",
     ".aionui/understand/",
     "node_modules/",
     "dist/",
@@ -437,6 +439,8 @@ mod tests {
             &[
                 "src/a.ts".to_string(),
                 "src/b.ts".to_string(),
+                ".tomni/understand/summary.json".to_string(),
+                ".omni/understand/summary.json".to_string(),
                 ".aionui/understand/summary.json".to_string(),
                 ".kiro/tmp-ox.txt".to_string(),
             ],

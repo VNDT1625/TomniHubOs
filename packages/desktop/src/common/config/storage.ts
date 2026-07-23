@@ -5,6 +5,8 @@
  */
 
 import type { SpeechToTextConfig } from '@/common/types/provider/speech';
+
+import type { Router9ReasoningEffort } from '@/common/router9/types';
 import { storage } from '@office-ai/platform';
 
 // 系统配置存储
@@ -102,7 +104,9 @@ export interface IConfigStorageRefer {
   };
   // Telegram assistant agent selection / Telegram 助手所使用的 Agent
   'assistant.telegram.agent'?: {
-    backend: string;
+    agent_type: string;
+    backend?: string;
+    id?: string;
     custom_agent_id?: string;
     name?: string;
   };
@@ -116,7 +120,9 @@ export interface IConfigStorageRefer {
   };
   // Lark assistant agent selection / Lark 助手所使用的 Agent
   'assistant.lark.agent'?: {
-    backend: string;
+    agent_type: string;
+    backend?: string;
+    id?: string;
     custom_agent_id?: string;
     name?: string;
   };
@@ -127,7 +133,9 @@ export interface IConfigStorageRefer {
   };
   // DingTalk assistant agent selection / DingTalk 助手所使用的 Agent
   'assistant.dingtalk.agent'?: {
-    backend: string;
+    agent_type: string;
+    backend?: string;
+    id?: string;
     custom_agent_id?: string;
     name?: string;
   };
@@ -138,7 +146,9 @@ export interface IConfigStorageRefer {
   };
   // WeChat assistant agent selection / WeChat 助手所使用的 Agent
   'assistant.weixin.agent'?: {
-    backend: string;
+    agent_type: string;
+    backend?: string;
+    id?: string;
     custom_agent_id?: string;
     name?: string;
   };
@@ -149,7 +159,9 @@ export interface IConfigStorageRefer {
   };
   // WeCom assistant agent selection / 企业微信助手所使用的 Agent
   'assistant.wecom.agent'?: {
-    backend: string;
+    agent_type: string;
+    backend?: string;
+    id?: string;
     custom_agent_id?: string;
     name?: string;
   };
@@ -181,6 +193,8 @@ export interface IConfigStorageRefer {
   // Desktop Pet: whether tool-call confirmations are routed to the pet's bubble
   // (true) or remain in the main chat window (false). Default true.
   'pet.confirmEnabled'?: boolean;
+  /** Enable the renderer console overlay for local diagnostics. */
+  'developer.consoleOverlay'?: boolean;
 }
 
 export interface IEnvStorageRefer {
@@ -196,6 +210,49 @@ export interface IEnvStorageRefer {
  */
 export type ConversationSource = 'aionui' | 'telegram' | 'lark' | 'dingtalk' | 'weixin' | 'wecom' | (string & {});
 
+/** Runtime metadata shared by every conversation backend during the native Tomny cutover. */
+export type TomnyConversationRuntimeMetadata = {
+  tomny_core_session_id?: string;
+  tomny_core_target_id?: string;
+  tomny_core_model_key?: string;
+  tomny_custom_context?: string;
+  tomny_context_branches?: Array<{ id: string; title: string; summary: string; content: string }>;
+  is_temporary_workspace?: boolean;
+  /** Product surface that owns and resumes the conversation. */
+  surface?: string;
+  /** Schema version for surface-specific durable metadata. */
+  surface_version?: number;
+  /** Studio IDE memory session bound to the conversation. */
+  ide_memory_id?: string;
+  /** Whether the Studio IDE planning workflow is enabled. */
+  ide_planning_enabled?: boolean;
+  /** Permission scopes restored when the native core resumes the conversation. */
+  permission_scopes?: string[];
+  /** Capability grants restored when the native core resumes the conversation. */
+  capability_grants?: string[];
+  /** Capabilities visible to the selected product surface. */
+  available_capabilities?: string[];
+  /** Explicitly enables the Super ToolMap for this conversation. */
+  super_mode?: boolean;
+  /** Files selected when the conversation was created. */
+  default_files?: string[];
+  /** Durable context fields consumed by agent and IDE surfaces. */
+  context?: string;
+  context_file_name?: string;
+  preset_context?: string;
+  preset_rules?: string;
+  /** Persisted runtime selection used when resuming a native core session. */
+  session_mode?: string;
+  current_model_id?: string;
+  codex_model?: string;
+  codexModel?: string;
+  backend?: string;
+  remote_agent_id?: string;
+  sandboxMode?: 'read-only' | 'workspace-write' | 'danger-full-access';
+  /** Durable MCP snapshot; create requests use selected_session_mcp_servers. */
+  session_mcp_servers?: ISessionMcpServer[];
+};
+
 interface IChatConversation<T, Extra> {
   created_at: number;
   modified_at: number;
@@ -203,7 +260,7 @@ interface IChatConversation<T, Extra> {
   desc?: string;
   id: string;
   type: T;
-  extra: Extra;
+  extra: Extra & TomnyConversationRuntimeMetadata;
   model: TProviderWithModel;
   status?: 'pending' | 'running' | 'finished' | undefined;
   /** 会话来源，默认为 aionui / Conversation source, defaults to aionui */
@@ -551,6 +608,8 @@ export interface IProvider {
 
 export type TProviderWithModel = Omit<IProvider, 'models'> & {
   use_model: string;
+  /** Optional request-level reasoning override for a managed gateway model. */
+  reasoning_effort?: Router9ReasoningEffort;
 };
 
 // MCP Server Configuration Types
@@ -595,12 +654,22 @@ export interface IMcpServer {
   transport: IMcpServerTransport;
   tools?: IMcpTool[];
   last_test_status?: 'connected' | 'disconnected' | 'error' | 'testing'; // 最近一次检测结果
+  /** Timestamp of the most recent native MCP connection test. */
+  last_test_at?: number;
+  /** Bounded diagnostic from the most recent failed native MCP connection test. */
+  last_test_error?: string;
   last_connected?: number;
   created_at: number;
   updated_at: number;
   original_json: string; // 存储原始JSON配置，用于编辑时的准确显示
   /** Built-in MCP server managed by AionUi (hide edit/delete in UI) */
   builtin?: boolean;
+  /** Read-only provenance for an extension-contributed MCP server. */
+  extension?: {
+    name: string;
+    displayName?: string;
+    version?: string;
+  };
 }
 
 export type ISessionMcpServer = Pick<IMcpServer, 'id' | 'name' | 'transport'>;

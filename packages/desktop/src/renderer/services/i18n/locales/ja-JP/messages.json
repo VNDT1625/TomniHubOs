@@ -66,5 +66,21 @@
     "yesAlwaysAllowTool": "はい、サーバー \"{{serverName}}\" のツール \"{{toolName}}\" を常に許可",
     "yesAlwaysAllowServer": "はい、サーバー \"{{serverName}}\" のすべてのツールを常に許可",
     "no": "いいえ (esc)"
+  },
+  "steps": {
+    "title": "{{count}} 件の実行ステップ",
+    "live": "実行中",
+    "status": {
+      "pending": "待機中",
+      "running": "実行中",
+      "completed": "完了",
+      "error": "失敗",
+      "canceled": "キャンセル済み"
+    },
+    "loadingDetail": "ステップの詳細を読み込み中...",
+    "loadDetailFailed": "ステップの詳細を読み込めませんでした",
+    "input": "入力",
+    "output": "出力",
+    "viewFull": "全体を表示"
   }
 }

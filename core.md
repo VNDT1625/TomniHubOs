@@ -295,7 +295,7 @@ Mỗi nhóm sở hữu interface và contract test. Quyết định protocol, pe
 
 - [Backend launcher](packages/web-host/src/backend-launcher.ts)
 - [Binary resolver](packages/desktop/src/process/backend/binaryResolver.ts)
-- [HTTP/WS bridge](packages/desktop/src/common/adapter/httpBridge.ts)
+- [HTTP/WS bridge](tests/e2e/helpers/httpBridge.ts)
 - [Main WS listener](packages/desktop/src/process/services/agentChat/mainBackendWs.ts)
 - [IDE MCP registration](packages/desktop/src/process/ide/mcp/registerIdeMcp.ts)
 - [Company role executor](packages/desktop/src/renderer/pages/company/pipeline/roleExecutor.ts)

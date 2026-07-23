@@ -17,7 +17,9 @@
  * No Node APIs, no I/O — `homeDir` is injected so even path expansion stays pure.
  */
 
-/** A plain JSON object (the only shape we deep-merge). */
+import { parse as parseToml, stringify as stringifyToml } from 'smol-toml';
+
+/** A plain JSON/TOML object (the only shape we deep-merge). */
 type JsonObject = Record<string, unknown>;
 
 /** True for a non-null, non-array object — the only thing we recurse into. */
@@ -67,9 +69,8 @@ export const deepMerge = (existing: unknown, incoming: unknown): unknown => {
  * to a {@link ConfigFilePlan}'s `mergeStrategy`.
  *
  * Returns the final text to write, or `null` when the strategy says "leave the
- * existing file alone" (`createIfMissing` on an existing file). Only JSON files
- * are deep-merged; `text`/`toml` formats fall back to a straight replace because
- * we cannot safely parse+merge them here.
+ * existing file alone" (`createIfMissing` on an existing file). JSON and TOML
+ * files are parsed and deep-merged so unrelated user configuration survives.
  *
  * @throws if an existing JSON file cannot be parsed (the caller should surface
  *   this so the user can fix or back up their file rather than lose it).
@@ -86,8 +87,20 @@ export const mergeConfigContent = (params: {
   if (mergeStrategy === 'createIfMissing') {
     return fileExists ? null : incomingContent;
   }
-  if (mergeStrategy === 'replace' || format !== 'json' || !fileExists) {
+  if (mergeStrategy === 'replace' || format === 'text' || !fileExists) {
     return incomingContent;
+  }
+
+  if (format === 'toml') {
+    try {
+      const existingToml = existingRaw.trim() === '' ? {} : parseToml(existingRaw);
+      const incomingToml = parseToml(incomingContent);
+      return stringifyToml(deepMerge(existingToml, incomingToml) as Record<string, unknown>);
+    } catch (error) {
+      throw new Error(`Existing config is not valid TOML: ${error instanceof Error ? error.message : String(error)}`, {
+        cause: error,
+      });
+    }
   }
 
   // deepMerge on an existing JSON file.

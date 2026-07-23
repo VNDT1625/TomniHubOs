@@ -14,6 +14,7 @@ type SessionEntry<T extends PooledSession> = {
   promise: Promise<T>;
   resource?: T;
   lastUsedAt: number;
+  idleTimer?: ReturnType<typeof setTimeout>;
 };
 
 export type BoundedSessionPoolOptions = {
@@ -47,6 +48,7 @@ export class BoundedSessionPool<T extends PooledSession> {
     const existing = this.entries.get(key);
     if (existing) {
       existing.lastUsedAt = this.now();
+      this.scheduleIdleEviction(key, existing);
       return existing.promise;
     }
 
@@ -67,6 +69,7 @@ export class BoundedSessionPool<T extends PooledSession> {
         }
         entry.resource = resource;
         entry.lastUsedAt = this.now();
+        this.scheduleIdleEviction(key, entry);
         return resource;
       },
       (error: unknown) => {
@@ -81,6 +84,7 @@ export class BoundedSessionPool<T extends PooledSession> {
     const entry = this.entries.get(key);
     if (!entry || (expected && entry.resource && entry.resource !== expected)) return false;
     this.entries.delete(key);
+    if (entry.idleTimer) clearTimeout(entry.idleTimer);
     if (entry.resource) entry.resource.dispose();
     else void entry.promise.then((resource) => resource.dispose()).catch((): undefined => undefined);
     return true;
@@ -88,16 +92,42 @@ export class BoundedSessionPool<T extends PooledSession> {
 
   public touch(key: string): void {
     const entry = this.entries.get(key);
-    if (entry) entry.lastUsedAt = this.now();
+    if (!entry) return;
+    entry.lastUsedAt = this.now();
+    this.scheduleIdleEviction(key, entry);
   }
 
   public async disposeAll(): Promise<void> {
     const entries = [...this.entries.values()];
     this.entries.clear();
+    for (const entry of entries) {
+      if (entry.idleTimer) clearTimeout(entry.idleTimer);
+    }
     const settled = await Promise.allSettled(entries.map((entry) => entry.promise));
     for (const result of settled) {
       if (result.status === 'fulfilled') result.value.dispose();
     }
+  }
+
+  private scheduleIdleEviction(key: string, entry: SessionEntry<T>): void {
+    if (entry.idleTimer) clearTimeout(entry.idleTimer);
+    const remainingMs = Math.max(1, this.idleTimeoutMs - (this.now() - entry.lastUsedAt));
+    entry.idleTimer = setTimeout(() => {
+      const current = this.entries.get(key);
+      if (current !== entry) return;
+      if (!entry.resource || entry.resource.isBusy()) {
+        entry.lastUsedAt = this.now();
+        this.scheduleIdleEviction(key, entry);
+        return;
+      }
+      const idleMs = this.now() - entry.lastUsedAt;
+      if (idleMs < this.idleTimeoutMs) {
+        this.scheduleIdleEviction(key, entry);
+        return;
+      }
+      this.invalidate(key, entry.resource);
+    }, remainingMs);
+    entry.idleTimer.unref?.();
   }
 
   private sweepIdle(): void {

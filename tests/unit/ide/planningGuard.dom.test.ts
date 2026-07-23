@@ -76,68 +76,19 @@ describe('buildPlanningGuard', () => {
     });
   });
 
-  it('runs MTUI preflight for ordinary chat and sends a clean message untouched', async () => {
-    const message = await buildPlanningGuard('/repo', 'fix login');
-    expect(message).toBe('fix login');
-    expect(mockedSpecStatus).not.toHaveBeenCalled();
-    expect(mockedSpecTaskList).not.toHaveBeenCalled();
-    expect(mockedGitStatus).toHaveBeenCalledWith('/repo');
-    expect(mockedMtuiPolicyCheck).not.toHaveBeenCalled();
-  });
-
-  it('blocks sending when changed files lack MTUI history', async () => {
+  it('does not block ordinary chat for pre-existing changed files', async () => {
     mockedGitStatus.mockResolvedValue({
       ok: true,
       data: [{ path: 'src/a.ts', status: 'M', staged: false }],
     });
-    mockedMtuiPolicyCheck.mockResolvedValue({
-      ok: true,
-      data: {
-        strict: true,
-        clean: false,
-        changedCount: 1,
-        baselineCount: 0,
-        sessionBaselineCount: 0,
-        autoSessionCreated: false,
-        violationCount: 1,
-        violationsTruncated: false,
-        violations: [{ path: 'src/a.ts', reason: 'Changed file has no recent MTUI write operation.' }],
-      },
-    });
 
-    await expect(buildPlanningGuard('/repo', '/execute @.aionui/specs/fix-login/')).rejects.toThrow(
-      'Strict MTUI Mode blocked this send'
-    );
-    expect(mockedMtuiPolicyCheck).toHaveBeenCalledWith('/repo', ['src/a.ts']);
-  });
+    const message = await buildPlanningGuard('/repo', 'fix login');
 
-  it('reports total MTUI violations when policy output is truncated', async () => {
-    mockedGitStatus.mockResolvedValue({
-      ok: true,
-      data: [
-        { path: 'src/a.ts', status: 'M', staged: false },
-        { path: 'src/b.ts', status: 'M', staged: false },
-        { path: 'src/c.ts', status: 'M', staged: false },
-      ],
-    });
-    mockedMtuiPolicyCheck.mockResolvedValue({
-      ok: true,
-      data: {
-        strict: true,
-        clean: false,
-        changedCount: 10,
-        baselineCount: 0,
-        sessionBaselineCount: 0,
-        autoSessionCreated: false,
-        violationCount: 10,
-        violationsTruncated: true,
-        violations: [{ path: 'src/a.ts', reason: 'Changed file has no recent MTUI write operation.' }],
-      },
-    });
-
-    await expect(buildPlanningGuard('/repo', '/execute @.aionui/specs/fix-login/')).rejects.toThrow(
-      '10 unowned changed file(s): src/a.ts, and 9 more'
-    );
+    expect(message).toBe('fix login');
+    expect(mockedSpecStatus).not.toHaveBeenCalled();
+    expect(mockedSpecTaskList).not.toHaveBeenCalled();
+    expect(mockedGitStatus).not.toHaveBeenCalled();
+    expect(mockedMtuiPolicyCheck).not.toHaveBeenCalled();
   });
 
   it('checks spec lifecycle state without injecting plan prompt when Planning Mode is on', async () => {

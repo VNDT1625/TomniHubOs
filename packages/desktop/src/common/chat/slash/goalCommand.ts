@@ -93,10 +93,10 @@ export const parseGoalCommand = (input: string): ParsedGoalCommand | null => {
 export const MANDATORY_PIPELINE = [
   'QUY TRÌNH BẮT BUỘC 100% (đi đủ, đúng thứ tự, lặp lại từ pha lỗi — KHÔNG bỏ/đảo bước):',
   '1. Phân tích query: bóc tách mục tiêu chính, ràng buộc, phạm vi, và tự suy ra "Definition of Done" nếu chưa nêu; ghi vào `.kiro/status.md`.',
-  '2. Lấy data: dùng `mtui --json map intent` rồi `compass read`/`read` để gom file liên quan; cần thì dùng sub-agent context-gatherer một lần; web search khi thiếu thông tin ngoài codebase.',
+  '2. Lấy data: dùng `mtui --json map intent` rồi `compass read`/`read` để gom file liên quan; nhiều query cùng dùng MTUI/ide_research thì leader gọi song song và tự tổng hợp, không spawn; web search khi thiếu thông tin ngoài codebase.',
   '3. Suy luận + bổ sung dữ liệu & năng lực còn thiếu: lấp khoảng trống kiến thức; rà `.claude/skills/SKILLS_GUIDE.md` và kích hoạt skill phù hợp (báo "Announce at start"); bổ sung thứ còn thiếu.',
   '4. Planning: chia thành các task rời rạc có thứ tự phụ thuộc rõ ràng, mỗi task có tiêu chí "xong" kiểm chứng được.',
-  '5. Tối ưu plan cho sub-agent: nhóm task độc-lập-theo-file thành đợt chạy song song (≤ 3–4 general-task-execution sub-agent); file chung/integration/checkpoint chạy tuần tự (theo subagent-parallel).',
+  '5. Tối ưu plan cho sub-agent: chỉ spawn khi task độc lập cả đầu ra, write target VÀ hành động/tool-family chính; cùng tool chỉ khác query thì leader gọi tool song song. Khác hành động rõ ràng (vd. implement + independent test/review, code investigation + runtime Quick Test) mới chia ≤ 3–4 sub-agent; file chung/integration/checkpoint chạy tuần tự.',
   '6. Thực hiện tasks: bám stack dự án (Arco + @icon-park/react + UnoCSS semantic token + i18n; renderer không Node API, main không DOM API); auto-fix `bun run lint:fix` + `bun run format`; chạm renderer/locale thì `bun run i18n:types` + `node scripts/check-i18n.js`.',
   '7. Quick test mỗi bước: sau MỖI task chạy quick test nhanh (script Python/Node một-lần, xóa file tạm sau khi xong) + `getDiagnostics` + `bunx tsc --noEmit` cho phần liên quan; PASS → đánh dấu task [x], FAIL → vào pha 9.',
   '8. Test lần cuối qua quick test tracker: sau MỖI tính năng/bước lớn/quan trọng, chạy cổng test chính thức `bun run test` (Vitest, kèm DOM test cho UI) + typecheck + lint + i18n; ghi kết quả từng mục vào `.kiro/status.md`.',

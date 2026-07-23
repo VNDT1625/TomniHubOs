@@ -5,7 +5,7 @@
  */
 
 import type { BrowserWindow } from 'electron';
-import { app } from 'electron';
+import { app, shell as electronShell } from 'electron';
 import { ipcBridge } from '@/common';
 import { ProcessConfig } from '@process/utils/initStorage';
 import { getZoomFactor, setZoomFactor } from '@process/utils/zoom';
@@ -14,11 +14,24 @@ import { getGpuStatus, setGpuUserOverride } from '@process/utils/gpuRecovery';
 import { initApplicationBridgeCore } from './applicationBridgeCore';
 import { getDefaultBrowserStatus, setAsDefaultBrowser } from './defaultBrowser';
 import type { IStartOnBootStatus } from '@/common/adapter/ipcBridge';
+import { execFile, spawn } from 'node:child_process';
+import { stat } from 'node:fs/promises';
+import { promisify } from 'node:util';
 
 let mainWindowRef: BrowserWindow | null = null;
 
 const START_ON_BOOT_UNSUPPORTED_MESSAGE = 'Start on boot is only available in packaged macOS and Windows apps.';
 export const START_ON_BOOT_WINDOWS_ARG = '--start-on-boot';
+const execFileAsync = promisify(execFile);
+const launchDetached = (command: string, args: string[], cwd?: string): Promise<void> =>
+  new Promise((resolve, reject) => {
+    const child = spawn(command, args, { cwd, detached: true, stdio: 'ignore', windowsHide: false });
+    child.once('spawn', () => {
+      child.unref();
+      resolve();
+    });
+    child.once('error', reject);
+  });
 
 const isStartOnBootSupported = (): boolean => {
   return app.isPackaged && (process.platform === 'darwin' || process.platform === 'win32');
@@ -108,6 +121,96 @@ export function getApplicationMainWindow(): BrowserWindow | null {
 export function initApplicationBridge(): void {
   // Platform-agnostic handlers: systemInfo, updateSystemInfo, getPath
   initApplicationBridgeCore();
+  ipcBridge.starOffice.detectUrl.provider(async ({ preferredUrl, force: _force, timeoutMs }) => {
+    const candidates = [
+      ...new Set([preferredUrl, 'http://127.0.0.1:19000'].filter((value): value is string => Boolean(value))),
+    ].flatMap((value) => {
+      try {
+        const parsed = new URL(value.includes('://') ? value : 'http://' + value);
+        if (
+          (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') ||
+          !['127.0.0.1', 'localhost', '[::1]'].includes(parsed.hostname)
+        )
+          return [];
+        const normalized = parsed.toString();
+        return [normalized.endsWith('/') ? normalized.slice(0, -1) : normalized];
+      } catch {
+        return [];
+      }
+    });
+    const timeout = Math.min(5000, Math.max(200, timeoutMs || 1200));
+    const results = await Promise.all(
+      candidates.map(async (url) => {
+        try {
+          const response = await fetch(url, {
+            method: 'GET',
+            redirect: 'manual',
+            signal: AbortSignal.timeout(timeout),
+          });
+          return response.status >= 200 && response.status < 500 ? url : null;
+        } catch {
+          return null;
+        }
+      })
+    );
+    return { url: results.find((value): value is string => value !== null) || null };
+  });
+  ipcBridge.shell.openFile.provider(async (filePath) => {
+    const error = await electronShell.openPath(filePath);
+    if (error) throw new Error(error);
+  });
+  ipcBridge.shell.showItemInFolder.provider((filePath) => {
+    electronShell.showItemInFolder(filePath);
+    return Promise.resolve();
+  });
+  ipcBridge.shell.openExternal.provider(async (url) => {
+    await electronShell.openExternal(url);
+  });
+  ipcBridge.shell.checkToolInstalled.provider(async ({ tool }) => {
+    if (!/^[A-Za-z0-9._-]+$/u.test(tool)) return false;
+    try {
+      await execFileAsync(process.platform === 'win32' ? 'where.exe' : 'which', [tool], { windowsHide: true });
+      return true;
+    } catch {
+      return false;
+    }
+  });
+  ipcBridge.shell.openFolderWith.provider(async ({ folder_path: folderPath, tool }) => {
+    const info = await stat(folderPath);
+    if (!info.isDirectory()) throw new Error('The selected workspace is not a directory.');
+    if (tool === 'explorer') {
+      const error = await electronShell.openPath(folderPath);
+      if (error) throw new Error(error);
+      return;
+    }
+    if (tool === 'vscode') {
+      const normalizedPath = folderPath.replaceAll(String.fromCharCode(92), '/');
+      await electronShell.openExternal('vscode://file/' + encodeURI(normalizedPath));
+      return;
+    }
+    if (process.platform === 'win32') {
+      await launchDetached(
+        'powershell.exe',
+        [
+          '-NoExit',
+          '-Command',
+          'Set-Location -LiteralPath (Get-Item -LiteralPath ([Environment]::GetCommandLineArgs()[-1])).FullName',
+          folderPath,
+        ],
+        folderPath
+      );
+      return;
+    }
+    if (process.platform === 'darwin') {
+      await launchDetached('open', ['-a', 'Terminal', folderPath], folderPath);
+      return;
+    }
+    try {
+      await launchDetached('x-terminal-emulator', ['--working-directory', folderPath], folderPath);
+    } catch {
+      await launchDetached('gnome-terminal', ['--working-directory=' + folderPath], folderPath);
+    }
+  });
 
   ipcBridge.application.restart.provider(async () => {
     // Backend subprocess shutdown is handled by backendManager.stop() in the

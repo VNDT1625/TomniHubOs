@@ -9,8 +9,16 @@ import { startBackendOrExit } from '@/process/startup/backendStartup';
 import { resolveCoreBootPolicy } from '@/process/startup/coreBootPolicy';
 
 describe('resolveCoreBootPolicy', () => {
-  it('boots the TypeScript Tomny core without starting the legacy backend by default', () => {
+  it('keeps compatibility services available by default while legacy startup stays optional', () => {
     expect(resolveCoreBootPolicy()).toEqual({
+      mode: 'compat',
+      startLegacyBackend: true,
+      requireLegacyBackend: false,
+    });
+  });
+
+  it('allows an explicit native-only Tomni Core boot after compatibility features are no longer needed', () => {
+    expect(resolveCoreBootPolicy({ requestedMode: 'tomny' })).toEqual({
       mode: 'tomny',
       startLegacyBackend: false,
       requireLegacyBackend: false,
@@ -34,28 +42,35 @@ describe('resolveCoreBootPolicy', () => {
   });
 
   it('rejects invalid modes instead of silently selecting a backend', () => {
-    expect(() => resolveCoreBootPolicy({ requestedMode: 'future' })).toThrow('Invalid Tomny core boot mode');
+    expect(() => resolveCoreBootPolicy({ requestedMode: 'future' })).toThrow('Invalid Tomni Core boot mode');
   });
 
-  it('preserves the legacy WebUI default until its HTTP routes are migrated', () => {
+  it('keeps the legacy backend optional for WebUI in default compatibility mode', () => {
     expect(resolveCoreBootPolicy({ isWebUIMode: true })).toEqual({
-      mode: 'legacy',
+      mode: 'compat',
       startLegacyBackend: true,
-      requireLegacyBackend: true,
+      requireLegacyBackend: false,
     });
   });
 
-  it('rejects backend-free mode for WebUI features that still require HTTP', () => {
-    expect(() => resolveCoreBootPolicy({ requestedMode: 'tomny', isWebUIMode: true })).toThrow(
-      'WebUI and password reset require'
-    );
+  it('allows backend-free mode for native WebUI and password reset', () => {
+    expect(resolveCoreBootPolicy({ requestedMode: 'tomny', isWebUIMode: true })).toEqual({
+      mode: 'tomny',
+      startLegacyBackend: false,
+      requireLegacyBackend: false,
+    });
+    expect(resolveCoreBootPolicy({ requestedMode: 'tomny', isResetPasswordMode: true })).toEqual({
+      mode: 'tomny',
+      startLegacyBackend: false,
+      requireLegacyBackend: false,
+    });
   });
 
-  it('forces legacy startup for WebUI when compatibility was explicitly requested', () => {
+  it('preserves explicit compatibility mode for WebUI', () => {
     expect(resolveCoreBootPolicy({ requestedMode: 'compat', isWebUIMode: true })).toEqual({
-      mode: 'legacy',
+      mode: 'compat',
       startLegacyBackend: true,
-      requireLegacyBackend: true,
+      requireLegacyBackend: false,
     });
   });
 });
@@ -125,7 +140,7 @@ describe('startBackendOrExit', () => {
     });
 
     expect(result).toEqual({ ok: false });
-    expect(logError).toHaveBeenCalledWith('[AionUi] Failed to start aioncore:', error);
+    expect(logError).toHaveBeenCalledWith('[TomniCore] Failed to start the legacy compatibility backend:', error);
     expect(captureFailure).toHaveBeenCalledWith(error);
     expect(exitApp).toHaveBeenCalledWith(1);
     expect(calls).toEqual(['capture-start', 'capture-end', 'exit']);
@@ -151,7 +166,7 @@ describe('startBackendOrExit', () => {
     });
 
     expect(result).toEqual({ ok: false });
-    expect(logError).toHaveBeenCalledWith('[AionUi] Failed to start aioncore:', error);
+    expect(logError).toHaveBeenCalledWith('[TomniCore] Failed to start the legacy compatibility backend:', error);
     expect(captureFailure).toHaveBeenCalledWith(error);
     expect(exitApp).not.toHaveBeenCalled();
     expect(onStarted).not.toHaveBeenCalled();

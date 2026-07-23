@@ -9,11 +9,14 @@
  */
 
 // ===== Product identity =====
-export const PRODUCT_ID = 'tomny';
-export const PRODUCT_NAME = 'Tomny';
-export const PRODUCT_FULL_NAME = 'Tomny Agentic';
-export const LEGACY_PRODUCT_ID = 'tomny-legacy';
-export const LEGACY_PRODUCT_NAME = 'Tomny Legacy';
+// Tomni is the application / agentic OS shell. Tomny Agentic is the built-in AI core.
+export const PRODUCT_ID = 'tomni';
+export const PRODUCT_NAME = 'Tomni';
+export const PRODUCT_FULL_NAME = 'Tomni';
+export const CORE_PRODUCT_ID = 'tomny-agentic';
+export const CORE_PRODUCT_NAME = 'Tomny Agentic';
+export const LEGACY_PRODUCT_ID = 'aionui';
+export const LEGACY_PRODUCT_NAME = 'AionUi';
 
 // ===== Workspace metadata =====
 export const OMNI_WORKSPACE_META_DIR = '.omni';
@@ -22,7 +25,7 @@ export const WORKSPACE_SPECS_DIR = 'specs';
 export const WORKSPACE_UNDERSTAND_DIR = 'understand';
 export const WORKSPACE_SPECS_REL_PATH = '.omni/specs';
 export const LEGACY_WORKSPACE_SPECS_REL_PATH = '.aionui/specs';
-export const WORKSPACE_UNDERSTAND_REL_PATH = '.omni/understand';
+export const WORKSPACE_UNDERSTAND_REL_PATH = '.tomni/understand';
 export const LEGACY_WORKSPACE_UNDERSTAND_REL_PATH = '.aionui/understand';
 
 // ===== 文件处理相关常量 =====
@@ -78,7 +81,7 @@ export const WEBUI_DEFAULT_PORT = (() => {
 export const TEAM_MODE_ENABLED = true;
 
 /**
- * Music Studio (Tomni Agentic music) feature flag.
+ * Music Studio (Tomni music) feature flag.
  *
  * Gates the in-app music-making capability (page route + agent MCP tools).
  * Default OFF: the app behaves exactly as before until this is turned on, so

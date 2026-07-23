@@ -87,6 +87,41 @@
     "duration": "Clip duration",
     "supportsEndFrame": "This model supports start + end frame interpolation"
   },
+  "editor": {
+    "storyboard": "Storyboard",
+    "timeline": "Timeline",
+    "noPreview": "Move the playhead over a video clip to preview it.",
+    "inspector": "Clip inspector",
+    "selectClip": "Select a clip on the timeline.",
+    "trackLabel": "Track",
+    "start": "Start (seconds)",
+    "duration": "Duration (seconds)",
+    "volume": "Volume",
+    "split": "Split",
+    "delete": "Delete",
+    "play": "Play",
+    "pause": "Pause",
+    "undo": "Undo",
+    "redo": "Redo",
+    "zoom": "Zoom",
+    "save": "Save timeline",
+    "snapping": "Snapping",
+    "ripple": "Ripple edit",
+    "transitionIn": "Transition in",
+    "transitionOut": "Transition out",
+    "transition": {
+      "cut": "Cut",
+      "fade": "Fade",
+      "dissolve": "Dissolve"
+    },
+    "track": {
+      "video": "Video",
+      "voice": "Voice",
+      "music": "Music",
+      "sfx": "SFX",
+      "subtitle": "Subtitle"
+    }
+  },
   "export": {
     "success": "Video exported: {{path}}"
   }

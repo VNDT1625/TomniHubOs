@@ -9,6 +9,10 @@ import { useEffect } from 'react';
 import {
   makeVideoClient,
   type ExportFinalRequest,
+  type FilmAsset,
+  type FilmBible,
+  type FilmTimeline,
+  type ProductionPlan,
   type Scene,
   type VideoClipConfig,
   type VideoProject,
@@ -25,6 +29,11 @@ export type MakeVideoAgentAction =
   | { tool: 'replace_scenes'; projectId: string; scenes: Scene[] }
   | { tool: 'update_scene'; projectId: string; sceneId: string; patch: Partial<Pick<Scene, 'title' | 'narration' | 'imagePrompt' | 'frameStartPath' | 'frameEndPath'>> }
   | { tool: 'reorder_scenes'; projectId: string; sceneIds: string[] }
+  | { tool: 'set_film_bible'; projectId: string; filmBible: FilmBible }
+  | { tool: 'set_assets'; projectId: string; assets: FilmAsset[] }
+  | { tool: 'set_timeline'; projectId: string; timeline: FilmTimeline }
+  | { tool: 'set_production_plan'; projectId: string; productionPlan: ProductionPlan }
+  | { tool: 'audit_continuity'; projectId: string }
   | { tool: 'delete_project'; projectId: string }
   | { tool: 'generate_script'; projectId: string; model: string; sceneCount: number }
   | { tool: 'generate_image'; projectId: string; sceneId: string; model: string }
@@ -51,7 +60,7 @@ const failure = (error: string, reason: MakeVideoAgentFailureReason): MakeVideoA
   reason,
 });
 
-const providerError = (result: ProviderFailure): MakeVideoAgentResult => providerError(result as ProviderFailure);
+const providerError = (result: ProviderFailure): MakeVideoAgentResult => failure(result.error, 'provider-error');
 
 const loadProject = async (projectId: string): Promise<VideoProject | null> => {
   const result = await makeVideoClient.get(projectId);
@@ -141,6 +150,49 @@ export const runMakeVideoAgentAction = async (action: MakeVideoAgentAction): Pro
           return failure('sceneIds must contain every existing scene exactly once.', 'invalid-action');
         }
         return saveProject({ ...project, scenes: action.sceneIds.map((id, index) => ({ ...byId.get(id)!, index })) });
+      }
+      case 'set_film_bible': {
+        const project = await loadProject(action.projectId);
+        if (!project) return failure(`Film project ${action.projectId} was not found.`, 'not-found');
+        return saveProject({ ...project, filmBible: action.filmBible });
+      }
+      case 'set_assets': {
+        const project = await loadProject(action.projectId);
+        if (!project) return failure(`Film project ${action.projectId} was not found.`, 'not-found');
+        return saveProject({ ...project, assets: action.assets });
+      }
+      case 'set_timeline': {
+        const project = await loadProject(action.projectId);
+        if (!project) return failure(`Film project ${action.projectId} was not found.`, 'not-found');
+        const invalidClip = action.timeline.clips.find(
+          (clip) => clip.startSec < 0 || clip.durationSec <= 0 || clip.trimStartSec < 0 || clip.trimEndSec < 0,
+        );
+        if (invalidClip) return failure(`Timeline clip ${invalidClip.id} has invalid timing.`, 'invalid-action');
+        return saveProject({ ...project, timeline: action.timeline });
+      }
+      case 'set_production_plan': {
+        const project = await loadProject(action.projectId);
+        if (!project) return failure(`Film project ${action.projectId} was not found.`, 'not-found');
+        const taskIds = new Set(action.productionPlan.tasks.map((task) => task.id));
+        const brokenTask = action.productionPlan.tasks.find((task) => task.dependsOn.some((id) => !taskIds.has(id)));
+        if (brokenTask) return failure(`Production task ${brokenTask.id} has an unknown dependency.`, 'invalid-action');
+        return saveProject({ ...project, productionPlan: action.productionPlan });
+      }
+      case 'audit_continuity': {
+        const project = await loadProject(action.projectId);
+        if (!project) return failure(`Film project ${action.projectId} was not found.`, 'not-found');
+        const issues: string[] = [];
+        if (!project.filmBible) issues.push('film bible is missing');
+        if (!project.scenes.length) issues.push('storyboard has no scenes');
+        project.scenes.forEach((scene) => {
+          if (!scene.imagePrompt.trim()) issues.push(`scene ${scene.index + 1} has no visual prompt`);
+          if (!scene.narration.trim()) issues.push(`scene ${scene.index + 1} has no narration`);
+        });
+        return {
+          ok: true,
+          observation: issues.length ? `Continuity audit found ${issues.length} issue(s): ${issues.join('; ')}.` : 'Continuity audit passed.',
+          project,
+        };
       }
       case 'delete_project': {
         const result = await makeVideoClient.remove(action.projectId);

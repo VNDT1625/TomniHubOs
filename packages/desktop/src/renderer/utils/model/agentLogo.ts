@@ -11,6 +11,7 @@
  */
 
 import { resolveBackendAssetUrl } from '@/renderer/utils/platform';
+import tomnyAgenticIcon from '@/renderer/assets/tomny-agentic-icon.svg';
 
 /**
  * Agent Logo 映射表
@@ -46,6 +47,7 @@ const AGENT_LOGO_PATH_MAP = {
   antigravity: 'tools/antigravity.svg',
 } as const satisfies Record<string, string>;
 
+const TOMNY_AGENTIC_ALIASES = new Set(['aionrs', 'tomny', 'tomny-agentic', 'tomny agentic']);
 const OPEN_CODE_LIGHT_FILE_NAME = 'opencode-light.svg';
 const OPEN_CODE_DARK_FILE_NAME = 'opencode-dark.svg';
 
@@ -83,7 +85,9 @@ function isDarkTheme(): boolean {
  */
 export function getAgentLogo(agent: string | undefined | null): string | null {
   if (!agent || typeof agent !== 'string') return null;
-  const key = agent.toLowerCase() as keyof typeof AGENT_LOGO_PATH_MAP;
+  const normalized = agent.trim().toLowerCase();
+  if (TOMNY_AGENTIC_ALIASES.has(normalized)) return tomnyAgenticIcon;
+  const key = normalized as keyof typeof AGENT_LOGO_PATH_MAP;
   const path = AGENT_LOGO_PATH_MAP[key];
   return path ? normalizeLogoUrl(buildAssetUrl(path)) : null;
 }

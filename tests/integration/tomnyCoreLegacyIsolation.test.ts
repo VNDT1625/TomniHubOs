@@ -140,7 +140,7 @@ describe('Tomny Core standalone replacement acceptance', () => {
     );
 
     expect(attempts).toEqual([1, 2]);
-    expect(resolveCapabilityHosts).toHaveBeenCalledWith(['aionui-ide']);
+    expect(resolveCapabilityHosts).toHaveBeenCalledWith(['aionui-ide'], []);
     expect(adapter.run).toHaveBeenCalledWith(
       expect.objectContaining({
         surface: 'ide',

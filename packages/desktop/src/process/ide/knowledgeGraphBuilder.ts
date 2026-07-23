@@ -1513,6 +1513,52 @@ export const buildKnowledgeDiagrams = (
 };
 
 /**
+ * Build the canonical renderer-independent summary consumed by MTUI.
+ *
+ * This stays in the pure builder layer so serialization tests do not import the
+ * Electron bridge and initialize provider/storage services as a side effect.
+ */
+export const buildRepoSummaryPayload = (graph: KnowledgeGraph) => ({
+  version: 3,
+  rootPath: graph.rootPath,
+  graphVersion: graph.version,
+  builtAt: graph.builtAt,
+  sourceSnapshotAt: graph.sourceSnapshotAt,
+  language: graph.language,
+  commitHash: graph.commitHash,
+  overview: graph.overview ?? null,
+  runbook: graph.runbook ?? null,
+  modules: (graph.modules ?? []).map((mod) => ({
+    id: mod.id,
+    label: mod.label,
+    layer: mod.layer,
+    summary: mod.summary,
+    fingerprint: mod.fingerprint ?? null,
+    fileCount: mod.fileCount,
+    files: mod.files,
+    parentId: mod.parentId ?? null,
+    childModuleIds: mod.childModuleIds ?? [],
+    relatedModuleIds: mod.relatedModuleIds ?? [],
+    entryFiles: mod.entryFiles ?? [],
+  })),
+  moduleEdges: graph.moduleEdges ?? [],
+  edges: graph.edges.map(({ from, to }) => ({ from, to })),
+  files: graph.nodes.map((node) => ({
+    path: node.id,
+    label: node.label,
+    group: node.group,
+    layer: node.layer,
+    summary: node.summary,
+    summarySource: node.summarySource ?? null,
+    tags: node.tags,
+    symbols: node.symbols,
+    language: node.language,
+    importedBy: node.importedBy,
+    fingerprint: node.fingerprint ?? null,
+  })),
+});
+
+/**
  * Create a knowledge-graph builder bound to the injected `deps`. The returned
  * {@link KnowledgeGraphBuilder.build} runs the deterministic + semantic pipeline
  * described in the file header.
@@ -1533,6 +1579,7 @@ export const createKnowledgeGraphBuilder = (deps: KnowledgeGraphBuilderDeps): Kn
     const summaryConcurrency = resolveSummaryConcurrency(model, opts?.summaryConcurrency);
     const summaryBatchTimeoutMs = resolveSummaryBatchTimeoutMs(opts?.summaryBatchTimeoutMs);
     const lang = opts?.language;
+    let sourceSnapshotAt: number | undefined;
 
     const assemble = (
       nodes: KnowledgeNode[],
@@ -1551,6 +1598,7 @@ export const createKnowledgeGraphBuilder = (deps: KnowledgeGraphBuilderDeps): Kn
       rootPath,
       version: KNOWLEDGE_GRAPH_VERSION,
       builtAt: now(),
+      sourceSnapshotAt,
       nodes,
       edges,
       tours: [],
@@ -1586,7 +1634,10 @@ export const createKnowledgeGraphBuilder = (deps: KnowledgeGraphBuilderDeps): Kn
 
     // 1. scanning ----------------------------------------------------------
     emit('scanning');
-    const files = await deps.collectFiles(rootPath);
+    sourceSnapshotAt = now();
+    const files = (await deps.collectFiles(rootPath))
+      .map((file) => ({ ...file, relPath: normalizeRel(file.relPath) }))
+      .toSorted((a, b) => a.relPath.localeCompare(b.relPath));
     emit('scanning', `${files.length}/${files.length}`);
     const contentByPath = new Map<string, string>();
     for (const file of files) {
@@ -1647,7 +1698,9 @@ export const createKnowledgeGraphBuilder = (deps: KnowledgeGraphBuilderDeps): Kn
       };
     });
     emit('parsing', `${nodes.length}/${files.length}`);
-    const edges: KnowledgeEdge[] = structural.edges.map((edge) => ({ from: edge.from, to: edge.to }));
+    const edges: KnowledgeEdge[] = structural.edges
+      .map((edge) => ({ from: edge.from, to: edge.to }))
+      .toSorted((a, b) => a.from.localeCompare(b.from) || a.to.localeCompare(b.to));
     const truncated = structural.truncated;
     const externals: ExternalDependency[] = extractExternals(files);
 

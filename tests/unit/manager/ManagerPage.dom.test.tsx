@@ -26,7 +26,7 @@ import { emptyManagerData, type ManagerData, type Task } from '@/process/manager
 
 // --- i18n: identity translator so assertions can use raw key strings ---------
 vi.mock('react-i18next', () => ({
-  useTranslation: () => ({ t: (k: string) => k, i18n: { language: 'en' } }),
+  useTranslation: () => ({ t: (k: string) => k, i18n: { language: 'en', resolvedLanguage: 'en' } }),
 }));
 
 // --- Arco Message: stub toasts so no portal spawns during tests --------------
@@ -66,6 +66,28 @@ const bridgeMocks = vi.hoisted(() => ({
 
 vi.mock('@/renderer/pages/manager/managerBridgeClient', () => ({
   managerClient: bridgeMocks,
+}));
+
+vi.mock('@/renderer/pages/manager/components/useManagerCore', () => ({
+  useManagerCore: () => ({
+    status: 'ready',
+    doctor: {
+      generatedAt: 1,
+      status: 'healthy',
+      checks: [],
+      metrics: { runCount: 0, completionRate: 1, retryRate: 0, toolFailureRate: 0 },
+    },
+    targets: [],
+    sessions: [],
+    activeRuns: [],
+    scheduledTasks: [],
+    lastUpdatedAt: 1,
+    error: null,
+    refresh: vi.fn(async () => undefined),
+    cancelRun: vi.fn(async () => true),
+    runScheduledTask: vi.fn(async () => true),
+    cancelScheduledTask: vi.fn(async () => true),
+  }),
 }));
 
 import ManagerPage from '@/renderer/pages/manager/ManagerPage';
@@ -128,9 +150,11 @@ describe('ManagerPage', () => {
     bridgeMocks.addTask.mockResolvedValue(ok(withTask));
 
     renderPage();
-    await waitFor(() => expect(screen.getByText('manager.tasks.create')).toBeTruthy());
+    await waitFor(() => expect(screen.getAllByText('manager.workspace.nav.overview').length).toBeGreaterThan(0));
 
-    // Open the editor.
+    // The overview CTA first opens the Tasks workspace; the Tasks CTA opens the editor.
+    await user.click(screen.getAllByText('manager.tasks.create')[0]);
+    await waitFor(() => expect(screen.getAllByText('manager.tasks.create').length).toBeGreaterThan(0));
     await user.click(screen.getByText('manager.tasks.create'));
     await waitFor(() => expect(screen.getByText('manager.taskEditor.createTitle')).toBeTruthy());
 

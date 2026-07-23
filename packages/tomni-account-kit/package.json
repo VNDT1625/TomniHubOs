@@ -1,0 +1,33 @@
+{
+  "name": "@tomni/account-kit",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Standalone, unintegrated Tomni account product prototype.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@arco-design/web-react": "^2.66.1",
+    "@icon-park/react": "^1.4.2",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.1.6",
+    "jsdom": "^28.1.0",
+    "typescript": "^5.8.3",
+    "vite": "^6.4.1",
+    "vitest": "^4.0.18"
+  }
+}

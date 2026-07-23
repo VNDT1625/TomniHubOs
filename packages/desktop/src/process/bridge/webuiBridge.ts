@@ -21,21 +21,44 @@ import {
   getDesktopWebUIStatus,
   setDesktopWebUIInitialPassword,
 } from '@process/utils/webuiConfig';
+import { getTomniGatewayEndpoint } from '@process/tomnigateway';
 
 type AdminUsernameResult = { username?: string };
+type WebUIAuthEndpoint = {
+  baseUrl: string;
+  native: boolean;
+  headers?: Record<string, string>;
+};
 
 function getBackendPort(): number | undefined {
   return (globalThis as typeof globalThis & { __backendPort?: number }).__backendPort;
 }
 
-async function fetchAdminUsername(): Promise<string> {
+const resolveWebUIAuthEndpoint = async (): Promise<WebUIAuthEndpoint> => {
   const port = getBackendPort();
-  if (!port) return 'admin';
+  if (port) return { baseUrl: `http://127.0.0.1:${port}`, native: false };
+  const gateway = await getTomniGatewayEndpoint();
+  return {
+    baseUrl: gateway.url,
+    native: true,
+    headers: {
+      authorization: `Bearer ${gateway.sessionToken}`,
+      'x-tomni-internal': '1',
+    },
+  };
+};
+
+async function fetchAdminUsername(): Promise<string> {
   try {
-    const res = await fetch(`http://127.0.0.1:${port}/api/auth/internal/users/system`);
+    const endpoint = await resolveWebUIAuthEndpoint();
+    const path = endpoint.native ? '/api/auth/status' : '/api/auth/internal/users/system';
+    const res = await fetch(endpoint.baseUrl + path, { headers: endpoint.headers });
     if (!res.ok) return 'admin';
-    const json = (await res.json()) as { data?: AdminUsernameResult | null };
-    return json.data?.username ?? 'admin';
+    const json = (await res.json()) as {
+      username?: string;
+      data?: AdminUsernameResult | null;
+    };
+    return json.username ?? json.data?.username ?? 'admin';
   } catch {
     return 'admin';
   }
@@ -49,12 +72,9 @@ async function fetchAdminUsername(): Promise<string> {
  * once. When the backend already has credentials (upgrade path handled by
  * ensureAdminUser, or a prior Enable-WebUI), this is a no-op.
  */
-async function maybeSeedInitialPassword(): Promise<void> {
-  const port = getBackendPort();
-  if (!port) {
-    throw new Error('[WebUI] Cannot start: aioncore is not running (globalThis.__backendPort unset)');
-  }
-  const statusRes = await fetch(`http://127.0.0.1:${port}/api/auth/status`);
+export async function maybeSeedInitialPassword(): Promise<void> {
+  const endpoint = await resolveWebUIAuthEndpoint();
+  const statusRes = await fetch(`${endpoint.baseUrl}/api/auth/status`, { headers: endpoint.headers });
   if (!statusRes.ok) {
     throw new Error(`[WebUI] /api/auth/status returned ${statusRes.status}`);
   }
@@ -64,7 +84,10 @@ async function maybeSeedInitialPassword(): Promise<void> {
     setDesktopWebUIInitialPassword(undefined);
     return;
   }
-  const resetRes = await fetch(`http://127.0.0.1:${port}/api/webui/reset-password`, { method: 'POST' });
+  const resetRes = await fetch(`${endpoint.baseUrl}/api/webui/reset-password`, {
+    method: 'POST',
+    headers: endpoint.headers,
+  });
   if (!resetRes.ok) {
     throw new Error(`[WebUI] /api/webui/reset-password returned ${resetRes.status}`);
   }

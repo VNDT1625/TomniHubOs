@@ -24,6 +24,7 @@ import TaskEditor from './TaskEditor';
 import AiCreateTasks from './AiCreateTasks';
 import ReviewTasks from './ReviewTasks';
 import QuickAdd from './QuickAdd';
+import styles from '../manager.module.css';
 
 const Option = Select.Option;
 
@@ -50,8 +51,8 @@ const TasksView: React.FC<{ store: UseManagerStore }> = ({ store }) => {
   const done = filtered.filter((task) => task.status === 'done');
 
   return (
-    <div className='h-full overflow-y-auto px-24px pb-32px'>
-      <div className='max-w-880px mx-auto flex flex-col gap-16px pt-4px'>
+    <div className={styles.workspaceScroll}>
+      <div className={styles.workspaceColumn}>
         {/* Day focus + progress */}
         <TodayPanel store={store} onEdit={(task) => setEditing(task)} />
 
@@ -62,7 +63,7 @@ const TasksView: React.FC<{ store: UseManagerStore }> = ({ store }) => {
         <AiCreateTasks store={store} />
 
         {/* Toolbar: filters + new */}
-        <div className='flex items-center gap-8px flex-wrap'>
+        <div className={styles.workspaceToolbar}>
           <Select
             size='small'
             value={statusFilter}
@@ -107,12 +108,12 @@ const TasksView: React.FC<{ store: UseManagerStore }> = ({ store }) => {
 
         {/* Active tasks */}
         {active.length === 0 && done.length === 0 && (
-          <div className='text-center text-13px text-t-tertiary py-40px'>{t('manager.tasks.empty')}</div>
+          <div className={styles.workspaceEmpty}>{t('manager.tasks.empty')}</div>
         )}
         {active.length === 0 && done.length > 0 && (
-          <div className='text-center text-13px text-t-tertiary py-12px'>{t('manager.tasks.noMatches')}</div>
+          <div className={styles.workspaceEmptyCompact}>{t('manager.tasks.noMatches')}</div>
         )}
-        <div className='flex flex-col gap-8px'>
+        <div className={styles.workspaceList}>
           {active.map((task) => (
             <TaskCard key={task.id} task={task} store={store} onEdit={() => setEditing(task)} />
           ))}
@@ -120,8 +121,8 @@ const TasksView: React.FC<{ store: UseManagerStore }> = ({ store }) => {
 
         {/* Completed (collapsed visual treatment) */}
         {done.length > 0 && (
-          <div className='flex flex-col gap-8px mt-8px'>
-            <div className='text-12px font-[600] text-t-tertiary uppercase tracking-wide'>
+          <div className={styles.workspaceCompleted}>
+            <div className={styles.workspaceSectionLabel}>
               {t('manager.tasks.done')} · {done.length}
             </div>
             {done.map((task) => (

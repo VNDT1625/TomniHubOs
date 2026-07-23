@@ -44,6 +44,10 @@ export const useAionrsMessage = (
   const [tokenUsage, setTokenUsage] = useState<TokenUsageData | null>(null);
   // Current active message ID to filter out events from old requests (prevents aborted request events from interfering with new ones)
   const activeMsgIdRef = useRef<string | null>(null);
+  // A stop is immediate in the UI, but the child process can still flush events
+  // for the cancelled turn. Keep its stream closed until a newly accepted turn
+  // supplies a fresh message id.
+  const stoppedTurnGateRef = useRef(false);
   const messageBufferRef = useRef(new Map<string, string>());
   const processedCronMsgIdsRef = useRef(new Set<string>());
 
@@ -51,6 +55,12 @@ export const useAionrsMessage = (
   const hasActiveToolsRef = useRef(hasActiveTools);
   const streamRunningRef = useRef(streamRunning);
   const waitingResponseRef = useRef(waitingResponse);
+
+  // The native Tomny stream emits an open-ended `thinking` frame, followed
+  // by tool/content/finish frames. Keep the lifecycle identity here so the
+  // rendered thinking row receives a terminal update and its elapsed timer
+  // cannot continue after the step has ended.
+  const activeThinkingRef = useRef<{ msgId: string; startedAt: number } | null>(null);
 
   // Track whether current turn has content output
   // Only reset waitingResponse when finish arrives after content (not after tool calls)
@@ -121,6 +131,7 @@ export const useAionrsMessage = (
   // Set current active message ID
   const setActiveMsgId = useCallback((msgId: string | null) => {
     activeMsgIdRef.current = msgId;
+    if (msgId) stoppedTurnGateRef.current = false;
   }, []);
 
   const processCompletedAssistantMessage = useCallback(
@@ -181,9 +192,41 @@ export const useAionrsMessage = (
     [addOrUpdateMessage, conversation_id]
   );
 
+  const completeActiveThinking = useCallback(
+    (
+      boundaryMessage: Pick<IResponseMessage, 'conversation_id' | 'created_at'>,
+      completeOptions?: { duration?: number }
+    ): void => {
+      const activeThinking = activeThinkingRef.current;
+      if (!activeThinking) return;
+
+      const endTime = boundaryMessage.created_at ?? Date.now();
+      const duration = completeOptions?.duration ?? Math.max(0, endTime - activeThinking.startedAt);
+      addOrUpdateMessage({
+        id: `${activeThinking.msgId}-thinking-done`,
+        type: 'thinking',
+        msg_id: activeThinking.msgId,
+        conversation_id: boundaryMessage.conversation_id,
+        position: 'left',
+        created_at: endTime,
+        content: {
+          content: '',
+          duration,
+          status: 'done',
+        },
+      });
+      activeThinkingRef.current = null;
+    },
+    [addOrUpdateMessage]
+  );
+
   useEffect(() => {
     return ipcBridge.conversation.responseStream.on((message) => {
       if (conversation_id !== message.conversation_id) {
+        return;
+      }
+
+      if (stoppedTurnGateRef.current && (!message.msg_id || message.msg_id !== activeMsgIdRef.current)) {
         return;
       }
 
@@ -193,6 +236,27 @@ export const useAionrsMessage = (
         if (message.type === 'thought') {
           return;
         }
+      }
+
+      // A thinking frame remains open until a terminal/non-thinking frame
+      // arrives. Close it before handling that boundary so the timer in
+      // MessageThinking receives a `status: done` update in the same order as
+      // the stream event.
+      const thinkingData =
+        message.type === 'thinking' && message.data && typeof message.data === 'object'
+          ? (message.data as { status?: string; duration?: number; duration_ms?: number })
+          : undefined;
+      if (thinkingData?.status === 'done') {
+        completeActiveThinking(message, {
+          duration: thinkingData.duration ?? thinkingData.duration_ms,
+        });
+      } else if (
+        activeThinkingRef.current &&
+        !['thought', 'thinking', 'start', 'content', 'text', 'request_trace', 'config_changed'].includes(message.type)
+      ) {
+        completeActiveThinking(message);
+      } else if (activeThinkingRef.current && (message.type === 'content' || message.type === 'text')) {
+        completeActiveThinking(message);
       }
 
       if ((message.type === 'content' || message.type === 'text') && message.msg_id) {
@@ -250,7 +314,26 @@ export const useAionrsMessage = (
             if (message.msg_id) {
               void processCompletedAssistantMessage(message.msg_id);
             }
+            activeThinkingRef.current = null;
           }
+          break;
+        case 'thinking':
+          if (thinkingData?.status === 'done') {
+            // `completeActiveThinking` has already merged the terminal frame;
+            // retain a standalone done frame when no active row was present
+            // (for example after rehydrating a conversation).
+            if (!message.msg_id || !activeThinkingRef.current) {
+              addOrUpdateMessage(transformMessage(message));
+            }
+            break;
+          }
+          if (message.msg_id) {
+            const startedAt = message.created_at ?? Date.now();
+            if (!activeThinkingRef.current || activeThinkingRef.current.msgId !== message.msg_id) {
+              activeThinkingRef.current = { msgId: message.msg_id, startedAt };
+            }
+          }
+          addOrUpdateMessage(transformMessage(message));
           break;
         case 'tool_group':
           {
@@ -372,7 +455,7 @@ export const useAionrsMessage = (
       }
     });
     // Note: hasActiveTools and streamRunning are accessed via refs to avoid re-subscription
-  }, [conversation_id, addOrUpdateMessage, onError, processCompletedAssistantMessage]);
+  }, [conversation_id, addOrUpdateMessage, completeActiveThinking, onError, processCompletedAssistantMessage]);
 
   useEffect(() => {
     let cancelled = false;
@@ -380,6 +463,7 @@ export const useAionrsMessage = (
     setThought({ subject: '', description: '' });
     setTokenUsage(null);
     hasContentInTurnRef.current = false;
+    activeThinkingRef.current = null;
     setHasHydratedRunningState(false);
 
     // Check actual conversation status from backend before resetting all running states
@@ -423,6 +507,8 @@ export const useAionrsMessage = (
   }, [conversation_id]);
 
   const resetState = useCallback(() => {
+    completeActiveThinking({ conversation_id, created_at: Date.now() });
+    stoppedTurnGateRef.current = true;
     setWaitingResponse(false);
     waitingResponseRef.current = false;
     setStreamRunning(false);
@@ -433,7 +519,7 @@ export const useAionrsMessage = (
     hasContentInTurnRef.current = false;
     // Clear active message ID to prevent filtering events from new messages after stop
     activeMsgIdRef.current = null;
-  }, []);
+  }, [completeActiveThinking, conversation_id]);
 
   return {
     thought,

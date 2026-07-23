@@ -37,7 +37,7 @@ vi.mock('@/common/adapter/ipcBridge', () => ({
 
 vi.mock('@/common/config/configMigration', () => ({
   migrateConfigStorage: vi.fn().mockResolvedValue(undefined),
-  migrateLegacyMcpConfigToDb: vi.fn().mockResolvedValue(undefined),
+
   migrateProviders: vi.fn().mockResolvedValue(undefined),
 }));
 

@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="tomnyCoreGradient" x1="84" y1="58" x2="432" y2="452" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#C43CFF"/>
+      <stop offset="0.5" stop-color="#7B3CFF"/>
+      <stop offset="1" stop-color="#155CFF"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Robot head / AI-core shell -->
+  <path
+    d="M154 58H358L420 120V292L374 338L336 426H176L138 338L92 292V120L154 58Z"
+    stroke="#111116"
+    stroke-width="30"
+    stroke-linejoin="round"
+  />
+
+  <!-- Headset / perception modules -->
+  <path d="M62 174H92V314H62C46 314 34 302 34 286V202C34 186 46 174 62 174Z" fill="#111116"/>
+  <path d="M450 174H420V314H450C466 314 478 302 478 286V202C478 186 466 174 450 174Z" fill="#111116"/>
+  <path d="M16 206H34V282H16C8 282 2 276 2 268V220C2 212 8 206 16 206Z" fill="#111116" opacity="0.8"/>
+  <path d="M496 206H478V282H496C504 282 510 276 510 268V220C510 212 504 206 496 206Z" fill="#111116" opacity="0.8"/>
+
+  <!-- T: cognition bar -->
+  <path d="M178 134H334M256 134V184" stroke="#111116" stroke-width="26" stroke-linecap="square"/>
+
+  <!-- O: central intelligence core -->
+  <circle cx="256" cy="226" r="34" stroke="#111116" stroke-width="22"/>
+
+  <!-- M: primary facial structure; outer shell and negative space hide the N flow -->
+  <path
+    d="M150 242V342L204 394V300L256 346L308 300V394L362 342V242L256 334L150 242Z"
+    stroke="#111116"
+    stroke-width="28"
+    stroke-linejoin="miter"
+  />
+
+  <!-- I: intelligence spine -->
+  <path d="M256 346V430" stroke="#111116" stroke-width="28" stroke-linecap="square"/>
+</svg>

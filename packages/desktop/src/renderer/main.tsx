@@ -152,31 +152,45 @@ const Config: React.FC<PropsWithChildren> = ({ children }) => {
 };
 
 const Main = () => {
-  const { ready } = useAuth();
+  const { ready, status } = useAuth();
   const [configReady, setConfigReady] = useState(false);
 
   useEffect(() => {
     if (!ready) return;
-    // Prefetch `/api/agents` in parallel with configService.initialize() and
-    // seed the shared SWR cache so the Guid page's model/mode selectors can
-    // read `handshake.available_models` on the very first render — without
-    // waiting for a session to be created.
-    Promise.all([
-      configService.initialize().catch((err) => {
+    // WebUI must render the login route before authenticated configuration is
+    // available. Waiting for protected settings/agent endpoints here creates a
+    // bootstrap deadlock: unauthenticated requests fail while the login UI is
+    // still hidden behind configReady.
+    if (status !== 'authenticated') {
+      setConfigReady(true);
+      return;
+    }
+    setConfigReady(false);
+    // Persisted configuration is the only blocking bootstrap dependency.
+    // Agent discovery uses the event bridge and may remain pending when a
+    // WebUI backend does not expose a desktop-only provider. Never let that
+    // optional warm-up keep the entire authenticated renderer blank.
+    configService
+      .initialize()
+      .catch((err) => {
         console.error('Failed to initialize config:', err);
-      }),
-      fetchDetectedAgents()
-        .then((agents) => swrMutate(DETECTED_AGENTS_SWR_KEY, agents, false))
-        .catch((err) => {
-          console.error('Failed to prefetch agents:', err);
-        }),
-    ]).finally(() => setConfigReady(true));
-  }, [ready]);
+      })
+      .finally(() => setConfigReady(true));
+
+    // Warm the shared SWR cache opportunistically. The pages that consume it
+    // already own loading/empty states and can revalidate when the transport
+    // becomes available.
+    void fetchDetectedAgents()
+      .then((agents) => swrMutate(DETECTED_AGENTS_SWR_KEY, agents, false))
+      .catch((err) => {
+        console.error('Failed to prefetch agents:', err);
+      });
+  }, [ready, status]);
 
   useEffect(() => {
-    if (!ready) return;
+    if (!ready || status !== 'authenticated') return;
     void repairAllCronJobTimeZonesOnce();
-  }, [ready]);
+  }, [ready, status]);
 
   // After a renderer reload (F5), a company run that was in progress is torn
   // down because the recursive pipeline lives in the renderer. The user never
@@ -184,9 +198,9 @@ const Main = () => {
   // and restart it from its goal — regardless of the current route. Runs once
   // per load, after config is ready so the company bridge is reachable.
   useEffect(() => {
-    if (!ready || !configReady) return;
+    if (!ready || status !== 'authenticated' || !configReady) return;
     resumeInterruptedCompanyRuns();
-  }, [ready, configReady]);
+  }, [ready, status, configReady]);
 
   if (!ready || !configReady) {
     return null;

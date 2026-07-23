@@ -29,6 +29,7 @@ import { useEditorToolsProvider } from './editorToolsProvider';
 import { useMakeVideoAgentHarness } from './makevideo/makeVideoAgentHarness';
 import type { CollabJoinData } from '@renderer/pages/editor/adapters/collabClient';
 import { MUSIC_STUDIO_ENABLED } from '@/common/config/constants';
+import AppLoader from '@renderer/components/layout/AppLoader';
 
 const AutomationView = React.lazy(() => import('./automation/AutomationView'));
 const IdeWorkspace = React.lazy(() => import('./ide/IdeWorkspace'));
@@ -39,7 +40,7 @@ type StudioView =
   | { mode: 'dashboard' }
   | { mode: 'editor'; filePath: string }
   | { mode: 'peer'; join: CollabJoinData; hostBaseUrl: string }
-  | { mode: 'ide' }
+  | { mode: 'ide'; initialMode?: 'files' | 'viu' }
   | { mode: 'automation' }
   | { mode: 'makeVideo' }
   | { mode: 'music' };
@@ -97,6 +98,7 @@ const StudioPage: React.FC = () => {
         <StudioDashboard
           onOpenFile={openFile}
           onOpenIde={() => setView({ mode: 'ide' })}
+          onOpenViu={() => setView({ mode: 'ide', initialMode: 'viu' })}
           onJoinSession={(join, joinCode) => setView({ mode: 'peer', join, hostBaseUrl: `http://${joinCode}` })}
           onAutomation={() => setView({ mode: 'automation' })}
           onMakeVideo={() => setView({ mode: 'makeVideo' })}
@@ -123,8 +125,8 @@ const StudioPage: React.FC = () => {
 
       {view.mode === 'ide' ? (
         <div className='absolute inset-0'>
-          <Suspense fallback={null}>
-            <IdeWorkspace onBack={() => setView({ mode: 'dashboard' })} />
+          <Suspense fallback={<AppLoader />}>
+            <IdeWorkspace initialMode={view.initialMode} onBack={() => setView({ mode: 'dashboard' })} />
           </Suspense>
         </div>
       ) : null}

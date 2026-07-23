@@ -22,6 +22,7 @@ describe('isIgnoredPath / isWatchedFile', () => {
   it('ignores vendor/build dirs', () => {
     expect(isIgnoredPath('node_modules/react/index.js')).toBe(true);
     expect(isIgnoredPath('.git/HEAD')).toBe(true);
+    expect(isIgnoredPath('.tomni/understand/summary.json')).toBe(true);
     expect(isIgnoredPath('\x2eomni/wiki/wiki.json')).toBe(true);
     expect(isIgnoredPath('.aionui/understand/stale.json')).toBe(true);
     expect(isIgnoredPath('.mtui/history.sqlite')).toBe(true);
@@ -96,6 +97,7 @@ describe('createRepoWatcher', () => {
     const harness = makeHarness(
       new Set([
         'node_modules/x/index.js',
+        '.tomni/understand/summary.json',
         '.aionui/understand/stale.json',
         '.mtui/history.sqlite',
         'img.png',
@@ -107,6 +109,7 @@ describe('createRepoWatcher', () => {
     watcher.start('/repo', (e) => events.push(e));
 
     harness.fire('change', 'node_modules/x/index.js');
+    harness.fire('change', '.tomni/understand/summary.json');
     harness.fire('change', '.aionui/understand/stale.json');
     harness.fire('change', '.mtui/history.sqlite');
     harness.fire('change', 'img.png');

@@ -413,6 +413,123 @@
     "open": "開啟",
     "close": "關閉"
   },
+  "workspace": {
+    "controlCenter": "控制中心",
+    "navigation": "管理導覽",
+    "system": "系統",
+    "todayCommand": "今日控制中心",
+    "overviewTitle": "看清重點，推動今天向前。",
+    "overviewSubtitle": "集中查看任務、行程、知識與 Tomny Core 即時活動。",
+    "viewAll": "查看全部",
+    "viewCalendar": "開啟行事曆",
+    "openCore": "開啟 Core",
+    "nav": {
+      "overview": "總覽",
+      "core": "Tomny Core"
+    },
+    "descriptions": {
+      "overview": "優先事項、進度與即時系統活動",
+      "tasks": "規劃、排序並完成工作",
+      "schedule": "協調固定與彈性時段",
+      "daily": "即時記錄今天",
+      "learn": "建立互聯知識庫",
+      "data": "整理文件、來源與摘要",
+      "core": "檢查原生目標、執行與自動化"
+    },
+    "metrics": {
+      "activeTasks": "進行中任務",
+      "overdue": "{{count}} 項逾期",
+      "eventsToday": "今日事件",
+      "nextAt": "下一項 {{time}}",
+      "clearDay": "沒有更多事件",
+      "notes": "筆記",
+      "knowledgeBase": "整個知識庫",
+      "activeRuns": "Core 活躍執行"
+    },
+    "focus": {
+      "title": "專注佇列",
+      "subtitle": "逾期與高影響工作優先",
+      "completion": "整體完成度",
+      "empty": "沒有緊急事項。"
+    },
+    "timeline": {
+      "title": "今日時間軸",
+      "subtitle": "接下來的固定與彈性時段",
+      "empty": "今日行事曆為空。"
+    },
+    "recent": {
+      "title": "最近知識",
+      "subtitle": "最近更新的筆記與文件",
+      "empty": "暫無最近筆記。"
+    },
+    "corePulse": {
+      "title": "Core 脈搏",
+      "subtitle": "原生執行環境與自動化就緒度",
+      "targets": "可用目標",
+      "sessions": "工作階段",
+      "automations": "自動化",
+      "completion": "完成率 {{rate}}%"
+    }
+  },
+  "core": {
+    "title": "Tomny Core 維運",
+    "subtitle": "用於執行環境健康、進行中工作、目標與持久自動化的原生控制介面。",
+    "nativeRuntime": "原生執行環境",
+    "loading": "正在連線 Tomny Core…",
+    "unavailableTitle": "Tomny Core 無回應",
+    "unavailableDescription": "管理資料仍可使用。請重新啟動桌面執行環境，或等待 Core 啟動完成後重試。",
+    "status": {
+      "loading": "Core 啟動中",
+      "offline": "Core 離線",
+      "healthy": "Core 健康",
+      "degraded": "Core 降級",
+      "unhealthy": "Core 異常"
+    },
+    "actions": {
+      "refresh": "重新整理",
+      "cancel": "取消執行",
+      "runNow": "立即執行",
+      "runSuccess": "自動化已啟動",
+      "cancelSuccess": "執行已取消",
+      "failed": "Core 操作失敗"
+    },
+    "metrics": {
+      "health": "執行環境健康",
+      "checked": "{{count}} 項檢查",
+      "targets": "可用目標",
+      "ofTotal": "共發現 {{total}} 個",
+      "activeRuns": "活躍執行",
+      "sessions": "{{count}} 個工作階段",
+      "automations": "已啟用自動化",
+      "scheduledTotal": "共 {{count}} 個排程"
+    },
+    "health": {
+      "title": "執行環境診斷",
+      "subtitle": "健康檢查與執行可靠性",
+      "completionRate": "完成率",
+      "noReport": "暫無診斷報告。"
+    },
+    "runs": {
+      "title": "活躍執行",
+      "subtitle": "目前透過新 Core 執行的工作",
+      "empty": "沒有活躍的 Core 執行。",
+      "started": "開始於 {{time}}"
+    },
+    "automations": {
+      "title": "持久自動化",
+      "subtitle": "具重試與生命週期狀態的原生排程工作",
+      "empty": "尚未建立 Core 自動化。",
+      "enabled": "已啟用",
+      "disabled": "已停用",
+      "manual": "手動",
+      "intervalMinutes": "每 {{count}} 分鐘"
+    },
+    "targets": {
+      "title": "執行目標",
+      "subtitle": "內建、ACP、CLI 與遠端執行介面卡",
+      "models": "{{count}} 個模型"
+    }
+  },
   "quickAdd": {
     "placeholder": "新增任務 —— 試試「報告 明天 5pm !high #work」",
     "hint": "提示：!high · #標籤 · 「明天 5pm」/「週一 9am」會自動辨識。",

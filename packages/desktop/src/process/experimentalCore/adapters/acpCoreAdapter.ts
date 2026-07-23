@@ -22,6 +22,7 @@ import { buildAcpPromptBlocks } from './attachmentPayload';
 
 import { evaluateAcpCompatibility } from './acpCompatibility';
 import {
+  dedupeCoreMcpServers,
   formatSpawnLabel,
   requireWorkspace,
   throwIfAborted,
@@ -30,13 +31,8 @@ import {
   type CoreRunInput,
   type DetectedCoreTarget,
 } from './coreAdapter';
-import {
-  buildExperimentalSessionKey,
-  type ExperimentalCoreModel,
-  type ExperimentalPermissionMode,
-} from '../experimentalCoreProtocol';
+import type { ExperimentalCoreModel, ExperimentalPermissionMode } from '../experimentalCoreProtocol';
 
-type AcpSession = { sessionId: string; connection: ClientSideConnection };
 type AcpPermissionHandler = {
   mode: ExperimentalPermissionMode;
   request: (request: { tool: string; detail?: string }) => Promise<boolean>;
@@ -47,7 +43,6 @@ const ACP_HANDSHAKE_TIMEOUT_MS = 15_000;
 type AcpProcess = {
   child: ChildProcessWithoutNullStreams;
   connection: ClientSideConnection;
-  sessions: Map<string, AcpSession>;
   permissions: Map<string, AcpPermissionHandler>;
 
   toolCalls: Map<string, string>;
@@ -118,13 +113,24 @@ export const runAcpWithRetry = async (input: CoreRunInput, operation: () => Prom
     onStatus: (status) => input.emit({ type: 'status', text: status.message }),
   });
 
-const acpMcpServers = (input: CoreRunInput) =>
-  (input.mcpServers ?? []).map((server) => ({
-    type: 'sse' as const,
-    name: server.name,
-    url: server.url,
-    headers: server.headers ?? [],
-  }));
+export const acpMcpServers = (input: CoreRunInput) =>
+  dedupeCoreMcpServers(input.mcpServers ?? []).map((server) => {
+    if (server.transport === 'stdio') {
+      return {
+        name: server.name,
+        command: server.command,
+        args: server.args ?? [],
+        env: server.env ?? [],
+      };
+    }
+    return {
+      type:
+        server.transport === 'http' || server.transport === 'streamable_http' ? ('http' as const) : ('sse' as const),
+      name: server.name,
+      url: server.url,
+      headers: server.headers ?? [],
+    };
+  });
 
 /** Generic ACP stdio host shared by Claude, OpenCode, Cursor, Hermes and compatible CLIs. */
 export class AcpCoreAdapter implements CoreAdapter {
@@ -158,50 +164,38 @@ export class AcpCoreAdapter implements CoreAdapter {
 
     throwIfAborted(input.signal);
     const cwd = requireWorkspace(input.workspace);
-    const key = buildExperimentalSessionKey({
-      sessionId: input.sessionId,
-      targetId: input.target.id,
-      workspace: cwd,
-      modelKey: input.modelKey,
-      permissionMode: input.permissionMode,
-      surface: input.surface,
-    });
-    let session = runtime.sessions.get(key);
-    if (!session) {
-      input.emit({ type: 'status', text: `Starting direct ${input.target.name} ACP session...` });
-      const created = await runtime.connection.newSession({ cwd, mcpServers: acpMcpServers(input) });
-      this.captureModels(input.target.id, created.models);
-      session = { sessionId: created.sessionId, connection: runtime.connection };
-      runtime.sessions.set(key, session);
-      if (input.modelKey) {
-        await runtime.connection.unstable_setSessionModel({
-          sessionId: created.sessionId,
-          modelId: input.modelKey,
-        });
-      }
+    input.emit({ type: 'status', text: `Starting stateless ${input.target.name} ACP turn...` });
+    const created = await runtime.connection.newSession({ cwd, mcpServers: acpMcpServers(input) });
+    this.captureModels(input.target.id, created.models);
+    const providerSessionId = created.sessionId;
+    if (input.modelKey) {
+      await runtime.connection.unstable_setSessionModel({
+        sessionId: providerSessionId,
+        modelId: input.modelKey,
+      });
     }
 
     throwIfAborted(input.signal);
 
-    this.emitters.set(session.sessionId, input.emit);
-    runtime.permissions.set(session.sessionId, {
+    this.emitters.set(providerSessionId, input.emit);
+    runtime.permissions.set(providerSessionId, {
       mode: input.permissionMode,
       request: input.requestPermission,
     });
     const onAbort = (): void => {
-      void runtime.connection.cancel({ sessionId: session?.sessionId ?? '' }).catch((): void => undefined);
+      void runtime.connection.cancel({ sessionId: providerSessionId }).catch((): void => undefined);
     };
     input.signal.addEventListener('abort', onAbort, { once: true });
     try {
       await runtime.connection.prompt({
-        sessionId: session.sessionId,
+        sessionId: providerSessionId,
         prompt: buildAcpPromptBlocks(input.prompt, input.attachments),
       });
       throwIfAborted(input.signal);
     } finally {
       input.signal.removeEventListener('abort', onAbort);
-      this.emitters.delete(session.sessionId);
-      runtime.permissions.delete(session.sessionId);
+      this.emitters.delete(providerSessionId);
+      runtime.permissions.delete(providerSessionId);
     }
   }
 
@@ -244,7 +238,6 @@ export class AcpCoreAdapter implements CoreAdapter {
     const runtime: AcpProcess = {
       child,
       connection: undefined as unknown as ClientSideConnection,
-      sessions: new Map(),
       permissions: new Map(),
 
       toolCalls: new Map(),
@@ -274,6 +267,7 @@ export class AcpCoreAdapter implements CoreAdapter {
             callId: update.toolCallId,
             text: update.title,
             phase: update.status === 'in_progress' ? 'running' : 'requested',
+            ...(update.rawInput !== undefined ? { input: update.rawInput } : {}),
           });
           return;
         }
@@ -287,6 +281,7 @@ export class AcpCoreAdapter implements CoreAdapter {
               callId: update.toolCallId,
               text: title,
               phase: update.status === 'in_progress' ? 'running' : 'requested',
+              ...(update.rawInput !== undefined ? { input: update.rawInput } : {}),
             });
             return;
           }
@@ -297,6 +292,7 @@ export class AcpCoreAdapter implements CoreAdapter {
             callId: update.toolCallId,
             text: title,
             outcome: update.status === 'failed' ? 'error' : 'success',
+            ...(update.rawInput !== undefined ? { input: update.rawInput } : {}),
           });
           runtime.toolCalls.delete(update.toolCallId);
         }

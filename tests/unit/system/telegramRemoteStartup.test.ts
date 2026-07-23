@@ -1,58 +1,62 @@
-﻿import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const tunnelMocks = vi.hoisted(() => ({
+const mocks = vi.hoisted(() => ({
   startTunnel: vi.fn(),
   stopTunnel: vi.fn(),
+  startGateway: vi.fn(),
+  configureGateway: vi.fn(),
+  stopGateway: vi.fn(),
+  configureHost: vi.fn(),
 }));
 
 vi.mock('@process/studio/cloudflareTunnel', () => ({
-  startTunnel: tunnelMocks.startTunnel,
-  stopTunnel: tunnelMocks.stopTunnel,
+  startTunnel: mocks.startTunnel,
+  stopTunnel: mocks.stopTunnel,
+}));
+vi.mock('@process/services/remoteGateway/registry', () => ({
+  startRegisteredTomniRemoteGateway: mocks.startGateway,
+  configureRegisteredTomniRemoteGateway: mocks.configureGateway,
+  stopRegisteredTomniRemoteGateway: mocks.stopGateway,
 }));
 
-describe('Telegram remote startup', () => {
+describe('Telegram remote startup lifecycle', () => {
   beforeEach(() => {
     vi.resetModules();
-    tunnelMocks.startTunnel.mockReset();
-    tunnelMocks.stopTunnel.mockReset();
-    vi.unstubAllGlobals();
+    vi.clearAllMocks();
+    mocks.startGateway.mockResolvedValue({
+      localUrl: 'http://127.0.0.1:4100',
+      configure: mocks.configureHost,
+    });
   });
 
-  it('publishes the existing tunnel URL again when aioncore becomes ready again', async () => {
-    tunnelMocks.startTunnel.mockResolvedValue({ ok: true, url: 'https://remote.trycloudflare.com' });
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200 });
-    vi.stubGlobal('fetch', fetchMock);
+  it('reuses one tunnel while synchronizing native language state', async () => {
+    mocks.startTunnel.mockResolvedValue({ ok: true, url: 'https://remote.trycloudflare.com' });
+    const { startTelegramRemoteTunnel, syncTelegramRemoteLanguage } =
+      await import('@process/startup/telegramRemoteStartup');
+    await startTelegramRemoteTunnel('vi-VN');
+    await startTelegramRemoteTunnel('en-US');
+    mocks.configureGateway.mockReturnValue(true);
 
-    const { startTelegramRemoteTunnel } = await import('@process/startup/telegramRemoteStartup');
-    await startTelegramRemoteTunnel(4100, 'vi-VN');
-    await startTelegramRemoteTunnel(4200, 'vi-VN');
-
-    expect(tunnelMocks.startTunnel).toHaveBeenCalledTimes(1);
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      2,
-      'http://127.0.0.1:4200/api/channel/remote/public-url',
-      expect.objectContaining({
-        body: JSON.stringify({
-          public_url: 'https://remote.trycloudflare.com',
-          language: 'vi-VN',
-        }),
-      })
-    );
+    await expect(syncTelegramRemoteLanguage('ja-JP')).resolves.toBe(true);
+    expect(mocks.startTunnel).toHaveBeenCalledTimes(1);
+    expect(mocks.configureHost).toHaveBeenLastCalledWith({
+      publicUrl: 'https://remote.trycloudflare.com',
+      language: 'en-US',
+    });
+    expect(mocks.configureGateway).toHaveBeenCalledWith({ language: 'ja-JP' });
   });
 
   it('allows tunnel startup to retry after a failed attempt', async () => {
-    tunnelMocks.startTunnel
+    mocks.startTunnel
       .mockResolvedValueOnce({ ok: false, reason: 'timeout' })
       .mockResolvedValueOnce({ ok: true, url: 'https://retry.trycloudflare.com' });
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200 }));
-
     const { startTelegramRemoteTunnel } = await import('@process/startup/telegramRemoteStartup');
-    await expect(startTelegramRemoteTunnel(4100)).resolves.toEqual({ ok: false, reason: 'timeout' });
-    await expect(startTelegramRemoteTunnel(4100)).resolves.toEqual({
+
+    await expect(startTelegramRemoteTunnel()).resolves.toEqual({ ok: false, reason: 'timeout' });
+    await expect(startTelegramRemoteTunnel()).resolves.toEqual({
       ok: true,
       url: 'https://retry.trycloudflare.com',
     });
-
-    expect(tunnelMocks.startTunnel).toHaveBeenCalledTimes(2);
+    expect(mocks.startTunnel).toHaveBeenCalledTimes(2);
   });
 });

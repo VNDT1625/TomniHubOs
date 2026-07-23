@@ -160,5 +160,153 @@
     "toolCompleted": "{{tool}} completed",
     "toolFailed": "{{tool}} failed",
     "toolWorkspace": "Workspace: {{workspace}}"
+  },
+  "benchmark": {
+    "tab": "基準測試",
+    "title": "代理程式基準測試",
+    "subtitle": "讓 Tomny、Claude Code 與 Codex 執行相同的雙提示詞套件，再比較驗證後的結果。",
+    "liveContract": "即時 IPC",
+    "suite": {
+      "title": "套件定義",
+      "hint": "保持任務完全一致，讓每個執行器都從可比較的要求開始。",
+      "selectPlaceholder": "選擇已儲存的套件",
+      "selectLabel": "已儲存的基準測試套件",
+      "nameLabel": "套件名稱",
+      "namePlaceholder": "例如：修復並驗證登入流程"
+    },
+    "prompts": {
+      "firstLabel": "提示詞 1 · 實作",
+      "firstName": "實作提示詞",
+      "firstPlaceholder": "描述問題，以及每個執行器都應完成的修改。",
+      "secondLabel": "提示詞 2 · 複查",
+      "secondName": "複查提示詞",
+      "secondPlaceholder": "要求每個執行器檢查、測試並完善第一輪結果。"
+    },
+    "verification": {
+      "label": "驗證命令",
+      "placeholder": "例如：bunx vitest run tests/unit/auth.test.ts",
+      "hint": "填寫後，此命令應在代理程式工作前失敗，並在工作完成後通過。"
+    },
+    "runner": {
+      "tomny": "Tomny",
+      "claude": "Claude Code",
+      "codex": "Codex"
+    },
+    "runnerDescription": {
+      "tomny": "透過 Tomny 執行環境接入的整合式 IDE 代理程式。",
+      "claude": "隔離的原生 Claude CLI 工作階段。",
+      "codex": "隔離的原生 Codex CLI 工作階段。"
+    },
+    "runners": {
+      "title": "執行器通道",
+      "hint": "每個已選擇的執行器都需要獨立的隔離工作區。",
+      "selectedCount": "已選擇 {{count}} 個",
+      "available": "可用",
+      "unavailable": "不可用",
+      "notProbed": "尚未探測",
+      "detail": "執行器可用性詳細資料",
+      "enabledLabel": "啟用 {{runner}}",
+      "modelLabel": "模型",
+      "modelPlaceholder": "執行器預設模型",
+      "modelAriaLabel": "{{runner}} 使用的模型",
+      "workspaceLabel": "工作區",
+      "workspacePlaceholder": "隔離工作區的絕對路徑",
+      "workspaceAriaLabel": "{{runner}} 使用的工作區"
+    },
+    "actions": {
+      "newSuite": "新增套件",
+      "probe": "探測執行器",
+      "retry": "重試",
+      "save": "儲存套件",
+      "startSelected": "啟動所選項目",
+      "refreshHistory": "重新整理歷史記錄",
+      "rerun": "重新執行此執行器",
+      "cancelRun": "取消執行"
+    },
+    "history": {
+      "title": "執行歷史",
+      "hint": "所選套件的即時進度與已儲存結果。",
+      "empty": "此套件尚無基準測試執行記錄。",
+      "rerunBadge": "重新執行",
+      "changedFiles": "已修改 {{count}} 個檔案"
+    },
+    "metrics": {
+      "hint": "權杖資料會保留其來源；無法取得的值維持未知。",
+      "duration": "耗時",
+      "ttft": "首字延遲",
+      "inputTokens": "輸入權杖",
+      "outputTokens": "輸出權杖",
+      "cachedTokens": "快取權杖",
+      "totalTokens": "總權杖",
+      "provenance": "權杖來源"
+    },
+    "provenance": {
+      "reported": "已回報",
+      "estimated": "估算值",
+      "unavailable": "不可用"
+    },
+    "status": {
+      "queued": "排隊中",
+      "preparing": "準備中",
+      "running": "執行中",
+      "verifying": "驗證中",
+      "completed": "已完成",
+      "passed": "已通過",
+      "failed": "未通過",
+      "error": "錯誤",
+      "cancelled": "已取消",
+      "interrupted": "已中斷"
+    },
+    "messages": {
+      "probeComplete": "執行器探測完成。",
+      "saved": "基準測試套件已儲存。",
+      "started": "已啟動 {{count}} 個執行器。",
+      "rerunStarted": "已為一個執行器啟動重新執行。",
+      "cancelled": "已送出取消要求。"
+    },
+    "errors": {
+      "loadSuites": "無法載入基準測試套件。",
+      "loadRuns": "無法載入基準測試歷史記錄。",
+      "probe": "無法探測基準測試執行器。",
+      "save": "無法儲存基準測試套件。",
+      "start": "無法啟動所選執行器。",
+      "rerun": "無法重新執行此執行器。",
+      "cancel": "無法取消此次執行。",
+      "cancelNotActive": "此執行已不再進行中。",
+      "runnerUnavailable": "{{runner}} 無法使用。安裝或設定後請重新偵測。",
+      "requiredFields": "請輸入套件名稱和兩個提示詞。",
+      "selectRunner": "請至少啟用一個執行器。",
+      "workspaceRequired": "請為每個已啟用的執行器輸入工作區。"
+    },
+    "runMetrics": {
+      "modelRequests": "Model requests",
+      "toolCalls": "Tool calls",
+      "toolFailures": "Tool failures",
+      "quickTestCalls": "Quick Test calls"
+    },
+    "checks": {
+      "precheck": "Precheck",
+      "postVerification": "Post-verification",
+      "notRun": "Not run",
+      "timedOut": "Timed out",
+      "expectedFailure": "Expected failure",
+      "unexpectedPass": "Unexpected pass",
+      "passed": "Passed",
+      "failed": "Failed"
+    },
+    "runDetails": {
+      "details": "Run details",
+      "turnsEmpty": "No turn response has been recorded yet.",
+      "response": "Final response",
+      "changedFilesTitle": "Changed files",
+      "diffTitle": "修補程式",
+      "exitCode": "結束代碼",
+      "batchId": "批次 ID",
+      "comparisonKey": "比較鍵",
+      "suiteRevision": "測試套件版本",
+      "sourceFingerprint": "原始碼指紋",
+      "sessionId": "工作階段 ID",
+      "errorTitle": "Run error"
+    }
   }
 }

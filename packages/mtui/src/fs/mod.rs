@@ -2,6 +2,8 @@ use anyhow::Context;
 use std::io::Write;
 use std::path::Path;
 
+pub mod discovery;
+
 pub fn compute_hash(content: &[u8]) -> String {
     blake3::hash(content).to_hex().to_string()
 }

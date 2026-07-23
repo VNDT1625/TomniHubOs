@@ -1,4 +1,6 @@
 const { Arch } = require('builder-util');
+
+const { createHash } = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -25,6 +27,14 @@ function getBackendBinaryName(electronPlatformName) {
   return electronPlatformName === 'win32' ? 'tomny-core.exe' : 'tomny-core';
 }
 
+function getCliBinaryName(electronPlatformName) {
+  return electronPlatformName === 'win32' ? 'tomny.exe' : 'tomny';
+}
+
+function getRuntimeBinaryName(electronPlatformName) {
+  return electronPlatformName === 'win32' ? 'tomny-runtime.exe' : 'tomny-runtime';
+}
+
 function requirePackagedResource(resourcesDir, relativePath, missing) {
   const absolutePath = path.join(resourcesDir, relativePath);
   if (!fs.existsSync(absolutePath)) {
@@ -43,8 +53,52 @@ function verifyBundledResources(resourcesDir, electronPlatformName, targetArch) 
   );
   requirePackagedResource(resourcesDir, path.join('bundled-tomny-core', runtimeKey, 'manifest.json'), missing);
 
+  requirePackagedResource(
+    resourcesDir,
+    path.join('bundled-tomny-cli', runtimeKey, getCliBinaryName(electronPlatformName)),
+    missing
+  );
+  requirePackagedResource(resourcesDir, path.join('bundled-tomny-cli', runtimeKey, 'manifest.json'), missing);
+
+  requirePackagedResource(
+    resourcesDir,
+    path.join('bundled-tomny-runtime', runtimeKey, getRuntimeBinaryName(electronPlatformName)),
+    missing
+  );
+  requirePackagedResource(resourcesDir, path.join('bundled-tomny-runtime', runtimeKey, 'manifest.json'), missing);
+
   if (missing.length > 0) {
     throw new Error(`Packaged app is missing required resource(s): ${missing.join(', ')}`);
+  }
+
+  const cliManifestPath = path.join(resourcesDir, 'bundled-tomny-cli', runtimeKey, 'manifest.json');
+  const cliBinaryPath = path.join(
+    resourcesDir,
+    'bundled-tomny-cli',
+    runtimeKey,
+    getCliBinaryName(electronPlatformName)
+  );
+  const cliManifest = JSON.parse(fs.readFileSync(cliManifestPath, 'utf8'));
+  const cliHash = createHash('sha256').update(fs.readFileSync(cliBinaryPath)).digest('hex');
+  if (cliManifest.binarySha256 !== cliHash) {
+    throw new Error(`Packaged Tomny CLI integrity check failed for ${runtimeKey}`);
+  }
+
+  const runtimeManifestPath = path.join(resourcesDir, 'bundled-tomny-runtime', runtimeKey, 'manifest.json');
+  const runtimeBinaryPath = path.join(
+    resourcesDir,
+    'bundled-tomny-runtime',
+    runtimeKey,
+    getRuntimeBinaryName(electronPlatformName)
+  );
+  const runtimeManifest = JSON.parse(fs.readFileSync(runtimeManifestPath, 'utf8'));
+  const runtimeHash = createHash('sha256').update(fs.readFileSync(runtimeBinaryPath)).digest('hex');
+  if (
+    runtimeManifest.protocol !== 'tomny.runtime.v1' ||
+    runtimeManifest.sourceType !== 'workspace-rust-build' ||
+    runtimeManifest.binarySha256 !== runtimeHash
+  ) {
+    throw new Error(`Packaged Tomny Runtime integrity check failed for ${runtimeKey}`);
   }
 
   console.log(`   ✓ Bundled resources verified for ${runtimeKey}`);

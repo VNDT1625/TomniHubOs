@@ -1,4 +1,47 @@
 {
+  "personalSecrets": {
+    "allowedHostnamesLabel": "Hostname trình duyệt được phép",
+    "allowedHostnamesPlaceholder": "example.com",
+    "allowedHostnamesDescription": "Thêm 1–20 hostname chính xác. Không chấp nhận giao thức, đường dẫn, cổng hoặc ký tự đại diện.",
+    "allowedHostnamesInvalid": "Hãy nhập 1–20 hostname chính xác, không trùng và không có giao thức, đường dẫn, cổng hoặc ký tự đại diện.",
+    "allowedHostnamesTagLabel": "Host được phép",
+    "legacyTargetsMissing": "Chưa có host được phép — bị chặn cho đến khi chỉnh sửa",
+    "nameRequired": "Hãy nhập tên cho bộ secret.",
+    "variablesInvalid": "Mỗi biến cần có tên hợp lệ, không trùng và có nội dung.",
+    "createdSuccess": "Đã tạo bộ secret.",
+    "replacedSuccess": "Đã thay thế bộ secret.",
+    "saveError": "Không thể lưu bộ secret.",
+    "removedSuccess": "Đã xóa bộ secret.",
+    "removeError": "Không thể xóa bộ secret.",
+    "countSummary": "{{setCount}} bộ · {{variableCount}} biến",
+    "securityTitle": "Agent có thể dùng secret mà không thấy giá trị",
+    "securityDescription": "Prompt chỉ nhận tên bộ, handle và tên biến. Core chỉ giải mã biến được yêu cầu cho host tin cậy, ví dụ điền trực tiếp USERNAME hoặc PASSWORD trong trình duyệt. Giá trị không được trả về chat hay MCP.",
+    "keychainProtected": "Mã hóa bằng keychain của hệ điều hành",
+    "empty": "Chưa có bộ secret nào.",
+    "createFirst": "Tạo bộ đầu tiên",
+    "noNote": "Không có ghi chú.",
+    "editAria": "Sửa bộ secret",
+    "deleteAria": "Xóa bộ secret",
+    "deleteConfirmTitle": "Xóa bộ secret này?",
+    "deleteConfirmContent": "Các liên kết đang dùng bộ này cũng sẽ bị gỡ.",
+    "updatedAt": "Cập nhật {{date}}",
+    "replaceTitle": "Thay thế bộ secret",
+    "createTitle": "Tạo bộ secret",
+    "replaceAction": "Thay thế",
+    "createAction": "Tạo bộ",
+    "cancel": "Hủy",
+    "replaceWarning": "Core không bao giờ trả lại giá trị đã lưu. Hãy nhập lại giá trị của mọi biến để thay thế bộ này.",
+    "setNameLabel": "Tên bộ",
+    "setNamePlaceholder": "Ví dụ: Tài khoản GitHub",
+    "noteLabel": "Ghi chú",
+    "notePlaceholder": "Bộ này dùng để làm gì?",
+    "variablesTitle": "Các biến trong bộ",
+    "variablesDescription": "Agent thấy tên biến nhưng không thấy nội dung biến.",
+    "addVariable": "Thêm biến",
+    "variableNamePlaceholder": "USERNAME",
+    "variableValuePlaceholder": "Nội dung bí mật",
+    "removeVariableAria": "Xóa biến"
+  },
   "title": "Cài đặt",
   "skillsHub": {
     "title": "Kho kỹ năng",
@@ -186,7 +229,7 @@
   "deleteInvalidKeys": "Xóa key không hợp lệ",
   "testAllKeys": "Kiểm tra tất cả key",
   "addModelPlaceholder": "Chọn hoặc nhập ID mô hình",
-  "customModelSupportNote": "Lưu ý: Hiện chỉ Tomni Agentic hỗ trợ mô hình tùy chỉnh.",
+  "customModelSupportNote": "Lưu ý: Hiện chỉ Tomny Agentic hỗ trợ mô hình tùy chỉnh.",
   "addModelHint": "Chọn hoặc nhập ID mô hình và nó sẽ được thêm vào nhà cung cấp này.",
   "addModelSelectedHint": "Sẵn sàng thêm mô hình: {{model}}",
   "currentModelsLabel": "Mô hình hiện tại",
@@ -197,13 +240,61 @@
   "platformNewApi": "New API",
   "platform9router": "9Router",
   "router9": {
-    "title": "Phân phối qua 9Router",
-    "subtitle": "Trỏ một công cụ CLI/IDE bên ngoài tới endpoint 9Router cục bộ. App tạo đúng định dạng cấu hình mà công cụ đó cần.",
+    "title": "Cổng mô hình Tomni",
+    "subtitle": "Kết nối provider bằng API key hoặc OAuth, rồi cấp thông tin truy cập riêng cho Claude Code, Codex và ứng dụng khác.",
+    "useGateway": "Khởi động và sử dụng",
+    "gatewayReady": "Cổng mô hình Tomni đã sẵn sàng",
+    "gatewayFailed": "Cổng mô hình lỗi: {{error}}",
+    "clientKeyUnavailable": "Cổng mô hình không trả về khóa cho client",
+    "runtimeMissing": "Runtime cổng mô hình chưa được chuẩn bị",
+    "oauthProviders": "Provider và OAuth",
+    "usage": "Token và mức sử dụng",
+    "autoStart": "Khởi động gateway cùng Tomni",
+    "autoStartHint": "Tự chuẩn bị gateway cục bộ sau khi mở lại ứng dụng.",
+    "usageByConsumer": "Mức dùng theo ứng dụng",
+    "usageBySession": "Mức dùng theo phiên",
+    "tokenSourceNote": "Token lấy từ số liệu provider khi có; gateway chỉ ước tính khi provider không trả usage.",
+    "metrics": {
+      "requests": "Yêu cầu",
+      "input": "Đầu vào",
+      "output": "Đầu ra",
+      "cached": "Đã cache",
+      "cost": "Chi phí"
+    },
+    "measurement": {
+      "provider-reported": "Provider",
+      "gateway-estimated": "Ước tính",
+      "unknown": "Chưa rõ"
+    },
+    "state": {
+      "stopped": "Đã dừng",
+      "starting": "Đang khởi động",
+      "running": "Đang chạy",
+      "failed": "Bị lỗi",
+      "external": "Gateway bên ngoài"
+    },
     "targetLabel": "Công cụ đích",
     "endpointLabel": "Endpoint",
     "apiKeyLabel": "API key (từ dashboard 9Router)",
     "modelLabel": "Model (tùy chọn)",
     "modelPlaceholder": "vd kr/claude-sonnet-4.5",
+    "clientAccessLabel": "Quyền truy cập CLI/ứng dụng",
+    "clientAccessManaged": "Được quản lý riêng cho client này",
+    "clientAccessProtected": "Đã bảo vệ",
+    "clientKeyPlaceholder": "Khóa client của gateway",
+    "clientAccessHint": "OAuth và API key của provider chỉ nằm ở phía upstream. Tomni tự tạo credential local riêng cho từng CLI/ứng dụng để cô lập, thu hồi và thống kê mức sử dụng.",
+    "reasoningLabel": "Mức suy luận",
+    "reasoningHint": "Độc lập với model. Gateway sẽ chuyển mức này sang định dạng của provider được chọn khi model hỗ trợ.",
+    "reasoning": {
+      "auto": "Tự động (mặc định của model)",
+      "none": "Không dùng",
+      "minimal": "Tối thiểu",
+      "low": "Thấp",
+      "medium": "Trung bình",
+      "high": "Cao",
+      "xhigh": "Rất cao",
+      "max": "Tối đa"
+    },
     "needCreds": "Nhập endpoint và API key để tạo cấu hình.",
     "fieldsTitle": "Thông tin kết nối",
     "envTitle": "Biến môi trường",
@@ -213,6 +304,9 @@
     "apply": "Áp dụng cho công cụ này",
     "applyHint": "Ghi (các) file cấu hình ra đĩa (file hiện có sẽ được sao lưu trước).",
     "applied": "Đã áp dụng cấu hình",
+    "useInTomniChat": "Dùng trong chat Tomni",
+    "manualChatHint": "Lưu model đã chọn cho chat Tomni; CLI bên ngoài vẫn cần cấu hình bằng các trường phía trên.",
+    "chatSynced": "Đã cập nhật model chat Tomni",
     "applyFailed": "Áp dụng thất bại: {{error}}",
     "fileWritten": "Đã ghi",
     "fileSkipped": "Giữ nguyên (đã tồn tại)",
@@ -226,8 +320,8 @@
     "target": {
       "kiro": "Đặt endpoint tương thích OpenAI và key trong cài đặt model của Kiro.",
       "antigravity": "Trỏ Antigravity tới endpoint local và dán API key.",
-      "claudeCode": "Ghi base URL kiểu Anthropic và key vào ~/.claude/config.json.",
-      "codex": "Xuất OPENAI_BASE_URL và OPENAI_API_KEY cho Codex CLI.",
+      "claudeCode": "Ghi môi trường gateway vào ~/.claude/settings.json.",
+      "codex": "Thêm provider Responses của Tomni vào ~/.codex/config.toml.",
       "cursor": "Đặt base URL OpenAI và key trong cài đặt model của Cursor.",
       "cline": "Chọn OpenAI Compatible rồi dán base URL và key.",
       "openclaw": "Thêm khối provider 9router vào ~/.openclaw/openclaw.json."
@@ -416,5 +510,137 @@
     "openInBrowser": "Mở /json trong trình duyệt",
     "mcpConfig": "Cấu hình MCP",
     "copyMcpConfig": "Sao chép cấu hình MCP"
-  }
+  },
+  "personalProfile": {
+    "title": "Hồ sơ cá nhân",
+    "description": "Giúp AI hiểu rõ bạn là ai để đặt câu hỏi phù hợp, cá nhân hóa quyết định và không bắt bạn lặp lại thông tin đã biết.",
+    "actions": {
+      "save": "Lưu thay đổi",
+      "addSecret": "Thêm bộ secret",
+      "add": "Thêm thông tin",
+      "addFirst": "Thêm thông tin đầu tiên"
+    },
+    "tabs": {
+      "profile": "Hồ sơ",
+      "secrets": "Secret ({{count}})"
+    },
+    "safety": {
+      "noSecrets": "Không nhập mật khẩu, token hoặc API key tại đây. Hãy lưu thông tin đăng nhập trong tab Secret.",
+      "selfDescribed": "Thông tin tâm lý do chính bạn mô tả, chỉ dùng để cá nhân hóa. AI không chẩn đoán hoặc tự suy diễn tình trạng sức khỏe tinh thần."
+    },
+    "structured": {
+      "title": "Chân dung đầy đủ hơn về bạn",
+      "description": "Sắp xếp bối cảnh dài hạn thành các khía cạnh rõ ràng. Chỉ thêm những gì hữu ích và bạn cảm thấy thoải mái chia sẻ.",
+      "summary": "{{count}} thông tin trong 7 khía cạnh",
+      "updatedAt": "Cập nhật {{date}}"
+    },
+    "categories": {
+      "personalInformation": {
+        "title": "Thông tin cá nhân",
+        "description": "Những thông tin cơ bản bạn muốn AI ghi nhớ, như tên, nơi ở, ngôn ngữ hoặc nhu cầu hỗ trợ tiếp cận."
+      },
+      "psychology": {
+        "title": "Tâm lý",
+        "description": "Cách bạn tự mô tả động lực, phong cách học, yếu tố gây căng thẳng và cách ra quyết định — không phải chẩn đoán."
+      },
+      "personality": {
+        "title": "Tính cách",
+        "description": "Đặc điểm, nhịp làm việc, cách cộng tác và kiểu phản hồi phù hợp với bạn."
+      },
+      "interests": {
+        "title": "Sở thích",
+        "description": "Chủ đề, thú vui và những điều bạn quan tâm hoặc coi trọng."
+      },
+      "profession": {
+        "title": "Nghề nghiệp",
+        "description": "Vai trò, lĩnh vực, kinh nghiệm, trách nhiệm và thế mạnh chuyên môn của bạn."
+      },
+      "aestheticTaste": {
+        "title": "Gu thẩm mỹ",
+        "description": "Phong cách hình ảnh, màu sắc, mật độ thông tin, nguồn cảm hứng và lựa chọn thiết kế bạn thích hoặc không thích."
+      },
+      "pastContext": {
+        "title": "Bối cảnh quá khứ",
+        "description": "Dự án, trải nghiệm quan trọng, bài học, quyết định trước đây và các ràng buộc thường lặp lại."
+      }
+    },
+    "suggestions": {
+      "displayName": "Tên hiển thị",
+      "location": "Nơi ở",
+      "languages": "Ngôn ngữ",
+      "motivation": "Điều tạo động lực cho tôi",
+      "learningStyle": "Phong cách học",
+      "stressTriggers": "Yếu tố gây căng thẳng",
+      "coreTraits": "Đặc điểm cốt lõi",
+      "collaborationStyle": "Cách cộng tác",
+      "feedbackPreference": "Kiểu phản hồi mong muốn",
+      "favoriteTopics": "Chủ đề yêu thích",
+      "hobbies": "Thú vui",
+      "causes": "Điều tôi quan tâm",
+      "role": "Vai trò",
+      "industry": "Lĩnh vực",
+      "experienceLevel": "Mức kinh nghiệm",
+      "visualStyle": "Phong cách hình ảnh",
+      "colorPreference": "Màu sắc yêu thích",
+      "densityPreference": "Mật độ thông tin",
+      "pastProjects": "Dự án trước đây",
+      "lessonsLearned": "Bài học đã rút ra",
+      "recurringConstraints": "Ràng buộc thường gặp"
+    },
+    "facts": {
+      "keyPlaceholder": "Tên thông tin",
+      "valuePlaceholder": "AI nên biết điều gì?",
+      "empty": "Chưa có thông tin nào trong mục này.",
+      "quickAdd": "Thêm nhanh",
+      "agentVisible": "Cho phép AI sử dụng",
+      "localOnly": "Chỉ lưu cục bộ",
+      "agentVisibleDescription": "Được đưa vào ngữ cảnh agent để AI cá nhân hóa câu hỏi và câu trả lời.",
+      "localOnlyDescription": "Chỉ lưu trên thiết bị này và không được đưa vào ngữ cảnh agent.",
+      "confidence": "Độ tin cậy {{value}}%",
+      "confirmed": "Đã xác nhận",
+      "removeAria": "Xóa thông tin này",
+      "source": {
+        "user": "Do bạn cung cấp",
+        "observed": "Đã quan sát",
+        "imported": "Đã nhập",
+        "inferred": "Đã suy luận"
+      }
+    },
+    "additional": {
+      "title": "Bối cảnh bổ sung",
+      "description": "Giữ lại các thông tin chung, sở thích và thói quen hiện có chưa phù hợp với một khía cạnh cụ thể.",
+      "facts": {
+        "title": "Thông tin khác",
+        "description": "Thông tin chung AI nên ghi nhớ xuyên suốt công việc và hội thoại."
+      },
+      "preferences": {
+        "title": "Sở thích khác",
+        "description": "Mong muốn về cách xử lý công việc, nội dung hoặc trải nghiệm."
+      },
+      "habits": {
+        "title": "Thói quen",
+        "description": "Quy trình và nhịp làm việc AI nên chủ động tôn trọng."
+      }
+    },
+    "communication": {
+      "title": "Cách giao tiếp",
+      "description": "Các thiết lập mặc định này có thể được ghi đè bằng yêu cầu cụ thể trong từng cuộc trò chuyện.",
+      "languageLabel": "Ngôn ngữ ưu tiên",
+      "languagePlaceholder": "Ví dụ: Tiếng Việt",
+      "toneLabel": "Giọng điệu ưu tiên",
+      "tonePlaceholder": "Ví dụ: thẳng thắn và chuyên nghiệp",
+      "verbosityLabel": "Độ chi tiết",
+      "verbosity": {
+        "concise": "Ngắn gọn",
+        "balanced": "Cân bằng",
+        "detailed": "Chi tiết"
+      }
+    },
+    "messages": {
+      "loadError": "Không thể tải hồ sơ cá nhân.",
+      "saveSuccess": "Đã lưu hồ sơ cá nhân.",
+      "saveError": "Không thể lưu hồ sơ cá nhân."
+    }
+  },
+  "personal": "Cá nhân"
 }

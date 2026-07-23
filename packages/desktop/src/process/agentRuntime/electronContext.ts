@@ -1,9 +1,17 @@
 import { app, safeStorage } from 'electron';
 import * as path from 'node:path';
 import { createCoreContextComposer } from './contextComposer';
-import { createContextStore, type ContextStore } from './contextStore';
-import { createFileSecretRepository, createSecretVault, type SecretVault, type SecretVaultCodec } from './secretVault';
+import { createContextStore, reconcilePersonalSecretReferences, type ContextStore } from './contextStore';
+import {
+  createFileSecretRepository,
+  createSecretVault,
+  recoverSecretSource,
+  type SecretRecoveryReport,
+  type SecretVault,
+  type SecretVaultCodec,
+} from './secretVault';
 import type { AgentContext, CoreContextComposer, PersonalContext } from './contextTypes';
+import { getRepoSecretStore } from '@process/ide/memory/repoSecretStore';
 
 const safeStorageCodec: SecretVaultCodec = {
   available: () => {
@@ -41,6 +49,15 @@ const defaultPersonal = (): PersonalContext => ({
   id: 'default',
   facts: [],
   preferences: [],
+  structuredProfile: {
+    personalInformation: [],
+    psychology: [],
+    personality: [],
+    interests: [],
+    profession: [],
+    aestheticTaste: [],
+    pastContext: [],
+  },
   communication: { vocabulary: [], writingGuidance: [] },
   decisionPolicy: { autonomy: 'minor-only', mayDecideCategories: [], alwaysAskCategories: ['secrets', 'payments'] },
   habits: [],
@@ -50,31 +67,63 @@ const defaultPersonal = (): PersonalContext => ({
 
 const ensureDefaultContexts = async (store: ContextStore): Promise<void> => {
   const [agent, personal] = await Promise.all([store.getAgent('tomny'), store.getPersonal('default')]);
-  await Promise.all([
-    agent ? Promise.resolve() : store.upsertAgent(defaultAgent()),
-    personal ? Promise.resolve() : store.upsertPersonal(defaultPersonal()),
-  ]);
+  if (!agent) await store.upsertAgent(defaultAgent());
+  if (!personal) await store.upsertPersonal(defaultPersonal());
+};
+
+const reconcileStoredSecretReferences = async (store: ContextStore, vault: SecretVault): Promise<void> => {
+  const [personal, descriptors] = await Promise.all([store.getPersonal('default'), vault.list()]);
+  if (!personal) throw new Error('Default Personal Context is unavailable.');
+  const reconciled = reconcilePersonalSecretReferences(personal, descriptors);
+  if (JSON.stringify(reconciled.secretReferences) === JSON.stringify(personal.secretReferences)) return;
+  await store.upsertPersonal({ ...reconciled, updatedAt: Date.now() });
 };
 
 export type ElectronContextServices = {
   composer: CoreContextComposer;
   vault: SecretVault;
   store: ContextStore;
+  /** Count-only startup result; never contains source identities or secret values. */
+  recovery: Promise<SecretRecoveryReport>;
   ready: Promise<void>;
 };
 
+let sharedContextServices: ElectronContextServices | undefined;
+
 /** Main-process wiring. Renderer and model transports never receive the vault instance. */
 export const createElectronContextServices = (): ElectronContextServices => {
+  if (sharedContextServices) return sharedContextServices;
   const directory = path.join(app.getPath('userData'), 'tomny-core', 'context');
   const store = createContextStore(path.join(directory, 'profiles.json'));
   const repository = createFileSecretRepository(path.join(directory, 'secrets.json'));
-  const ready = ensureDefaultContexts(store);
+  const vault = createSecretVault(repository, safeStorageCodec);
+  const recovery = ensureDefaultContexts(store).then(() =>
+    recoverSecretSource(vault, () => getRepoSecretStore().listCoreRecoveryCandidates())
+  );
+  void recovery.then((report) => {
+    if (report.status === 'partial' || report.status === 'unavailable') {
+      console.warn('[SecretContextRecovery] Legacy recovery was not complete.', {
+        status: report.status,
+        imported: report.imported,
+        existing: report.existing,
+        skipped: report.skipped,
+        failed: report.failed,
+      });
+    }
+  });
+  const ready = recovery.then(() => reconcileStoredSecretReferences(store, vault));
   const baseComposer = createCoreContextComposer(store);
   const composer: CoreContextComposer = {
     async composePrompt(input) {
       await ready;
       return baseComposer.composePrompt(input);
     },
+    async inspectContext(input) {
+      await ready;
+      if (!baseComposer.inspectContext) return {};
+      return baseComposer.inspectContext(input);
+    },
   };
-  return { composer, vault: createSecretVault(repository, safeStorageCodec), store, ready };
+  sharedContextServices = { composer, vault, store, recovery, ready };
+  return sharedContextServices;
 };

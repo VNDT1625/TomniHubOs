@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1420 420" fill="none">
+  <defs>
+    <linearGradient id="tomnyCoreGradient" x1="50" y1="40" x2="372" y2="380" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#C43CFF"/>
+      <stop offset="0.5" stop-color="#7B3CFF"/>
+      <stop offset="1" stop-color="#155CFF"/>
+    </linearGradient>
+  </defs>
+
+  <g transform="translate(10 4) scale(.78)">
+    <path d="M154 58H358L420 120V292L374 338L336 426H176L138 338L92 292V120L154 58Z" stroke="url(#tomnyCoreGradient)" stroke-width="30" stroke-linejoin="round"/>
+    <path d="M62 174H92V314H62C46 314 34 302 34 286V202C34 186 46 174 62 174Z" fill="url(#tomnyCoreGradient)"/>
+    <path d="M450 174H420V314H450C466 314 478 302 478 286V202C478 186 466 174 450 174Z" fill="url(#tomnyCoreGradient)"/>
+    <path d="M178 134H334M256 134V184" stroke="url(#tomnyCoreGradient)" stroke-width="26" stroke-linecap="square"/>
+    <circle cx="256" cy="226" r="34" stroke="url(#tomnyCoreGradient)" stroke-width="22"/>
+    <path d="M150 242V342L204 394V300L256 346L308 300V394L362 342V242L256 334L150 242Z" stroke="url(#tomnyCoreGradient)" stroke-width="28" stroke-linejoin="miter"/>
+    <path d="M256 346V430" stroke="url(#tomnyCoreGradient)" stroke-width="28" stroke-linecap="square"/>
+  </g>
+
+  <text x="430" y="220" fill="#F7F7FA" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="190" font-weight="500" letter-spacing="-10">tomny</text>
+  <text x="438" y="322" fill="url(#tomnyCoreGradient)" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="82" font-weight="500" letter-spacing="24">AGENTIC</text>
+</svg>

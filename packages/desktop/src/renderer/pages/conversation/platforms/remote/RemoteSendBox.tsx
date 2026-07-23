@@ -32,6 +32,7 @@ import { emitter, useAddEventListener } from '@/renderer/utils/emitter';
 import { mergeFileSelectionItems } from '@/renderer/utils/file/fileSelection';
 import { buildDisplayMessage } from '@/renderer/utils/file/messageFiles';
 import { expandGoalCommand, isGoalOffCommand, parseGoalCommand } from '@/common/chat/slash/goalCommand';
+import { expandBuild0Command } from '@/common/chat/slash/build0Command';
 import { clearGoalMode, setGoalMode, withGoalSteeringDirective } from '@/renderer/utils/chat/goalMode';
 import { Message } from '@arco-design/web-react';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -267,8 +268,9 @@ const RemoteSendBox: React.FC<{ conversation_id: string }> = ({ conversation_id 
 
         void checkAndUpdateTitle(conversation_id, input);
         const initialGoalExpansion = expandGoalCommand(input);
-        const initialModelInput = initialGoalExpansion
-          ? buildDisplayMessage(initialGoalExpansion, files, workspacePath)
+        const initialCommandExpansion = initialGoalExpansion ?? expandBuild0Command(input);
+        const initialModelInput = initialCommandExpansion
+          ? buildDisplayMessage(initialCommandExpansion, files, workspacePath)
           : initialDisplayMessage;
         if (initialGoalExpansion) {
           const parsedGoal = parseGoalCommand(input);
@@ -347,7 +349,10 @@ const RemoteSendBox: React.FC<{ conversation_id: string }> = ({ conversation_id 
         // Goal commands (/goal, /goal-all) expand into a full autonomous instruction
         // for the agent; the bubble keeps showing the raw `/goal ...` text.
         const goalExpansion = expandGoalCommand(input);
-        const modelInput = goalExpansion ? buildDisplayMessage(goalExpansion, files, workspacePath) : displayMessage;
+        const commandExpansion = goalExpansion ?? expandBuild0Command(input);
+        const modelInput = commandExpansion
+          ? buildDisplayMessage(commandExpansion, files, workspacePath)
+          : displayMessage;
         if (goalExpansion) {
           const parsedGoal = parseGoalCommand(input);
           if (parsedGoal) setGoalMode(conversation_id, parsedGoal.variant, parsedGoal.requirement);

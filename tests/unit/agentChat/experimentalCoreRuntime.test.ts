@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -22,6 +22,7 @@ import {
 } from '../../../packages/desktop/src/process/services/agentChat/permission';
 import type {
   CoreAdapter,
+  CoreCapabilityHostContext,
   CoreRunInput,
   DetectedCoreTarget,
 } from '../../../packages/desktop/src/process/experimentalCore/adapters/coreAdapter';
@@ -32,7 +33,10 @@ import {
 } from '../../../packages/desktop/src/process/experimentalCore/sessionCheckpointStore';
 
 import {
+  createTomnySessionActionHistorySource,
   ExperimentalCoreRuntime,
+  resolveCoreCapabilityServerNames,
+  resolveCoreToolCatalogPolicy,
   type ExperimentalCoreEvent,
 } from '../../../packages/desktop/src/process/experimentalCore/experimentalCoreRuntime';
 
@@ -61,6 +65,112 @@ const makeAdapter = (): CoreAdapter => ({
 });
 
 describe('experimental direct core runtime', () => {
+  it('limits ToolMap to the active surface until Super is explicitly attached', () => {
+    const surface = {
+      capabilities: [
+        { kind: 'mcp', toolPatterns: ['music_*'] },
+        { kind: 'native', toolPatterns: ['ignored_*'] },
+      ],
+    } as never;
+
+    expect(resolveCoreToolCatalogPolicy(surface)).toEqual({
+      mode: 'surface',
+      patterns: ['tomny_session_actions', 'music_*'],
+    });
+    // Browser Control can be attached by an IDE session without expanding its ToolMap.
+    expect(resolveCoreToolCatalogPolicy(surface, false)).toEqual({
+      mode: 'surface',
+      patterns: ['tomny_session_actions', 'music_*'],
+    });
+    expect(resolveCoreToolCatalogPolicy(surface, true)).toEqual({ mode: 'super', patterns: ['*'] });
+  });
+
+  it('discovers Super hosts from every registered surface without hard-coded surface names', () => {
+    const activeSurface = {
+      capabilities: [{ kind: 'mcp', serverName: 'aionui-ide' }],
+    } as never;
+    const registry = {
+      list: () => [
+        { capabilities: [{ kind: 'mcp', serverName: 'aionui-ide' }] },
+        { capabilities: [{ kind: 'mcp', serverName: 'aionui-browser-control' }] },
+        // A manifest can be registered before its host; it must not break Super.
+        { capabilities: [{ kind: 'mcp', serverName: 'aionui-future-surface' }] },
+      ],
+    } as never;
+
+    expect(resolveCoreCapabilityServerNames(activeSurface, registry, false, ['aionui-ide'])).toEqual(['aionui-ide']);
+    expect(
+      resolveCoreCapabilityServerNames(activeSurface, registry, true, ['aionui-ide', 'aionui-browser-control'])
+    ).toEqual(['aionui-ide', 'aionui-browser-control']);
+  });
+
+  it('keeps action-history reads locked to the current session id', async () => {
+    const eventStore = new MemoryDurableEventStore();
+    await eventStore.append({
+      sessionId: 'session-a',
+      kind: 'tool.completed',
+      visibility: 'public',
+      payload: { tool: 'ide_read_file' },
+    });
+    await eventStore.append({
+      sessionId: 'session-b',
+      kind: 'tool.completed',
+      visibility: 'public',
+      payload: { tool: 'browser_open' },
+    });
+
+    const actions = await createTomnySessionActionHistorySource(eventStore)('session-a', { limit: 20 });
+
+    expect(actions).toHaveLength(1);
+    expect(JSON.stringify(actions)).toContain('ide_read_file');
+    expect(JSON.stringify(actions)).not.toContain('browser_open');
+  });
+
+  it('never exposes archived checkpoint messages through the agent-facing action log', async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'tomny-history-search-'));
+    const filePath = path.join(directory, 'sessions.json');
+    try {
+      const writer = new JsonCoreSessionStore(filePath);
+      await writer.initialize();
+      await writer.save({
+        id: 'session-a',
+        targetId: 'tomny',
+        workspace: 'C:/workspace',
+        permissionMode: 'workspace-write',
+        status: 'completed',
+        createdAt: 1,
+        updatedAt: 2,
+        messages: [
+          { role: 'user', text: `early archive ${'x'.repeat(40_000)} UNIQUE_ARCHIVE_MARKER`, timestamp: 1 },
+          { role: 'assistant', text: 'recent conclusion', timestamp: 2 },
+        ],
+        conversationSummary: '- User: early archive…',
+        summarizedMessageCount: 1,
+      });
+      await writer.save({
+        id: 'session-b',
+        targetId: 'tomny',
+        workspace: 'C:/workspace',
+        permissionMode: 'workspace-write',
+        status: 'completed',
+        createdAt: 1,
+        updatedAt: 2,
+        messages: [{ role: 'user', text: 'UNIQUE_ARCHIVE_MARKER belongs elsewhere', timestamp: 1 }],
+      });
+      const restarted = new JsonCoreSessionStore(filePath);
+      await restarted.initialize();
+
+      const matches = await createTomnySessionActionHistorySource(new MemoryDurableEventStore(), restarted)(
+        'session-a',
+        { limit: 10, query: 'UNIQUE_ARCHIVE_MARKER' }
+      );
+
+      expect(matches).toEqual([]);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   let adapter: CoreAdapter;
 
   let coordinator: { requestLease: ReturnType<typeof vi.fn>; releaseLease: ReturnType<typeof vi.fn> };
@@ -89,6 +199,21 @@ describe('experimental direct core runtime', () => {
       expect.objectContaining({ id: 'codex', available: true, defaultModelKey: 'gpt::medium' }),
     ]);
     expect(adapter.listModels).toHaveBeenCalledWith(target, undefined);
+  });
+
+  it('returns the target list when one model catalog never responds', async () => {
+    vi.mocked(adapter.listModels).mockImplementationOnce(() => new Promise(() => {}));
+    const stalledRuntime = new ExperimentalCoreRuntime((event) => events.push(event), {
+      detectTargets: vi.fn().mockResolvedValue([target]),
+      adapters: [adapter],
+      coordinator,
+      agentMeshService: meshService,
+      modelDiscoveryTimeoutMs: 5,
+    });
+
+    await expect(stalledRuntime.listTargets()).resolves.toEqual([
+      expect.objectContaining({ id: 'codex', available: true, models: [] }),
+    ]);
   });
 
   it('runs a selected Company through a direct adapter without AionCore', async () => {
@@ -267,6 +392,40 @@ describe('experimental direct core runtime', () => {
     );
   });
 
+  it('redacts sensitive tool input before publishing or journaling the event', async () => {
+    vi.mocked(adapter.run).mockImplementationOnce(async (input) => {
+      input.emit({
+        type: 'tool-call',
+        tool: 'browser_type',
+        callId: 'browser-type-1',
+        phase: 'running',
+        text: 'Typing into the sign-in form',
+        input: {
+          selector: '#password',
+          text: 'typed-password-value',
+          nested: { apiKey: 'sk-example-secret-123456' },
+        },
+      });
+    });
+
+    await runtime.listTargets();
+    runtime.start('redacted-input', 'codex', 'sign in', 'C:/workspace');
+    await vi.waitFor(() =>
+      expect(events.some((event) => event.requestId === 'redacted-input' && event.type === 'completed')).toBe(true)
+    );
+
+    const toolEvent = events.find((event) => event.requestId === 'redacted-input' && event.type === 'tool-call');
+    expect(toolEvent?.input).toEqual({
+      selector: '#password',
+      text: '[REDACTED]',
+      nested: { apiKey: '[REDACTED]' },
+    });
+
+    const replay = await runtime.replayEvents({ sessionId: toolEvent?.sessionId });
+    expect(JSON.stringify(replay)).not.toContain('typed-password-value');
+    expect(JSON.stringify(replay)).not.toContain('sk-example-secret-123456');
+  });
+
   it('pauses a protected tool until the renderer resolves permission', async () => {
     vi.mocked(adapter.run).mockImplementationOnce(async (input) => {
       const approved = await input.requestPermission({ tool: 'terminal', detail: 'bun test' });
@@ -295,6 +454,16 @@ describe('experimental direct core runtime', () => {
     let calls = 0;
     vi.mocked(adapter.run).mockImplementation(async (input) => {
       calls += 1;
+      if (calls > 1) {
+        input.emit({
+          type: 'tool-call',
+          tool: 'ide_read_file',
+          callId: `team-tool-${calls}`,
+          phase: 'running',
+          text: 'Reading a repository file',
+          input: { rootPath: 'C:/workspace', filePath: `src/${calls}.ts` },
+        });
+      }
       input.emit({
         type: 'delta',
         mode: 'replace',
@@ -306,35 +475,129 @@ describe('experimental direct core runtime', () => {
     });
 
     await runtime.listTargets();
-    runtime.start(
+    const run = runtime.start(
       'team-proposal',
       'codex',
       'Build the full frontend and backend application, design the database, then run QA and security testing.',
       'C:/workspace'
     );
-    await vi.waitFor(() =>
-      expect(events.some((event) => event.type === 'permission' && event.tool === 'orchestration.create.team')).toBe(
-        true
-      )
-    );
+    await vi.waitFor(() => expect(events.some((event) => event.type === 'orchestration-proposal')).toBe(true));
     expect(adapter.run).toHaveBeenCalledTimes(1);
-    const permission = events.find(
-      (event) => event.type === 'permission' && event.tool === 'orchestration.create.team'
-    );
-    runtime.resolvePermission(permission?.permissionId ?? '', true);
+    const proposal = events.find((event) => event.type === 'orchestration-proposal');
+    expect(proposal?.orchestrationProposal?.roles[0]?.responsibility).toBe('Build the UI');
+
+    await runtime.resolveOrchestrationProposal(proposal?.orchestrationProposalId ?? '', true);
 
     await vi.waitFor(() =>
       expect(events.some((event) => event.requestId === 'team-proposal' && event.type === 'completed')).toBe(true)
     );
     expect(adapter.run).toHaveBeenCalledTimes(4);
-    expect(meshService.listSessions()).toContain('team-proposal');
-    expect(meshService.snapshot('team-proposal').agents.map((agent) => agent.agentId)).toEqual([
+    const meshSessionId = `${run.sessionId}:team:team-proposal`;
+    expect(meshService.listSessions()).toContain(meshSessionId);
+    expect(meshService.snapshot(meshSessionId).agents.map((agent) => agent.agentId)).toEqual([
       'leader',
+      'user',
       'frontend',
       'backend',
     ]);
-    expect(meshService.canSend('team-proposal', 'leader', 'frontend', 'control')).toBe(true);
-    expect(meshService.canSend('team-proposal', 'frontend', 'backend', 'question')).toBe(true);
+    expect(meshService.canSend(meshSessionId, 'user', 'frontend', 'control')).toBe(true);
+    expect(meshService.canSend(meshSessionId, 'frontend', 'backend', 'question')).toBe(true);
+    expect(
+      new Set(
+        events
+          .filter((event) => event.requestId === 'team-proposal' && event.type === 'tool-call')
+          .map((event) => event.agentId)
+      )
+    ).toEqual(new Set(['frontend', 'backend', 'leader']));
+
+    meshService.send(meshSessionId, {
+      fromAgentId: 'user',
+      toAgentId: 'frontend',
+      kind: 'question',
+      content: 'What did you change?',
+      delivery: 'send-now',
+    });
+    await vi.waitFor(() => expect(adapter.run).toHaveBeenCalledTimes(5));
+    const teamRuns = vi.mocked(adapter.run).mock.calls.map(([input]) => input);
+    expect(teamRuns.slice(1).every((input) => input.prompt.includes('Workspace root: C:/workspace'))).toBe(true);
+    expect(
+      teamRuns.slice(1).every((input) => input.prompt.includes('required file path, directory, glob pattern'))
+    ).toBe(true);
+    expect(teamRuns[4]?.toolCatalog).toEqual(teamRuns[1]?.toolCatalog);
+    expect(teamRuns[4]?.toolCatalog?.patterns.length).toBeGreaterThan(0);
+    await vi.waitFor(() =>
+      expect(
+        meshService
+          .snapshot(meshSessionId)
+          .messages.some(
+            (message) =>
+              message.fromAgentId === 'frontend' && message.toAgentId === 'user' && message.content === 'agent-result-5'
+          )
+      ).toBe(true)
+    );
+  });
+
+  it('always asks before creating a Team and never persists that approval', async () => {
+    const permissionStore = new PermissionStore(new MemoryPermissionRepository());
+    await permissionStore.initialize();
+    await permissionStore.createGrant({
+      id: 'existing-team-grant',
+      scope: {
+        subjectId: 'tomny',
+        sessionId: '*',
+        surfaceId: 'chat',
+        capabilityId: 'core',
+        toolPattern: 'orchestration.create.team',
+      },
+      effect: 'allow',
+      lifetime: 'persistent',
+    });
+    let calls = 0;
+    vi.mocked(adapter.run).mockImplementation(async (input) => {
+      calls += 1;
+      input.emit({
+        type: 'delta',
+        mode: 'replace',
+        text:
+          calls === 1
+            ? '<tomny_orchestration_proposal>{"kind":"team","name":"Delivery","reason":"Independent delivery roles","parallelism":2,"roles":[{"id":"build","name":"Build","responsibility":"Build the change","dependsOn":[]},{"id":"verify","name":"Verify","responsibility":"Verify the result","dependsOn":["build"]}]}</tomny_orchestration_proposal>'
+            : `agent-result-${calls}`,
+      });
+    });
+    const permissionRuntime = new ExperimentalCoreRuntime((event) => events.push(event), {
+      detectTargets: vi.fn().mockResolvedValue([target]),
+      adapters: [adapter],
+      coordinator,
+      agentMeshService: meshService,
+      permissionStore,
+    });
+
+    await permissionRuntime.listTargets();
+    permissionRuntime.start(
+      'team-fresh-approval',
+      'codex',
+      'Build the frontend and backend, then verify the complete release in separate roles.',
+      'C:/workspace'
+    );
+
+    await vi.waitFor(() =>
+      expect(
+        events.some((event) => event.requestId === 'team-fresh-approval' && event.type === 'orchestration-proposal')
+      ).toBe(true)
+    );
+    expect(adapter.run).toHaveBeenCalledTimes(1);
+    const proposal = events.find(
+      (event) => event.requestId === 'team-fresh-approval' && event.type === 'orchestration-proposal'
+    );
+    await expect(
+      permissionRuntime.resolveOrchestrationProposal(proposal?.orchestrationProposalId ?? '', true)
+    ).resolves.toBe(true);
+    await vi.waitFor(() =>
+      expect(events.some((event) => event.requestId === 'team-fresh-approval' && event.type === 'completed')).toBe(true)
+    );
+    expect(await permissionStore.listGrants({ includeInactive: true })).toEqual([
+      expect.objectContaining({ id: 'existing-team-grant' }),
+    ]);
   });
 
   it('creates nothing when an orchestration proposal is denied', async () => {
@@ -352,9 +615,9 @@ describe('experimental direct core runtime', () => {
       'Audit the full frontend and backend implementation, then run independent QA and security reviews.',
       'C:/workspace'
     );
-    await vi.waitFor(() => expect(events.some((event) => event.type === 'permission')).toBe(true));
-    const permission = events.find((event) => event.type === 'permission');
-    runtime.resolvePermission(permission?.permissionId ?? '', false);
+    await vi.waitFor(() => expect(events.some((event) => event.type === 'orchestration-proposal')).toBe(true));
+    const proposal = events.find((event) => event.type === 'orchestration-proposal');
+    await runtime.resolveOrchestrationProposal(proposal?.orchestrationProposalId ?? '', false);
 
     await vi.waitFor(() =>
       expect(events.some((event) => event.requestId === 'team-denied' && event.type === 'completed')).toBe(true)
@@ -423,7 +686,273 @@ describe('experimental direct core runtime', () => {
     expect(vi.mocked(adapter.run).mock.calls[1]?.[0].sessionId).toBe(started.sessionId);
   });
 
-  it('rehydrates context when the user changes model inside a saved session', async () => {
+  it('reports an error instead of completion when the terminal checkpoint cannot be persisted', async () => {
+    class FailingTerminalStore extends MemoryCoreSessionStore {
+      public override async save(checkpoint: Parameters<MemoryCoreSessionStore['save']>[0]): Promise<void> {
+        if (checkpoint.status === 'completed') throw new Error('checkpoint disk full');
+        await super.save(checkpoint);
+      }
+    }
+    const failingRuntime = new ExperimentalCoreRuntime((event) => events.push(event), {
+      detectTargets: vi.fn().mockResolvedValue([target]),
+      adapters: [adapter],
+      coordinator,
+      sessionStore: new FailingTerminalStore(),
+    });
+    await failingRuntime.listTargets();
+
+    failingRuntime.start('terminal-save-failure', 'codex', 'hello', 'C:/workspace');
+    await vi.waitFor(() =>
+      expect(events.some((event) => event.requestId === 'terminal-save-failure' && event.type === 'error')).toBe(true)
+    );
+
+    expect(events.some((event) => event.requestId === 'terminal-save-failure' && event.type === 'completed')).toBe(
+      false
+    );
+  });
+
+  it('sends only the current request on every turn for a stateless Tomny transport', async () => {
+    const statelessAdapter: CoreAdapter = {
+      ...makeAdapter(),
+      retainsConversationHistory: false,
+    };
+    vi.mocked(statelessAdapter.run).mockImplementation(async (input) => {
+      input.emit({ type: 'delta', text: input.prompt === 'first question' ? 'first conclusion' : 'next conclusion' });
+    });
+    const statelessRuntime = new ExperimentalCoreRuntime((event) => events.push(event), {
+      detectTargets: vi.fn().mockResolvedValue([target]),
+      adapters: [statelessAdapter],
+      coordinator,
+    });
+    await statelessRuntime.listTargets();
+
+    const started = statelessRuntime.start('stateless-1', 'codex', 'first question', 'C:/workspace');
+    await vi.waitFor(() =>
+      expect(events.some((event) => event.requestId === 'stateless-1' && event.type === 'completed')).toBe(true)
+    );
+    statelessRuntime.start(
+      'stateless-2',
+      'codex',
+      'continue',
+      'C:/workspace',
+      undefined,
+      'workspace-write',
+      started.sessionId
+    );
+    await vi.waitFor(() =>
+      expect(events.some((event) => event.requestId === 'stateless-2' && event.type === 'completed')).toBe(true)
+    );
+
+    const secondPrompt = vi.mocked(statelessAdapter.run).mock.calls[1]?.[0].prompt ?? '';
+    expect(secondPrompt).toContain('continue');
+    expect(secondPrompt).not.toContain('first question');
+    expect(secondPrompt).not.toContain('first conclusion');
+    expect(secondPrompt).not.toContain('tool-call');
+  });
+
+  it('preserves the bounded Save block separately from oversized host context in the effective prompt', async () => {
+    await runtime.listTargets();
+    const savedMemoryContext = `## Save — session-scoped historical context\n${'saved '.repeat(6_000)}END-PINNED-SAVE`;
+    runtime.start(
+      'save-priority-request',
+      'codex',
+      'CURRENT-SAVE-REQUEST',
+      'C:/workspace',
+      undefined,
+      'workspace-write',
+      undefined,
+      undefined,
+      {
+        conversationContext: `OVERSIZED-HOST ${'h'.repeat(40_000)}`,
+        savedMemoryContext,
+      }
+    );
+    await vi.waitFor(() =>
+      expect(events.some((event) => event.requestId === 'save-priority-request' && event.type === 'completed')).toBe(
+        true
+      )
+    );
+
+    const prompt = vi.mocked(adapter.run).mock.calls.at(-1)?.[0].prompt ?? '';
+    expect(prompt).toContain('END-PINNED-SAVE');
+    expect(prompt).toContain('CURRENT-SAVE-REQUEST');
+  });
+
+  it('excludes old prompt context regardless of size without deleting searchable checkpoint messages', async () => {
+    const sessionStore = new MemoryCoreSessionStore();
+    const messages = Array.from({ length: 12 }, (_, index) => ({
+      role: index % 2 === 0 ? ('user' as const) : ('assistant' as const),
+      text: `turn-${index}: ${'x'.repeat(3980)}${index === 0 ? 'EARLY_RAW_TAIL' : ''}`,
+      timestamp: index + 1,
+    }));
+    await sessionStore.save({
+      id: 'large-history',
+      targetId: 'codex',
+      workspace: 'C:/workspace',
+      permissionMode: 'workspace-write',
+      status: 'completed',
+      createdAt: 1,
+      updatedAt: 1,
+      messages,
+    });
+    const statelessAdapter: CoreAdapter = {
+      ...makeAdapter(),
+      retainsConversationHistory: false,
+      inspectContext: vi.fn(async () => ({ system: '', tools: [] })),
+    };
+    vi.mocked(statelessAdapter.run).mockImplementation(async (input) => {
+      input.emit({ type: 'delta', text: 'bounded reply' });
+    });
+    const compactingRuntime = new ExperimentalCoreRuntime((event) => events.push(event), {
+      detectTargets: vi.fn().mockResolvedValue([target]),
+      adapters: [statelessAdapter],
+      coordinator,
+      sessionStore,
+    });
+    await compactingRuntime.listTargets();
+
+    compactingRuntime.start(
+      'large-history-request',
+      'codex',
+      'continue',
+      'C:/workspace',
+      undefined,
+      'workspace-write',
+      'large-history'
+    );
+    await vi.waitFor(() =>
+      expect(events.some((event) => event.requestId === 'large-history-request' && event.type === 'completed')).toBe(
+        true
+      )
+    );
+
+    const prompt = vi.mocked(statelessAdapter.run).mock.calls[0]?.[0].prompt ?? '';
+    expect(prompt).toContain('continue');
+    expect(prompt).not.toContain('Conversation summary of older turns');
+    expect(prompt).not.toContain('EARLY_RAW_TAIL');
+    expect(prompt).not.toContain('turn-11:');
+    const checkpoint = await sessionStore.get('large-history');
+    expect(checkpoint?.messages[0]?.text).toContain('EARLY_RAW_TAIL');
+    expect(checkpoint?.messages).toHaveLength(14);
+    expect(checkpoint?.summarizedMessageCount).toBeUndefined();
+    const context = await compactingRuntime.inspectContext({
+      sessionId: 'large-history',
+      targetId: 'codex',
+      workspace: 'C:/workspace',
+    });
+    expect(context.history).toEqual([]);
+  });
+
+  it('does not send even the latest oversized historical conclusion', async () => {
+    const sessionStore = new MemoryCoreSessionStore();
+    await sessionStore.save({
+      id: 'oversized-latest',
+      targetId: 'codex',
+      workspace: 'C:/workspace',
+      permissionMode: 'workspace-write',
+      status: 'completed',
+      createdAt: 1,
+      updatedAt: 1,
+      messages: [
+        { role: 'user', text: 'old request', timestamp: 1 },
+        { role: 'assistant', text: `${'x'.repeat(45_000)} LATEST_TAIL_MARKER`, timestamp: 2 },
+      ],
+    });
+    const statelessAdapter: CoreAdapter = { ...makeAdapter(), retainsConversationHistory: false };
+    vi.mocked(statelessAdapter.run).mockImplementation(async (input) => {
+      input.emit({ type: 'delta', text: 'bounded reply' });
+    });
+    const oversizedRuntime = new ExperimentalCoreRuntime((event) => events.push(event), {
+      detectTargets: vi.fn().mockResolvedValue([target]),
+      adapters: [statelessAdapter],
+      coordinator,
+      sessionStore,
+    });
+    await oversizedRuntime.listTargets();
+
+    oversizedRuntime.start(
+      'oversized-latest-request',
+      'codex',
+      'continue',
+      'C:/workspace',
+      undefined,
+      'workspace-write',
+      'oversized-latest'
+    );
+    await vi.waitFor(() =>
+      expect(events.some((event) => event.requestId === 'oversized-latest-request' && event.type === 'completed')).toBe(
+        true
+      )
+    );
+
+    expect(vi.mocked(statelessAdapter.run).mock.calls[0]?.[0].prompt).not.toContain('LATEST_TAIL_MARKER');
+    expect(vi.mocked(statelessAdapter.run).mock.calls[0]?.[0].prompt).toContain('continue');
+  });
+
+  it('round-trips the lossless search archive without creating a prompt summary', async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'tomny-compaction-restart-'));
+    const filePath = path.join(directory, 'sessions.json');
+    try {
+      const sessionStore = new JsonCoreSessionStore(filePath);
+      await sessionStore.initialize();
+      await sessionStore.save({
+        id: 'compacted-on-disk',
+        targetId: 'codex',
+        workspace: 'C:/workspace',
+        permissionMode: 'workspace-write',
+        status: 'completed',
+        createdAt: 1,
+        updatedAt: 1,
+        messages: Array.from({ length: 12 }, (_, index) => ({
+          role: index % 2 === 0 ? ('user' as const) : ('assistant' as const),
+          text: `disk-turn-${index}: ${'x'.repeat(3980)}${index === 0 ? ' DISK_ARCHIVE_MARKER' : ''}`,
+          timestamp: index + 1,
+        })),
+      });
+      const statelessAdapter: CoreAdapter = { ...makeAdapter(), retainsConversationHistory: false };
+      vi.mocked(statelessAdapter.run).mockImplementation(async (input) => {
+        input.emit({ type: 'delta', text: 'disk reply' });
+      });
+      const diskRuntime = new ExperimentalCoreRuntime((event) => events.push(event), {
+        detectTargets: vi.fn().mockResolvedValue([target]),
+        adapters: [statelessAdapter],
+        coordinator,
+        sessionStore,
+      });
+      await diskRuntime.listTargets();
+
+      diskRuntime.start(
+        'disk-compaction-request',
+        'codex',
+        'continue',
+        'C:/workspace',
+        undefined,
+        'workspace-write',
+        'compacted-on-disk'
+      );
+      await vi.waitFor(() =>
+        expect(
+          events.some((event) => event.requestId === 'disk-compaction-request' && event.type === 'completed')
+        ).toBe(true)
+      );
+
+      const restarted = new JsonCoreSessionStore(filePath);
+      await restarted.initialize();
+      const checkpoint = await restarted.get('compacted-on-disk');
+      expect(checkpoint?.conversationSummary).toBeUndefined();
+      expect(checkpoint?.summarizedMessageCount).toBeUndefined();
+      expect(checkpoint?.messages[0]?.text).toContain('DISK_ARCHIVE_MARKER');
+      const matches = await createTomnySessionActionHistorySource(new MemoryDurableEventStore(), restarted)(
+        'compacted-on-disk',
+        { limit: 5, query: 'DISK_ARCHIVE_MARKER' }
+      );
+      expect(matches).toEqual([]);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('changes model without rehydrating archived messages', async () => {
     await runtime.listTargets();
     const started = runtime.start('model-request-1', 'codex', 'first question', 'C:/workspace', 'gpt::medium');
     await vi.waitFor(() =>
@@ -446,7 +975,7 @@ describe('experimental direct core runtime', () => {
     expect(vi.mocked(adapter.run).mock.calls[1]?.[0]).toEqual(
       expect.objectContaining({
         modelKey: 'gpt::high',
-        prompt: expect.stringContaining('Assistant: reply:first question'),
+        prompt: expect.stringContaining('continue'),
       })
     );
     await expect(runtime.listSessions()).resolves.toEqual([
@@ -454,7 +983,7 @@ describe('experimental direct core runtime', () => {
     ]);
   });
 
-  it('hands one portable session across providers and only sends each transport its missing context', async () => {
+  it('tracks target transitions without sending archived messages across providers', async () => {
     const claudeTarget: DetectedCoreTarget = {
       ...target,
       id: 'claude',
@@ -512,10 +1041,10 @@ describe('experimental direct core runtime', () => {
 
     const claudePrompt = vi.mocked(claudeAdapter.run).mock.calls[0]?.[0].prompt ?? '';
     const returningCodexPrompt = vi.mocked(codexAdapter.run).mock.calls[1]?.[0].prompt ?? '';
-    expect(claudePrompt).toContain('Previous agent: codex');
-    expect(claudePrompt).toContain('Assistant: codex answer');
-    expect(returningCodexPrompt).toContain('Previous agent: claude');
-    expect(returningCodexPrompt).toContain('Assistant: claude answer');
+    expect(claudePrompt).toContain('review the work');
+    expect(claudePrompt).not.toContain('codex answer');
+    expect(returningCodexPrompt).toContain('finish it');
+    expect(returningCodexPrompt).not.toContain('claude answer');
     expect(returningCodexPrompt).not.toContain('Assistant: codex answer');
 
     await expect(portableRuntime.listSessions()).resolves.toEqual([
@@ -546,7 +1075,7 @@ describe('experimental direct core runtime', () => {
     expect(forked.messages).toEqual(source?.messages);
   });
 
-  it('recovers an interrupted checkpoint by hydrating a fresh transport session', async () => {
+  it('recovers an interrupted checkpoint without hydrating archived messages', async () => {
     const sessionStore = new MemoryCoreSessionStore();
     await sessionStore.save({
       id: 'recovered-session',
@@ -585,9 +1114,10 @@ describe('experimental direct core runtime', () => {
     expect(adapter.run).toHaveBeenCalledWith(
       expect.objectContaining({
         sessionId: 'recovered-session',
-        prompt: expect.stringContaining('Assistant: prior answer'),
+        prompt: expect.stringContaining('continue'),
       })
     );
+    expect(vi.mocked(adapter.run).mock.calls.at(-1)?.[0].prompt).not.toContain('prior answer');
   });
 
   it('redacts common credentials before checkpoint persistence', () => {
@@ -612,6 +1142,7 @@ describe('experimental direct core runtime', () => {
         createdAt: 1,
         updatedAt: 1,
         messages: [{ role: 'user', text: 'api_key=top-secret', timestamp: 1 }],
+        conversationContext: 'Workspace token=checkpoint-secret',
         lastError: 'request failed with Bearer leaked.error.token',
       });
 
@@ -621,9 +1152,46 @@ describe('experimental direct core runtime', () => {
       await expect(recovered.get('disk-session')).resolves.toMatchObject({
         status: 'interrupted',
         messages: [{ text: 'api_key[REDACTED]' }],
+        conversationContext: 'Workspace token[REDACTED]',
       });
       expect(await readFile(filePath, 'utf8')).not.toContain('top-secret');
+      expect(await readFile(filePath, 'utf8')).not.toContain('checkpoint-secret');
       expect(await readFile(filePath, 'utf8')).not.toContain('leaked.error.token');
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('drops malformed persisted summary metadata instead of hiding arbitrary history', async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'tomny-checkpoint-invalid-summary-'));
+    const filePath = path.join(directory, 'sessions.json');
+    try {
+      await writeFile(
+        filePath,
+        JSON.stringify([
+          {
+            id: 'invalid-summary',
+            targetId: 'tomny',
+            workspace: 'C:/workspace',
+            permissionMode: 'workspace-write',
+            status: 'completed',
+            createdAt: 1,
+            updatedAt: 1,
+            messages: [{ role: 'user', text: 'must remain visible', timestamp: 1 }],
+            conversationSummary: 'claims too much history',
+            summarizedMessageCount: 99,
+          },
+        ]),
+        'utf8'
+      );
+      const store = new JsonCoreSessionStore(filePath);
+      await store.initialize();
+
+      await expect(store.get('invalid-summary')).resolves.toMatchObject({
+        messages: [{ text: 'must remain visible' }],
+        conversationSummary: undefined,
+        summarizedMessageCount: undefined,
+      });
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
@@ -664,6 +1232,7 @@ describe('experimental direct core runtime', () => {
       targetId: 'codex',
       workspace: 'C:/workspace',
       modelKey: 'gpt::medium',
+      conversationContext: 'Resume with the IDE workspace primer.',
       permissionMode: 'workspace-write',
       status: 'running',
       createdAt: 1,
@@ -690,9 +1259,10 @@ describe('experimental direct core runtime', () => {
     expect(started).toEqual({ requestId: 'resumed-request', sessionId: 'resume-session' });
     expect(vi.mocked(adapter.run)).toHaveBeenCalledWith(
       expect.objectContaining({
-        prompt: expect.stringContaining('Current user request: unfinished request'),
+        prompt: expect.stringContaining('unfinished request'),
       })
     );
+    expect(vi.mocked(adapter.run).mock.calls.at(-1)?.[0].prompt).toContain('Resume with the IDE workspace primer.');
     const checkpoint = (await resumedRuntime.listSessions())[0];
     expect(checkpoint?.messages.filter((message) => message.text === 'unfinished request')).toHaveLength(1);
   });
@@ -740,6 +1310,7 @@ describe('experimental direct core runtime', () => {
 
     await stoppedRuntime.cancel('stop-request');
 
+    expect(events.some((event) => event.requestId === 'stop-request' && event.type === 'cancelled')).toBe(true);
     await vi.waitFor(async () => expect((await sessionStore.get(started.sessionId))?.status).toBe('cancelled'));
   });
 
@@ -775,12 +1346,14 @@ describe('experimental direct core runtime', () => {
       expect(events.some((event) => event.requestId === 'context-request' && event.type === 'completed')).toBe(true)
     );
 
-    expect(contextComposer.composePrompt).toHaveBeenCalledWith({
-      agentId: 'tomny',
-      personalId: 'default',
-      surface: 'music',
-      prompt: 'compose this',
-    });
+    expect(contextComposer.composePrompt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentId: 'tomny',
+        personalId: 'default',
+        surface: 'music',
+        prompt: 'compose this',
+      })
+    );
     expect(adapter.run).toHaveBeenCalledWith(expect.objectContaining({ prompt: '[surface=music] compose this' }));
     const checkpoint = await sessionStore.get(started.sessionId);
     expect(checkpoint).toEqual(
@@ -818,9 +1391,10 @@ describe('experimental direct core runtime', () => {
   });
 
   it('activates only explicitly granted capabilities for a registered surface', async () => {
-    const resolveCapabilityHosts = vi.fn(async (names: string[]) =>
-      names.map((name) => ({ name, url: 'http://127.0.0.1/mcp' }))
-    );
+    const resolveCapabilityHosts = vi.fn(async (names: string[], sessionServers = []) => [
+      ...names.map((name) => ({ name, url: 'http://127.0.0.1/mcp' })),
+      ...sessionServers,
+    ]);
     const contextComposer = {
       composePrompt: vi.fn(
         async (input: { agentId: string; personalId: string; surface: string; prompt: string }) => input.prompt
@@ -838,7 +1412,7 @@ describe('experimental direct core runtime', () => {
       }),
     });
     await surfaceRuntime.listTargets();
-    surfaceRuntime.start(
+    const surfaceRun = surfaceRuntime.start(
       'surface-request',
       'codex',
       'mix a track',
@@ -854,6 +1428,7 @@ describe('experimental direct core runtime', () => {
         permissionScopes: ['music.read', 'music.write'],
         capabilityGrants: ['surface.music'],
         availableCapabilities: ['surface.music'],
+        mcpServers: [{ name: 'session-tools', transport: 'sse', url: 'http://127.0.0.1/session/sse' }],
       }
     );
     await vi.waitFor(() =>
@@ -864,16 +1439,77 @@ describe('experimental direct core runtime', () => {
       expect.objectContaining({
         surface: 'music',
         prompt: expect.stringContaining('[Surface: music]'),
+        secretContextPolicy: {
+          includeOpaqueSecretHandles: false,
+          allowedSecretCapabilities: [],
+        },
       })
     );
-    expect(resolveCapabilityHosts).toHaveBeenCalledWith(['aionui-music']);
+    expect(resolveCapabilityHosts).toHaveBeenCalledWith(
+      ['aionui-tool-selector', 'aionui-music'],
+      [{ name: 'session-tools', transport: 'sse', url: 'http://127.0.0.1/session/sse' }],
+      {
+        sessionId: surfaceRun.sessionId,
+        workspace: 'C:/workspace',
+        surface: 'music',
+        permissionMode: 'workspace-write',
+        requestPermission: expect.any(Function),
+      }
+    );
     expect(adapter.run).toHaveBeenCalledWith(
       expect.objectContaining({
         surface: 'music',
         prompt: expect.stringContaining('music_*'),
-        mcpServers: [{ name: 'aionui-music', url: 'http://127.0.0.1/mcp' }],
+        mcpServers: [
+          { name: 'aionui-tool-selector', url: 'http://127.0.0.1/mcp' },
+          { name: 'aionui-music', url: 'http://127.0.0.1/mcp' },
+          { name: 'session-tools', transport: 'sse', url: 'http://127.0.0.1/session/sse' },
+        ],
       })
     );
+  });
+
+  it('delivers host-selected IDE context without polluting checkpoint message history', async () => {
+    const sessionStore = new MemoryCoreSessionStore();
+    const contextRuntime = new ExperimentalCoreRuntime((event) => events.push(event), {
+      detectTargets: vi.fn().mockResolvedValue([target]),
+      adapters: [adapter],
+      coordinator,
+      sessionStore,
+    });
+    await contextRuntime.listTargets();
+    const started = contextRuntime.start(
+      'ide-context-request',
+      'codex',
+      'fix the failing test',
+      'C:/workspace',
+      undefined,
+      'workspace-write',
+      undefined,
+      undefined,
+      {
+        surface: 'ide',
+        mcpServers: [{ name: 'session-tools', transport: 'sse', url: 'http://127.0.0.1:4300/sse' }],
+        conversationContext: '## IDE workspace guide\nWorkspace root: C:/workspace\nUse ide_* tools.',
+      }
+    );
+
+    await vi.waitFor(() =>
+      expect(events.some((event) => event.requestId === 'ide-context-request' && event.type === 'completed')).toBe(true)
+    );
+
+    expect(adapter.run).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: expect.stringContaining('Workspace root: C:/workspace'),
+        mcpServers: [{ name: 'session-tools', transport: 'sse', url: 'http://127.0.0.1:4300/sse' }],
+      })
+    );
+    await expect(sessionStore.get(started.sessionId)).resolves.toMatchObject({
+      conversationContext: expect.stringContaining('Use ide_* tools.'),
+      messages: expect.arrayContaining([expect.objectContaining({ role: 'user', text: 'fix the failing test' })]),
+    });
+    expect((await sessionStore.get(started.sessionId))?.messages[0]?.text).not.toContain('IDE workspace guide');
+    expect(await sessionStore.get(started.sessionId)).not.toHaveProperty('mcpServers');
   });
 
   it('uses a durable scoped permission grant without reopening the approval modal', async () => {
@@ -920,6 +1556,135 @@ describe('experimental direct core runtime', () => {
       expect.objectContaining({ allowed: true, reason: 'explicit-allow', tool: 'shell' }),
     ]);
   });
+  it('auto-authorizes the trusted Secret Firewall without consuming a durable grant', async () => {
+    const permissionStore = new PermissionStore(new MemoryPermissionRepository());
+    await permissionStore.initialize();
+    await permissionStore.createGrant({
+      id: 'existing-secret-grant',
+      scope: {
+        subjectId: 'tomny',
+        sessionId: '*',
+        surfaceId: 'browser',
+        capabilityId: 'core',
+        toolPattern: 'agent_secret_context_use',
+      },
+      effect: 'allow',
+      lifetime: 'persistent',
+    });
+    let hostContext: CoreCapabilityHostContext | undefined;
+    const resolveCapabilityHosts = vi.fn(
+      async (_names: string[], _sessionServers: CoreRunInput['mcpServers'], context: CoreCapabilityHostContext) => {
+        hostContext = context;
+        return [
+          {
+            name: 'aionui-secret-context',
+            url: 'http://127.0.0.1:43123/sse',
+            headers: [{ name: 'Authorization', value: 'Bearer runtime-attestation' }],
+          },
+        ];
+      }
+    );
+    vi.mocked(adapter.run).mockImplementationOnce(async (input) => {
+      const approved = await hostContext!.requestPermission!({
+        tool: 'agent_secret_context_use',
+        detail: 'opaque browser fill',
+      });
+      if (!approved) throw new Error('secret use denied');
+      input.emit({ type: 'delta', text: 'secret used by firewall policy' });
+    });
+    const secretEvents: ExperimentalCoreEvent[] = [];
+    const secretRuntime = new ExperimentalCoreRuntime((event) => secretEvents.push(event), {
+      detectTargets: vi.fn().mockResolvedValue([target]),
+      adapters: [adapter],
+      coordinator,
+      permissionStore,
+      resolveCapabilityHosts,
+      surfaceRegistry: createSurfaceRegistry({
+        manifests: createBuiltinSurfaceManifests(),
+        defaultSurfaceId: 'chat',
+      }),
+    });
+    await secretRuntime.listTargets();
+    secretRuntime.start(
+      'secret-approval-request',
+      'codex',
+      'fill the secret',
+      'C:/workspace',
+      undefined,
+      'full-access',
+      'secret-parent-session',
+      undefined,
+      {
+        surface: 'browser',
+        permissionScopes: ['browser.control'],
+        capabilityGrants: ['surface.browser'],
+        availableCapabilities: ['surface.browser'],
+      }
+    );
+
+    await vi.waitFor(() => expect(secretEvents.some((event) => event.type === 'completed')).toBe(true));
+    expect(resolveCapabilityHosts).toHaveBeenCalledWith(
+      expect.arrayContaining(['aionui-secret-context']),
+      [],
+      expect.any(Object)
+    );
+    expect(secretEvents.some((event) => event.type === 'permission')).toBe(false);
+    expect(await permissionStore.queryAudit({ actions: ['request.evaluated'] })).toEqual([]);
+    expect(await permissionStore.listGrants({ includeInactive: true })).toEqual([
+      expect.objectContaining({ id: 'existing-secret-grant' }),
+    ]);
+  });
+
+  it('does not auto-authorize a server that only claims the Secret Context name', async () => {
+    const untrustedEvents: ExperimentalCoreEvent[] = [];
+    const resolveCapabilityHosts = vi.fn(
+      async (_names: string[], _sessionServers: CoreRunInput['mcpServers'], _context: CoreCapabilityHostContext) => [
+        {
+          name: 'aionui-secret-context',
+          url: 'https://untrusted.example/sse',
+          headers: [{ name: 'Authorization', value: 'Bearer spoofed' }],
+        },
+      ]
+    );
+    vi.mocked(adapter.run).mockImplementationOnce(async (input) => {
+      const approved = await input.requestPermission({ tool: 'secret_context_generate' });
+      if (!approved) throw new Error('secret use denied');
+    });
+    const untrustedRuntime = new ExperimentalCoreRuntime((event) => untrustedEvents.push(event), {
+      detectTargets: vi.fn().mockResolvedValue([target]),
+      adapters: [adapter],
+      coordinator,
+      resolveCapabilityHosts,
+      surfaceRegistry: createSurfaceRegistry({
+        manifests: createBuiltinSurfaceManifests(),
+        defaultSurfaceId: 'chat',
+      }),
+    });
+    await untrustedRuntime.listTargets();
+    untrustedRuntime.start(
+      'untrusted-secret-host-request',
+      'codex',
+      'generate a secret',
+      'C:/workspace',
+      undefined,
+      'full-access',
+      'untrusted-secret-host-session',
+      undefined,
+      {
+        surface: 'browser',
+        permissionScopes: ['browser.control'],
+        capabilityGrants: ['surface.browser'],
+        availableCapabilities: ['surface.browser'],
+      }
+    );
+
+    await vi.waitFor(() => expect(untrustedEvents.some((event) => event.type === 'permission')).toBe(true));
+    const permission = untrustedEvents.find((event) => event.type === 'permission');
+    expect(untrustedEvents.some((event) => event.type === 'completed')).toBe(false);
+    await expect(untrustedRuntime.resolvePermission(permission!.permissionId!, false)).resolves.toBe(true);
+    await vi.waitFor(() => expect(untrustedEvents.some((event) => event.type === 'error')).toBe(true));
+  });
+
   it('releases every resource lease during a deterministic cancellation soak', async () => {
     await runtime.listTargets();
 

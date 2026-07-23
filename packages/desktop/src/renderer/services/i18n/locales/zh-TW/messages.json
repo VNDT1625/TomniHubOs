@@ -66,5 +66,21 @@
     "yesAlwaysAllowTool": "是，始終允許來自伺服器 \"{{serverName}}\" 的工具 \"{{toolName}}\"",
     "yesAlwaysAllowServer": "是，始終允許來自伺服器 \"{{serverName}}\" 的所有工具",
     "no": "否 (esc)"
+  },
+  "steps": {
+    "title": "{{count}} 個執行步驟",
+    "live": "進行中",
+    "status": {
+      "pending": "等待中",
+      "running": "執行中",
+      "completed": "已完成",
+      "error": "失敗",
+      "canceled": "已取消"
+    },
+    "loadingDetail": "正在載入步驟詳情...",
+    "loadDetailFailed": "無法載入步驟詳情",
+    "input": "輸入",
+    "output": "輸出",
+    "viewFull": "檢視全部"
   }
 }

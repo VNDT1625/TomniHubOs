@@ -1,4 +1,4 @@
-﻿import os from 'node:os';
+import os from 'node:os';
 import path from 'node:path';
 import { app } from 'electron';
 import { bridge } from '@office-ai/platform';
@@ -83,10 +83,12 @@ export const registerNativeCapabilityBridge = (
   nativeCapabilityChannels.skillDetectExternal.provider(() => skills.detectExternal());
   nativeCapabilityChannels.skillImportLink.provider(({ skill_path }) => skills.import(skill_path, true));
   nativeCapabilityChannels.skillDelete.provider(({ skill_name }) => skills.remove(skill_name));
-  nativeCapabilityChannels.skillPaths.provider(() => ({
-    user_skills_dir: getSkillsDir(),
-    builtin_skills_dir: defaultBuiltinRoots()[0],
-  }));
+  nativeCapabilityChannels.skillPaths.provider(() =>
+    Promise.resolve({
+      user_skills_dir: getSkillsDir(),
+      builtin_skills_dir: defaultBuiltinRoots()[0],
+    })
+  );
   nativeCapabilityChannels.skillExternalPaths.provider(() => skills.getExternal());
   nativeCapabilityChannels.skillExternalAdd.provider((input) => skills.addExternal(input));
   nativeCapabilityChannels.skillExternalRemove.provider(({ path: externalPath }) =>

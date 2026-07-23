@@ -7,6 +7,8 @@
  * 打包应用的密码重置命令行工具
  */
 
+import { getTomniGatewayEndpoint } from '@process/tomnigateway';
+
 // Color output
 const colors = {
   reset: '\x1b[0m',
@@ -36,20 +38,19 @@ export function resolveResetPasswordUsername(argv: string[]): string {
   return argsAfterCommand.find((arg) => !arg.startsWith('--')) || 'admin';
 }
 
-// index.ts:487 already started a backend for every mode including --resetpass,
-// so we reuse __backendPort instead of spawning a short-lived one. username arg
-// is advisory; backend operates on get_primary_webui_user() == system_default_user.
+// Tomni Gateway starts for every application mode, including --resetpass.
+// The username argument is advisory because WebUI currently has one owner account.
 export async function resetPasswordCLI(username: string): Promise<void> {
-  log.info(`Target user: ${username} (advisory — operates on system_default_user)`);
-  const port = (globalThis as typeof globalThis & { __backendPort?: number }).__backendPort;
-  if (!port) {
-    log.error('Backend did not start — cannot reset password');
-    process.exit(1);
-  }
+  log.info(`Target user: ${username} (Tomni WebUI owner)`);
+  const endpoint = await getTomniGatewayEndpoint();
   try {
-    const res = await fetch(`http://127.0.0.1:${port}/api/webui/reset-password`, {
+    const res = await fetch(`${endpoint.url}/api/webui/reset-password`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        authorization: `Bearer ${endpoint.sessionToken}`,
+        'x-tomni-internal': '1',
+      },
     });
     if (!res.ok) {
       const body = await res.text();

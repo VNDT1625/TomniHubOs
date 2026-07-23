@@ -167,14 +167,22 @@ import type {
   IdeMemoryRequest,
   IdeMemoryRememberRequest,
   IdeMemoryRecordableKind,
+  RepoSecretComboRemoveRequest,
+  RepoSecretComboSaveRequest,
   RepoSecretDeclareRequest,
   RepoSecretListRequest,
   RepoSecretRemoveRequest,
   RepoSecretRevealRequest,
   RepoSecretRenderMarkersRequest,
   RepoSecretSaveRequest,
+  RepoSecretScopesRequest,
 } from '@process/ide/memory/ideMemoryBridge';
-import type { RepoSecretContext, RepoSecretMarkerRender } from '@process/ide/memory/repoSecretStore';
+import type {
+  RepoSecretCombo,
+  RepoSecretContext,
+  RepoSecretMarkerRender,
+  RepoSecretScopeSummary,
+} from '@process/ide/memory/repoSecretStore';
 import type { SuperMemorySnapshot, RememberResult } from '@process/ide/memory/sessionMemoryStore';
 import type { IdeCommandResult, RunCommandRequest } from '@process/ide/command/commandBridge';
 import type { CommandResult } from '@process/ide/command/commandRunner';
@@ -276,8 +284,12 @@ const IDE_CHANNELS = {
   memoryClear: 'ide.memory-clear',
   memoryRemember: 'ide.memory-remember',
   repoSecretList: 'ide.repo-secret-list',
+  repoSecretScopes: 'ide.repo-secret-scopes',
   repoSecretSave: 'ide.repo-secret-save',
   repoSecretDeclare: 'ide.repo-secret-declare',
+  repoSecretComboList: 'ide.repo-secret-combo-list',
+  repoSecretComboSave: 'ide.repo-secret-combo-save',
+  repoSecretComboRemove: 'ide.repo-secret-combo-remove',
   repoSecretRemove: 'ide.repo-secret-remove',
   repoSecretReveal: 'ide.repo-secret-reveal',
   repoSecretRenderMarkers: 'ide.repo-secret-render-markers',
@@ -305,6 +317,29 @@ const KG_BUILD_TIMEOUT_MS = 3600000;
 const COMMAND_TIMEOUT_MS = 60000;
 /** Timeout (ms) for an element pick — generous because it waits for a human click. */
 const INSPECT_TIMEOUT_MS = 300000;
+
+type BrowserIdeWindow = Window & {
+  electronAPI?: unknown;
+  __tomniIdeMcpPort?: number;
+};
+
+const isBrowserIdeRpc = (): boolean =>
+  typeof window !== 'undefined' && typeof document !== 'undefined' && !(window as BrowserIdeWindow).electronAPI;
+
+const callBrowserIdeRpc = async <T>(method: string, params?: Record<string, unknown>): Promise<T> => {
+  const port = (window as BrowserIdeWindow).__tomniIdeMcpPort ?? 17890;
+  const response = await fetch(`http://127.0.0.1:${port}/ui-rpc`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-tomni-local-rpc': '1',
+    },
+    body: JSON.stringify({ method, params }),
+  });
+  const result = (await response.json()) as { ok: boolean; data?: T; error?: string };
+  if (!response.ok || !result.ok) throw new Error(result.error || `Browser IDE RPC failed (${response.status}).`);
+  return result.data as T;
+};
 
 /** Raw typed invokers — each `.invoke(req)` round-trips to the Main process. */
 const channels = {
@@ -457,11 +492,23 @@ const channels = {
   repoSecretList: bridge.buildProvider<IdeMemoryResult<RepoSecretContext[]>, RepoSecretListRequest>(
     IDE_CHANNELS.repoSecretList
   ),
+  repoSecretScopes: bridge.buildProvider<IdeMemoryResult<RepoSecretScopeSummary[]>, RepoSecretScopesRequest>(
+    IDE_CHANNELS.repoSecretScopes
+  ),
   repoSecretSave: bridge.buildProvider<IdeMemoryResult<RepoSecretContext>, RepoSecretSaveRequest>(
     IDE_CHANNELS.repoSecretSave
   ),
   repoSecretDeclare: bridge.buildProvider<IdeMemoryResult<RepoSecretContext>, RepoSecretDeclareRequest>(
     IDE_CHANNELS.repoSecretDeclare
+  ),
+  repoSecretComboList: bridge.buildProvider<IdeMemoryResult<RepoSecretCombo[]>, RepoSecretListRequest>(
+    IDE_CHANNELS.repoSecretComboList
+  ),
+  repoSecretComboSave: bridge.buildProvider<IdeMemoryResult<RepoSecretCombo>, RepoSecretComboSaveRequest>(
+    IDE_CHANNELS.repoSecretComboSave
+  ),
+  repoSecretComboRemove: bridge.buildProvider<IdeMemoryResult<boolean>, RepoSecretComboRemoveRequest>(
+    IDE_CHANNELS.repoSecretComboRemove
   ),
   repoSecretRemove: bridge.buildProvider<IdeMemoryResult<boolean>, RepoSecretRemoveRequest>(
     IDE_CHANNELS.repoSecretRemove
@@ -511,8 +558,20 @@ const invokeWithTimeout = <T>(channel: string, call: () => Promise<T>, timeoutMs
 
 /** Timeout-guarded IDE invokers for the renderer. */
 export const ideClient = {
+  /** Workspace served by the local IDE sidecar (WebUI only). */
+  getDefaultRoot: async (): Promise<string | null> => {
+    if (!isBrowserIdeRpc()) return null;
+    const result = await callBrowserIdeRpc<{ rootPath: string }>('workspace.info');
+    return result.rootPath;
+  },
   scanRepo: (rootPath: string, maxFiles?: number): Promise<IdeScanResult> =>
-    invokeWithTimeout(IDE_CHANNELS.scanRepo, () => channels.scanRepo.invoke({ rootPath, maxFiles }), SCAN_TIMEOUT_MS),
+    isBrowserIdeRpc()
+      ? callBrowserIdeRpc<IdeScanResult>('ide.scanRepo', { rootPath, maxFiles })
+      : invokeWithTimeout(
+          IDE_CHANNELS.scanRepo,
+          () => channels.scanRepo.invoke({ rootPath, maxFiles }),
+          SCAN_TIMEOUT_MS
+        ),
   wikiPlan: (request: WikiPlanRequest): Promise<IdeWikiResult<WikiPlan>> =>
     invokeWithTimeout(IDE_CHANNELS.wikiPlan, () => channels.wikiPlan.invoke(request), WIKI_PLAN_TIMEOUT_MS),
   wikiSection: (request: WikiSectionRequest): Promise<IdeWikiResult<string>> =>
@@ -537,63 +596,88 @@ export const ideClient = {
     dir: string,
     opts?: { glob?: string; recursive?: boolean; maxResults?: number }
   ): Promise<IdeFileResult<IdeDirEntry[]>> =>
-    invokeWithTimeout(IDE_CHANNELS.listDir, () => channels.listDir.invoke({ dir, ...opts }), FILE_OP_TIMEOUT_MS),
+    isBrowserIdeRpc()
+      ? callBrowserIdeRpc<IdeFileResult<IdeDirEntry[]>>('ide.listDir', { dir, ...opts })
+      : invokeWithTimeout(IDE_CHANNELS.listDir, () => channels.listDir.invoke({ dir, ...opts }), FILE_OP_TIMEOUT_MS),
   readFile: (filePathOrReq: string | ReadFileRequest): Promise<IdeFileResult<ReadFileData>> => {
     const req: ReadFileRequest = typeof filePathOrReq === 'string' ? { path: filePathOrReq } : filePathOrReq;
+    if (isBrowserIdeRpc()) return callBrowserIdeRpc<IdeFileResult<ReadFileData>>('ide.readFile', req);
     return invokeWithTimeout(IDE_CHANNELS.readFile, () => channels.readFile.invoke(req), FILE_OP_TIMEOUT_MS);
   },
   readFileBase64: (filePath: string): Promise<IdeFileResult<string>> =>
-    invokeWithTimeout(
-      IDE_CHANNELS.readFileBase64,
-      () => channels.readFileBase64.invoke({ path: filePath }),
-      FILE_OP_TIMEOUT_MS
-    ),
+    isBrowserIdeRpc()
+      ? callBrowserIdeRpc<IdeFileResult<string>>('ide.readFileBase64', { path: filePath })
+      : invokeWithTimeout(
+          IDE_CHANNELS.readFileBase64,
+          () => channels.readFileBase64.invoke({ path: filePath }),
+          FILE_OP_TIMEOUT_MS
+        ),
   writeFile: (filePath: string, data: string): Promise<IdeFileResult<boolean>> =>
-    invokeWithTimeout(
-      IDE_CHANNELS.writeFile,
-      () => channels.writeFile.invoke({ path: filePath, data }),
-      FILE_OP_TIMEOUT_MS
-    ),
+    isBrowserIdeRpc()
+      ? callBrowserIdeRpc<IdeFileResult<boolean>>('ide.writeFile', { path: filePath, data })
+      : invokeWithTimeout(
+          IDE_CHANNELS.writeFile,
+          () => channels.writeFile.invoke({ path: filePath, data }),
+          FILE_OP_TIMEOUT_MS
+        ),
   writeFileBase64: (filePath: string, dataBase64: string): Promise<IdeFileResult<boolean>> =>
-    invokeWithTimeout(
-      IDE_CHANNELS.writeFileBase64,
-      () => channels.writeFileBase64.invoke({ path: filePath, dataBase64 }),
-      FILE_OP_TIMEOUT_MS
-    ),
+    isBrowserIdeRpc()
+      ? callBrowserIdeRpc<IdeFileResult<boolean>>('ide.writeFileBase64', { path: filePath, dataBase64 })
+      : invokeWithTimeout(
+          IDE_CHANNELS.writeFileBase64,
+          () => channels.writeFileBase64.invoke({ path: filePath, dataBase64 }),
+          FILE_OP_TIMEOUT_MS
+        ),
   fileWatchStart: (rootPath: string): Promise<IdeFileResult<boolean>> =>
-    invokeWithTimeout(
-      IDE_CHANNELS.fileWatchStart,
-      () => channels.fileWatchStart.invoke({ rootPath }),
-      FILE_OP_TIMEOUT_MS
-    ),
+    isBrowserIdeRpc()
+      ? Promise.resolve({ ok: true, data: true })
+      : invokeWithTimeout(
+          IDE_CHANNELS.fileWatchStart,
+          () => channels.fileWatchStart.invoke({ rootPath }),
+          FILE_OP_TIMEOUT_MS
+        ),
   fileWatchStop: (rootPath: string): Promise<IdeFileResult<boolean>> =>
-    invokeWithTimeout(
-      IDE_CHANNELS.fileWatchStop,
-      () => channels.fileWatchStop.invoke({ rootPath }),
-      FILE_OP_TIMEOUT_MS
-    ),
+    isBrowserIdeRpc()
+      ? Promise.resolve({ ok: true, data: true })
+      : invokeWithTimeout(
+          IDE_CHANNELS.fileWatchStop,
+          () => channels.fileWatchStop.invoke({ rootPath }),
+          FILE_OP_TIMEOUT_MS
+        ),
   onFileChanged: (listener: (event: IdeFileChangeEvent) => void): (() => void) =>
-    channels.fileChanged.on((envelope) => listener(envelope.event)),
+    isBrowserIdeRpc() ? () => undefined : channels.fileChanged.on((envelope) => listener(envelope.event)),
   /** Delete a file at the given absolute path. Gracefully degrades if the channel is not registered. */
   deleteFile: (filePath: string): Promise<IdeFileResult<boolean>> =>
-    invokeWithTimeout(
-      IDE_CHANNELS.deleteFile,
-      () => channels.deleteFile.invoke({ path: filePath }),
-      FILE_OP_TIMEOUT_MS
-    ),
+    isBrowserIdeRpc()
+      ? callBrowserIdeRpc<IdeFileResult<boolean>>('ide.deleteFile', { path: filePath })
+      : invokeWithTimeout(
+          IDE_CHANNELS.deleteFile,
+          () => channels.deleteFile.invoke({ path: filePath }),
+          FILE_OP_TIMEOUT_MS
+        ),
   /** Create a directory (and any missing parents) at the given absolute path. */
   createDir: (dirPath: string): Promise<IdeFileResult<boolean>> =>
-    invokeWithTimeout(IDE_CHANNELS.createDir, () => channels.createDir.invoke({ path: dirPath }), FILE_OP_TIMEOUT_MS),
+    isBrowserIdeRpc()
+      ? callBrowserIdeRpc<IdeFileResult<boolean>>('ide.createDir', { path: dirPath })
+      : invokeWithTimeout(
+          IDE_CHANNELS.createDir,
+          () => channels.createDir.invoke({ path: dirPath }),
+          FILE_OP_TIMEOUT_MS
+        ),
   /** Load project rules from `.aionrules` / `AGENTS.md` / `.cursorrules` in the repo. */
   rulesLoad: (rootPath: string): Promise<IdeFileResult<string[]>> =>
-    invokeWithTimeout(IDE_CHANNELS.rulesLoad, () => channels.rulesLoad.invoke({ rootPath }), FILE_OP_TIMEOUT_MS),
+    isBrowserIdeRpc()
+      ? callBrowserIdeRpc<IdeFileResult<string[]>>('ide.rulesLoad', { rootPath })
+      : invokeWithTimeout(IDE_CHANNELS.rulesLoad, () => channels.rulesLoad.invoke({ rootPath }), FILE_OP_TIMEOUT_MS),
   /** Rename / move a file from oldPath to newPath. */
   renameFile: (oldPath: string, newPath: string): Promise<IdeFileResult<boolean>> =>
-    invokeWithTimeout(
-      IDE_CHANNELS.renameFile,
-      () => channels.renameFile.invoke({ oldPath, newPath }),
-      FILE_OP_TIMEOUT_MS
-    ),
+    isBrowserIdeRpc()
+      ? callBrowserIdeRpc<IdeFileResult<boolean>>('ide.renameFile', { oldPath, newPath })
+      : invokeWithTimeout(
+          IDE_CHANNELS.renameFile,
+          () => channels.renameFile.invoke({ oldPath, newPath }),
+          FILE_OP_TIMEOUT_MS
+        ),
   /** Build the Understand-Anything knowledge graph for a repo (long-running). */
   kgBuild: (
     rootPath: string,
@@ -954,18 +1038,26 @@ export const ideClient = {
     query: string,
     opts?: { caseSensitive?: boolean; regex?: boolean; wholeWord?: boolean }
   ): Promise<IdeSearchResult<IdeGrepMatch[]>> =>
-    invokeWithTimeout(
-      IDE_CHANNELS.grep,
-      () =>
-        channels.grep.invoke({
+    isBrowserIdeRpc()
+      ? callBrowserIdeRpc<IdeSearchResult<IdeGrepMatch[]>>('ide.search', {
           rootPath,
           query,
           caseSensitive: opts?.caseSensitive,
           regex: opts?.regex,
           wholeWord: opts?.wholeWord,
-        }),
-      SCAN_TIMEOUT_MS
-    ),
+        })
+      : invokeWithTimeout(
+          IDE_CHANNELS.grep,
+          () =>
+            channels.grep.invoke({
+              rootPath,
+              query,
+              caseSensitive: opts?.caseSensitive,
+              regex: opts?.regex,
+              wholeWord: opts?.wholeWord,
+            }),
+          SCAN_TIMEOUT_MS
+        ),
   /** Replace all matches in ONE file (via the MTUI write gateway). Returns the count. */
   replaceFile: (req: ReplaceFileRequest): Promise<IdeSearchResult<number>> =>
     invokeWithTimeout(IDE_CHANNELS.replaceFile, () => channels.replaceFile.invoke(req), FILE_OP_TIMEOUT_MS),
@@ -974,18 +1066,22 @@ export const ideClient = {
     invokeWithTimeout(IDE_CHANNELS.lintFile, () => channels.lintFile.invoke({ filePath, rootPath }), SCAN_TIMEOUT_MS),
   /** Heuristic go-to-definition: declaration sites of a symbol across the repo. */
   findDefinition: (rootPath: string, symbol: string): Promise<IdeNavResult> =>
-    invokeWithTimeout(
-      IDE_CHANNELS.findDefinition,
-      () => channels.findDefinition.invoke({ rootPath, symbol }),
-      SCAN_TIMEOUT_MS
-    ),
+    isBrowserIdeRpc()
+      ? callBrowserIdeRpc<IdeNavResult>('ide.findDefinition', { rootPath, name: symbol })
+      : invokeWithTimeout(
+          IDE_CHANNELS.findDefinition,
+          () => channels.findDefinition.invoke({ rootPath, symbol }),
+          SCAN_TIMEOUT_MS
+        ),
   /** Heuristic find-references: all occurrences of a symbol across the repo. */
   findReferences: (rootPath: string, symbol: string): Promise<IdeNavResult> =>
-    invokeWithTimeout(
-      IDE_CHANNELS.findReferences,
-      () => channels.findReferences.invoke({ rootPath, symbol }),
-      SCAN_TIMEOUT_MS
-    ),
+    isBrowserIdeRpc()
+      ? callBrowserIdeRpc<IdeNavResult>('ide.findReferences', { rootPath, name: symbol })
+      : invokeWithTimeout(
+          IDE_CHANNELS.findReferences,
+          () => channels.findReferences.invoke({ rootPath, symbol }),
+          SCAN_TIMEOUT_MS
+        ),
   /** Detect repo languages + recommended editor engines via `mtui analyze type`. */
   analyzeLanguages: (rootPath: string): Promise<IdeLangResult> =>
     invokeWithTimeout(
@@ -1000,7 +1096,7 @@ export const ideClient = {
       () => channels.inlineComplete.invoke(req),
       INLINE_COMPLETE_TIMEOUT_MS
     ),
-  /** Read the ephemeral session super-memory snapshot (notes + token usage + secret keys). */
+  /** Read the session-scoped Save snapshot (notes + token usage + RAM-only secret keys). */
   memorySnapshot: (sessionId: string): Promise<IdeMemoryResult<SuperMemorySnapshot>> =>
     invokeWithTimeout(
       IDE_CHANNELS.memorySnapshot,
@@ -1028,6 +1124,9 @@ export const ideClient = {
       () => channels.repoSecretList.invoke({ repository }),
       FILE_OP_TIMEOUT_MS
     ),
+  /** List metadata-only Secret Context scopes so workspace switches never look like data loss. */
+  repoSecretScopes: (): Promise<IdeMemoryResult<RepoSecretScopeSummary[]>> =>
+    invokeWithTimeout(IDE_CHANNELS.repoSecretScopes, () => channels.repoSecretScopes.invoke({}), FILE_OP_TIMEOUT_MS),
   /** Store a value in the OS-encrypted repository vault; response is metadata only. */
   repoSecretSave: (
     repository: string,
@@ -1049,6 +1148,29 @@ export const ideClient = {
     invokeWithTimeout(
       IDE_CHANNELS.repoSecretDeclare,
       () => channels.repoSecretDeclare.invoke({ repository, alias, description }),
+      FILE_OP_TIMEOUT_MS
+    ),
+  /** List grouped Combo metadata. Secret values never cross IPC. */
+  repoSecretComboList: (repository: string): Promise<IdeMemoryResult<RepoSecretCombo[]>> =>
+    invokeWithTimeout(
+      IDE_CHANNELS.repoSecretComboList,
+      () => channels.repoSecretComboList.invoke({ repository }),
+      FILE_OP_TIMEOUT_MS
+    ),
+  /** Atomically create or update a Combo and its keys. */
+  repoSecretComboSave: (
+    repository: string,
+    combo: RepoSecretComboSaveRequest['combo']
+  ): Promise<IdeMemoryResult<RepoSecretCombo>> =>
+    invokeWithTimeout(
+      IDE_CHANNELS.repoSecretComboSave,
+      () => channels.repoSecretComboSave.invoke({ repository, combo }),
+      FILE_OP_TIMEOUT_MS
+    ),
+  repoSecretComboRemove: (repository: string, comboId: string): Promise<IdeMemoryResult<boolean>> =>
+    invokeWithTimeout(
+      IDE_CHANNELS.repoSecretComboRemove,
+      () => channels.repoSecretComboRemove.invoke({ repository, comboId }),
       FILE_OP_TIMEOUT_MS
     ),
   repoSecretRemove: (repository: string, alias: string): Promise<IdeMemoryResult<boolean>> =>

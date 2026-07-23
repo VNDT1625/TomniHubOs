@@ -11,7 +11,7 @@ pub struct UndoResult {
 }
 
 pub fn undo_operation(
-    _project_root: &Path,
+    project_root: &Path,
     operation: &crate::history::OperationRecord,
 ) -> Result<UndoResult, MtuiError> {
     if operation.backup_path.is_none() {
@@ -74,6 +74,7 @@ pub fn undo_operation(
         message: format!("Failed to restore file: {}", e),
         suggestion: "Check disk space and permissions".to_string(),
     })?;
+    crate::ops::mark_understand_stale(project_root, file_path);
 
     Ok(UndoResult {
         operation_id: operation.operation_id.clone(),

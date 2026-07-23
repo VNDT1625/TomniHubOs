@@ -413,6 +413,123 @@
     "open": "打开",
     "close": "关闭"
   },
+  "workspace": {
+    "controlCenter": "控制中心",
+    "navigation": "管理导航",
+    "system": "系统",
+    "todayCommand": "今日控制中心",
+    "overviewTitle": "看清重点，推动今天向前。",
+    "overviewSubtitle": "集中查看任务、日程、知识与 Tomny Core 实时活动。",
+    "viewAll": "查看全部",
+    "viewCalendar": "打开日历",
+    "openCore": "打开 Core",
+    "nav": {
+      "overview": "总览",
+      "core": "Tomny Core"
+    },
+    "descriptions": {
+      "overview": "优先事项、进度与实时系统活动",
+      "tasks": "规划、排序并完成工作",
+      "schedule": "协调固定与灵活时间块",
+      "daily": "及时记录今天",
+      "learn": "构建互联知识库",
+      "data": "整理文档、来源与摘要",
+      "core": "检查原生目标、运行与自动化"
+    },
+    "metrics": {
+      "activeTasks": "进行中任务",
+      "overdue": "{{count}} 项逾期",
+      "eventsToday": "今日事件",
+      "nextAt": "下一项 {{time}}",
+      "clearDay": "没有更多事件",
+      "notes": "笔记",
+      "knowledgeBase": "整个知识库",
+      "activeRuns": "Core 活跃运行"
+    },
+    "focus": {
+      "title": "专注队列",
+      "subtitle": "逾期与高影响工作优先",
+      "completion": "总体完成度",
+      "empty": "没有紧急事项。"
+    },
+    "timeline": {
+      "title": "今日时间线",
+      "subtitle": "接下来的固定与灵活时段",
+      "empty": "今日日历为空。"
+    },
+    "recent": {
+      "title": "最近知识",
+      "subtitle": "最近更新的笔记与文档",
+      "empty": "暂无最近笔记。"
+    },
+    "corePulse": {
+      "title": "Core 脉搏",
+      "subtitle": "原生运行时与自动化就绪度",
+      "targets": "可用目标",
+      "sessions": "会话",
+      "automations": "自动化",
+      "completion": "完成率 {{rate}}%"
+    }
+  },
+  "core": {
+    "title": "Tomny Core 运维",
+    "subtitle": "用于运行时健康、活动任务、目标和持久自动化的原生控制面。",
+    "nativeRuntime": "原生运行时",
+    "loading": "正在连接 Tomny Core…",
+    "unavailableTitle": "Tomny Core 无响应",
+    "unavailableDescription": "管理数据仍可使用。请重启桌面运行时或等待 Core 启动完成后重试。",
+    "status": {
+      "loading": "Core 启动中",
+      "offline": "Core 离线",
+      "healthy": "Core 健康",
+      "degraded": "Core 降级",
+      "unhealthy": "Core 异常"
+    },
+    "actions": {
+      "refresh": "刷新",
+      "cancel": "取消运行",
+      "runNow": "立即运行",
+      "runSuccess": "自动化已启动",
+      "cancelSuccess": "运行已取消",
+      "failed": "Core 操作失败"
+    },
+    "metrics": {
+      "health": "运行时健康",
+      "checked": "{{count}} 项检查",
+      "targets": "可用目标",
+      "ofTotal": "共发现 {{total}} 个",
+      "activeRuns": "活动运行",
+      "sessions": "{{count}} 个会话",
+      "automations": "已启用自动化",
+      "scheduledTotal": "共 {{count}} 个计划"
+    },
+    "health": {
+      "title": "运行时诊断",
+      "subtitle": "健康检查与执行可靠性",
+      "completionRate": "完成率",
+      "noReport": "暂无诊断报告。"
+    },
+    "runs": {
+      "title": "活动运行",
+      "subtitle": "当前通过新 Core 执行的工作",
+      "empty": "没有活动 Core 运行。",
+      "started": "开始于 {{time}}"
+    },
+    "automations": {
+      "title": "持久自动化",
+      "subtitle": "带重试和生命周期状态的原生计划任务",
+      "empty": "尚未创建 Core 自动化。",
+      "enabled": "已启用",
+      "disabled": "已停用",
+      "manual": "手动",
+      "intervalMinutes": "每 {{count}} 分钟"
+    },
+    "targets": {
+      "title": "运行目标",
+      "subtitle": "内置、ACP、CLI 与远程执行适配器",
+      "models": "{{count}} 个模型"
+    }
+  },
   "quickAdd": {
     "placeholder": "添加任务 —— 试试 “报告 明天 5pm !high #work”",
     "hint": "提示：!high · #标签 · “明天 5pm” / “周一 9am” 会被自动识别。",

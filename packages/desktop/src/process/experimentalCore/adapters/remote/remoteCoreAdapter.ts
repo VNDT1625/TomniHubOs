@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { randomUUID } from 'node:crypto';
+
 import type { ExperimentalCoreModel } from '../../experimentalCoreProtocol';
 import {
   requireWorkspace,
@@ -154,7 +156,7 @@ export class RemoteCoreAdapter implements CoreAdapter {
     let descriptor = assertDescriptor(
       await client.startRun(
         {
-          sessionId: input.sessionId,
+          sessionId: randomUUID(),
           prompt: input.prompt,
           workspace,
           modelKey: input.modelKey,

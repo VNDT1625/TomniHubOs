@@ -1,4 +1,47 @@
 {
+  "personalSecrets": {
+    "allowedHostnamesLabel": "允许的浏览器主机名",
+    "allowedHostnamesPlaceholder": "example.com",
+    "allowedHostnamesDescription": "添加 1–20 个精确主机名。不允许协议、路径、端口或通配符。",
+    "allowedHostnamesInvalid": "请输入 1–20 个唯一且精确的主机名，不要包含协议、路径、端口或通配符。",
+    "allowedHostnamesTagLabel": "允许的主机",
+    "legacyTargetsMissing": "未配置允许的主机 — 编辑前保持阻止",
+    "nameRequired": "请输入密钥组名称。",
+    "variablesInvalid": "每个变量都需要有效且不重复的名称和值。",
+    "createdSuccess": "密钥组已创建。",
+    "replacedSuccess": "密钥组已替换。",
+    "saveError": "无法保存密钥组。",
+    "removedSuccess": "密钥组已删除。",
+    "removeError": "无法删除密钥组。",
+    "countSummary": "{{setCount}} 组 · {{variableCount}} 个变量",
+    "securityTitle": "代理无需查看值即可使用密钥",
+    "securityDescription": "提示词只会收到组名、句柄和变量名。Core 仅会为受信任的主机解密被请求的变量，例如直接在浏览器中填写 USERNAME 或 PASSWORD。值不会返回到聊天或 MCP。",
+    "keychainProtected": "由操作系统钥匙串加密",
+    "empty": "尚无密钥组。",
+    "createFirst": "创建第一个密钥组",
+    "noNote": "无备注。",
+    "editAria": "编辑密钥组",
+    "deleteAria": "删除密钥组",
+    "deleteConfirmTitle": "删除此密钥组？",
+    "deleteConfirmContent": "使用此密钥组的关联也会被移除。",
+    "updatedAt": "更新于 {{date}}",
+    "replaceTitle": "替换密钥组",
+    "createTitle": "创建密钥组",
+    "replaceAction": "替换",
+    "createAction": "创建",
+    "cancel": "取消",
+    "replaceWarning": "Core 永远不会返回已保存的值。替换此密钥组时，请重新输入所有变量值。",
+    "setNameLabel": "组名",
+    "setNamePlaceholder": "例如：GitHub 账号",
+    "noteLabel": "备注",
+    "notePlaceholder": "此密钥组用于什么？",
+    "variablesTitle": "组内变量",
+    "variablesDescription": "代理可以看到变量名，但看不到变量值。",
+    "addVariable": "添加变量",
+    "variableNamePlaceholder": "USERNAME",
+    "variableValuePlaceholder": "机密值",
+    "removeVariableAria": "移除变量"
+  },
   "title": "设置",
   "skillsHub": {
     "title": "技能中心",
@@ -213,7 +256,7 @@
   "deleteInvalidKeys": "删除无效密钥",
   "testAllKeys": "测试所有密钥",
   "addModelPlaceholder": "请选择或输入模型ID",
-  "customModelSupportNote": "说明：目前仅 Tomni Agentic 支持使用自定义模型。",
+  "customModelSupportNote": "说明：目前仅 Tomny Agentic 支持使用自定义模型。",
   "addModelHint": "选择或输入模型 ID，它会追加到当前平台配置。",
   "addModelSelectedHint": "即将添加模型：{{model}}",
   "currentModelsLabel": "当前模型",
@@ -225,13 +268,51 @@
   "platformNewApi": "New API",
   "platform9router": "9Router",
   "router9": {
-    "title": "通过 9Router 分发",
-    "subtitle": "将外部 CLI/IDE 工具指向本地 9Router 端点。应用会生成该工具所需的精确配置。",
+    "title": "Tomni 模型网关",
+    "subtitle": "通过 API 密钥或 OAuth 连接提供商，并向 Claude Code、Codex 和其他应用签发独立凭据。",
+    "useGateway": "启动并使用网关",
+    "gatewayReady": "Tomni 模型网关已就绪",
+    "gatewayFailed": "网关失败：{{error}}",
+    "clientKeyUnavailable": "网关未返回客户端密钥",
+    "runtimeMissing": "网关运行时尚未准备",
+    "oauthProviders": "提供商与 OAuth",
+    "usage": "用量与令牌",
+    "autoStart": "随 Tomni 启动网关",
+    "autoStartHint": "重新打开应用后自动准备本地网关。",
+    "usageByConsumer": "按客户端统计",
+    "usageBySession": "按会话统计",
+    "tokenSourceNote": "优先使用提供商返回的令牌数；仅在提供商未返回用量时由网关估算。",
+    "metrics": { "requests": "请求", "input": "输入", "output": "输出", "cached": "缓存", "cost": "费用" },
+    "measurement": { "provider-reported": "提供商", "gateway-estimated": "估算", "unknown": "未知" },
+    "state": {
+      "stopped": "已停止",
+      "starting": "正在启动",
+      "running": "运行中",
+      "failed": "失败",
+      "external": "外部网关"
+    },
     "targetLabel": "目标工具",
     "endpointLabel": "端点",
     "apiKeyLabel": "API 密钥（来自 9Router 仪表盘）",
     "modelLabel": "模型（可选）",
     "modelPlaceholder": "例如 kr/claude-sonnet-4.5",
+    "clientAccessLabel": "CLI/应用访问",
+    "clientAccessManaged": "为此客户端单独管理",
+    "clientAccessProtected": "已保护",
+    "clientKeyPlaceholder": "网关客户端密钥",
+    "clientAccessHint": "OAuth 和供应商 API 密钥仅保留在上游。Tomni 为每个 CLI/应用创建独立的本地客户端凭据，用于隔离、撤销和用量归因。",
+    "reasoningLabel": "推理强度",
+    "reasoningHint": "与模型独立。模型支持时，网关会将此级别转换为所选供应商的格式。",
+    "reasoning": {
+      "auto": "自动（模型默认）",
+      "none": "无",
+      "minimal": "最小",
+      "low": "低",
+      "medium": "中",
+      "high": "高",
+      "xhigh": "超高",
+      "max": "最大"
+    },
     "needCreds": "输入端点和 API 密钥以生成配置。",
     "fieldsTitle": "连接信息",
     "envTitle": "环境变量",
@@ -241,6 +322,9 @@
     "apply": "应用到此工具",
     "applyHint": "将配置文件写入磁盘（会先备份现有文件）。",
     "applied": "配置已应用",
+    "useInTomniChat": "在 Tomni 聊天中使用",
+    "manualChatHint": "为 Tomni 聊天保存所选模型；外部 CLI 仍需使用上方字段单独配置。",
+    "chatSynced": "Tomni 聊天模型已更新",
     "applyFailed": "应用失败：{{error}}",
     "fileWritten": "已写入",
     "fileSkipped": "已保留（已存在）",
@@ -254,8 +338,8 @@
     "target": {
       "kiro": "在 Kiro 的模型设置中填入兼容 OpenAI 的端点和密钥。",
       "antigravity": "将 Antigravity 指向本地端点并粘贴 API 密钥。",
-      "claudeCode": "将 Anthropic 的 base URL 和密钥写入 ~/.claude/config.json。",
-      "codex": "为 Codex CLI 导出 OPENAI_BASE_URL 和 OPENAI_API_KEY。",
+      "claudeCode": "将网关环境写入 ~/.claude/settings.json。",
+      "codex": "将 Tomni Responses 提供商添加到 ~/.codex/config.toml。",
       "cursor": "在 Cursor 的模型设置中填入 OpenAI base URL 和密钥。",
       "cline": "选择 OpenAI Compatible，然后粘贴 base URL 和密钥。",
       "openclaw": "向 ~/.openclaw/openclaw.json 添加 9router 提供商配置块。"
@@ -947,7 +1031,7 @@
   "agentManagement": {
     "localAgents": "本地 Agents",
     "remoteAgents": "远端 Agents",
-    "localAgentsDescription": "Tomni Agentic 是内置 Agent，App 自带无需安装；其他 Agent 需先在本地安装对应 CLI 才能被识别。",
+    "localAgentsDescription": "Tomny Agentic 是 Tomni 内置的 AI 核心，无需安装；其他 Agent 需先在本地安装对应 CLI 才能被识别。",
     "localAgentsSetupLink": "查看安装指南",
     "goToChat": "开始对话",
     "remoteAgentsDescription": "目前只支持远程连接 OpenClaw，其他 Agent 正在开发中。",
@@ -1014,5 +1098,137 @@
     "pendingTimeout": "审批请求已过期（5 分钟）。请重试。",
     "pendingCancel": "取消",
     "pendingTimeRemaining": "剩余时间：{{time}}"
-  }
+  },
+  "personalProfile": {
+    "title": "个人档案",
+    "description": "帮助 AI 了解你是谁，以便提出更贴切的问题、个性化决策，并避免让你重复已提供的信息。",
+    "actions": {
+      "save": "保存更改",
+      "addSecret": "添加秘密信息组",
+      "add": "添加信息",
+      "addFirst": "添加第一条信息"
+    },
+    "tabs": {
+      "profile": "个人资料",
+      "secrets": "秘密信息 ({{count}})"
+    },
+    "safety": {
+      "noSecrets": "请勿在此输入密码、令牌或 API 密钥。请在秘密信息标签页中保存凭据。",
+      "selfDescribed": "心理信息仅来自你的自我描述，仅用于个性化。AI 不会诊断或自行推断心理健康状况。"
+    },
+    "structured": {
+      "title": "更完整地了解你",
+      "description": "将长期背景整理为清晰的维度。只添加有帮助且你愿意分享的信息。",
+      "summary": "7 个维度，共 {{count}} 条信息",
+      "updatedAt": "更新于 {{date}}"
+    },
+    "categories": {
+      "personalInformation": {
+        "title": "个人信息",
+        "description": "你希望 AI 记住的基本信息，例如姓名、所在地、语言或无障碍需求。"
+      },
+      "psychology": {
+        "title": "心理特点",
+        "description": "你对自身动机、学习方式、压力触发因素和决策模式的描述——不用于诊断。"
+      },
+      "personality": {
+        "title": "性格",
+        "description": "影响你工作方式的核心特质、工作节奏、协作方式和反馈偏好。"
+      },
+      "interests": {
+        "title": "兴趣",
+        "description": "吸引你注意或对你重要的主题、爱好和关注事项。"
+      },
+      "profession": {
+        "title": "职业",
+        "description": "你的角色、行业、经验、职责和专业优势。"
+      },
+      "aestheticTaste": {
+        "title": "审美偏好",
+        "description": "你喜欢或不喜欢的视觉风格、颜色、信息密度、灵感来源和设计选择。"
+      },
+      "pastContext": {
+        "title": "过往背景",
+        "description": "以往项目、重要经历、所得经验、历史决策和反复出现的限制。"
+      }
+    },
+    "suggestions": {
+      "displayName": "显示名称",
+      "location": "所在地",
+      "languages": "语言",
+      "motivation": "我的动力来源",
+      "learningStyle": "学习方式",
+      "stressTriggers": "压力触发因素",
+      "coreTraits": "核心特质",
+      "collaborationStyle": "协作方式",
+      "feedbackPreference": "反馈偏好",
+      "favoriteTopics": "喜爱的主题",
+      "hobbies": "爱好",
+      "causes": "我关心的事项",
+      "role": "角色",
+      "industry": "行业",
+      "experienceLevel": "经验水平",
+      "visualStyle": "视觉风格",
+      "colorPreference": "颜色偏好",
+      "densityPreference": "信息密度",
+      "pastProjects": "过往项目",
+      "lessonsLearned": "所得经验",
+      "recurringConstraints": "常见限制"
+    },
+    "facts": {
+      "keyPlaceholder": "信息名称",
+      "valuePlaceholder": "AI 应该了解什么？",
+      "empty": "此部分尚未添加任何信息。",
+      "quickAdd": "快速添加",
+      "agentVisible": "可供 AI 使用",
+      "localOnly": "仅本地保存",
+      "agentVisibleDescription": "包含在智能体上下文中，以便 AI 个性化问题和回答。",
+      "localOnlyDescription": "仅保存在此设备上，不会包含在智能体上下文中。",
+      "confidence": "可信度 {{value}}%",
+      "confirmed": "已确认",
+      "removeAria": "删除此信息",
+      "source": {
+        "user": "由你提供",
+        "observed": "观察所得",
+        "imported": "已导入",
+        "inferred": "推断所得"
+      }
+    },
+    "additional": {
+      "title": "补充背景",
+      "description": "保留无法归入具体维度的现有通用信息、偏好和习惯。",
+      "facts": {
+        "title": "其他信息",
+        "description": "AI 应在工作和对话中持续记住的通用信息。"
+      },
+      "preferences": {
+        "title": "其他偏好",
+        "description": "你希望工作、内容或体验采用的处理方式。"
+      },
+      "habits": {
+        "title": "习惯",
+        "description": "AI 应主动尊重的日常流程和工作节奏。"
+      }
+    },
+    "communication": {
+      "title": "沟通方式",
+      "description": "这些默认设置可由任一对话中的具体要求覆盖。",
+      "languageLabel": "首选语言",
+      "languagePlaceholder": "例如：简体中文",
+      "toneLabel": "首选语气",
+      "tonePlaceholder": "例如：直接、专业",
+      "verbosityLabel": "详细程度",
+      "verbosity": {
+        "concise": "简洁",
+        "balanced": "适中",
+        "detailed": "详细"
+      }
+    },
+    "messages": {
+      "loadError": "无法加载个人档案。",
+      "saveSuccess": "个人档案已保存。",
+      "saveError": "无法保存个人档案。"
+    }
+  },
+  "personal": "个人"
 }

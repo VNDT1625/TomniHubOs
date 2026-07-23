@@ -89,6 +89,14 @@ export const classifyAgentFailure = (error: unknown): AgentFailureClassification
     return { kind: 'context', retry: false, message };
   }
   if (
+    /no active credentials? for provider|no available credentials? for provider|credential pool (?:is )?(?:empty|exhausted|unavailable)/u.test(
+      normalized
+    )
+  ) {
+    return { kind: 'transient', retry: true, message };
+  }
+
+  if (
     status === 401 ||
     status === 403 ||
     /invalid api[ _-]?key|incorrect api[ _-]?key|missing api[ _-]?key|api[ _-]?key.*required|unauthori[sz]ed|authentication failed|invalid bearer|unauthenticated|access token.*(?:invalid|expired)/u.test(
@@ -109,6 +117,9 @@ export const classifyAgentFailure = (error: unknown): AgentFailureClassification
   }
   if (
     /no (?:usable )?model|model (?:is )?not (?:configured|found)|unknown model|invalid model|invalid request|bad request|configuration|not installed|executable (?:was )?not found|\benoent\b|\beacces\b|\beperm\b|operation not permitted/u.test(
+      normalized
+    ) ||
+    /surface .+ (?:is )?unavailable|surface .* requires (?:scopes|an explicit user grant)|missing-(?:permission-scope|capability)/u.test(
       normalized
     ) ||
     (status !== undefined && [400, 404, 405, 409, 410, 422].includes(status))

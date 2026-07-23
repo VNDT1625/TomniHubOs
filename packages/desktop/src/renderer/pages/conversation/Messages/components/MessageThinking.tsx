@@ -43,7 +43,8 @@ const MessageThinking: React.FC<{ message: IMessageThinking }> = ({ message }) =
     const initialStartedAt = message.created_at ?? Date.now();
     return isDone ? 0 : Math.max(0, Math.floor((Date.now() - initialStartedAt) / 1000));
   });
-  const startTimeRef = useRef<number>(message.created_at ?? Date.now());
+  const startTimeRef = useRef<number | null>(null);
+  const activeMsgIdRef = useRef(message.msg_id);
   const bodyRef = useRef<HTMLDivElement>(null);
 
   // Auto-collapse when status changes to done
@@ -53,14 +54,23 @@ const MessageThinking: React.FC<{ message: IMessageThinking }> = ({ message }) =
     }
   }, [isDone]);
 
-  // Elapsed timer for active thinking
+  // Elapsed timer for active thinking. Stream updates may carry a fresh
+  // `created_at`; that is an update timestamp, not a new thinking run. Keep
+  // the original start time for the same msg_id so the clock never jumps back.
   useEffect(() => {
     if (isDone) return;
 
-    startTimeRef.current = message.created_at ?? Date.now();
-    setElapsedTime(Math.max(0, Math.floor((Date.now() - startTimeRef.current) / 1000)));
+    if (activeMsgIdRef.current !== message.msg_id || startTimeRef.current === null) {
+      activeMsgIdRef.current = message.msg_id;
+      startTimeRef.current = message.created_at ?? Date.now();
+    }
+    const updateElapsed = (): void => {
+      if (startTimeRef.current === null) return;
+      setElapsedTime(Math.max(0, Math.floor((Date.now() - startTimeRef.current) / 1000)));
+    };
+    updateElapsed();
     const timer = setInterval(() => {
-      setElapsedTime(Math.floor((Date.now() - startTimeRef.current) / 1000));
+      updateElapsed();
     }, 1000);
 
     return () => clearInterval(timer);

@@ -105,24 +105,6 @@ export const buildPlanningGuard = async (rootPath: string, userMessage: string):
     }
   }
 
-  const gitStatusResult = await ideClient.gitStatus(rootPath).catch((): null => null);
-  const changedPaths = gitStatusResult?.ok ? gitStatusResult.data.map((change) => change.path) : [];
-  if (changedPaths.length > 0) {
-    const policyResult = await ideClient.mtuiPolicyCheck(rootPath, changedPaths).catch((): null => null);
-    const policy = policyResult?.ok ? policyResult.data : null;
-    const violations = policy?.violations ?? [];
-    const violationCount = policy?.violationCount ?? violations.length;
-    if (violationCount > 0) {
-      const shown = violations.slice(0, 3);
-      const sample = shown.map((violation) => violation.path).join(', ');
-      const suffix = violationCount > shown.length ? `, and ${violationCount - shown.length} more` : '';
-      const samplePart = sample ? `: ${sample}${suffix}` : '';
-      throw new MtuiRuntimePreflightError(
-        `Strict MTUI Mode blocked this send: ${violationCount} unowned changed file(s)${samplePart}. Run mtui --json policy status, or session-start for user-owned pre-existing changes.`
-      );
-    }
-  }
-
   if (executeMatch && isPlanningEnabled(rootPath)) {
     const statusResult = await ideClient.specStatus(rootPath).catch((): null => null);
     const status = statusResult?.ok ? statusResult.data : null;

@@ -222,7 +222,7 @@ const emptyTaskCounts = (): SpecTaskCounts => ({
   blocked: 0,
 });
 
-const workspaceMetaChildRoot = (rootPath: string, childDir: 'specs' | 'understand'): string => {
+const workspaceMetaChildRoot = (rootPath: string, childDir: 'specs'): string => {
   const next = path.join(rootPath, '.omni', childDir);
   if (existsSync(next)) return next;
   const legacy = path.join(rootPath, '.aionui', childDir);
@@ -230,7 +230,14 @@ const workspaceMetaChildRoot = (rootPath: string, childDir: 'specs' | 'understan
 };
 
 const specsRoot = (rootPath: string): string => workspaceMetaChildRoot(rootPath, 'specs');
-const understandRoot = (rootPath: string): string => workspaceMetaChildRoot(rootPath, 'understand');
+const understandRoot = (rootPath: string): string => {
+  const canonical = path.join(rootPath, '.tomni', 'understand');
+  if (existsSync(canonical)) return canonical;
+  const migration = path.join(rootPath, '.omni', 'understand');
+  if (existsSync(migration)) return migration;
+  const legacy = path.join(rootPath, '.aionui', 'understand');
+  return existsSync(legacy) ? legacy : canonical;
+};
 
 const slugify = (title: string): string => {
   const slug = title

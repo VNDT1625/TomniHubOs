@@ -6,7 +6,7 @@
 
 import type { IMessagePermission } from '@/common/chat/chatLib';
 import { ipcBridge } from '@/common';
-import { Button, Card, Radio, Typography } from '@arco-design/web-react';
+import { Button, Card, Message, Radio, Typography } from '@arco-design/web-react';
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -25,7 +25,15 @@ const actionIcons: Record<string, string> = {
 
 const MessagePermission: React.FC<MessagePermissionProps> = React.memo(({ message }) => {
   const { t } = useTranslation();
-  const { options = [], description, title, action, call_id, command_type } = message.content || {};
+  const {
+    options = [],
+    description,
+    title,
+    action,
+    call_id,
+    command_type,
+    native_core_permission_id,
+  } = message.content || {};
 
   const [selected, setSelected] = useState<string | null>(null);
   const [isResponding, setIsResponding] = useState(false);
@@ -40,16 +48,26 @@ const MessagePermission: React.FC<MessagePermissionProps> = React.memo(({ messag
     setIsResponding(true);
     try {
       const always_allow = selected === 'proceed_always';
-      await ipcBridge.conversation.confirmation.confirm.invoke({
-        conversation_id: message.conversation_id,
-        call_id,
-        msg_id: message.msg_id || '',
-        data: { value: selected },
-        always_allow,
-      });
+      if (native_core_permission_id) {
+        const resolved = await ipcBridge.conversation.resolveNativePermission.invoke({
+          permission_id: native_core_permission_id,
+          approved: selected !== 'cancel',
+          lifetime: always_allow ? 'persistent' : 'allow-once',
+        });
+        if (!resolved) throw new Error('The permission request is no longer active.');
+      } else {
+        await ipcBridge.conversation.confirmation.confirm.invoke({
+          conversation_id: message.conversation_id,
+          call_id,
+          msg_id: message.msg_id || '',
+          data: { value: selected },
+          always_allow,
+        });
+      }
       setHasResponded(true);
     } catch (error) {
       console.error('Error confirming permission:', error);
+      Message.error(t('ide.agentMesh.actionFailed'));
     } finally {
       setIsResponding(false);
     }

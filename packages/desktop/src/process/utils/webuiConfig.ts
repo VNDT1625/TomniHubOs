@@ -8,10 +8,11 @@ import { app } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
 import { networkInterfaces } from 'os';
-import { getSystemDir } from './initStorage';
-import { httpRequest } from '@/common/adapter/httpBridge';
-import { startWebHost, type WebHostHandle } from '@aionui/web-host';
+import { getSystemDir, ProcessConfig } from './initStorage';
+
+import { startWebHost, type WebHostHandle, type WebHostOptions } from '@aionui/web-host';
 import { ensureCloudflared, startTunnel, stopTunnel } from '@process/studio/cloudflareTunnel';
+import { getTomniGatewayEndpoint } from '@process/tomnigateway';
 import { getDataPath } from './utils';
 
 const WEBUI_CONFIG_FILE = 'webui.config.json';
@@ -36,23 +37,27 @@ async function readWebUIDesktopPreferences(): Promise<{
   port: number | undefined;
 }> {
   try {
-    const settings = await httpRequest<Record<string, unknown>>('GET', '/api/settings/client');
-    const enabled = settings?.[DESKTOP_WEBUI_ENABLED_KEY] === true;
-    const allowRemote = settings?.[DESKTOP_WEBUI_ALLOW_REMOTE_KEY] === true;
-    const rawPort = settings?.[DESKTOP_WEBUI_PORT_KEY];
-    const port = typeof rawPort === 'number' && rawPort > 0 ? rawPort : undefined;
-    return { enabled, allowRemote, port };
+    const [enabled, allowRemote, rawPort] = await Promise.all([
+      ProcessConfig.get(DESKTOP_WEBUI_ENABLED_KEY),
+      ProcessConfig.get(DESKTOP_WEBUI_ALLOW_REMOTE_KEY),
+      ProcessConfig.get(DESKTOP_WEBUI_PORT_KEY),
+    ]);
+    return {
+      enabled: enabled === true,
+      allowRemote: allowRemote === true,
+      port: typeof rawPort === 'number' && rawPort > 0 ? rawPort : undefined,
+    };
   } catch (error) {
-    console.error('[WebUI] Failed to read preferences from backend:', error);
+    console.error('[WebUI] Failed to read native preferences:', error);
     return { enabled: false, allowRemote: false, port: undefined };
   }
 }
 
 async function writeWebUIDesktopEnabled(enabled: boolean): Promise<void> {
   try {
-    await httpRequest<void>('PUT', '/api/settings/client', { [DESKTOP_WEBUI_ENABLED_KEY]: enabled });
+    await ProcessConfig.set(DESKTOP_WEBUI_ENABLED_KEY, enabled);
   } catch (error) {
-    console.error('[WebUI] Failed to reconcile webui.desktop.enabled on backend:', error);
+    console.error('[WebUI] Failed to persist webui.desktop.enabled:', error);
   }
 }
 
@@ -178,6 +183,33 @@ export type DesktopWebUIHandle = {
 const WEBUI_TUNNEL_KEY = 'webui';
 let currentHandle: (WebHostHandle & { allowRemote: boolean }) | null = null;
 let currentPublicUrl: string | undefined;
+
+const startPublicTunnelInBackground = async (handle: WebHostHandle): Promise<void> => {
+  const cloudflared = await ensureCloudflared();
+  if (currentHandle !== handle) return;
+
+  if (!cloudflared.ok) {
+    const detail = 'detail' in cloudflared ? cloudflared.detail : 'cloudflared installation failed';
+    console.warn(`[WebUI] Public tunnel unavailable: ${detail}`);
+    return;
+  }
+
+  const tunnel = await startTunnel(WEBUI_TUNNEL_KEY, handle.localUrl);
+  if (currentHandle !== handle) {
+    if (tunnel.ok) stopTunnel(WEBUI_TUNNEL_KEY);
+    return;
+  }
+
+  if (tunnel.ok) {
+    currentPublicUrl = tunnel.url;
+    return;
+  }
+
+  const reason = 'reason' in tunnel ? tunnel.reason : 'start-failed';
+  const detail = 'detail' in tunnel ? tunnel.detail : undefined;
+  console.warn(`[WebUI] Public tunnel unavailable: ${reason}${detail ? ` (${detail})` : ''}`);
+};
+
 // First-use plaintext password for the active handle. Set by webui.start IPC
 // handler before startDesktopWebUI() when the backend reports needs_setup=true,
 // so Settings can display the generated password exactly once. Cleared on stop.
@@ -252,11 +284,20 @@ export async function startDesktopWebUI(opts: { port?: number; allowRemote?: boo
   const preferredPort = parsePortValue(opts.port) ?? DEFAULT_WEBUI_PORT;
   const sysDir = getSystemDir();
 
-  // Reuse the backend already spawned by backendManager.start() in src/index.ts.
-  // Spawning a second backend here would race the first on the same SQLite file.
-  const backendPort = (globalThis as typeof globalThis & { __backendPort?: number }).__backendPort;
-  if (!backendPort) {
-    throw new Error('[WebUI] Cannot start: aioncore is not running (globalThis.__backendPort unset)');
+  // Preserve the full compatibility surface when its backend is available.
+  // Native-only mode has no backend port, so use the same Tomni Gateway path
+  // as headless --webui instead of refusing to start from Settings.
+  const legacyBackendPort = (globalThis as typeof globalThis & { __backendPort?: number }).__backendPort;
+  let backend: WebHostOptions['backend'];
+  if (legacyBackendPort) {
+    backend = { kind: 'useExistingBackend', port: legacyBackendPort };
+  } else {
+    const gatewayEndpoint = await getTomniGatewayEndpoint();
+    backend = {
+      kind: 'useExistingGateway',
+      port: gatewayEndpoint.port,
+      sessionToken: gatewayEndpoint.sessionToken,
+    };
   }
 
   const handle = await startWebHost({
@@ -283,30 +324,17 @@ export async function startDesktopWebUI(opts: { port?: number; allowRemote?: boo
       workDir: sysDir.workDir,
       logDir: sysDir.logDir,
     },
-    backend: {
-      kind: 'useExistingBackend',
-      port: backendPort,
-    },
+    backend,
   });
 
   currentHandle = Object.assign(handle, { allowRemote });
   currentPublicUrl = undefined;
 
   if (allowRemote) {
-    const cloudflared = await ensureCloudflared();
-    if (cloudflared.ok) {
-      const tunnel = await startTunnel(WEBUI_TUNNEL_KEY, handle.localUrl);
-      if (tunnel.ok) {
-        currentPublicUrl = tunnel.url;
-      } else {
-        const reason = 'reason' in tunnel ? tunnel.reason : 'start-failed';
-        const detail = 'detail' in tunnel ? tunnel.detail : undefined;
-        console.warn(`[WebUI] Public tunnel unavailable: ${reason}${detail ? ` (${detail})` : ''}`);
-      }
-    } else {
-      const detail = 'detail' in cloudflared ? cloudflared.detail : 'cloudflared installation failed';
-      console.warn(`[WebUI] Public tunnel unavailable: ${detail}`);
-    }
+    // LAN access is ready as soon as WebHost binds. Cloudflare installation and
+    // tunnel negotiation can take much longer, so do not keep the Settings
+    // switch stuck on "Starting" while optional public access is resolving.
+    void startPublicTunnelInBackground(handle);
   }
 
   return toDesktopHandle(handle, allowRemote);

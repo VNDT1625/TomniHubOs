@@ -55,7 +55,7 @@ const AgentCard: React.FC<AgentCardProps> = (props) => {
 
   if (props.type === 'detected') {
     const { agent, onGoToChat } = props;
-    const displayName = agent.agent_type === 'aionrs' || agent.backend === 'aionrs' ? 'Tomni Agentic' : agent.name;
+    const displayName = agent.agent_type === 'aionrs' || agent.backend === 'aionrs' ? 'Tomny Agentic' : agent.name;
     const extensionAvatar = resolveExtensionAssetUrl(agent.isExtension ? agent.avatar : undefined);
     const logo =
       extensionAvatar ||

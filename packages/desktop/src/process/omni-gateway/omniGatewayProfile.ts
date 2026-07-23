@@ -39,7 +39,7 @@ export const OMNI_IDE_SERVER_NAME = 'aionui-omni-ide';
 
 /** Cross-tool guidance returned in the MCP server's `instructions` field. */
 export const OMNI_IDE_SERVER_INSTRUCTIONS =
-  'This server exposes Tomni Agentic IDE tools. Before calling any tomny_/ide_/team_/db_ tool, ' +
+  'This server exposes Tomni IDE tools powered by the Tomny Agentic core. Before calling any tomny_/ide_/team_/db_ tool, ' +
   'call omni_bootstrap_session (with an EMPTY {} arguments object) to receive the active ' +
   'workspace guide, project rules, session id, and allowed-tool list. Pass the returned ' +
   'sessionId as the `sessionId` argument on every subsequent tool call. Do not send optional ' +
@@ -83,6 +83,7 @@ const hasOptionalToolDeps = (toolName: string, ideDeps: Omit<IdeServerDeps, 'too
   if (toolName.startsWith('team_') || toolName.startsWith('tomny_team_')) return ideDeps.teamEdit !== undefined;
   if (toolName.startsWith('db_')) return ideDeps.db !== undefined;
   if (toolName.startsWith('ide_memory_')) return ideDeps.memory !== undefined;
+  if (toolName.startsWith('ide_secret_context_')) return ideDeps.repoSecrets !== undefined;
   if (toolName === 'ide_quick_test') return ideDeps.quickTest !== undefined;
   if (toolName.startsWith('ide_quick_test_')) return ideDeps.quickTestScenarios !== undefined;
   if (

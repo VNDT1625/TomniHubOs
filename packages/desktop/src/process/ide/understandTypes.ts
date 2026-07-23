@@ -128,6 +128,8 @@ export type KnowledgeGraph = {
   version: number;
   /** Build timestamp (epoch ms). */
   builtAt: number;
+  /** Timestamp captured before repository files were scanned/read. */
+  sourceSnapshotAt?: number;
   /** File nodes. */
   nodes: KnowledgeNode[];
   /** Import edges. */

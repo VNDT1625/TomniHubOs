@@ -78,14 +78,23 @@ describe('static-server', () => {
   it('/api/* reverse-proxies to backend', async () => {
     const backend = await startMockBackend((req, res) => {
       res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ path: req.url, method: req.method }));
+      res.end(
+        `${JSON.stringify({ path: req.url, method: req.method, authorization: req.headers.authorization, origin: req.headers.origin, internal: req.headers['x-tomni-internal'] })}`
+      );
     });
     stopBackend = backend.close;
-    handle = await startStaticServer({ staticDir, backendPort: backend.port, port: 0 });
-    const r = await fetch(`${handle.localUrl}/api/anything`);
+    handle = await startStaticServer({
+      staticDir,
+      backendPort: backend.port,
+      port: 0,
+      upstreamToken: 'gateway-http-token',
+    });
+    const r = await fetch(`${handle.localUrl}/api/anything`, {
+      headers: { authorization: 'Bearer spoof', origin: 'https://evil.example', 'x-tomni-internal': '1' },
+    });
     expect(r.status).toBe(200);
-    const json = (await r.json()) as { path: string };
-    expect(json.path).toBe('/api/anything');
+    const json = (await r.json()) as { path: string; authorization?: string; origin?: string; internal?: string };
+    expect(json).toEqual({ path: '/api/anything', method: 'GET', authorization: 'Bearer gateway-http-token' });
   });
 
   it('/login reverse-proxies to backend (no local handler)', async () => {
@@ -172,7 +181,9 @@ describe('static-server', () => {
     const net = await import('node:net');
     const httpMod = await import('node:http');
     const backendServer = httpMod.createServer();
+    let upgradeHeaders: httpMod.IncomingHttpHeaders | undefined;
     backendServer.on('upgrade', (req, socket) => {
+      upgradeHeaders = req.headers;
       const wsKey = (req.headers['sec-websocket-key'] as string) || '';
       const accept = createHash('sha1')
         .update(wsKey + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11')
@@ -189,19 +200,21 @@ describe('static-server', () => {
     stopBackend = () => new Promise<void>((r) => backendServer.close(() => r()));
     const backendPort = (backendServer.address() as { port: number }).port;
 
-    handle = await startStaticServer({ staticDir, backendPort, port: 0 });
+    handle = await startStaticServer({ staticDir, backendPort, port: 0, upstreamToken: 'gateway-secret-token' });
 
     // Speak raw HTTP/1.1 upgrade over a TCP socket against the public listener.
     const { port: publicPort } = handle;
     const status: string = await new Promise((resolve, reject) => {
       const sock = net.connect({ host: '127.0.0.1', port: publicPort }, () => {
         sock.write(
-          'GET /ws HTTP/1.1\r\n' +
+          'GET /ws/v1 HTTP/1.1\r\n' +
             `Host: 127.0.0.1:${publicPort}\r\n` +
             'Upgrade: websocket\r\n' +
             'Connection: Upgrade\r\n' +
             'Sec-WebSocket-Version: 13\r\n' +
             'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n' +
+            'Origin: https://evil.example\r\n' +
+            'Authorization: Bearer browser-spoof\r\n' +
             '\r\n'
         );
       });
@@ -222,6 +235,8 @@ describe('static-server', () => {
       }, 3000).unref();
     });
     expect(status).toMatch(/HTTP\/1\.1 101/i);
+    expect(upgradeHeaders?.authorization).toBe('Bearer gateway-secret-token');
+    expect(upgradeHeaders?.origin).toBeUndefined();
   });
 
   it('network URL populated only when allowRemote=true', async () => {

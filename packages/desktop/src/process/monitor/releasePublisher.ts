@@ -59,7 +59,7 @@ export type PublisherConfig = {
   push?: boolean;
   /** Allow pushing even when the remote looks like the shared upstream. Defaults to `false`. */
   allowUpstreamPush?: boolean;
-  /** Pattern identifying the protected upstream remote. Defaults to the Tomni Agentic upstream. */
+  /** Pattern identifying the protected upstream remote. Defaults to the Tomni upstream. */
   upstreamPattern?: RegExp;
 };
 

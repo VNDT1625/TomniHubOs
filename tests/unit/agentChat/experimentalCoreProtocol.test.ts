@@ -10,7 +10,10 @@ import {
   resolveAcpPermission,
   runAcpWithRetry,
 } from '../../../packages/desktop/src/process/experimentalCore/adapters/acpCoreAdapter';
-import { codexSandboxForPermission } from '../../../packages/desktop/src/process/experimentalCore/adapters/codexAppServerAdapter';
+import {
+  codexSandboxForPermission,
+  shouldDisplayCodexItemStep,
+} from '../../../packages/desktop/src/process/experimentalCore/adapters/codexAppServerAdapter';
 import {
   buildExperimentalSessionKey,
   classifyExperimentalTarget,
@@ -71,6 +74,12 @@ describe('experimental core protocol', () => {
     expect(codexSandboxForPermission('read-only')).toBe('read-only');
     expect(codexSandboxForPermission('workspace-write')).toBe('workspace-write');
     expect(codexSandboxForPermission('full-access')).toBe('danger-full-access');
+  });
+
+  it('does not render Codex user and agent message lifecycle frames as thinking steps', () => {
+    expect(shouldDisplayCodexItemStep('userMessage')).toBe(false);
+    expect(shouldDisplayCodexItemStep('agentMessage')).toBe(false);
+    expect(shouldDisplayCodexItemStep('commandExecution')).toBe(true);
   });
 
   it('enforces read-only, prompted write, and full-access ACP decisions', async () => {

@@ -7,8 +7,11 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { createInterface } from 'node:readline';
 
+import { withPersistentAgentRetry } from '@process/agentRuntime/retryPolicy';
+
 import { withCodexTurnInput } from './attachmentPayload';
 import {
+  dedupeCoreMcpServers,
   formatSpawnLabel,
   requireWorkspace,
   throwIfAborted,
@@ -17,11 +20,7 @@ import {
   type CoreRunInput,
   type DetectedCoreTarget,
 } from './coreAdapter';
-import {
-  buildExperimentalSessionKey,
-  type ExperimentalCoreModel,
-  type ExperimentalPermissionMode,
-} from '../experimentalCoreProtocol';
+import type { ExperimentalCoreModel, ExperimentalPermissionMode } from '../experimentalCoreProtocol';
 
 type JsonRecord = Record<string, unknown>;
 type PendingRequest = { resolve: (value: unknown) => void; reject: (error: Error) => void };
@@ -39,6 +38,9 @@ const stringProp = (record: JsonRecord, key: string): string => {
   const value = record[key];
   return typeof value === 'string' ? value : '';
 };
+
+const toolInputFromCodexItem = (item: JsonRecord): unknown =>
+  item.input ?? item.arguments ?? item.rawInput ?? item.raw_input ?? item.params;
 
 const spawnTarget = (target: DetectedCoreTarget): ChildProcessWithoutNullStreams => {
   if (!target.command) throw new Error(`${target.name} executable was not found.`);
@@ -59,6 +61,10 @@ export const codexSandboxForPermission = (
   return 'workspace-write';
 };
 
+/** App-server announces conversational items as lifecycle frames; they are not work steps. */
+export const shouldDisplayCodexItemStep = (itemType: string): boolean =>
+  !['usermessage', 'agentmessage'].includes(itemType.trim().toLowerCase());
+
 const parseModelKey = (key?: string): { model?: string; effort?: string } => {
   if (!key) return {};
   const [model, effort] = key.split('::');
@@ -66,24 +72,42 @@ const parseModelKey = (key?: string): { model?: string; effort?: string } => {
 };
 
 /** Direct Codex app-server v2 client. It never calls aioncore. */
-const codexMcpConfig = (servers: CoreRunInput['mcpServers']): Record<string, unknown> | undefined => {
-  if (!servers?.length) return undefined;
+export const codexMcpConfig = (servers: CoreRunInput['mcpServers']): Record<string, unknown> | undefined => {
+  const unique = dedupeCoreMcpServers(servers ?? []);
+  if (unique.length === 0) return undefined;
   return {
     mcp_servers: Object.fromEntries(
-      servers.map((server) => [
-        server.name,
-        {
-          url: server.url,
-          enabled: true,
-          required: true,
-          ...(server.headers?.length
-            ? { http_headers: Object.fromEntries(server.headers.map((header) => [header.name, header.value])) }
-            : {}),
-        },
-      ])
+      unique.map((server) => {
+        const config =
+          server.transport === 'stdio'
+            ? {
+                command: server.command,
+                args: server.args ?? [],
+                ...(server.env?.length
+                  ? { env: Object.fromEntries(server.env.map((entry) => [entry.name, entry.value])) }
+                  : {}),
+              }
+            : {
+                url: server.url,
+                ...(server.headers?.length
+                  ? { http_headers: Object.fromEntries(server.headers.map((header) => [header.name, header.value])) }
+                  : {}),
+              };
+        return [server.name, { ...config, enabled: true, required: true }];
+      })
     ),
   };
 };
+
+/** Keep one logical Codex turn alive while a loopback gateway credential pool recovers. */
+export const runCodexWithRetry = async (input: CoreRunInput, operation: () => Promise<void>): Promise<void> =>
+  withPersistentAgentRetry({
+    signal: input.signal,
+    operation,
+    agentLabel: input.target.name.trim() || 'Codex',
+    onBeforeRetry: () => input.emit({ type: 'delta', text: '', mode: 'replace' }),
+    onStatus: (status) => input.emit({ type: 'status', text: status.message }),
+  });
 
 export class CodexAppServerAdapter implements CoreAdapter {
   public readonly protocol = 'codex-app-server' as const;
@@ -92,7 +116,6 @@ export class CodexAppServerAdapter implements CoreAdapter {
   private initialized?: Promise<void>;
   private nextId = 1;
   private readonly pending = new Map<number, PendingRequest>();
-  private readonly threads = new Map<string, string>();
   private activeTurn?: ActiveTurn;
   private stderrTail = '';
 
@@ -127,37 +150,29 @@ export class CodexAppServerAdapter implements CoreAdapter {
   }
 
   public async run(input: CoreRunInput): Promise<void> {
+    await runCodexWithRetry(input, () => this.runAttempt(input));
+  }
+
+  private async runAttempt(input: CoreRunInput): Promise<void> {
     throwIfAborted(input.signal);
     await this.ensureStarted(input.target);
     if (this.activeTurn) throw new Error('Codex app-server is already processing a turn.');
 
     const cwd = requireWorkspace(input.workspace);
     const selected = parseModelKey(input.modelKey);
-    const sessionKey = buildExperimentalSessionKey({
-      sessionId: input.sessionId,
-      targetId: input.target.id,
-      workspace: cwd,
-      modelKey: input.modelKey,
-      permissionMode: input.permissionMode,
-      surface: input.surface,
+    input.emit({ type: 'status', text: 'Starting a stateless Codex thread...' });
+    const started = await this.request('thread/start', {
+      cwd,
+      model: selected.model,
+      approvalPolicy: 'never',
+      sandbox: codexSandboxForPermission(input.permissionMode),
+      ephemeral: true,
+      config: codexMcpConfig(input.mcpServers),
     });
-    let threadId = this.threads.get(sessionKey);
-    if (!threadId) {
-      input.emit({ type: 'status', text: 'Starting a direct Codex thread?' });
-      const started = await this.request('thread/start', {
-        cwd,
-        model: selected.model,
-        approvalPolicy: 'never',
-        sandbox: codexSandboxForPermission(input.permissionMode),
-        ephemeral: true,
-        config: codexMcpConfig(input.mcpServers),
-      });
-      if (!isRecord(started) || !isRecord(started.thread) || typeof started.thread.id !== 'string') {
-        throw new Error('Codex app-server returned an invalid thread/start response.');
-      }
-      threadId = started.thread.id;
-      this.threads.set(sessionKey, threadId);
+    if (!isRecord(started) || !isRecord(started.thread) || typeof started.thread.id !== 'string') {
+      throw new Error('Codex app-server returned an invalid thread/start response.');
     }
+    const threadId = started.thread.id;
 
     await withCodexTurnInput(
       input.prompt,
@@ -207,7 +222,6 @@ export class CodexAppServerAdapter implements CoreAdapter {
     this.child?.kill();
     this.child = undefined;
     this.initialized = undefined;
-    this.threads.clear();
   }
 
   private async ensureStarted(target: DetectedCoreTarget): Promise<void> {
@@ -231,7 +245,6 @@ export class CodexAppServerAdapter implements CoreAdapter {
       this.failAll(new Error(`${formatSpawnLabel(target)} exited with code ${String(code)}.${suffix}`));
       this.child = undefined;
       this.initialized = undefined;
-      this.threads.clear();
     });
     this.initialized = (async () => {
       await this.request('initialize', {
@@ -298,6 +311,7 @@ export class CodexAppServerAdapter implements CoreAdapter {
     if (method === 'item/started' || method === 'item/completed') {
       const item = isRecord(params.item) ? params.item : params;
       const itemType = stringProp(item, 'type');
+      if (!shouldDisplayCodexItemStep(itemType)) return;
       const title = stringProp(item, 'title') || stringProp(item, 'name') || stringProp(item, 'command') || itemType;
       if (/tool|command|exec|mcp/iu.test(itemType) || /tool|command|exec|mcp/iu.test(title)) {
         if (method === 'item/started') {
@@ -307,6 +321,7 @@ export class CodexAppServerAdapter implements CoreAdapter {
             callId: stringProp(item, 'id'),
             text: title || method,
             phase: 'running',
+            ...(toolInputFromCodexItem(item) !== undefined ? { input: toolInputFromCodexItem(item) } : {}),
           };
           turn.emit(event);
         } else {
@@ -316,6 +331,7 @@ export class CodexAppServerAdapter implements CoreAdapter {
             callId: stringProp(item, 'id'),
             text: title || method,
             outcome: stringProp(item, 'status') === 'failed' ? 'error' : 'success',
+            ...(toolInputFromCodexItem(item) !== undefined ? { input: toolInputFromCodexItem(item) } : {}),
           };
           turn.emit(event);
         }

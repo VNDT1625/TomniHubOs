@@ -38,7 +38,7 @@ import { createHash } from 'node:crypto';
 import { promises as fsp } from 'node:fs';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { httpRequest } from '@/common/adapter/httpBridge';
+import { listReadyProviders } from '@process/services/tomnyProviderBridge';
 import type { IProvider } from '@/common/config/storage';
 import { hasSpecificModelCapability } from '@/common/utils/modelCapabilities';
 import { runAgentChatMessages } from '@process/services/agentChat';
@@ -47,15 +47,18 @@ import { collectRepoFiles } from './repoGraph';
 import {
   createKnowledgeGraphBuilder,
   KNOWLEDGE_GRAPH_VERSION,
-  detectLanguage,
-  enrichSymbolRangesAndCalls,
-  extractSymbols,
-  fingerprintOf,
-  inferLayer,
   type KnowledgeBuildContext,
   type KnowledgeGraphBuilderDeps,
 } from './knowledgeGraphBuilder';
 import { createRepoWatcher, type FsWatcherHandle, type RawWatchEventType } from './repoWatcher';
+import {
+  applyRepoChangesToGraph,
+  captureStaleMarkerSnapshots,
+  createLiveGraphUpdater,
+  knowledgeGraphArtifactMutations,
+  persistKnowledgeGraphArtifacts,
+  type KnowledgeGraphPublishOptions,
+} from './kgRefresh';
 import { diffGraphs } from './graphSnapshot';
 import { assessGraphFreshness, type GraphFreshness } from './graphFreshness';
 import { createContextBuilder } from './contextBuilder';
@@ -236,8 +239,7 @@ const isUsable = (p: IProvider): boolean =>
   p.enabled !== false && Boolean(p.api_key) && Boolean(p.base_url) && Array.isArray(p.models) && p.models.length > 0;
 
 /** Load configured model providers from the backend. */
-const loadProviders = (): Promise<IProvider[]> =>
-  httpRequest<IProvider[]>('GET', '/api/providers').catch(() => [] as IProvider[]);
+const loadProviders = (): Promise<IProvider[]> => listReadyProviders().catch(() => [] as IProvider[]);
 
 /** Resolve the OpenAI-compatible chat endpoint for a provider (honours "Full URL"). */
 const resolveChatUrl = (provider: IProvider): string => {
@@ -290,7 +292,7 @@ const defaultChat = async (
       { role: 'user', content: user },
     ],
     signal,
-    { workspace: execution?.workspace, surface: 'ide', permissionMode: 'read-only' }
+    { workspace: execution?.workspace, surface: 'ide', permissionMode: 'workspace-write' }
   );
 };
 
@@ -453,62 +455,15 @@ const MIN_REUSABLE_GRAPH_VERSION = 4;
 /** Whether an error is a "file not found" Node error. */
 const isFileNotFound = (error: unknown): boolean => (error as NodeJS.ErrnoException | undefined)?.code === 'ENOENT';
 
-/** Persist a built graph atomically (write tmp, then rename over the target). */
-const persistGraph = async (graph: KnowledgeGraph): Promise<void> => {
-  const dir = resolveStorageDir();
-  await fsp.mkdir(dir, { recursive: true });
-  const target = path.join(dir, graphFileName(graph.rootPath));
-  const tmp = `${target}.${process.pid}.${Date.now()}.tmp`;
-  await fsp.writeFile(tmp, JSON.stringify(graph), 'utf-8');
-  await fsp.rename(tmp, target);
-};
+const graphArtifactPaths = (rootPath: string) => ({
+  graphPath: path.join(resolveStorageDir(), graphFileName(rootPath)),
+  summaryPath: path.join(rootPath, '.tomni', 'understand', 'summary.json'),
+  staleMarkerPaths: ['.tomni', '.omni', '.aionui'].map((dir) => path.join(rootPath, dir, 'understand', 'stale.json')),
+});
 
-const exportRepoSummary = async (graph: KnowledgeGraph): Promise<void> => {
-  const dir = path.join(graph.rootPath, '.omni', 'understand');
-  await fsp.mkdir(dir, { recursive: true });
-  const target = path.join(dir, 'summary.json');
-  const tmp = `${target}.${process.pid}.${Date.now()}.tmp`;
-  const payload = {
-    version: 2,
-    rootPath: graph.rootPath,
-    graphVersion: graph.version,
-    builtAt: graph.builtAt,
-    language: graph.language,
-    commitHash: graph.commitHash,
-    overview: graph.overview ?? null,
-    runbook: graph.runbook ?? null,
-    modules: (graph.modules ?? []).map((mod) => ({
-      id: mod.id,
-      label: mod.label,
-      layer: mod.layer,
-      summary: mod.summary,
-      fingerprint: mod.fingerprint ?? null,
-      fileCount: mod.fileCount,
-      files: mod.files,
-      parentId: mod.parentId ?? null,
-      childModuleIds: mod.childModuleIds ?? [],
-      relatedModuleIds: mod.relatedModuleIds ?? [],
-      entryFiles: mod.entryFiles ?? [],
-    })),
-    moduleEdges: graph.moduleEdges ?? [],
-    files: graph.nodes.map((node) => ({
-      path: node.id,
-      label: node.label,
-      group: node.group,
-      layer: node.layer,
-      summary: node.summary,
-      summarySource: node.summarySource ?? null,
-      tags: node.tags,
-      symbols: node.symbols,
-      language: node.language,
-      importedBy: node.importedBy,
-      fingerprint: node.fingerprint ?? null,
-    })),
-  };
-  await fsp.writeFile(tmp, JSON.stringify(payload, null, 2), 'utf-8');
-  await fsp.rename(tmp, target);
-  await fsp.rm(path.join(dir, 'stale.json'), { force: true }).catch((): undefined => undefined);
-};
+/** Publish the graph + canonical MTUI summary, then clear migration stale markers. */
+const persistGraphArtifacts = (graph: KnowledgeGraph, options?: KnowledgeGraphPublishOptions): Promise<void> =>
+  persistKnowledgeGraphArtifacts(graph, graphArtifactPaths(graph.rootPath), undefined, options);
 
 /** Load a previously-persisted graph for a repo root, or `null` when absent. */
 const loadGraph = async (
@@ -647,6 +602,40 @@ const defaultDeps = (): KnowledgeGraphBuilderDeps => ({ chat: defaultChat, colle
  */
 export function registerKnowledgeGraphBridge(deps: KnowledgeGraphBuilderDeps = defaultDeps()): void {
   const builder = createKnowledgeGraphBuilder(deps);
+  const artifactMutations = knowledgeGraphArtifactMutations;
+  // Live saves must never spend model tokens. Existing graphs are patched from
+  // the debounced changed/removed batch; the local builder is only a cold-start
+  // fallback when this repo has no persisted graph yet.
+  const liveBuilder = createKnowledgeGraphBuilder({ ...deps, chat: async () => '[]' });
+  const liveUpdater = createLiveGraphUpdater({
+    loadGraph: (rootPath) => loadGraph(rootPath, { allowReusableVersion: true }),
+    captureStaleMarkers: (rootPath) => captureStaleMarkerSnapshots(graphArtifactPaths(rootPath).staleMarkerPaths),
+    rebuildGraph: async (rootPath, previous, event, context) => {
+      const graph =
+        previous && !context.fullRebuildRequired
+          ? await applyRepoChangesToGraph(previous, event, async (repoRoot, relPath) => {
+              try {
+                return await fsp.readFile(path.join(repoRoot, relPath), 'utf-8');
+              } catch (error) {
+                if (isFileNotFound(error)) return null;
+                throw error;
+              }
+            })
+          : await liveBuilder.build(rootPath, 'live-structural', {
+              previous,
+              language: previous?.language,
+              summaryCap: 0,
+            });
+      graph.commitHash = await resolveCommitHash(rootPath).catch((): undefined => undefined);
+      return graph;
+    },
+    persistArtifacts: (graph, context) =>
+      persistGraphArtifacts(graph, {
+        processedPaths: [...context.event.changed, ...context.event.removed],
+        staleMarkerSnapshots: context.staleMarkerSnapshots,
+        fullStructuralRebuild: context.fullRebuildRequired,
+      }),
+  });
 
   const startBuild = (req: KnowledgeBuildRequest): Promise<UnderstandResult<KnowledgeGraph>> => {
     const rootPath = req.rootPath.trim();
@@ -675,8 +664,10 @@ export function registerKnowledgeGraphBridge(deps: KnowledgeGraphBuilderDeps = d
     const ctx: KnowledgeBuildContext = {
       onPhase: (phase, detail) => pushBuildEvent(job, rootPath, phase, detail),
     };
-    job.promise = (async (): Promise<UnderstandResult<KnowledgeGraph>> => {
+    job.promise = artifactMutations.run(rootPath, async (): Promise<UnderstandResult<KnowledgeGraph>> => {
       try {
+        const artifactPaths = graphArtifactPaths(rootPath);
+        const staleMarkerSnapshots = await captureStaleMarkerSnapshots(artifactPaths.staleMarkerPaths);
         // Incremental builds reuse unchanged summaries. A fresh build deliberately
         // ignores the persisted graph so users can rebuild from scratch.
         const previous = req.forceFresh
@@ -684,11 +675,10 @@ export function registerKnowledgeGraphBridge(deps: KnowledgeGraphBuilderDeps = d
           : await loadGraph(rootPath, { allowReusableVersion: true }).catch((): KnowledgeGraph | null => null);
         const graph = await builder.build(rootPath, req.model, { previous, language: req.language }, ctx);
         graph.commitHash = await resolveCommitHash(rootPath).catch((): undefined => undefined);
-        await persistGraph(graph).catch((error) => {
-          console.error('[KnowledgeGraphBridge] persist failed:', error);
-        });
-        await exportRepoSummary(graph).catch((error) => {
-          console.error('[KnowledgeGraphBridge] summary export failed:', error);
+        await persistGraphArtifacts(graph, {
+          processedPaths: staleMarkerSnapshots.flatMap((snapshot) => snapshot.paths),
+          staleMarkerSnapshots,
+          fullStructuralRebuild: true,
         });
         await appendSnapshot(graph).catch((error) => {
           console.error('[KnowledgeGraphBridge] snapshot append failed:', error);
@@ -716,7 +706,7 @@ export function registerKnowledgeGraphBridge(deps: KnowledgeGraphBuilderDeps = d
           }, 30000);
         }
       }
-    })();
+    });
     return job.promise;
   };
 
@@ -778,76 +768,56 @@ export function registerKnowledgeGraphBridge(deps: KnowledgeGraphBuilderDeps = d
       return { ok: false, error: 'rootPath and relPath are required.', code: 'error' };
     }
     try {
-      const graph = await loadGraph(rootPath);
-      if (!graph) return { ok: true, data: null };
-      const language = detectLanguage(relPath);
-      const symbols = enrichSymbolRangesAndCalls(req.content, extractSymbols(req.content, language));
-      const fingerprint = fingerprintOf(req.content);
-      const idx = graph.nodes.findIndex((node) => node.id === relPath);
-      let node: KnowledgeNode;
-      let nodeIndex: number;
-      if (idx >= 0) {
-        node = { ...graph.nodes[idx], symbols, fingerprint, language };
-        graph.nodes[idx] = node;
-        nodeIndex = idx;
-      } else {
-        const label = relPath.slice(relPath.lastIndexOf('/') + 1);
-        const slash = relPath.indexOf('/');
-        const group = slash > 0 ? relPath.slice(0, slash) : relPath;
-        node = {
-          id: relPath,
-          label,
-          group,
-          layer: inferLayer(relPath),
-          summary: '',
-          summarySource: 'fallback',
-          tags: [],
-          symbols,
-          language,
-          importedBy: 0,
-          fingerprint,
-        };
-        graph.nodes.push(node);
-        graph.fileCount = graph.nodes.length;
-        nodeIndex = graph.nodes.length - 1;
-      }
+      return await artifactMutations.run(rootPath, async (): Promise<UnderstandResult<KnowledgeNode | null>> => {
+        const artifactPaths = graphArtifactPaths(rootPath);
+        const staleMarkerSnapshots = await captureStaleMarkerSnapshots(artifactPaths.staleMarkerPaths);
+        const previous = await loadGraph(rootPath, { allowReusableVersion: true });
+        if (!previous) return { ok: true, data: null };
+        const graph = await applyRepoChangesToGraph(
+          previous,
+          { rootPath, changed: [relPath], removed: [] },
+          async () => req.content
+        );
+        const nodeIndex = graph.nodes.findIndex((candidate) => candidate.id === relPath);
+        if (nodeIndex < 0) return { ok: true, data: null };
+        let node = graph.nodes[nodeIndex];
 
-      // Optional on-demand LLM re-summary of this one file (explicit user action).
-      if (req.summarize) {
-        try {
-          const requested = req.model && !req.model.startsWith('cli:') ? req.model : undefined;
-          let model = requested;
-          if (!model) {
-            model = pickForModel(await loadProviders(), '')?.model ?? undefined;
-          }
-          if (model) {
-            const symbolNames = symbols
-              .slice(0, 20)
-              .map((s) => s.name)
-              .filter(Boolean)
-              .join(', ');
-            const langLine =
-              graph.language && !graph.language.startsWith('en') ? ` Write the summary in ${graph.language}.` : '';
-            const system =
-              'You summarize one source file for a codebase knowledge graph. Reply with ONE plain-English ' +
-              `paragraph (2-3 sentences) describing what the file is for and its role. No preamble, no markdown.${langLine}`;
-            const userMsg = `File: ${relPath}\nLanguage: ${language}\nSymbols: ${symbolNames || '(none)'}\n\nSource:\n${req.content.slice(0, 6000)}`;
-            const reply = (await deps.chat(model, system, userMsg)).trim();
-            if (reply.length > 0) {
-              node = { ...node, summary: reply, summarySource: 'llm' };
-              graph.nodes[nodeIndex] = node;
+        // Optional on-demand LLM re-summary of this one file (explicit user action).
+        if (req.summarize) {
+          try {
+            const requested = req.model && !req.model.startsWith('cli:') ? req.model : undefined;
+            let model = requested;
+            if (!model) {
+              model = pickForModel(await loadProviders(), '')?.model ?? undefined;
             }
+            if (model) {
+              const symbolNames = node.symbols
+                .slice(0, 20)
+                .map((s) => s.name)
+                .filter(Boolean)
+                .join(', ');
+              const langLine =
+                graph.language && !graph.language.startsWith('en') ? ` Write the summary in ${graph.language}.` : '';
+              const system =
+                'You summarize one source file for a codebase knowledge graph. Reply with ONE plain-English ' +
+                `paragraph (2-3 sentences) describing what the file is for and its role. No preamble, no markdown.${langLine}`;
+              const userMsg = `File: ${relPath}\nLanguage: ${node.language}\nSymbols: ${symbolNames || '(none)'}\n\nSource:\n${req.content.slice(0, 6000)}`;
+              const reply = (await deps.chat(model, system, userMsg)).trim();
+              if (reply.length > 0) {
+                node = { ...node, summary: reply, summarySource: 'llm' };
+                graph.nodes[nodeIndex] = node;
+              }
+            }
+          } catch (error) {
+            console.error('[KnowledgeGraphBridge] refresh-file summarize failed:', error);
+            // Keep the structural patch; the previous summary stays.
           }
-        } catch (error) {
-          console.error('[KnowledgeGraphBridge] refresh-file summarize failed:', error);
-          // Keep the structural patch; the previous summary stays.
         }
-      }
 
-      await persistGraph(graph).catch((error) => {
-        console.error('[KnowledgeGraphBridge] refresh-file persist failed:', error);
+        graph.commitHash = await resolveCommitHash(rootPath).catch((): undefined => undefined);
+        await persistGraphArtifacts(graph, { processedPaths: [relPath], staleMarkerSnapshots });
+        return { ok: true, data: node };
       });
-      return { ok: true, data: node };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       return { ok: false, error: message, code: 'error' };
@@ -984,7 +954,14 @@ export function registerKnowledgeGraphBridge(deps: KnowledgeGraphBuilderDeps = d
     }
     try {
       watcher.start(rootPath, (event) => {
-        knowledgeChannels.changed.emit({ event });
+        void artifactMutations
+          .run(rootPath, () => liveUpdater.enqueue(event))
+          .then(
+            () => knowledgeChannels.changed.emit({ event }),
+            (error) => {
+              console.error('[KnowledgeGraphBridge] live update failed:', error);
+            }
+          );
       });
       return { ok: true, data: true };
     } catch (error) {

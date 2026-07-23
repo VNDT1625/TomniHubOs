@@ -66,5 +66,21 @@
   },
   "atFile.hint": "Введите текст для поиска файлов",
   "atFile.menuLabel": "Упоминания файлов",
-  "atFile.loading": "Загрузка..."
+  "atFile.loading": "Загрузка...",
+  "steps": {
+    "title": "Шаги выполнения: {{count}}",
+    "live": "Выполняется",
+    "status": {
+      "pending": "Ожидание",
+      "running": "Выполняется",
+      "completed": "Готово",
+      "error": "Ошибка",
+      "canceled": "Отменено"
+    },
+    "loadingDetail": "Загрузка сведений о шаге...",
+    "loadDetailFailed": "Не удалось загрузить сведения о шаге",
+    "input": "Ввод",
+    "output": "Результат",
+    "viewFull": "Показать полностью"
+  }
 }

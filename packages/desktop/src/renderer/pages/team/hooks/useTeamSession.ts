@@ -5,6 +5,7 @@ import type {
   ITeamAgentRenamedEvent,
   ITeamAgentSpawnedEvent,
   ITeamAgentStatusEvent,
+  ITeamWorkspaceChangedEvent,
   TeamAgent,
   TeammateStatus,
   TTeam,
@@ -52,11 +53,17 @@ export function useTeamSession(team: TTeam) {
       void mutateTeam();
     });
 
+    const unsubWorkspace = ipcBridge.team.workspaceChanged.on((event: ITeamWorkspaceChangedEvent) => {
+      if (event.team_id !== team.id) return;
+      void mutateTeam();
+    });
+
     return () => {
       unsubStatus();
       unsubSpawned();
       unsubRemoved();
       unsubRenamed();
+      unsubWorkspace();
     };
   }, [team.id, mutateTeam]);
 

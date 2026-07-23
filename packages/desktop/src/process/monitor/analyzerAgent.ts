@@ -11,7 +11,7 @@
  * analysis: root cause, a fix explanation, a unified diff, and a risk level.
  *
  * The provider call mirrors `company/companyGenerator.ts` exactly: the provider
- * list (with a usable `api_key`) is read from aioncore (`GET /api/providers`)
+ * list (with a usable `api_key`) is read from the native Tomni provider catalog
  * and the request is issued directly against the OpenAI-compatible
  * `/chat/completions` endpoint via `fetch` (not through `ClientFactory`, which
  * expects camelCase `apiKey` and throws outside the chat pipeline). Nothing is
@@ -23,7 +23,7 @@
  * known value. Process boundary: Main-process (Node.js) module — no DOM APIs.
  */
 
-import { httpRequest } from '@/common/adapter/httpBridge';
+import { listReadyProviders } from '@process/services/tomnyProviderBridge';
 import type { IProvider } from '@/common/config/storage';
 import type { AgentAnalysis, AnalyzerAgent } from './rootCauseAnalyzer';
 
@@ -69,7 +69,7 @@ const firstApiKey = (apiKeys: string): string =>
 
 /** The system instruction defining the analyzer's job + strict output shape. */
 const SYSTEM_PROMPT = [
-  'You are a senior software engineer analysing a bug report from an Electron + TypeScript desktop app (Tomni Agentic, a fork of AionUi).',
+  'You are a senior software engineer analysing a bug report from an Electron + TypeScript desktop app (Tomni, evolved from AionUi).',
   'Given the error and the relevant source snippets, identify the ROOT CAUSE and propose a MINIMAL, safe fix.',
   'Respond with exactly ONE JSON object (optionally inside a ```json fenced block) and nothing else, with this shape:',
   '{',
@@ -138,7 +138,7 @@ const buildUserPrompt = (input: Parameters<AnalyzerAgent['analyze']>[0]): string
 export const createAnalyzerAgent = (): AnalyzerAgent => {
   return {
     analyze: async (input) => {
-      const providers = (await httpRequest<IProvider[]>('GET', '/api/providers').catch(() => [] as IProvider[])) || [];
+      const providers = (await listReadyProviders().catch(() => [] as IProvider[])) || [];
       const selected = pickProviderModel(providers);
       if (!selected) {
         throw new Error(

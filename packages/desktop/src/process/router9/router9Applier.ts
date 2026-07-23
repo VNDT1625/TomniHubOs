@@ -112,6 +112,7 @@ export const applyConnectorPlan = async (
 
   for (const file of plan.files) {
     const absPath = path.normalize(expandHome(file.path, d.homeDir()));
+    // eslint-disable-next-line no-await-in-loop -- config writes are intentionally ordered for deterministic backups.
     const existingRaw = await d.readFile(absPath);
     const finalContent = mergeConfigContent({
       format: file.format,
@@ -123,7 +124,9 @@ export const applyConnectorPlan = async (
       result.files.push({ path: absPath, status: 'skipped' });
       continue;
     }
+    // eslint-disable-next-line no-await-in-loop -- backup must complete before its corresponding atomic write.
     const backupPath = existingRaw !== undefined ? await d.backup(absPath) : undefined;
+    // eslint-disable-next-line no-await-in-loop -- avoid racing writes when a target owns more than one config file.
     await d.writeFileAtomic(absPath, finalContent);
     result.files.push({ path: absPath, status: 'written', backupPath });
   }

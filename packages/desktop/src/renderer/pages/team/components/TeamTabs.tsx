@@ -1,4 +1,4 @@
-import { CloseSmall, Edit } from '@icon-park/react';
+import { CloseSmall, Edit, Link } from '@icon-park/react';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { TeammateStatus } from '@/common/types/team/teamTypes';
 import AgentStatusBadge from './AgentStatusBadge';
@@ -20,6 +20,8 @@ type TeamTabViewProps = {
   isLeader: boolean;
   /** Number of pending permission confirmations for this agent */
   pendingCount?: number;
+  /** Primary task pinned to this agent conversation. */
+  taskLabel?: string;
   onSwitch: (slot_id: string) => void;
   onRename?: (slot_id: string, new_name: string) => void;
   onRemove?: (slot_id: string) => void;
@@ -39,6 +41,7 @@ const TeamTabView: React.FC<TeamTabViewProps> = ({
   status,
   isLeader,
   pendingCount = 0,
+  taskLabel,
   onSwitch,
   onRename,
   onRemove,
@@ -147,6 +150,15 @@ const TeamTabView: React.FC<TeamTabViewProps> = ({
             avatarClassName={`w-14px h-14px rounded-2px flex items-center justify-center text-11px leading-none bg-fill-2 shrink-0 ${isActive ? 'opacity-100' : 'opacity-80'}`}
             nameClassName='text-15px whitespace-nowrap overflow-hidden text-ellipsis select-none'
           />
+          {taskLabel && (
+            <span
+              title={taskLabel}
+              className='max-w-96px min-w-0 inline-flex items-center gap-3px rd-10px bg-primary-light-1 px-6px py-2px text-10px text-primary'
+            >
+              <Link theme='outline' size='10' className='shrink-0' />
+              <span className='truncate'>{taskLabel}</span>
+            </span>
+          )}
         </div>
       )}
       <AgentStatusBadge status={status} />
@@ -177,13 +189,15 @@ type TeamTabsProps = {
   onTabClick?: (slot_id: string) => void;
   /** Pending permission confirmation counts per slot ID */
   pendingCounts?: Map<string, number>;
+  /** Primary pinned task title per agent slot. */
+  taskLabels?: Map<string, string>;
 };
 
 /**
  * Tab bar for team mode showing agent tabs with status badges.
  * Supports scroll overflow with fade indicators and add-agent dropdown.
  */
-const TeamTabs: React.FC<TeamTabsProps> = ({ onTabClick, pendingCounts }) => {
+const TeamTabs: React.FC<TeamTabsProps> = ({ onTabClick, pendingCounts, taskLabels }) => {
   const { agents, activeSlotId, statusMap, switchTab, renameAgent, removeAgent, reorderAgents } = useTeamTabs();
   const tabsContainerRef = useRef<HTMLDivElement>(null);
   const [showLeftFade, setShowLeftFade] = useState(false);
@@ -261,6 +275,7 @@ const TeamTabs: React.FC<TeamTabsProps> = ({ onTabClick, pendingCounts }) => {
                 status={statusInfo?.status ?? agent.status}
                 isLeader={agent.role === 'leader'}
                 pendingCount={pendingCounts?.get(agent.slot_id) ?? 0}
+                taskLabel={taskLabels?.get(agent.slot_id)}
                 onSwitch={(slot_id) => {
                   switchTab(slot_id);
                   onTabClick?.(slot_id);

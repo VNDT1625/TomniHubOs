@@ -377,6 +377,36 @@ export const getTestingServices = (getWindow: () => BrowserWindow | null | undef
     return reportPath;
   };
 
+  const importReportImage = async (sessionId: string, sourcePath: string): Promise<string> => {
+    const resolvedSource = path.resolve(sourcePath);
+    const extension = path.extname(resolvedSource).toLowerCase();
+    if (!['.png', '.jpg', '.jpeg', '.webp'].includes(extension)) {
+      throw new Error('Report images must be PNG, JPEG, or WebP files.');
+    }
+
+    const stat = await fs.stat(resolvedSource);
+    if (!stat.isFile()) throw new Error('The report image path must point to a file.');
+    if (stat.size === 0 || stat.size > 20 * 1024 * 1024) {
+      throw new Error('Report images must be between 1 byte and 20 MB.');
+    }
+
+    const bytes = await fs.readFile(resolvedSource);
+    const isPng = bytes.length >= 8 && bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+    const isJpeg = bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+    const isWebp =
+      bytes.length >= 12 &&
+      bytes.subarray(0, 4).toString('ascii') === 'RIFF' &&
+      bytes.subarray(8, 12).toString('ascii') === 'WEBP';
+    if (!isPng && !isJpeg && !isWebp) throw new Error('The selected file is not a valid PNG, JPEG, or WebP image.');
+
+    const attachmentsDir = path.join(outputDir, sessionId, 'attachments');
+    await fs.mkdir(attachmentsDir, { recursive: true });
+    const fileName = `${Date.now()}-${crypto.randomUUID()}${extension === '.jpeg' ? '.jpg' : extension}`;
+    const destination = path.join(attachmentsDir, fileName);
+    await fs.writeFile(destination, bytes, { flag: 'wx' });
+    return destination;
+  };
+
   const orchestrator = createTestOrchestrator({
     displayManager,
     targets: [webTarget, androidTarget, windowsTarget],
@@ -385,6 +415,7 @@ export const getTestingServices = (getWindow: () => BrowserWindow | null | undef
     recorder,
     coordinator,
     writeReport,
+    importReportImage,
     appLauncher: createAppLauncher(),
   });
 

@@ -5,7 +5,7 @@
  */
 
 import type { IChannelPairingRequest, IChannelPluginStatus, IChannelUser } from '@/common/types/channel/channel';
-import { channel } from '@/common/adapter/ipcBridge';
+import { telegramChannel as channel } from '@/common/adapter/ipcBridge';
 import { getAgents } from '@/renderer/hooks/agent/useAgents';
 import { configService } from '@/common/config/configService';
 
@@ -380,7 +380,7 @@ const TelegramConfigForm: React.FC<TelegramConfigFormProps> = ({
     backend?: string;
     name: string;
     id?: string;
-  }> = availableAgents.length > 0 ? availableAgents : [{ agent_type: 'aionrs', name: 'Tomni Agentic' }];
+  }> = availableAgents.length > 0 ? availableAgents : [{ agent_type: 'aionrs', name: 'Tomny Agentic' }];
 
   return (
     <div className='flex flex-col gap-24px'>

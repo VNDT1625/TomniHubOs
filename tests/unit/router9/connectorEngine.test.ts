@@ -11,7 +11,14 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { buildConnectorPlan, CONNECTOR_TARGETS, getConnectorTarget, toOrigin, toV1 } from '@/common/router9';
+import {
+  buildConnectorPlan,
+  CONNECTOR_TARGETS,
+  getConnectorTarget,
+  toOrigin,
+  toV1,
+  withRouter9ReasoningEffort,
+} from '@/common/router9';
 import type { Router9Endpoint } from '@/common/router9';
 
 const endpoint: Router9Endpoint = {
@@ -21,6 +28,10 @@ const endpoint: Router9Endpoint = {
 };
 
 describe('url normalization', () => {
+  it('replaces a previous gateway reasoning suffix without duplicating it', () => {
+    expect(withRouter9ReasoningEffort('cx/gpt-5.6-luna(high)', 'low')).toBe('cx/gpt-5.6-luna(low)');
+    expect(withRouter9ReasoningEffort('cx/gpt-5.6-luna', undefined)).toBe('cx/gpt-5.6-luna');
+  });
   it('toOrigin strips /v1 and trailing slashes (idempotent)', () => {
     expect(toOrigin('http://127.0.0.1:20128/v1')).toBe('http://127.0.0.1:20128');
     expect(toOrigin('http://127.0.0.1:20128/v1/')).toBe('http://127.0.0.1:20128');
@@ -46,6 +57,16 @@ describe('registry', () => {
     expect(getConnectorTarget('kiro')?.label).toBe('Kiro');
     expect(getConnectorTarget('nope')).toBeUndefined();
   });
+
+  it('maps connector targets to their matching Tomni chat preference keys', () => {
+    expect(getConnectorTarget('claude-code')?.agentPreferenceKey).toBe('claude');
+    expect(getConnectorTarget('codex')?.agentPreferenceKey).toBe('codex');
+    expect(getConnectorTarget('kiro')?.agentPreferenceKey).toBe('kiro');
+    expect(getConnectorTarget('antigravity')?.agentPreferenceKey).toBe('antigravity');
+    expect(getConnectorTarget('cursor')?.agentPreferenceKey).toBe('cursor');
+    expect(getConnectorTarget('openclaw')?.agentPreferenceKey).toBe('openclaw-gateway');
+    expect(getConnectorTarget('cline')?.agentPreferenceKey).toBeUndefined();
+  });
 });
 
 describe('buildConnectorPlan — validation', () => {
@@ -63,15 +84,16 @@ describe('buildConnectorPlan — validation', () => {
 });
 
 describe('buildConnectorPlan — protocol/base-url shaping', () => {
-  it('codex uses origin base url + OPENAI_* env vars', () => {
+  it('codex writes a durable Responses provider to config.toml', () => {
     const plan = buildConnectorPlan('codex', endpoint);
-    expect(plan.baseUrl).toBe('http://127.0.0.1:20128');
-    expect(plan.env).toEqual([
-      { key: 'OPENAI_BASE_URL', value: 'http://127.0.0.1:20128' },
-      { key: 'OPENAI_API_KEY', value: 'sk_test_key' },
-      { key: 'OPENAI_MODEL', value: 'kr/claude-sonnet-4.5' },
-    ]);
-    expect(plan.files).toHaveLength(0);
+    expect(plan.baseUrl).toBe('http://127.0.0.1:20128/v1');
+    expect(plan.env).toHaveLength(0);
+    expect(plan.files).toHaveLength(1);
+    expect(plan.files[0].path).toBe('~/.codex/config.toml');
+    expect(plan.files[0].content).toContain('model_provider = "tomni_gateway"');
+    expect(plan.files[0].content).toContain('base_url = "http://127.0.0.1:20128/v1"');
+    expect(plan.files[0].content).toContain('wire_api = "responses"');
+    expect(plan.files[0].content).toContain('experimental_bearer_token = "sk_test_key"');
   });
 
   it('kiro (manual) keeps /v1 and produces copy-paste fields only', () => {
@@ -88,15 +110,46 @@ describe('buildConnectorPlan — protocol/base-url shaping', () => {
 });
 
 describe('buildConnectorPlan — config files', () => {
-  it('claude-code writes anthropic-style config with /v1 base', () => {
+  it('writes an explicit reasoning effort for Claude Code and Codex without changing the model id', () => {
+    const configured = { ...endpoint, reasoningEffort: 'high' as const };
+    const claude = JSON.parse(buildConnectorPlan('claude-code', configured).files[0].content) as {
+      effortLevel?: string;
+      model?: string;
+    };
+    const codex = buildConnectorPlan('codex', configured).files[0].content;
+
+    expect(claude.model).toBe('kr/claude-sonnet-4.5');
+    expect(claude.effortLevel).toBe('high');
+    expect(codex).toContain(`model = ${JSON.stringify('kr/claude-sonnet-4.5')}`);
+    expect(codex).toContain(`model_reasoning_effort = ${JSON.stringify('high')}`);
+  });
+
+  it('keeps reasoning automatic when no effort is selected', () => {
+    const claude = JSON.parse(buildConnectorPlan('claude-code', endpoint).files[0].content) as {
+      effortLevel?: string;
+    };
+    const codex = buildConnectorPlan('codex', endpoint).files[0].content;
+
+    expect(claude.effortLevel).toBeUndefined();
+    expect(codex).not.toContain('model_reasoning_effort');
+  });
+  it('claude-code writes the documented gateway env settings with bare origin', () => {
     const plan = buildConnectorPlan('claude-code', endpoint);
     expect(plan.files).toHaveLength(1);
     const file = plan.files[0];
-    expect(file.path).toBe('~/.claude/config.json');
+    expect(plan.baseUrl).toBe('http://127.0.0.1:20128');
+    expect(file.path).toBe('~/.claude/settings.json');
     expect(file.mergeStrategy).toBe('deepMerge');
-    const parsed = JSON.parse(file.content) as Record<string, string>;
-    expect(parsed.anthropic_api_base).toBe('http://127.0.0.1:20128/v1');
-    expect(parsed.anthropic_api_key).toBe('sk_test_key');
+    const parsed = JSON.parse(file.content) as {
+      env: Record<string, string>;
+      model: string;
+      availableModels: string[];
+    };
+    expect(parsed.env.ANTHROPIC_BASE_URL).toBe('http://127.0.0.1:20128');
+    expect(parsed.env.ANTHROPIC_AUTH_TOKEN).toBe('sk_test_key');
+    expect(parsed.env.ANTHROPIC_MODEL).toBe('kr/claude-sonnet-4.5');
+    expect(parsed.model).toBe('kr/claude-sonnet-4.5');
+    expect(parsed.availableModels).toEqual(['kr/claude-sonnet-4.5']);
   });
 
   it('openclaw writes a 9router provider block with the chosen model', () => {

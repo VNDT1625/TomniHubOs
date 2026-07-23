@@ -119,7 +119,7 @@ describe('MemorySessionDrawer', () => {
     expect(screen.getByText('ide.memory.empty')).toBeInTheDocument();
   });
 
-  it('shows Context only for an AionRS conversation', () => {
+  it('shows Context for AionRS and Tomni compatibility conversations', () => {
     const { rerender } = render(
       <MemorySessionDrawer memId='ide-mem-1' conversationId='conv-1' conversationType='acp' visible onClose={vi.fn()} />
     );
@@ -136,14 +136,25 @@ describe('MemorySessionDrawer', () => {
     );
     fireEvent.click(screen.getByText('ide.memory.tabs.context'));
     expect(screen.getByTestId('aionrs-context-panel')).toBeInTheDocument();
+
+    rerender(
+      <MemorySessionDrawer
+        memId='ide-mem-1'
+        conversationId='conv-1'
+        conversationType='tomny'
+        visible
+        onClose={vi.fn()}
+      />
+    );
+    expect(screen.getByText('ide.memory.tabs.context')).toBeInTheDocument();
   });
 
-  it('shows the repository Secret Context only for an AionRS conversation with a workspace', () => {
+  it('shows the repository Secret Context for a Codex conversation with a workspace', () => {
     render(
       <MemorySessionDrawer
         memId='ide-mem-1'
         conversationId='conv-1'
-        conversationType='aionrs'
+        conversationType='codex'
         repository='C:\\repo'
         visible
         onClose={vi.fn()}

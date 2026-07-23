@@ -280,7 +280,7 @@ export type TeamSession = {
   passwordHash: string;
   /** Created-at (Unix ms). */
   createdAt: number;
-  /** Admitted peers by their peer token (token == coordinator agentId). */
+  /** Admitted peers keyed only by their secret bearer token. */
   peers: Map<string, TeamPeer>;
   /** Host-selected capabilities copied into each newly admitted peer token. */
   peerCapabilities: TeamPeerCapabilities;
@@ -290,7 +290,9 @@ export type TeamSession = {
 
 /** A peer admitted to a team session. */
 export type TeamPeer = {
-  /** Opaque token the peer sends on every request; also its coordinator agentId. */
+  /** Public coordinator/presence identity. Safe to include in snapshots and feedback. */
+  id: string;
+  /** Secret bearer credential sent only by this peer on authenticated requests. */
   token: string;
   /** Display name shown in presence. */
   name: string;
@@ -366,6 +368,7 @@ export const admitTeamPeer = (session: TeamSession, name: string): TeamPeer => {
     throw new Error(`Team session reached its ${session.maxPeers}-peer limit.`);
   }
   const peer: TeamPeer = {
+    id: newId('participant'),
     token: newId('peer'),
     name: name.trim().slice(0, 80) || `Guest ${session.peers.size + 1}`,
     color: colorForIndex(session.peers.size),

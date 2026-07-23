@@ -1,10 +1,10 @@
 appId: com.aionui.app
-productName: OmniAgentic
-executableName: OmniAgentic
-copyright: Copyright © 2024 AionUi
+productName: Tomni
+executableName: Tomni
+copyright: Copyright © 2026 Tomni
 
 protocols:
-  - name: AionUi Protocol
+  - name: Tomni Protocol
     schemes:
       - aionui
 
@@ -119,6 +119,12 @@ extraResources:
   # Source-built Tomny Core compatibility runtime for REST, WebSocket, and services.
   - from: resources/bundled-tomny-core
     to: bundled-tomny-core
+  # Workspace-owned Rust sidecar for durable, process, hashing, and journal services.
+  - from: resources/bundled-tomny-runtime
+    to: bundled-tomny-runtime
+  # MIT-licensed 9Router core, managed by Tomni as the local model gateway.
+  - from: resources/bundled-model-gateway
+    to: bundled-model-gateway
   - from: resources/hub
     to: hub
 win:
@@ -179,15 +185,15 @@ linux:
   icon: resources/app.png
   artifactName: ${productName}-${version}-${os}-${arch}.${ext}
   category: Utility
-  maintainer: aionui
-  vendor: aionui
+  maintainer: Tomni
+  vendor: Tomni
   synopsis: ${description}
   description: ${description}
   desktop:
     entry:
-      Name: OmniAgentic
+      Name: Tomni
       Comment: ${description}
-      Icon: aionui
+      Icon: tomni
       Categories: Office;Utility;
       MimeType: x-scheme-handler/aionui;
 

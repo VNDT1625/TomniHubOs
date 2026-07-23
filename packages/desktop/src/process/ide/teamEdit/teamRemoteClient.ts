@@ -19,6 +19,7 @@
  * Process boundary: Main-process (Node.js) module — uses global `fetch`. No DOM.
  */
 
+import type { CreateViuPreviewFeedbackInput, ViuPreviewFeedbackEvent, ViuTeamPreviewPackage } from '@/common/viu';
 import type { GuardedEditResult, GuardedWriteResult, TeamEditSnapshot } from './teamEditService';
 import type { TeamPeerCapabilities } from '@process/studio/collabServer';
 import type { TeamTreeEntry, TeamFileRead, TeamDbConnection, TeamDbQueryResult } from './teamSessionHost';
@@ -42,6 +43,9 @@ const teamUrl = (baseUrl: string, sub: string, params?: Record<string, string>):
   if (params) for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
   return url.toString();
 };
+
+/** Keep bearer credentials out of URLs, browser history, proxy logs, and diagnostics. */
+const bearerRequest = (token: string): RequestInit => ({ headers: { Authorization: `Bearer ${token}` } });
 
 /** Fetch JSON with a hard timeout; resolves to a discriminated envelope. */
 const fetchJson = async <T>(
@@ -100,7 +104,7 @@ export const teamRemoteClient = {
     baseUrl: string,
     token: string
   ): Promise<{ ok: true; snapshot: RemoteTeamSnapshot } | { ok: false; error: string }> => {
-    const res = await fetchJson<{ snapshot: RemoteTeamSnapshot }>(teamUrl(baseUrl, 'snapshot', { token }));
+    const res = await fetchJson<{ snapshot: RemoteTeamSnapshot }>(teamUrl(baseUrl, 'snapshot'), bearerRequest(token));
     if (res.ok === false) return res;
     return { ok: true, snapshot: res.data.snapshot };
   },
@@ -111,7 +115,7 @@ export const teamRemoteClient = {
     token: string,
     dir: string
   ): Promise<{ ok: true; entries: TeamTreeEntry[] } | { ok: false; error: string }> => {
-    const res = await fetchJson<{ entries: TeamTreeEntry[] }>(teamUrl(baseUrl, 'tree', { token, dir }));
+    const res = await fetchJson<{ entries: TeamTreeEntry[] }>(teamUrl(baseUrl, 'tree', { dir }), bearerRequest(token));
     if (res.ok === false) return res;
     return { ok: true, entries: res.data.entries };
   },
@@ -122,7 +126,7 @@ export const teamRemoteClient = {
     token: string,
     relPath: string
   ): Promise<{ ok: true; read: TeamFileRead } | { ok: false; error: string }> => {
-    const res = await fetchJson<TeamFileRead>(teamUrl(baseUrl, 'file', { token, relPath }));
+    const res = await fetchJson<TeamFileRead>(teamUrl(baseUrl, 'file', { relPath }), bearerRequest(token));
     if (res.ok === false) return res;
     return { ok: true, read: { content: res.data.content, contentHash: res.data.contentHash } };
   },
@@ -174,19 +178,76 @@ export const teamRemoteClient = {
     return { ok: true, result: res.data.result };
   },
 
+  /** List immutable VIU preview packages shared by the host. */
+  previews: async (
+    baseUrl: string,
+    token: string
+  ): Promise<{ ok: true; packages: readonly ViuTeamPreviewPackage[] } | { ok: false; error: string }> => {
+    const res = await fetchJson<{ packages: readonly ViuTeamPreviewPackage[] }>(
+      teamUrl(baseUrl, 'previews'),
+      bearerRequest(token)
+    );
+    if (res.ok === false) return res;
+    return { ok: true, packages: res.data.packages };
+  },
+
+  /** Open one exact immutable VIU preview package. */
+  preview: async (
+    baseUrl: string,
+    token: string,
+    packageId: string
+  ): Promise<{ ok: true; package: ViuTeamPreviewPackage } | { ok: false; error: string }> => {
+    const res = await fetchJson<{ package: ViuTeamPreviewPackage }>(
+      teamUrl(baseUrl, 'preview', { packageId }),
+      bearerRequest(token)
+    );
+    if (res.ok === false) return res;
+    return { ok: true, package: res.data.package };
+  },
+
+  /** List append-only review feedback for one remote package. */
+  previewFeedback: async (
+    baseUrl: string,
+    token: string,
+    packageId: string
+  ): Promise<{ ok: true; feedback: readonly ViuPreviewFeedbackEvent[] } | { ok: false; error: string }> => {
+    const res = await fetchJson<{ feedback: readonly ViuPreviewFeedbackEvent[] }>(
+      teamUrl(baseUrl, 'preview-feedback', { packageId }),
+      bearerRequest(token)
+    );
+    if (res.ok === false) return res;
+    return { ok: true, feedback: res.data.feedback };
+  },
+
+  /** Add feedback as the authenticated peer; caller-supplied identity is never accepted. */
+  appendPreviewFeedback: async (
+    baseUrl: string,
+    token: string,
+    packageId: string,
+    feedback: Omit<CreateViuPreviewFeedbackInput, 'feedbackId' | 'authorId' | 'authorKind' | 'createdAt'>
+  ): Promise<{ ok: true; event: ViuPreviewFeedbackEvent } | { ok: false; error: string }> => {
+    const res = await postJson<{ event: ViuPreviewFeedbackEvent }>(teamUrl(baseUrl, 'preview-feedback'), {
+      token,
+      packageId,
+      ...feedback,
+    });
+    if (res.ok === false) return res;
+    return { ok: true, event: res.data.event };
+  },
+
   /** Pull the host's Understand graph (read-only). */
   understand: async (
     baseUrl: string,
     token: string
   ): Promise<{ ok: true; graph: unknown } | { ok: false; error: string }> => {
-    const res = await fetchJson<{ graph: unknown }>(teamUrl(baseUrl, 'understand', { token }));
+    const res = await fetchJson<{ graph: unknown }>(teamUrl(baseUrl, 'understand'), bearerRequest(token));
     if (res.ok === false) return res;
     return { ok: true, graph: res.data.graph };
   },
 
   /** Pull the host's Wiki (read-only). */
   wiki: async (baseUrl: string, token: string): Promise<{ ok: true; wiki: unknown } | { ok: false; error: string }> => {
-    const res = await fetchJson<{ wiki: unknown }>(teamUrl(baseUrl, 'wiki', { token }));
+    const res = await fetchJson<{ wiki: unknown }>(teamUrl(baseUrl, 'wiki'), bearerRequest(token));
     if (res.ok === false) return res;
     return { ok: true, wiki: res.data.wiki };
   },
@@ -196,7 +257,7 @@ export const teamRemoteClient = {
     baseUrl: string,
     token: string
   ): Promise<{ ok: true; connections: TeamDbConnection[] } | { ok: false; error: string }> => {
-    const res = await fetchJson<{ connections: TeamDbConnection[] }>(teamUrl(baseUrl, 'db', { token }));
+    const res = await fetchJson<{ connections: TeamDbConnection[] }>(teamUrl(baseUrl, 'db'), bearerRequest(token));
     if (res.ok === false) return res;
     return { ok: true, connections: res.data.connections };
   },
@@ -218,7 +279,7 @@ export const teamRemoteClient = {
     baseUrl: string,
     token: string
   ): Promise<{ ok: true; status: RemoteTeamQueueStatus } | { ok: false; error: string }> => {
-    const res = await fetchJson<{ status: RemoteTeamQueueStatus }>(teamUrl(baseUrl, 'queue', { token }));
+    const res = await fetchJson<{ status: RemoteTeamQueueStatus }>(teamUrl(baseUrl, 'queue'), bearerRequest(token));
     if (res.ok === false) return res;
     return { ok: true, status: res.data.status };
   },

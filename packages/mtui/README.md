@@ -276,7 +276,7 @@ mtui summary folder . --json
 mtui information folder . --json
 ```
 
-`summary` and `info` read `.omni/understand/summary.json`, exported by the IDE Understand/codegraph build. Treat results with `"stale": true` as hints only and rebuild Understand before relying on them.
+`summary` and `info` read `.tomni/understand/summary.json`, exported by the IDE Understand/codegraph build. Treat results with `"stale": true` as hints only and rebuild Understand before relying on them.
 
 If the Understand cache is missing a file or folder, `summary`, `info`, and `map folder` fall back to a safe filesystem scan instead of returning an empty result. When a folder map is stale but still available, MTUI overlays new filesystem files and refreshes the visible module file count while retaining cached semantic summaries as explicitly stale hints. Fallback output is marked with `summarySource: "filesystem-fallback"`, `stale: true`, and low map confidence; use it to pick candidate files, then run `compass read` or rebuild Understand for semantic relationships.
 

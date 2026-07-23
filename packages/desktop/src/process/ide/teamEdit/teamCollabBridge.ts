@@ -59,6 +59,7 @@ import { teamRemoteClient, type RemoteTeamSnapshot } from './teamRemoteClient';
 import type { TeamTreeEntry, TeamFileRead } from './teamSessionHost';
 import type { GuardedWriteResult } from './teamEditService';
 import type { ISessionMcpServer } from '@/common/config/storage';
+import type { CreateViuPreviewFeedbackInput, ViuPreviewFeedbackEvent, ViuTeamPreviewPackage } from '@/common/viu';
 
 /** IPC channel names for the team-collab surface. */
 export const TEAM_COLLAB_CHANNELS = {
@@ -70,6 +71,10 @@ export const TEAM_COLLAB_CHANNELS = {
   remoteSnapshot: 'ide.team-collab-remote-snapshot',
   remoteTree: 'ide.team-collab-remote-tree',
   remoteFile: 'ide.team-collab-remote-file',
+  remotePreviews: 'ide.team-collab-remote-previews',
+  remotePreview: 'ide.team-collab-remote-preview',
+  remotePreviewFeedback: 'ide.team-collab-remote-preview-feedback',
+  remoteAppendPreviewFeedback: 'ide.team-collab-remote-append-preview-feedback',
   remoteClaim: 'ide.team-collab-remote-claim',
   remoteRelease: 'ide.team-collab-remote-release',
   remoteWrite: 'ide.team-collab-remote-write',
@@ -113,6 +118,12 @@ export type PeerCtx = { baseUrl: string; token: string };
 export type PeerTreeRequest = PeerCtx & { dir: string };
 /** Peer: read one file from the host. */
 export type PeerFileRequest = PeerCtx & { relPath: string };
+/** Peer: open or review one immutable VIU preview package. */
+export type PeerPreviewRequest = PeerCtx & { packageId: string };
+/** Peer: append feedback; authenticated identity is always supplied by the host. */
+export type PeerAppendPreviewFeedbackRequest = PeerPreviewRequest & {
+  feedback: Omit<CreateViuPreviewFeedbackInput, 'feedbackId' | 'authorId' | 'authorKind' | 'createdAt'>;
+};
 /** Peer: claim a lease before editing. */
 export type PeerClaimRequest = PeerCtx & { relPath: string; intent?: string };
 /** Peer: release a lease. */
@@ -134,6 +145,19 @@ export const teamCollabChannels = {
   ),
   remoteTree: bridge.buildProvider<TeamCollabResult<TeamTreeEntry[]>, PeerTreeRequest>(TEAM_COLLAB_CHANNELS.remoteTree),
   remoteFile: bridge.buildProvider<TeamCollabResult<TeamFileRead>, PeerFileRequest>(TEAM_COLLAB_CHANNELS.remoteFile),
+  remotePreviews: bridge.buildProvider<TeamCollabResult<readonly ViuTeamPreviewPackage[]>, PeerCtx>(
+    TEAM_COLLAB_CHANNELS.remotePreviews
+  ),
+  remotePreview: bridge.buildProvider<TeamCollabResult<ViuTeamPreviewPackage>, PeerPreviewRequest>(
+    TEAM_COLLAB_CHANNELS.remotePreview
+  ),
+  remotePreviewFeedback: bridge.buildProvider<TeamCollabResult<readonly ViuPreviewFeedbackEvent[]>, PeerPreviewRequest>(
+    TEAM_COLLAB_CHANNELS.remotePreviewFeedback
+  ),
+  remoteAppendPreviewFeedback: bridge.buildProvider<
+    TeamCollabResult<ViuPreviewFeedbackEvent>,
+    PeerAppendPreviewFeedbackRequest
+  >(TEAM_COLLAB_CHANNELS.remoteAppendPreviewFeedback),
   remoteClaim: bridge.buildProvider<TeamCollabResult<{ claim: unknown }>, PeerClaimRequest>(
     TEAM_COLLAB_CHANNELS.remoteClaim
   ),
@@ -367,6 +391,52 @@ export function registerTeamCollabBridge(): void {
       return { ok: false, error: error instanceof Error ? error.message : String(error) };
     }
   });
+
+  teamCollabChannels.remotePreviews.provider(
+    async (req): Promise<TeamCollabResult<readonly ViuTeamPreviewPackage[]>> => {
+      try {
+        const res = await teamRemoteClient.previews(req.baseUrl, req.token);
+        if (res.ok === false) return { ok: false, error: res.error };
+        return { ok: true, data: res.packages };
+      } catch (error) {
+        return { ok: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    }
+  );
+
+  teamCollabChannels.remotePreview.provider(async (req): Promise<TeamCollabResult<ViuTeamPreviewPackage>> => {
+    try {
+      const res = await teamRemoteClient.preview(req.baseUrl, req.token, req.packageId);
+      if (res.ok === false) return { ok: false, error: res.error };
+      return { ok: true, data: res.package };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  });
+
+  teamCollabChannels.remotePreviewFeedback.provider(
+    async (req): Promise<TeamCollabResult<readonly ViuPreviewFeedbackEvent[]>> => {
+      try {
+        const res = await teamRemoteClient.previewFeedback(req.baseUrl, req.token, req.packageId);
+        if (res.ok === false) return { ok: false, error: res.error };
+        return { ok: true, data: res.feedback };
+      } catch (error) {
+        return { ok: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    }
+  );
+
+  teamCollabChannels.remoteAppendPreviewFeedback.provider(
+    async (req): Promise<TeamCollabResult<ViuPreviewFeedbackEvent>> => {
+      try {
+        const res = await teamRemoteClient.appendPreviewFeedback(req.baseUrl, req.token, req.packageId, req.feedback);
+        if (res.ok === false) return { ok: false, error: res.error };
+        return { ok: true, data: res.event };
+      } catch (error) {
+        return { ok: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    }
+  );
 
   teamCollabChannels.remoteClaim.provider(async (req): Promise<TeamCollabResult<{ claim: unknown }>> => {
     try {

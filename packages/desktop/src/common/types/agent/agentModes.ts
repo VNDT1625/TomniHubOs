@@ -5,6 +5,7 @@
  */
 
 import { CODEX_MODE_NATIVE_FULL_ACCESS, CODEX_MODE_READ_ONLY } from '@/common/types/codex/codexModes';
+import { isTomniAgentBackend } from '@/common/utils/buildAgentConversationParams';
 
 /**
  * Full-auto (YOLO) mode ID per backend.
@@ -29,6 +30,7 @@ const FULL_AUTO_MODE: Record<string, string> = {
  */
 export function getFullAutoMode(backend: string | undefined): string {
   if (!backend) return 'yolo';
+  if (isTomniAgentBackend(backend)) return FULL_AUTO_MODE.aionrs;
   return FULL_AUTO_MODE[backend] || 'yolo';
 }
 
@@ -63,5 +65,6 @@ const ASK_MODE: Record<string, string> = {
  */
 export function getAskMode(backend: string | undefined): string | undefined {
   if (!backend) return undefined;
+  if (isTomniAgentBackend(backend)) return ASK_MODE.aionrs;
   return ASK_MODE[backend];
 }

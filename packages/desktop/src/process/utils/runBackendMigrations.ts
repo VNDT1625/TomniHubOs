@@ -5,7 +5,7 @@
  */
 
 import { execFile } from 'node:child_process';
-import { migrateConfigStorage, migrateLegacyMcpConfigToDb, migrateProviders } from '@/common/config/configMigration';
+import { migrateConfigStorage, migrateProviders } from '@/common/config/configMigration';
 import { httpRequest } from '@/common/adapter/httpBridge';
 import { mcpService } from '@/common/adapter/ipcBridge';
 import type { ConfigKeyMap } from '@/common/config/configKeys';
@@ -369,10 +369,7 @@ const MIGRATION_STEPS: Array<{
   name: string;
   run: (configFile: ConfigFile) => Promise<MigrationStepResult>;
 }> = [
-  {
-    name: 'migrateLegacyMcpConfigToDb',
-    run: async (configFile) => (await migrateLegacyMcpConfigToDb(configFile), true),
-  },
+
   { name: 'migrateConfigStorage', run: async (configFile) => (await migrateConfigStorage(configFile), true) },
   { name: 'migrateProviders', run: async (configFile) => (await migrateProviders(configFile), true) },
   {
@@ -622,31 +619,6 @@ async function ensureBootstrapAgents(): Promise<boolean> {
   return true;
 }
 
-async function syncBuiltinMcpConfig(configFile: ConfigFile): Promise<void> {
-  const localMcpConfig = ((await configFile.get('mcp.config').catch((): IMcpServer[] => [])) || []) as IMcpServer[];
-  const localBuiltinServers = localMcpConfig.filter((server) => server?.builtin === true);
-
-  if (localBuiltinServers.length === 0) {
-    return;
-  }
-
-  const backendSettings = (await httpRequest<Record<string, unknown>>('GET', '/api/settings/client')) || {};
-  const backendMcpConfig = Array.isArray(backendSettings['mcp.config'])
-    ? (backendSettings['mcp.config'] as IMcpServer[])
-    : [];
-
-  const mergedMcpConfig = [...backendMcpConfig.filter((server) => server?.builtin !== true), ...localBuiltinServers];
-
-  if (JSON.stringify(backendMcpConfig) === JSON.stringify(mergedMcpConfig)) {
-    return;
-  }
-
-  await httpRequest<void>('PUT', '/api/settings/client', { 'mcp.config': mergedMcpConfig });
-  console.info(
-    '[AionUi] Synced builtin MCP config to backend settings (%d builtin servers)',
-    localBuiltinServers.length
-  );
-}
 
 export async function runBackendMigrations(configFile: ConfigFile): Promise<void> {
   await CLEANUP_STEPS.reduce<Promise<void>>(async (previous, step) => {
@@ -677,11 +649,4 @@ export async function runBackendMigrations(configFile: ConfigFile): Promise<void
     }
   }, Promise.resolve());
 
-  const syncStart = Date.now();
-  try {
-    await syncBuiltinMcpConfig(configFile);
-    console.info(`[AionUi] Backend migration step completed: syncBuiltinMcpConfig (${Date.now() - syncStart}ms)`);
-  } catch (error) {
-    console.error(`[AionUi] Backend migration step failed: syncBuiltinMcpConfig (${Date.now() - syncStart}ms)`, error);
-  }
 }

@@ -77,7 +77,7 @@ export type StartOmniGatewayHostInput = {
    *  - `bearer` (default) — only the external Bearer token is accepted.
    *  - `oauth`            — only a valid OAuth access token is accepted.
    *  - `mixed`            — either an OAuth access token OR the Bearer token.
-   *  - `none`             — legacy value, hardened to the short-TTL external bearer.
+   *  - `none`             — explicitly disables external authentication.
    *
    * The LOCAL bearer (`localBearerToken`) is ALWAYS accepted regardless of mode
    * so first-party clients (Claude Desktop / Cursor) never break.
@@ -158,7 +158,7 @@ export const startOmniGatewayHost = async (input: StartOmniGatewayHostInput): Pr
    * Identify the auth mode of an incoming `/ide/*` request, or null when the
    * request is not authorised. The LOCAL bearer is always accepted. Beyond
    * that, the CONFIGURED Web Access auth mode decides:
-   *  - `none`   → require the short-TTL external bearer (legacy compatibility).
+   *  - `none`   → accept the request without external authentication.
    *  - `bearer` → accept the external Bearer token (legacy behaviour).
    *  - `oauth`  → accept a valid OAuth access token.
    *  - `mixed`  → accept either an OAuth access token or the Bearer token.
@@ -174,9 +174,9 @@ export const startOmniGatewayHost = async (input: StartOmniGatewayHostInput): Pr
     const mode: OmniAuthMode = input.getAuthMode?.() ?? 'bearer';
     const bearerOk = (): boolean => presented.length > 0 && input.isExternalBearerValid?.(presented) === true;
 
-    // Legacy none remains loadable for settings compatibility, but the core
-    // never disables authentication. It is hardened to the short-TTL bearer.
-    if (mode === 'none') return bearerOk() ? 'external' : null;
+    // Honour the explicit no-auth mode. This preserves the legacy gateway
+    // contract and is intentionally scoped to users who select `none`.
+    if (mode === 'none') return 'external';
     const oauthOk = async (): Promise<boolean> =>
       presented.length > 0 && input.isOAuthTokenValid !== undefined && (await input.isOAuthTokenValid(presented));
 

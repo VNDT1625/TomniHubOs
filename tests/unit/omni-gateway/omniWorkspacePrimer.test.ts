@@ -25,7 +25,7 @@ describe('buildWorkspacePrimer', () => {
     expect(primer).toContain('Workspace root: /repo/AionUi');
     expect(primer).toContain('## Project rules');
     expect(primer).toContain('- First rule');
-    expect(primer).toContain('## Session memory (your ephemeral scratchpad)');
+    expect(primer).toContain('## Session memory (your restart-resilient Save)');
     expect(primer).toContain('Your session memory id is: sess-42');
   });
 
@@ -46,6 +46,35 @@ describe('buildWorkspacePrimer', () => {
     expect(primer).toContain('## IDE workspace guide');
     expect(primer).toContain('## Session memory');
   });
+  it('includes only safe Secret Context metadata and explains guarded environment injection', () => {
+    const primer = buildWorkspacePrimer({
+      ...baseInput,
+      repoSecrets: [
+        { alias: 'SEPAY_WEBHOOK_SECRET', description: 'SePay webhook signature', status: 'set' },
+        { alias: 'MISSING_VALUE', description: 'Not configured yet', status: 'needs_value' },
+      ],
+      repoSecretCombos: [
+        {
+          comboId: 'github-account',
+          comboLabel: 'GitHub account',
+          description: 'Release credentials',
+          keys: [
+            { alias: 'GITHUB_USERNAME', status: 'set' },
+            { alias: 'GITHUB_TOKEN', status: 'set' },
+          ],
+        },
+      ],
+    });
+
+    expect(primer).toContain('## Repository Secret Context (metadata only)');
+    expect(primer).toContain('- SEPAY_WEBHOOK_SECRET: set; purpose: SePay webhook signature');
+    expect(primer).toContain('- MISSING_VALUE: needs_value; purpose: Not configured yet');
+    expect(primer).toContain('never claim that the value or credential is missing');
+    expect(primer).toContain('`secretAliases`');
+    expect(primer).toContain('github-account');
+    expect(primer).toContain('GITHUB_USERNAME: set');
+    expect(primer).toContain('secretComboIds');
+  });
 });
 
 describe('buildIdeMemorySection / withIdeMemorySection', () => {
@@ -63,7 +92,7 @@ describe('buildIdeMemorySection / withIdeMemorySection', () => {
   it('is idempotent: a second append does not duplicate the block', () => {
     const once = withIdeMemorySection('sess-1', 'existing');
     const twice = withIdeMemorySection('sess-1', once);
-    const matches = twice.match(/## Session memory \(your ephemeral scratchpad\)/g);
+    const matches = twice.match(/## Session memory \(your restart-resilient Save\)/g);
     expect(matches?.length).toBe(1);
   });
 

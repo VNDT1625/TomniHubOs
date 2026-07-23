@@ -300,7 +300,12 @@ export const useIdeWorkspace = (): UseIdeWorkspace => {
     restoredRef.current = true;
     const session = readSession();
     if (!session) {
-      setRestoring(false);
+      // A standalone WebUI has no native folder dialog. Its local IDE sidecar
+      // is already bound to one workspace, so mount that workspace directly.
+      void ideClient
+        .getDefaultRoot()
+        .then((defaultRoot) => (defaultRoot ? openRoot(defaultRoot) : undefined))
+        .finally(() => setRestoring(false));
       return;
     }
     setOpenFiles(session.openFiles);
@@ -353,6 +358,15 @@ export const useIdeWorkspace = (): UseIdeWorkspace => {
   }, []);
 
   const pickFolder = useCallback(async (): Promise<void> => {
+    const browserRoot = await ideClient.getDefaultRoot().catch((): null => null);
+    if (browserRoot) {
+      setOpenFiles([]);
+      setDirtyFiles(new Set());
+      setActiveFile(null);
+      persistSessionRef.current = true;
+      await openRoot(browserRoot);
+      return;
+    }
     const picked = await ipcBridge.dialog.showOpen.invoke({ properties: ['openDirectory'] });
     if (!picked || picked.length === 0) return;
     const root = picked[0];

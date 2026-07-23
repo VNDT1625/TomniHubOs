@@ -12,6 +12,7 @@ import {
   transformMessage,
   type IMessageTips,
   type IMessageAcpToolCall,
+  type IMessageToolGroup,
   type IMessageThinking,
   type TMessage,
 } from '@/common/chat/chatLib';
@@ -67,6 +68,30 @@ function createToolCallMessage(toolCallId: string): IMessageAcpToolCall {
   };
 }
 
+function createToolGroupMessage(
+  status: 'Executing' | 'Success',
+  input?: Record<string, unknown>,
+  result_display?: string
+): IMessageToolGroup {
+  return {
+    id: `group-${status}`,
+    type: 'tool_group',
+    msg_id: 'group-1',
+    conversation_id: CONVERSATION_ID,
+    content: [
+      {
+        call_id: 'tool-group-1',
+        name: 'ide_scan_repo',
+        description: status === 'Executing' ? 'Scanning' : '',
+        render_output_as_markdown: false,
+        status,
+        ...(input !== undefined ? { input } : {}),
+        ...(result_display !== undefined ? { result_display } : {}),
+      },
+    ],
+  };
+}
+
 describe('composeMessage', () => {
   it('preserves thinking boundaries once a tool message has been inserted', () => {
     let list: TMessage[] = [];
@@ -98,6 +123,18 @@ describe('composeMessage', () => {
     expect(list.map((message) => message.type)).toEqual(['thinking', 'acp_tool_call']);
     expect((list[0] as IMessageThinking).content.status).toBe('done');
     expect((list[0] as IMessageThinking).content.duration).toBe(3200);
+  });
+
+  it('keeps tool input when the result frame updates the same tool_group row', () => {
+    let list: TMessage[] = [];
+    list = composeMessage(createToolGroupMessage('Executing', { rootPath: 'C:/repo', maxFiles: 2000 }), list);
+    list = composeMessage(createToolGroupMessage('Success', undefined, 'Files: 2000'), list);
+
+    expect(list).toHaveLength(1);
+    expect(list[0].type).toBe('tool_group');
+    if (list[0].type !== 'tool_group') throw new Error('expected tool group');
+    expect(list[0].content[0].input).toEqual({ rootPath: 'C:/repo', maxFiles: 2000 });
+    expect(list[0].content[0].result_display).toBe('Files: 2000');
   });
 });
 
@@ -147,6 +184,32 @@ describe('normalizeAgentStreamError', () => {
 });
 
 describe('transformMessage', () => {
+  it('turns a Core orchestration proposal into a dedicated chat message', () => {
+    const transformed = transformMessage({
+      type: 'orchestration_proposal',
+      msg_id: 'proposal-1',
+      conversation_id: CONVERSATION_ID,
+      data: {
+        id: 'proposal-1',
+        proposal_id: 'proposal-1',
+        proposal: {
+          kind: 'team',
+          name: 'Delivery',
+          reason: 'Parallel implementation and verification',
+          parallelism: 2,
+          roles: [
+            { id: 'build', name: 'Build', responsibility: 'Implement the change', dependsOn: [] },
+            { id: 'verify', name: 'Verify', responsibility: 'Review the result', dependsOn: ['build'] },
+          ],
+        },
+      },
+    });
+
+    expect(transformed?.type).toBe('orchestration_proposal');
+    if (transformed?.type !== 'orchestration_proposal') throw new Error('expected orchestration proposal');
+    expect(transformed.content.proposal.roles.map((role) => role.id)).toEqual(['build', 'verify']);
+  });
+
   it('preserves whitespace-only stream chunks between Markdown tokens and table rows', () => {
     const chunks = [
       '`text`',

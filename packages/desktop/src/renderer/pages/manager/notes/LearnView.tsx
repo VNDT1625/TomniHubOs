@@ -59,10 +59,10 @@ const LearnView: React.FC<{ store: UseManagerStore; focusId?: string | null; onF
   const selected = useMemo(() => learnNotes.find((n) => n.id === selectedId) ?? null, [learnNotes, selectedId]);
 
   return (
-    <div className='h-full flex'>
+    <div className={styles.learnWorkspace}>
       {/* List pane */}
-      <div className='w-300px shrink-0 border-r border-solid border-arco-2 flex flex-col'>
-        <div className='p-12px flex flex-col gap-8px'>
+      <aside className={styles.learnSidebar}>
+        <div className={styles.learnSidebarControls}>
           <Input
             allowClear
             value={query}
@@ -102,9 +102,9 @@ const LearnView: React.FC<{ store: UseManagerStore; focusId?: string | null; onF
             </Radio>
           </Radio.Group>
         </div>
-        <div className='flex-1 overflow-y-auto px-8px pb-12px flex flex-col gap-4px'>
+        <div className={styles.learnNoteList}>
           {filtered.length === 0 ? (
-            <div className='text-center text-12px text-t-tertiary py-24px'>{t('manager.notes.learn.empty')}</div>
+            <div className={styles.workspaceEmptyCompact}>{t('manager.notes.learn.empty')}</div>
           ) : (
             filtered.map((note) => (
               <div
@@ -133,11 +133,11 @@ const LearnView: React.FC<{ store: UseManagerStore; focusId?: string | null; onF
             ))
           )}
         </div>
-      </div>
+      </aside>
 
       {/* Detail / graph pane */}
       {mode === 'graph' ? (
-        <div className='flex-1 min-w-0 p-16px'>
+        <div className={styles.learnGraphPane}>
           <LinkGraphView
             notes={learnNotes}
             selectedId={selectedId}
@@ -148,11 +148,9 @@ const LearnView: React.FC<{ store: UseManagerStore; focusId?: string | null; onF
           />
         </div>
       ) : (
-        <div className='flex-1 min-w-0 overflow-y-auto'>
+        <div className={styles.learnDetailPane}>
           {!selected ? (
-            <div className='h-full flex items-center justify-center text-13px text-t-tertiary'>
-              {t('manager.notes.learn.selectHint')}
-            </div>
+            <div className={styles.learnSelectHint}>{t('manager.notes.learn.selectHint')}</div>
           ) : (
             <NotePage
               key={selected.id}

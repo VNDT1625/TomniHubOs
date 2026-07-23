@@ -81,6 +81,40 @@ describe('quickTestService', () => {
     expect(result.contextPack).toBeNull();
   });
 
+  it('finalizes web coverage before stopping and detaching the tracer', async () => {
+    const calls: string[] = [];
+    const wc = makeFakeWc();
+    wc.debugger.sendCommand = vi.fn(async (method: string) => {
+      calls.push(method);
+      if (method === 'Profiler.takePreciseCoverage') {
+        return {
+          result: [
+            {
+              scriptId: '1',
+              url: 'http://localhost/src/app.ts',
+              functions: [{ functionName: 'runApp', ranges: [{ startOffset: 0, endOffset: 10, count: 1 }] }],
+            },
+          ],
+        };
+      }
+      if (method === 'Debugger.getScriptSource') return { scriptSource: 'function runApp() {}' };
+      return {};
+    });
+    wc.debugger.detach = vi.fn(() => calls.push('debugger.detach'));
+
+    const service = createQuickTestService({
+      getWebContents: () => wc,
+      openNativeStream: async () => null,
+      loadGraph: async () => null,
+      now: () => 0,
+      sleep: async () => undefined,
+    });
+    const result = await service.runSession({ platform: 'web', rootPath: '/repo', durationMs: 0 });
+
+    expect(result.trace.coverage).toEqual([{ file: 'src/app.ts', functionName: 'runApp', line: 1, callCount: 1 }]);
+    expect(calls.indexOf('Profiler.takePreciseCoverage')).toBeLessThan(calls.indexOf('debugger.detach'));
+  });
+
   it('early-exits the observation window once a first error appears (android)', async () => {
     const fake = makeFakeStream();
     let t = 0;
@@ -138,6 +172,31 @@ describe('quickTestService', () => {
     const result = await service.runSession({ platform: 'android', rootPath: '/repo', durationMs: 60000 });
     expect(result.contextPack).not.toBeNull();
     expect(result.contextPack?.request).toBe('Quick Test trace');
+  });
+
+  it('captures final web screenshot evidence by default and can disable it', async () => {
+    let t = 0;
+    const captureScreenshot = vi.fn(async () => '/repo/.tomni/quick-test/agent-evidence/quick-test-1.png');
+    const service = createQuickTestService({
+      getWebContents: () => makeFakeWc(),
+      openNativeStream: async () => null,
+      loadGraph: async () => null,
+      captureScreenshot,
+      now: () => (t += 100),
+      sleep: async () => undefined,
+    });
+
+    const captured = await service.runSession({ platform: 'web', rootPath: '/repo', durationMs: 200 });
+    const disabled = await service.runSession({
+      platform: 'web',
+      rootPath: '/repo',
+      durationMs: 200,
+      captureScreenshot: false,
+    });
+
+    expect(captured.screenshotPath).toContain('.tomni/quick-test/agent-evidence');
+    expect(disabled.screenshotPath).toBeUndefined();
+    expect(captureScreenshot).toHaveBeenCalledTimes(1);
   });
 
   it('clamps an over-long duration to the hard cap (no hang)', async () => {

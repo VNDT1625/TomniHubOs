@@ -84,6 +84,13 @@ const assessCapability = (
   request: Omit<SurfaceResolutionRequest, 'surfaceId'>
 ): SurfaceResolutionIssue[] => {
   const issues = compatibilityIssues(binding.compatibility, request.model, binding.id);
+  if (binding.id === 'core.secret-context' && !manifest.context.includeOpaqueSecretHandles) {
+    issues.push({
+      code: 'missing-capability',
+      message: 'core.secret-context is unavailable for this surface.',
+      capabilityId: binding.id,
+    });
+  }
   if (PERMISSION_RANK[request.permissionMode] < PERMISSION_RANK[binding.minimumPermissionMode]) {
     issues.push({
       code: 'permission-mode-denied',

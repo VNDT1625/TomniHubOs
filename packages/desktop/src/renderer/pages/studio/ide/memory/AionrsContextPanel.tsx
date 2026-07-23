@@ -1,6 +1,6 @@
 /** Exact AionRS context inspector. Internal request state is read-only; custom context is editable. */
 import { Alert, Button, Collapse, Empty, Input, Message, Spin, Tag, Typography } from '@arco-design/web-react';
-import { AddOne, Data, Delete, Refresh, Save } from '@icon-park/react';
+import { AddOne, Data, Delete, History, Refresh, Robot, Save, Toolkit, User } from '@icon-park/react';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AionrsContextBranch } from '@/common';
@@ -18,6 +18,22 @@ const JsonBlock: React.FC<{ value: unknown }> = ({ value }) => (
   </Typography.Paragraph>
 );
 
+const CoreBranchHeader: React.FC<{ icon: React.ReactNode; label: string }> = ({ icon, label }) => (
+  <div className='flex items-center gap-7px'>
+    <span className='text-primary flex-center'>{icon}</span>
+    <span>{label}</span>
+  </div>
+);
+
+const CoreTextBlock: React.FC<{ value: string; emptyLabel: string }> = ({ value, emptyLabel }) =>
+  value.trim() ? (
+    <Typography.Paragraph className='!mb-0 whitespace-pre-wrap break-words font-mono text-12px leading-relaxed text-t-secondary'>
+      {value}
+    </Typography.Paragraph>
+  ) : (
+    <Empty description={emptyLabel} />
+  );
+
 const AionrsContextPanel: React.FC<AionrsContextPanelProps> = ({ conversationId, active }) => {
   const { t } = useTranslation();
   const { snapshot, loading, saving, error, refresh, save } = useAionrsContext(conversationId, active);
@@ -26,6 +42,13 @@ const AionrsContextPanel: React.FC<AionrsContextPanelProps> = ({ conversationId,
   const [branchDrafts, setBranchDrafts] = useState<AionrsContextBranch[]>([]);
   const [branchesDirty, setBranchesDirty] = useState(false);
   const assistantReplyCount = snapshot?.messages.filter((message) => message.role === 'assistant').length ?? 0;
+  const toolMapSummary =
+    typeof snapshot?.session_experience.capability_summary === 'string'
+      ? snapshot.session_experience.capability_summary
+      : '';
+  const loadedToolMapSchemas = Object.entries(snapshot?.tool_cache ?? {}).toSorted(([left], [right]) =>
+    left.localeCompare(right)
+  );
 
   useEffect(() => {
     if (!customDirty && snapshot) setDraft(snapshot.custom_context);
@@ -162,7 +185,7 @@ const AionrsContextPanel: React.FC<AionrsContextPanelProps> = ({ conversationId,
       </div>
 
       <div className='flex-1 min-h-0 overflow-y-auto pr-2px'>
-        <Collapse defaultActiveKey={['system']} destroyOnHide>
+        <Collapse defaultActiveKey={['tool-map-summary']} destroyOnHide>
           <Collapse.Item
             name='context-branches'
             header={t('ide.memory.context.branchesTitle', { count: branchDrafts.length })}
@@ -255,8 +278,152 @@ const AionrsContextPanel: React.FC<AionrsContextPanelProps> = ({ conversationId,
           <Collapse.Item name='working-memory' header={t('ide.memory.context.workingMemory')}>
             <JsonBlock value={snapshot.working_memory} />
           </Collapse.Item>
+          <Collapse.Item name='tool-map-summary' header={t('ide.memory.context.toolMapSummary')}>
+            <div className='flex flex-col gap-10px'>
+              <CoreTextBlock value={toolMapSummary} emptyLabel={t('ide.memory.context.toolMapSummaryEmpty')} />
+              <div>
+                <div className='mb-6px text-11px font-600 text-t-tertiary'>
+                  {t('ide.memory.context.toolMapLoadedSchemas', { count: loadedToolMapSchemas.length })}
+                </div>
+                {loadedToolMapSchemas.length > 0 ? (
+                  <Collapse accordion destroyOnHide>
+                    {loadedToolMapSchemas.map(([name, schema]) => (
+                      <Collapse.Item
+                        key={name}
+                        name={`tool-map-schema-${name}`}
+                        header={<span className='font-mono text-12px text-t-primary'>{name}</span>}
+                      >
+                        <div className='p-9px rd-8px bg-fill-1 border border-border-2'>
+                          <JsonBlock value={schema} />
+                        </div>
+                      </Collapse.Item>
+                    ))}
+                  </Collapse>
+                ) : (
+                  <Empty description={t('ide.memory.context.toolMapSummaryEmpty')} />
+                )}
+              </div>
+            </div>
+          </Collapse.Item>
           <Collapse.Item name='tool-cache' header={t('ide.memory.context.toolCache')}>
             <JsonBlock value={snapshot.tool_cache} />
+          </Collapse.Item>
+          <Collapse.Item name='core-context' header={t('ide.memory.context.coreContext')}>
+            <Collapse defaultActiveKey={['core-agent', 'core-personal']} destroyOnHide>
+              <Collapse.Item
+                name='core-agent'
+                header={
+                  <CoreBranchHeader
+                    icon={<Robot theme='outline' size={14} />}
+                    label={t('ide.memory.context.coreAgent')}
+                  />
+                }
+              >
+                <CoreTextBlock value={snapshot.core_context.agent} emptyLabel={t('ide.memory.context.coreEmpty')} />
+              </Collapse.Item>
+              <Collapse.Item
+                name='core-personal'
+                header={
+                  <CoreBranchHeader
+                    icon={<User theme='outline' size={14} />}
+                    label={t('ide.memory.context.corePersonal')}
+                  />
+                }
+              >
+                <CoreTextBlock value={snapshot.core_context.personal} emptyLabel={t('ide.memory.context.coreEmpty')} />
+              </Collapse.Item>
+              <Collapse.Item
+                name='core-control-tools'
+                header={
+                  <CoreBranchHeader
+                    icon={<Toolkit theme='outline' size={14} />}
+                    label={t('ide.memory.context.coreControlTools', {
+                      count: snapshot.core_context.control_tools.length,
+                    })}
+                  />
+                }
+              >
+                {snapshot.core_context.control_tools.length > 0 ? (
+                  <Collapse accordion>
+                    {snapshot.core_context.control_tools.map((tool, index) => (
+                      <Collapse.Item
+                        key={`${tool.name}-${index}`}
+                        name={`${tool.name}-${index}`}
+                        header={<span className='font-mono text-12px text-t-primary'>{tool.name}</span>}
+                      >
+                        <div className='flex flex-col gap-9px'>
+                          <Typography.Paragraph className='!mb-0 text-12px leading-relaxed text-t-secondary'>
+                            {tool.description}
+                          </Typography.Paragraph>
+                          <div>
+                            <div className='mb-5px text-11px font-600 text-t-tertiary'>
+                              {t('ide.memory.context.coreToolSchema')}
+                            </div>
+                            <div className='p-9px rd-8px bg-fill-1 border border-border-2'>
+                              <JsonBlock value={tool.input_schema} />
+                            </div>
+                          </div>
+                        </div>
+                      </Collapse.Item>
+                    ))}
+                  </Collapse>
+                ) : (
+                  <Empty description={t('ide.memory.context.coreEmpty')} />
+                )}
+              </Collapse.Item>
+              <Collapse.Item
+                name='core-saved-memory'
+                header={
+                  <CoreBranchHeader
+                    icon={<History theme='outline' size={14} />}
+                    label={t('ide.memory.context.coreSavedMemory')}
+                  />
+                }
+              >
+                <CoreTextBlock
+                  value={snapshot.core_context.saved_memory ?? ''}
+                  emptyLabel={t('ide.memory.context.coreEmpty')}
+                />
+              </Collapse.Item>
+              <Collapse.Item
+                name='core-history'
+                header={
+                  <CoreBranchHeader
+                    icon={<History theme='outline' size={14} />}
+                    label={t('ide.memory.context.coreHistory', { count: snapshot.core_context.history.length })}
+                  />
+                }
+              >
+                {snapshot.core_context.history.length > 0 ? (
+                  <div className='flex flex-col gap-8px'>
+                    {snapshot.core_context.history.map((entry, index) => (
+                      <div
+                        key={`${entry.timestamp}-${index}`}
+                        className='p-10px rd-9px bg-fill-1 border border-border-2'
+                      >
+                        <div className='mb-6px flex items-center justify-between gap-8px'>
+                          <Tag size='small' color={entry.role === 'user' ? 'arcoblue' : 'green'}>
+                            {entry.role === 'user'
+                              ? t('ide.memory.context.coreHistoryUser')
+                              : t('ide.memory.context.coreHistoryAssistant')}
+                          </Tag>
+                          {entry.timestamp > 0 ? (
+                            <span className='text-10px text-t-tertiary'>
+                              {new Date(entry.timestamp).toLocaleString()}
+                            </span>
+                          ) : null}
+                        </div>
+                        <Typography.Paragraph className='!mb-0 whitespace-pre-wrap break-words text-12px leading-relaxed text-t-secondary'>
+                          {entry.text}
+                        </Typography.Paragraph>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <Empty description={t('ide.memory.context.coreEmpty')} />
+                )}
+              </Collapse.Item>
+            </Collapse>
           </Collapse.Item>
           <Collapse.Item name='session-expbase' header={t('ide.memory.context.sessionExpbase')}>
             <JsonBlock value={snapshot.session_experience} />

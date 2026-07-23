@@ -26,7 +26,7 @@
  */
 
 import { bridge } from '@office-ai/platform';
-import { httpRequest } from '@/common/adapter/httpBridge';
+import { listReadyProviders } from '@process/services/tomnyProviderBridge';
 import type { IProvider } from '@/common/config/storage';
 import { stripTokenWatermarkNotice } from '@/common/chat/chatLib';
 import { runAgentChatMessages } from '@process/services/agentChat';
@@ -107,7 +107,7 @@ const classify = (error: unknown): 'no-model' | 'error' => {
  * without a restart. Throws on failure; the caller wraps it into a result.
  */
 const runProviderChat = async (model: string, messages: StudioChatRequest['messages']): Promise<string> => {
-  const providers = (await httpRequest<IProvider[]>('GET', '/api/providers').catch(() => [] as IProvider[])) || [];
+  const providers = (await listReadyProviders().catch(() => [] as IProvider[])) || [];
   const selected = pickForModel(providers, model);
   if (!selected) {
     throw new Error('No usable model is configured. Open Settings → Model and add a provider/model, then try again.');

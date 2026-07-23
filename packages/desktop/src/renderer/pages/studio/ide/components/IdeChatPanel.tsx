@@ -60,6 +60,7 @@ import {
 import { useIdeChat, type IdeChatTab } from '../useIdeChat';
 import type { CloudWorkspaceConnection } from '../teamEdit/cloud/useCloudWorkspace';
 import MemorySessionDrawer from '../memory/MemorySessionDrawer';
+import { Build0CommandProvider } from '@/renderer/hooks/context/Build0Context';
 import {
   enforceStrictIdeSessionMode,
   isStrictIdeModeEnabled,
@@ -130,7 +131,13 @@ const IdeChatPanel: React.FC<IdeChatPanelProps> = ({ rootPath, activeFile, repoF
       return;
     }
     void getConversationOrNull(chat.activeId).then((conversation) => {
-      if (!cancelled) setActiveConversationType(conversation?.type ?? null);
+      if (cancelled) return;
+      // Conversations created before the Tomni runtime type cutover were
+      // persisted as ACP with extra.backend = tomny. Preserve their native
+      // Context and Secret tabs instead of making the user recreate the chat.
+      const type =
+        conversation?.type === 'acp' && conversation.extra.backend === 'tomny' ? 'tomny' : (conversation?.type ?? null);
+      setActiveConversationType(type);
     });
     return () => {
       cancelled = true;
@@ -213,127 +220,131 @@ const IdeChatPanel: React.FC<IdeChatPanelProps> = ({ rootPath, activeFile, repoF
     [rootPath, chat.activeId, cliAgents, presetAssistants, i18n.language]
   );
 
+  const build0CommandValue = useMemo(() => (rootPath ? { rootPath } : null), [rootPath]);
+
   return (
-    <div className='size-full flex flex-col min-h-0 bg-1'>
-      <ChatTabStrip
-        tabs={chat.tabs}
-        activeId={chat.activeId}
-        creating={chat.creating}
-        onSelect={chat.setActive}
-        onClose={(id) => void chat.close(id)}
-        rightActions={
-          <div className='flex items-center gap-8px'>
-            <Tooltip content={t('ide.memory.tooltip')} mini>
-              <Button
-                size='small'
-                icon={<Brain theme='outline' size={14} />}
-                disabled={!chat.activeId}
-                onClick={() => setMemoryOpen(true)}
-              >
-                {t('ide.memory.button')}
-              </Button>
-            </Tooltip>
-            <Tooltip content={t('ide.chat.planningHint')} mini>
-              <span className='inline-flex items-center gap-6px px-8px py-4px rd-8px bg-fill-1 border border-arco-2'>
-                <span className='text-12px font-500 text-t-secondary'>{t('ide.chat.planning')}</span>
-                <Switch
-                  size='small'
-                  checked={chat.planningEnabled}
-                  disabled={noFolder}
-                  onChange={chat.setPlanningEnabled}
-                />
-              </span>
-            </Tooltip>
-            <Tooltip content={t('ide.chat.strictModeHint')} mini>
-              <span className='inline-flex items-center gap-6px px-8px py-4px rd-8px bg-fill-1 border border-arco-2'>
-                <Shield theme='outline' size={13} />
-                <span className='text-12px font-500 text-t-secondary'>{t('ide.chat.strictMode')}</span>
-                <Switch size='small' checked={strictMode} disabled={noFolder} onChange={toggleStrictMode} />
-              </span>
-            </Tooltip>
-            <Dropdown
-              position='br'
-              popupVisible={pickerOpen}
-              onVisibleChange={setPickerOpen}
-              trigger='click'
-              droplist={
-                <AgentMenu
-                  cliAgents={cliAgents}
-                  presetAssistants={presetAssistants}
-                  language={i18n.language}
-                  loading={loadingAgents}
-                  disabled={noFolder || chat.creating}
-                  onPick={async (launcher) => {
-                    setPickerOpen(false);
-                    await chat.open(launcher);
-                  }}
-                />
-              }
-            >
-              <Tooltip content={noFolder ? t('ide.chat.noFolder') : t('ide.chat.newTab')} mini>
+    <Build0CommandProvider value={build0CommandValue}>
+      <div className='size-full flex flex-col min-h-0 bg-1'>
+        <ChatTabStrip
+          tabs={chat.tabs}
+          activeId={chat.activeId}
+          creating={chat.creating}
+          onSelect={chat.setActive}
+          onClose={(id) => void chat.close(id)}
+          rightActions={
+            <div className='flex items-center gap-8px'>
+              <Tooltip content={t('ide.memory.tooltip')} mini>
                 <Button
-                  type='primary'
                   size='small'
-                  loading={chat.creating}
-                  disabled={noFolder}
-                  icon={<Plus theme='outline' size={14} />}
+                  icon={<Brain theme='outline' size={14} />}
+                  disabled={!chat.activeId}
+                  onClick={() => setMemoryOpen(true)}
                 >
-                  {t('ide.chat.newTab')}
+                  {t('ide.memory.button')}
                 </Button>
               </Tooltip>
-            </Dropdown>
-          </div>
-        }
-      />
-
-      {chat.planningEnabled && rootPath ? <PlanningStatusBar rootPath={rootPath} /> : null}
-
-      {chat.activeId ? (
-        <ActiveFileBar
-          relPath={activeRelPath}
-          repoFiles={repoFiles}
-          onAttachActive={() => activeRelPath && insertMention(activeRelPath)}
-          onPickMention={insertMention}
+              <Tooltip content={t('ide.chat.planningHint')} mini>
+                <span className='inline-flex items-center gap-6px px-8px py-4px rd-8px bg-fill-1 border border-arco-2'>
+                  <span className='text-12px font-500 text-t-secondary'>{t('ide.chat.planning')}</span>
+                  <Switch
+                    size='small'
+                    checked={chat.planningEnabled}
+                    disabled={noFolder}
+                    onChange={chat.setPlanningEnabled}
+                  />
+                </span>
+              </Tooltip>
+              <Tooltip content={t('ide.chat.strictModeHint')} mini>
+                <span className='inline-flex items-center gap-6px px-8px py-4px rd-8px bg-fill-1 border border-arco-2'>
+                  <Shield theme='outline' size={13} />
+                  <span className='text-12px font-500 text-t-secondary'>{t('ide.chat.strictMode')}</span>
+                  <Switch size='small' checked={strictMode} disabled={noFolder} onChange={toggleStrictMode} />
+                </span>
+              </Tooltip>
+              <Dropdown
+                position='br'
+                popupVisible={pickerOpen}
+                onVisibleChange={setPickerOpen}
+                trigger='click'
+                droplist={
+                  <AgentMenu
+                    cliAgents={cliAgents}
+                    presetAssistants={presetAssistants}
+                    language={i18n.language}
+                    loading={loadingAgents}
+                    disabled={noFolder || chat.creating}
+                    onPick={async (launcher) => {
+                      setPickerOpen(false);
+                      await chat.open(launcher);
+                    }}
+                  />
+                }
+              >
+                <Tooltip content={noFolder ? t('ide.chat.noFolder') : t('ide.chat.newTab')} mini>
+                  <Button
+                    type='primary'
+                    size='small'
+                    loading={chat.creating}
+                    disabled={noFolder}
+                    icon={<Plus theme='outline' size={14} />}
+                  >
+                    {t('ide.chat.newTab')}
+                  </Button>
+                </Tooltip>
+              </Dropdown>
+            </div>
+          }
         />
-      ) : null}
 
-      <div className='flex-1 min-h-0 relative'>
-        {noFolder ? (
-          <ChatEmpty
-            icon={<FolderClose theme='outline' size={28} />}
-            title={t('ide.chat.noFolderTitle')}
-            hint={t('ide.chat.noFolderHint')}
+        {chat.planningEnabled && rootPath ? <PlanningStatusBar rootPath={rootPath} /> : null}
+
+        {chat.activeId ? (
+          <ActiveFileBar
+            relPath={activeRelPath}
+            repoFiles={repoFiles}
+            onAttachActive={() => activeRelPath && insertMention(activeRelPath)}
+            onPickMention={insertMention}
           />
-        ) : chat.tabs.length === 0 ? (
-          <ChatEmpty
-            icon={<Robot theme='outline' size={28} />}
-            title={t('ide.chat.emptyTitle')}
-            hint={t('ide.chat.emptyHint')}
-          />
-        ) : (
-          // Mount one ChatConversation per tab; only the active one is visible.
-          // Keeping inactive tabs MOUNTED preserves their composer state and
-          // streaming AI work while the user toggles tabs.
-          chat.tabs.map((tab) => (
-            <ChatTabBody
-              key={tab.id}
-              tab={tab}
-              active={chat.activeId === tab.id}
-              onResolveTitle={(title) => chat.rename(tab.id, title)}
+        ) : null}
+
+        <div className='flex-1 min-h-0 relative'>
+          {noFolder ? (
+            <ChatEmpty
+              icon={<FolderClose theme='outline' size={28} />}
+              title={t('ide.chat.noFolderTitle')}
+              hint={t('ide.chat.noFolderHint')}
             />
-          ))
-        )}
-      </div>
+          ) : chat.tabs.length === 0 ? (
+            <ChatEmpty
+              icon={<Robot theme='outline' size={28} />}
+              title={t('ide.chat.emptyTitle')}
+              hint={t('ide.chat.emptyHint')}
+            />
+          ) : (
+            // Mount one ChatConversation per tab; only the active one is visible.
+            // Keeping inactive tabs MOUNTED preserves their composer state and
+            // streaming AI work while the user toggles tabs.
+            chat.tabs.map((tab) => (
+              <ChatTabBody
+                key={tab.id}
+                tab={tab}
+                active={chat.activeId === tab.id}
+                onResolveTitle={(title) => chat.rename(tab.id, title)}
+              />
+            ))
+          )}
+        </div>
 
-      <MemorySessionDrawer
-        memId={activeMemId}
-        conversationId={chat.activeId}
-        conversationType={activeConversationType}
-        repository={rootPath}
-        visible={memoryOpen}
-        onClose={() => setMemoryOpen(false)}
-      />
-    </div>
+        <MemorySessionDrawer
+          memId={activeMemId}
+          conversationId={chat.activeId}
+          conversationType={activeConversationType}
+          repository={rootPath}
+          visible={memoryOpen}
+          onClose={() => setMemoryOpen(false)}
+        />
+      </div>
+    </Build0CommandProvider>
   );
 };
 

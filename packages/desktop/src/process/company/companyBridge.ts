@@ -44,6 +44,10 @@ import { bridge } from '@office-ai/platform';
 import { httpRequest } from '@/common/adapter/httpBridge';
 import { getMcpRegistry } from '@process/resources/mcpRegistry';
 import { getAssistantResourceStore } from '@process/resources/nativeAssistantResourceBridge';
+
+import { createNativeAssistant, listReadyAgents, listReadyAssistants } from '@process/resources/agentCatalogBridge';
+
+import { listReadyProviders } from '@process/services/tomnyProviderBridge';
 import {
   createCompanyConfigStore,
   createFromDescription,
@@ -393,10 +397,10 @@ export const getCompanyServices = (): CompanyServices => {
 };
 
 /**
- * Fetch the assignable executor pool from aioncore: installed CLI engines
- * (`/api/agents`), existing assistants (`/api/assistants`), and provider models
- * (`/api/providers`). Defensive — any endpoint failure degrades to an empty
- * list so the company UI still loads.
+ * Fetch the assignable executor pool from Tomni Core: installed CLI engines,
+ * native assistants, and provider models. Defensive — any catalog failure
+ * degrades to an empty list so the company UI still loads.
+ *
  */
 const fetchAgentPool = async (): Promise<ListAgentsResponse> => {
   type RawAgent = {
@@ -411,9 +415,9 @@ const fetchAgentPool = async (): Promise<ListAgentsResponse> => {
   type RawProvider = { models?: string[]; enabled?: boolean };
 
   const [agents, assistants, providers] = await Promise.all([
-    httpRequest<RawAgent[]>('GET', '/api/agents').catch((): RawAgent[] => []),
-    httpRequest<RawAssistant[]>('GET', '/api/assistants').catch((): RawAssistant[] => []),
-    httpRequest<RawProvider[]>('GET', '/api/providers').catch((): RawProvider[] => []),
+    listReadyAgents().catch((): RawAgent[] => []),
+    listReadyAssistants().catch((): RawAssistant[] => []),
+    listReadyProviders().catch((): RawProvider[] => []),
   ]);
 
   const clis: AgentPoolCli[] = (agents || [])
@@ -773,7 +777,7 @@ export function registerCompanyBridge(options: RegisterCompanyBridgeOptions = {}
             ...(draft.model ? { models: [draft.model] } : {}),
             ...(Array.isArray(draft.skills) && draft.skills.length > 0 ? { enabled_skills: draft.skills } : {}),
           };
-          const assistant = await httpRequest<{ id?: string; name?: string }>('POST', '/api/assistants', body);
+          const assistant = await createNativeAssistant(body);
           const newId = assistant && typeof assistant.id === 'string' ? assistant.id : undefined;
           if (!newId) throw new Error('assistant create returned no id');
           // Persist the proposed rules as the assistant's rule file (best-effort).

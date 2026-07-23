@@ -3,6 +3,7 @@
  * Non-AionRS conversations must never call this hook with `enabled = true`.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ipcBridge, type AionrsContextBranch, type AionrsContextSnapshot } from '@/common';
 
 const POLL_MS = 3000;
@@ -17,11 +18,13 @@ export type UseAionrsContext = {
 };
 
 export const useAionrsContext = (conversationId: string | null, enabled: boolean): UseAionrsContext => {
+  const { t } = useTranslation();
   const [snapshot, setSnapshot] = useState<AionrsContextSnapshot | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const aliveRef = useRef(true);
+  const refreshRequestRef = useRef<{ conversationId: string; promise: Promise<void> } | null>(null);
 
   useEffect(() => {
     aliveRef.current = true;
@@ -30,38 +33,50 @@ export const useAionrsContext = (conversationId: string | null, enabled: boolean
     };
   }, []);
 
-  const refresh = useCallback(async (): Promise<void> => {
+  const refresh = useCallback((): Promise<void> => {
     if (!conversationId || !enabled) {
       setSnapshot(null);
       setError(null);
-      return;
+      return Promise.resolve();
     }
+    if (refreshRequestRef.current?.conversationId === conversationId) return refreshRequestRef.current.promise;
+
     setLoading(true);
-    try {
-      const next = await ipcBridge.conversation.getAionrsContext.invoke({ conversation_id: conversationId });
-      if (!aliveRef.current) return;
-      setSnapshot(next);
-      setError(null);
-    } catch (reason) {
-      if (!aliveRef.current) return;
-      setError(reason instanceof Error ? reason.message : String(reason));
-    } finally {
-      if (aliveRef.current) setLoading(false);
-    }
-  }, [conversationId, enabled]);
+    const requestedConversationId = conversationId;
+    const request = (async (): Promise<void> => {
+      try {
+        const result = await ipcBridge.conversation.getAionrsContext.invoke({ conversation_id: conversationId });
+        if (!result.ok) throw new Error(t('codex.error.context_error', { context: 'AionRS' }));
+        if (!aliveRef.current || refreshRequestRef.current?.promise !== request) return;
+        setSnapshot(result.data);
+        setError(null);
+      } catch (reason) {
+        if (!aliveRef.current || refreshRequestRef.current?.promise !== request) return;
+        setError(reason instanceof Error ? reason.message : String(reason));
+      } finally {
+        if (refreshRequestRef.current?.promise === request) {
+          refreshRequestRef.current = null;
+          if (aliveRef.current) setLoading(false);
+        }
+      }
+    })();
+    refreshRequestRef.current = { conversationId: requestedConversationId, promise: request };
+    return request;
+  }, [conversationId, enabled, t]);
 
   const save = useCallback(
     async (customContext: string, branches: AionrsContextBranch[]): Promise<string | null> => {
       if (!conversationId || !enabled) return null;
       setSaving(true);
       try {
-        const next = await ipcBridge.conversation.updateAionrsContext.invoke({
+        const result = await ipcBridge.conversation.updateAionrsContext.invoke({
           conversation_id: conversationId,
           custom_context: customContext,
           context_branches: branches,
         });
+        if (!result.ok) throw new Error(t('codex.error.context_error', { context: 'AionRS' }));
         if (aliveRef.current) {
-          setSnapshot(next);
+          setSnapshot(result.data);
           setError(null);
         }
         return null;
@@ -73,7 +88,7 @@ export const useAionrsContext = (conversationId: string | null, enabled: boolean
         if (aliveRef.current) setSaving(false);
       }
     },
-    [conversationId, enabled]
+    [conversationId, enabled, t]
   );
 
   useEffect(() => {

@@ -17,7 +17,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { teamEditClient, type TeamEditSnapshot } from './teamEditClient';
+import { teamEditClient, type TeamEditSnapshot, type ViuTeamPreviewPackage } from './teamEditClient';
 
 /** Stable id the human user claims/releases under (distinct from any agent). */
 export const USER_AGENT_ID = 'user';
@@ -26,6 +26,8 @@ export const USER_AGENT_ID = 'user';
 export type UseTeamEdit = {
   /** The live snapshot (participants + leases + activity), or null before load. */
   snapshot: TeamEditSnapshot | null;
+  /** Immutable VIU packages available for local Team testing. */
+  previews: readonly ViuTeamPreviewPackage[];
   /** Whether the initial snapshot is still loading. */
   loading: boolean;
   /** Manually claim a file lease as the user. */
@@ -44,6 +46,7 @@ export type UseTeamEdit = {
  */
 export const useTeamEdit = (rootPath: string | null, userLabel: string): UseTeamEdit => {
   const [snapshot, setSnapshot] = useState<TeamEditSnapshot | null>(null);
+  const [previews, setPreviews] = useState<readonly ViuTeamPreviewPackage[]>([]);
   const [loading, setLoading] = useState(false);
   const aliveRef = useRef(true);
 
@@ -56,8 +59,13 @@ export const useTeamEdit = (rootPath: string | null, userLabel: string): UseTeam
 
   const refresh = useCallback(async (): Promise<void> => {
     if (!rootPath) return;
-    const res = await teamEditClient.snapshot(rootPath).catch((): null => null);
-    if (res && res.ok && aliveRef.current) setSnapshot(res.data);
+    const [snapshotResult, previewResult] = await Promise.all([
+      teamEditClient.snapshot(rootPath).catch((): null => null),
+      teamEditClient.listPreviews(rootPath).catch((): null => null),
+    ]);
+    if (!aliveRef.current) return;
+    if (snapshotResult?.ok) setSnapshot(snapshotResult.data);
+    if (previewResult?.ok) setPreviews(previewResult.data);
   }, [rootPath]);
 
   // Seed + subscribe whenever the folder changes. The user joins so they appear
@@ -65,21 +73,34 @@ export const useTeamEdit = (rootPath: string | null, userLabel: string): UseTeam
   useEffect(() => {
     if (!rootPath) {
       setSnapshot(null);
+      setPreviews([]);
       return;
     }
     setLoading(true);
     let cancelled = false;
     void (async () => {
       await teamEditClient.join(rootPath, USER_AGENT_ID, userLabel).catch((): null => null);
-      const res = await teamEditClient.snapshot(rootPath).catch((): null => null);
+      const [snapshotResult, previewResult] = await Promise.all([
+        teamEditClient.snapshot(rootPath).catch((): null => null),
+        teamEditClient.listPreviews(rootPath).catch((): null => null),
+      ]);
       if (!cancelled && aliveRef.current) {
-        if (res && res.ok) setSnapshot(res.data);
+        if (snapshotResult?.ok) setSnapshot(snapshotResult.data);
+        if (previewResult?.ok) setPreviews(previewResult.data);
         setLoading(false);
       }
     })();
     const unsubscribe = teamEditClient.onChanged((next) => {
       // Only react to the folder this panel is showing.
-      if (!cancelled && aliveRef.current && next.rootPath === rootPath) setSnapshot(next);
+      if (!cancelled && aliveRef.current && next.rootPath === rootPath) {
+        setSnapshot(next);
+        void teamEditClient
+          .listPreviews(rootPath)
+          .then((result) => {
+            if (!cancelled && aliveRef.current && result.ok) setPreviews(result.data);
+          })
+          .catch((): undefined => undefined);
+      }
     });
     return () => {
       cancelled = true;
@@ -105,7 +126,10 @@ export const useTeamEdit = (rootPath: string | null, userLabel: string): UseTeam
     [rootPath, refresh]
   );
 
-  return useMemo(() => ({ snapshot, loading, claim, release, refresh }), [snapshot, loading, claim, release, refresh]);
+  return useMemo(
+    () => ({ snapshot, previews, loading, claim, release, refresh }),
+    [snapshot, previews, loading, claim, release, refresh]
+  );
 };
 
 export default useTeamEdit;

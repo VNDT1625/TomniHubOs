@@ -5,7 +5,7 @@
  */
 
 /**
- * Session "super-memory" for IDE agents — a high-capacity, EPHEMERAL working
+ * Session "super-memory" for IDE agents — a high-capacity, durable working
  * memory scoped to a single IDE chat session (one chat tab / one conversation).
  *
  * ## What problem this solves
@@ -17,14 +17,12 @@
  * surface, a short-lived secret (an API key the user pasted for this session
  * only), a running TODO list. This store is that scratchpad.
  *
- * ## Lifecycle — exists only while the tab is open
+ * ## Lifecycle — durable notes, session-only secrets
  *
- * The memory is held **in RAM only** (no disk, no `userData`, never synced). A
- * session is created lazily on first write and lives until {@link clearSession}
- * (the renderer calls it when the chat tab closes) — or until the app restarts.
- * "Open the tab → the memory exists; close the tab → the memory is gone." This is
- * deliberately the opposite of the persistent company-agent memory
- * (`company/memoryStore.ts`), which lives on disk forever.
+ * Saved notes use the same item model/API in RAM and on disk. The production
+ * singleton restores them after an app restart; no parallel memory layer is
+ * introduced. Secret values deliberately remain RAM-only and are never written
+ * into the persisted snapshot. {@link clearSession} removes both copies.
  *
  * ## Production-grade memory characteristics (less token, faster, wider recall)
  *
@@ -65,6 +63,9 @@
  * in-memory maps, so it is equally safe to unit-test under plain Node.
  */
 
+import { app } from 'electron';
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
 import type { SuperMemoryEmbedder } from './embedding';
 import { cosineSimilarity, createLocalEmbedder } from './embedding';
 
@@ -158,7 +159,7 @@ export type SuperMemoryPolicy = {
   tokenBudget: number;
   /** Number of most-SALIENT non-pinned notes always kept verbatim (never folded). */
   keepRecent: number;
-  /** Max pinned notes; beyond this the OLDEST pinned auto-unpins (avoids budget lock). */
+  /** Max pinned notes; a write beyond this cap is rejected rather than silently unpinned. */
   maxPinned: number;
   /** Max notes returned in {@link SuperMemoryRecall.recent}. */
   recallRecent: number;
@@ -207,6 +208,8 @@ export type SessionMemoryStoreOptions = {
    * lexical recall. The Main-process singleton wires the local embedder.
    */
   embedder?: SuperMemoryEmbedder;
+  /** Optional file containing the existing SuperMemorySnapshot[] model. */
+  persistencePath?: string;
 };
 
 /** Outcome flag from a {@link ISessionMemoryStore.remember} call. */
@@ -290,7 +293,7 @@ const defaultEstimateTokens = (text: string): number => {
   const words = (text.replace(/[\u3000-\u9fff\uac00-\ud7af]/g, ' ').match(/[A-Za-z0-9_]+|[^\sA-Za-z0-9_]/g) ?? [])
     .length;
   // ~0.75 word per token is a common ratio; bias slightly up for safety.
-  return Math.max(1, Math.ceil(words / 0.75) + cjk);
+  return Math.max(1, Math.ceil(words / 0.75) + cjk, Math.ceil(text.length / 8));
 };
 
 /** Normalise text to a comparable token set for de-duplication. */
@@ -384,6 +387,78 @@ export const createSessionMemoryStore = (options: SessionMemoryStoreOptions): IS
   /** Live sessions. A session is created lazily on first write. */
   const sessions = new Map<string, SessionState>();
 
+  const validItem = (value: unknown): value is SuperMemoryItem => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+    const item = value as Partial<SuperMemoryItem>;
+    return (
+      typeof item.id === 'string' &&
+      typeof item.text === 'string' &&
+      typeof item.kind === 'string' &&
+      ['fact', 'decision', 'todo', 'snippet', 'note', 'summary'].includes(item.kind) &&
+      typeof item.pinned === 'boolean' &&
+      typeof item.createdAt === 'number'
+    );
+  };
+
+  const persistedSnapshots = (): SuperMemorySnapshot[] =>
+    [...sessions.entries()].map(([sessionId, state]) => ({
+      sessionId,
+      items: state.items.map((item) => ({ ...item })),
+      secretKeys: [] as string[],
+      tokensUsed: tokensOf(state),
+      tokenBudget: policy.tokenBudget,
+      compactions: state.compactions,
+      deduped: state.deduped,
+      recalls: state.recalls,
+      lastCompactedAt: state.lastCompactedAt,
+    }));
+
+  /** Persist only Save items/metrics. Secret names and values never reach disk. */
+  const persist = (): void => {
+    if (!options.persistencePath) return;
+    const directory = path.dirname(options.persistencePath);
+    mkdirSync(directory, { recursive: true });
+    const temporaryPath = `${options.persistencePath}.tmp`;
+    writeFileSync(temporaryPath, JSON.stringify(persistedSnapshots(), null, 2), 'utf8');
+    renameSync(temporaryPath, options.persistencePath);
+  };
+
+  if (options.persistencePath) {
+    try {
+      const decoded: unknown = JSON.parse(readFileSync(options.persistencePath, 'utf8'));
+      if (Array.isArray(decoded)) {
+        for (const value of decoded) {
+          if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
+          const snapshot = value as Partial<SuperMemorySnapshot>;
+          const sessionId = typeof snapshot.sessionId === 'string' ? snapshot.sessionId.trim() : '';
+          if (!sessionId || !Array.isArray(snapshot.items)) continue;
+          const items = snapshot.items.filter(validItem).map((item) => ({
+            ...item,
+            tokens: estimateTokens(item.text),
+            accessCount: Number.isFinite(item.accessCount) ? item.accessCount : 0,
+            lastAccessedAt: Number.isFinite(item.lastAccessedAt) ? item.lastAccessedAt : item.createdAt,
+          }));
+          const counters = items.map((item) => Number.parseInt(item.id.slice(1), 10)).filter(Number.isFinite);
+          const state: SessionState = {
+            items,
+            secrets: new Map(),
+            embeddings: new Map(),
+            counter: counters.length > 0 ? Math.max(...counters) : 0,
+            compactions: Number.isFinite(snapshot.compactions) ? snapshot.compactions! : 0,
+            deduped: Number.isFinite(snapshot.deduped) ? snapshot.deduped! : 0,
+            recalls: Number.isFinite(snapshot.recalls) ? snapshot.recalls! : 0,
+            lastCompactedAt: Number.isFinite(snapshot.lastCompactedAt) ? snapshot.lastCompactedAt! : null,
+            tail: Promise.resolve(),
+          };
+          if (embedder) for (const item of items) state.embeddings.set(item.id, embedder.embed(item.text));
+          sessions.set(sessionId, state);
+        }
+      }
+    } catch {
+      // Missing/corrupt snapshots degrade to an empty Save store.
+    }
+  }
+
   /** Get (or lazily create) a session's state. */
   const ensure = (sessionId: string): SessionState => {
     const id = requireSessionId(sessionId);
@@ -408,18 +483,6 @@ export const createSessionMemoryStore = (options: SessionMemoryStoreOptions): IS
   /** Store an item's embedding when an embedder is configured (no-op otherwise). */
   const indexEmbedding = (state: SessionState, id: string, text: string): void => {
     if (embedder) state.embeddings.set(id, embedder.embed(text));
-  };
-
-  /**
-   * Keep pinned notes under the cap: when too many are pinned, auto-unpin the
-   * OLDEST ones so they become foldable again. Without this, an agent that pins
-   * everything could lock the budget (pinned notes are never folded).
-   */
-  const enforcePinnedCap = (state: SessionState): void => {
-    const pinned = state.items.filter((item) => item.pinned);
-    if (pinned.length <= policy.maxPinned) return;
-    const toUnpin = pinned.toSorted((a, b) => a.createdAt - b.createdAt).slice(0, pinned.length - policy.maxPinned);
-    for (const item of toUnpin) item.pinned = false;
   };
 
   /**
@@ -468,8 +531,11 @@ export const createSessionMemoryStore = (options: SessionMemoryStoreOptions): IS
       if (tokensOf(state) <= policy.tokenBudget) break;
 
       const foldable = state.items.filter((item) => !item.pinned && item.kind !== 'summary');
-      const trimCount = foldable.length - policy.keepRecent;
-      if (trimCount > 0) {
+      if (foldable.length > 0) {
+        // keepRecent is a preference, not a hard exemption: if the preferred
+        // recent tail itself exceeds the budget, continue folding its least
+        // salient item(s) until the budget is met or only pinned items remain.
+        const trimCount = Math.max(1, foldable.length - policy.keepRecent);
         // Fold the LEAST-salient ordinary notes (oldest + least-accessed) first.
         const batch = foldable.toSorted((a, b) => salience(a) - salience(b)).slice(0, trimCount);
         // eslint-disable-next-line no-await-in-loop
@@ -520,6 +586,9 @@ export const createSessionMemoryStore = (options: SessionMemoryStoreOptions): IS
     let text = input.text?.trim();
     if (!text) throw new Error('Cannot remember empty text.');
     if ((input.kind as string) === 'summary') throw new Error('The "summary" kind is reserved for compaction.');
+    if (input.pinned === true && estimateTokens(text) > policy.maxNoteTokens) {
+      throw new Error(`Pinned Save item is too large (max ${policy.maxNoteTokens} tokens); it was not truncated.`);
+    }
 
     // Clamp an oversized note so a single write can never blow the whole budget
     // (the agent is told not to dump large file contents here).
@@ -536,6 +605,22 @@ export const createSessionMemoryStore = (options: SessionMemoryStoreOptions): IS
       // ── De-dup: refresh an existing near-identical note instead of appending. ──
       const duplicate = findDuplicate(state, noteText);
       if (duplicate) {
+        if (input.pinned === true && !duplicate.pinned) {
+          const pinnedCount = state.items.filter((item) => item.pinned).length;
+          if (pinnedCount >= policy.maxPinned) {
+            throw new Error(`Too many pinned Save items (max ${policy.maxPinned}); no item was silently unpinned.`);
+          }
+        }
+        if (duplicate.pinned || input.pinned === true) {
+          const otherPinnedTokens = state.items
+            .filter((item) => item.pinned && item.id !== duplicate.id)
+            .reduce((total, item) => total + item.tokens, 0);
+          if (otherPinnedTokens + estimateTokens(noteText) > policy.tokenBudget) {
+            throw new Error(
+              `Pinned Save items exceed the ${policy.tokenBudget}-token Save budget; no pinned text was truncated.`
+            );
+          }
+        }
         if (noteText.length > duplicate.text.length) {
           duplicate.text = noteText;
           duplicate.tokens = estimateTokens(noteText);
@@ -547,9 +632,8 @@ export const createSessionMemoryStore = (options: SessionMemoryStoreOptions): IS
         duplicate.lastAccessedAt = duplicate.createdAt;
         duplicate.accessCount++;
         state.deduped++;
-        if (duplicate.pinned) enforcePinnedCap(state);
         const compacted = await compact(state);
-        return {
+        const result = {
           item: { ...duplicate },
           deduped: true,
           truncated,
@@ -557,9 +641,24 @@ export const createSessionMemoryStore = (options: SessionMemoryStoreOptions): IS
           tokensUsed: tokensOf(state),
           tokenBudget: policy.tokenBudget,
         };
+        persist();
+        return result;
       }
 
       const stamp = now();
+      if (input.pinned === true && state.items.filter((existing) => existing.pinned).length >= policy.maxPinned) {
+        throw new Error(`Too many pinned Save items (max ${policy.maxPinned}); no item was silently unpinned.`);
+      }
+      if (
+        input.pinned === true &&
+        state.items.filter((existing) => existing.pinned).reduce((total, existing) => total + existing.tokens, 0) +
+          estimateTokens(noteText) >
+          policy.tokenBudget
+      ) {
+        throw new Error(
+          `Pinned Save items exceed the ${policy.tokenBudget}-token Save budget; no pinned text was truncated.`
+        );
+      }
       const item: SuperMemoryItem = {
         id: `m${++state.counter}`,
         text: noteText,
@@ -572,7 +671,6 @@ export const createSessionMemoryStore = (options: SessionMemoryStoreOptions): IS
       };
       state.items.push(item);
       indexEmbedding(state, item.id, item.text);
-      if (item.pinned) enforcePinnedCap(state);
 
       // Defensive hard cap: drop the least-salient foldable note if over the cap.
       if (state.items.length > policy.maxItems) {
@@ -585,7 +683,7 @@ export const createSessionMemoryStore = (options: SessionMemoryStoreOptions): IS
       }
 
       const compacted = await compact(state);
-      return {
+      const result = {
         item: { ...item },
         deduped: false,
         truncated,
@@ -593,6 +691,8 @@ export const createSessionMemoryStore = (options: SessionMemoryStoreOptions): IS
         tokensUsed: tokensOf(state),
         tokenBudget: policy.tokenBudget,
       };
+      persist();
+      return result;
     });
   };
 
@@ -688,7 +788,9 @@ export const createSessionMemoryStore = (options: SessionMemoryStoreOptions): IS
     const before = state.items.length;
     state.items = state.items.filter((item) => item.id !== id);
     state.embeddings.delete(id);
-    return state.items.length < before;
+    const removed = state.items.length < before;
+    if (removed) persist();
+    return removed;
   };
 
   const setSecret: ISessionMemoryStore['setSecret'] = (sessionId, key, value) => {
@@ -752,6 +854,7 @@ export const createSessionMemoryStore = (options: SessionMemoryStoreOptions): IS
 
   const clearSession: ISessionMemoryStore['clearSession'] = (sessionId) => {
     sessions.delete(requireSessionId(sessionId));
+    persist();
   };
 
   const listSessions: ISessionMemoryStore['listSessions'] = () => Array.from(sessions.keys());
@@ -802,6 +905,10 @@ let singleton: ISessionMemoryStore | undefined;
  */
 export const getSessionMemoryStore = (): ISessionMemoryStore => {
   if (!singleton)
-    singleton = createSessionMemoryStore({ summarizer: heuristicSummarizer(), embedder: createLocalEmbedder() });
+    singleton = createSessionMemoryStore({
+      summarizer: heuristicSummarizer(),
+      embedder: createLocalEmbedder(),
+      persistencePath: path.join(app.getPath('userData'), 'tomny-core', 'ide-session-memory.json'),
+    });
   return singleton;
 };

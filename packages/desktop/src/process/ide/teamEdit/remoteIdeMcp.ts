@@ -21,6 +21,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import { z } from 'zod';
 import { getMcpRegistry } from '@process/resources/mcpRegistry';
+import { protectedMcpTextContent, redactSecretFileText } from '@process/agentRuntime/agentMesh/security';
 import type { IMcpServer, ISessionMcpServer } from '@/common/config/storage';
 import { teamRemoteClient } from './teamRemoteClient';
 import type { TeamTreeEntry } from './teamSessionHost';
@@ -71,9 +72,16 @@ let activeSession: RemoteIdeMcpSession | null = null;
 let host: RemoteIdeMcpHost | undefined;
 
 const textResult = (text: string, isError = false): TextResult => ({
-  content: [{ type: 'text', text }],
+  content: protectedMcpTextContent(text),
   ...(isError ? { isError: true } : {}),
 });
+
+const protectRemoteFileText = (relPath: string, text: string): string => {
+  const result = redactSecretFileText(relPath, text);
+  return result.findings.length === 0
+    ? result.text
+    : `${result.text}\n--- secret firewall ---\n${JSON.stringify({ findings: result.findings }, null, 2)}`;
+};
 
 const guard = async (fn: () => Promise<string>): Promise<TextResult> => {
   try {
@@ -238,7 +246,10 @@ const searchRemoteFiles = async (
     if (content.length > MAX_SEARCH_FILE_BYTES) continue;
     const lines = content.split('\n');
     for (let index = 0; index < lines.length && hits.length < limit; index += 1) {
-      if (pattern.test(lines[index])) hits.push(`${relPath}:${index + 1}: ${lines[index].trim()}`);
+      if (pattern.test(lines[index])) {
+        const safeLine = protectRemoteFileText(relPath, lines[index].trim());
+        hits.push(`${relPath}:${index + 1}: ${safeLine}`);
+      }
       pattern.lastIndex = 0;
     }
   }
@@ -511,9 +522,9 @@ const createRemoteIdeServer = (): McpServer => {
 
   server.tool(
     'ide_read_file',
-    'Read a remote host file by repo-relative path with optional line range.',
+    'Read a remote host file. Required arguments: { filePath: "repo-relative/or/absolute/path" }.',
     {
-      filePath: z.string(),
+      filePath: z.string().trim().min(1),
       all: z.boolean().optional(),
       from: z.number().optional(),
       to: z.number().optional(),
@@ -524,60 +535,75 @@ const createRemoteIdeServer = (): McpServer => {
         const session = requireSession();
         const relPath = normalizeRemoteRelPath(filePath, session.workspacePath);
         const content = await readRemoteFile(session, relPath);
-        if (all) return content;
-        return withLineNumbers(content, from, to, maxLines ?? 2000);
+        return protectRemoteFileText(relPath, all ? content : withLineNumbers(content, from, to, maxLines ?? 2000));
       })
   );
 
   server.tool(
     'ide_search',
-    'Search remote host text files. Bounded to protect the host; narrow with dir/glob when possible.',
+    'Search remote host text files. Required arguments: { rootPath: "workspace root", query: "text" }. Narrow with dir/glob when possible.',
     {
-      query: z.string(),
+      rootPath: z.string().trim().min(1),
+      query: z.string().trim().min(1),
       dir: z.string().optional(),
       glob: z.string().optional(),
       caseSensitive: z.boolean().optional(),
       regex: z.boolean().optional(),
       maxResults: z.number().optional(),
     },
-    ({ query, dir, glob, caseSensitive, regex, maxResults }) =>
+    ({ rootPath, query, dir, glob, caseSensitive, regex, maxResults }) =>
       guard(async () => {
         const session = requireSession();
-        return searchRemoteFiles(session, { query, dir, glob, caseSensitive, regex, maxResults });
+        return searchRemoteFiles(session, { query, dir: dir ?? rootPath, glob, caseSensitive, regex, maxResults });
       })
   );
 
   server.tool(
     'ide_grep',
-    'Grep remote/cloud repository file contents. Alias of ide_search for agents that expect grep-style IDE tools.',
+    'Grep remote/cloud repository contents. Required arguments: { rootPath: "workspace root", pattern: "text or regex" }.',
     {
-      pattern: z.string(),
+      rootPath: z.string().trim().min(1),
+      pattern: z.string().trim().min(1),
       dir: z.string().optional(),
       glob: z.string().optional(),
       caseSensitive: z.boolean().optional(),
       regex: z.boolean().optional(),
       maxResults: z.number().optional(),
     },
-    ({ pattern, dir, glob, caseSensitive, regex, maxResults }) =>
+    ({ rootPath, pattern, dir, glob, caseSensitive, regex, maxResults }) =>
       guard(async () => {
         const session = requireSession();
-        return searchRemoteFiles(session, { query: pattern, dir, glob, caseSensitive, regex, maxResults });
+        return searchRemoteFiles(session, {
+          query: pattern,
+          dir: dir ?? rootPath,
+          glob,
+          caseSensitive,
+          regex,
+          maxResults,
+        });
       })
   );
 
   server.tool(
     'ide_find_definition',
-    'Find likely symbol declarations in the remote/cloud repository.',
+    'Find likely symbol declarations. Required arguments: { rootPath: "workspace root", name: "identifier" }.',
     {
-      name: z.string(),
+      rootPath: z.string().trim().min(1),
+      name: z.string().trim().min(1),
       dir: z.string().optional(),
       glob: z.string().optional(),
       maxResults: z.number().optional(),
     },
-    ({ name, dir, glob, maxResults }) =>
+    ({ rootPath, name, dir, glob, maxResults }) =>
       guard(async () => {
         const session = requireSession();
-        return findSymbolInRemoteFiles(session, { name, dir, glob, declarationsOnly: true, maxResults });
+        return findSymbolInRemoteFiles(session, {
+          name,
+          dir: dir ?? rootPath,
+          glob,
+          declarationsOnly: true,
+          maxResults,
+        });
       })
   );
 
@@ -657,7 +683,10 @@ const createRemoteIdeServer = (): McpServer => {
         const session = requireSession();
         const relPath = normalizeRemoteRelPath(filePath, session.workspacePath);
         if (!query?.trim())
-          return withLineNumbers(await readRemoteFile(session, relPath), undefined, undefined, maxLines);
+          return protectRemoteFileText(
+            relPath,
+            withLineNumbers(await readRemoteFile(session, relPath), undefined, undefined, maxLines)
+          );
         const hits = await searchRemoteFiles(session, {
           query,
           glob: relPath,

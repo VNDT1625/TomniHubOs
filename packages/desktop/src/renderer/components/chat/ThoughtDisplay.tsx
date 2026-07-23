@@ -48,22 +48,35 @@ const ThoughtDisplay: React.FC<ThoughtDisplayProps> = ({
   };
 
   const [elapsedTime, setElapsedTime] = useState(0);
-  const startTimeRef = useRef<number>(Date.now());
+  const startTimeRef = useRef<number | null>(null);
+  const wasRunningRef = useRef(false);
 
-  // Timer for elapsed time
+  // Keep one clock for the whole processing run. A thought subject can change
+  // many times (for example, Planning -> Executing); it must not restart the
+  // clock. Once running becomes false, stop the interval and freeze the value
+  // until the next run starts.
   useEffect(() => {
-    if (!running && !thought?.subject) {
-      setElapsedTime(0);
+    if (!running) {
+      wasRunningRef.current = false;
+      if (!thought?.subject) {
+        startTimeRef.current = null;
+        setElapsedTime(0);
+      }
       return;
     }
 
-    startTimeRef.current = Date.now();
-    setElapsedTime(0);
+    if (!wasRunningRef.current || startTimeRef.current === null) {
+      startTimeRef.current = Date.now();
+      setElapsedTime(0);
+    }
+    wasRunningRef.current = true;
 
-    const timer = setInterval(() => {
-      const elapsed = Math.floor((Date.now() - startTimeRef.current) / 1000);
-      setElapsedTime(elapsed);
-    }, 1000);
+    const updateElapsed = (): void => {
+      if (startTimeRef.current === null) return;
+      setElapsedTime(Math.floor((Date.now() - startTimeRef.current) / 1000));
+    };
+    updateElapsed();
+    const timer = setInterval(updateElapsed, 1000);
 
     return () => clearInterval(timer);
   }, [running, thought?.subject]);

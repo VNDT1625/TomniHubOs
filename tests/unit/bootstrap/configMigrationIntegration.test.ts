@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import path from 'node:path';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const mockDriver = {
@@ -45,7 +46,10 @@ vi.mock('@process/services/database/migrations', () => ({
 }));
 
 import { existsSync } from 'fs';
-import { runLegacyDatabaseMigrations } from '@process/services/database/runLegacyDatabaseMigrations';
+import {
+  discoverLegacyDatabasePaths,
+  runLegacyDatabaseMigrations,
+} from '@process/services/database/runLegacyDatabaseMigrations';
 import { getDatabaseVersion, setDatabaseVersion } from '@process/services/database/schema';
 import { runMigrations } from '@process/services/database/migrations';
 
@@ -54,6 +58,23 @@ describe('configMigrationIntegration', () => {
     vi.clearAllMocks();
     (existsSync as any).mockReturnValue(true);
     (getDatabaseVersion as any).mockReturnValue(20);
+  });
+
+  it('discovers the active backend catalog before the Electron legacy catalog', () => {
+    const dataDir = path.resolve('/data');
+    const backend = path.join(dataDir, 'aionui-backend.db');
+    const electronLegacy = path.join(dataDir, 'aionui.db');
+    (existsSync as any).mockImplementation((candidate: string) => [backend, electronLegacy].includes(candidate));
+
+    expect(discoverLegacyDatabasePaths(dataDir)).toEqual([backend, electronLegacy]);
+  });
+
+  it('discovers the historical nested data directory without inventing a database', () => {
+    const dataDir = path.resolve('/data');
+    const nestedLegacy = path.join(dataDir, 'aionui', 'aionui.db');
+    (existsSync as any).mockImplementation((candidate: string) => candidate === nestedLegacy);
+
+    expect(discoverLegacyDatabasePaths(dataDir)).toEqual([nestedLegacy]);
   });
 
   it('runs migrations when database version is outdated', async () => {

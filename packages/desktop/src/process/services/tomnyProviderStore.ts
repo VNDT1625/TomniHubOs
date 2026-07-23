@@ -83,6 +83,7 @@ const normalizeCreate = (input: CreateProviderRequest, id: string): IProvider =>
   model_health: input.model_health,
   is_full_url: input.is_full_url,
 });
+
 /** Create the independent provider store used by both Settings and Tomny CLI. */
 export const createProviderStore = (options: ProviderStoreOptions = {}): IProviderStore => {
   const fsImpl = options.fs ?? defaultFs;
@@ -92,31 +93,52 @@ export const createProviderStore = (options: ProviderStoreOptions = {}): IProvid
   const filePath = path.join(dir, PROVIDERS_FILE);
   let cache: StoredProvider[] = [];
   let loaded = false;
-  const decode = (stored: StoredProvider): IProvider => {
-    let secrets: ProviderSecrets = { apiKey: '' };
+  let mutationQueue = Promise.resolve();
+
+  const exclusive = async <T>(operation: () => Promise<T>): Promise<T> => {
+    const previous = mutationQueue;
+    let release = (): void => undefined;
+    mutationQueue = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await previous;
     try {
-      const value = JSON.parse(crypto.decrypt(stored.encryptedSecrets, stored.osEncrypted)) as unknown;
-      if (isObject(value)) {
-        secrets = {
-          apiKey: typeof value.apiKey === 'string' ? value.apiKey : '',
-          bedrockSecretAccessKey:
-            typeof value.bedrockSecretAccessKey === 'string' ? value.bedrockSecretAccessKey : undefined,
-        };
-      }
-    } catch {
-      /* Corrupted secrets do not hide non-secret metadata. */
+      return await operation();
+    } finally {
+      release();
     }
+  };
+
+  const decodeSecrets = (stored: StoredProvider): ProviderSecrets => {
+    const value = JSON.parse(crypto.decrypt(stored.encryptedSecrets, stored.osEncrypted)) as unknown;
+    if (!isObject(value) || typeof value.apiKey !== 'string') {
+      throw new Error(`Provider credentials are invalid for ${stored.id}.`);
+    }
+    return {
+      apiKey: value.apiKey,
+      bedrockSecretAccessKey:
+        typeof value.bedrockSecretAccessKey === 'string' ? value.bedrockSecretAccessKey : undefined,
+    };
+  };
+
+  const providerFromStored = (stored: StoredProvider, secrets: ProviderSecrets): IProvider => {
     const bedrock_config = stored.bedrock_config
       ? { ...stored.bedrock_config, secret_access_key: secrets.bedrockSecretAccessKey }
       : undefined;
     const { encryptedSecrets: _encryptedSecrets, osEncrypted: _osEncrypted, ...provider } = stored;
     return { ...provider, api_key: secrets.apiKey, bedrock_config };
   };
-  const encode = (provider: IProvider): StoredProvider => {
-    const secrets: ProviderSecrets = {
-      apiKey: provider.api_key,
-      bedrockSecretAccessKey: provider.bedrock_config?.secret_access_key,
-    };
+
+  const decode = (stored: StoredProvider): IProvider => {
+    try {
+      return providerFromStored(stored, decodeSecrets(stored));
+    } catch (error) {
+      console.warn(`[ProviderStore] credentials for ${stored.id} could not be decrypted:`, error);
+      return providerFromStored(stored, { apiKey: '' });
+    }
+  };
+
+  const metadataFor = (provider: IProvider): Omit<StoredProvider, 'encryptedSecrets' | 'osEncrypted'> => {
     const bedrock_config = provider.bedrock_config
       ? {
           auth_method: provider.bedrock_config.auth_method,
@@ -126,24 +148,41 @@ export const createProviderStore = (options: ProviderStoreOptions = {}): IProvid
         }
       : undefined;
     const { api_key: _apiKey, bedrock_config: _bedrockConfig, ...metadata } = provider;
+    return { ...metadata, bedrock_config };
+  };
+
+  const encode = (provider: IProvider): StoredProvider => {
+    const secrets: ProviderSecrets = {
+      apiKey: provider.api_key,
+      bedrockSecretAccessKey: provider.bedrock_config?.secret_access_key,
+    };
     return {
-      ...metadata,
-      bedrock_config,
+      ...metadataFor(provider),
       encryptedSecrets: crypto.encrypt(JSON.stringify(secrets)),
       osEncrypted: crypto.isAvailable(),
     };
   };
+
   const ensureLoaded = async (): Promise<void> => {
     if (loaded) return;
     try {
       const parsed = JSON.parse(await fsImpl.readFile(filePath, 'utf-8')) as unknown;
-      cache = Array.isArray(parsed) ? parsed.filter(isStoredProvider) : [];
+      if (!Array.isArray(parsed) || parsed.some((value) => !isStoredProvider(value))) {
+        throw new Error('Provider catalog has an invalid shape.');
+      }
+      cache = parsed;
+      loaded = true;
     } catch (error) {
-      if (!isNotFound(error)) console.warn('[ProviderStore] read failed; using an empty provider list:', error);
-      cache = [];
+      if (isNotFound(error)) {
+        cache = [];
+        loaded = true;
+        return;
+      }
+      console.warn('[ProviderStore] read failed; preserving the existing file:', error);
+      throw new Error('Provider catalog could not be read safely. No provider changes were applied.', { cause: error });
     }
-    loaded = true;
   };
+
   const persist = async (next: StoredProvider[]): Promise<void> => {
     const tempPath = `${filePath}.tmp`;
     await fsImpl.mkdir(path.dirname(filePath), { recursive: true });
@@ -151,6 +190,7 @@ export const createProviderStore = (options: ProviderStoreOptions = {}): IProvid
     await fsImpl.rename(tempPath, filePath);
     cache = next;
   };
+
   return {
     async list() {
       await ensureLoaded();
@@ -161,35 +201,88 @@ export const createProviderStore = (options: ProviderStoreOptions = {}): IProvid
       const found = cache.find((provider) => provider.id === id);
       return found ? decode(found) : undefined;
     },
-    async create(input) {
-      await ensureLoaded();
-      const id = input.id?.trim() || newId();
-      if (cache.some((provider) => provider.id === id)) throw new Error(`Provider already exists: ${id}`);
-      const provider = normalizeCreate(input, id);
-      await persist([...cache, encode(provider)]);
-      return provider;
+    create(input) {
+      return exclusive(async () => {
+        await ensureLoaded();
+        const id = input.id?.trim() || newId();
+        if (cache.some((provider) => provider.id === id)) throw new Error(`Provider already exists: ${id}`);
+        const provider = normalizeCreate(input, id);
+        await persist([...cache, encode(provider)]);
+        return provider;
+      });
     },
-    async update(id, input) {
-      await ensureLoaded();
-      const index = cache.findIndex((provider) => provider.id === id);
-      if (index < 0) throw new Error(`Provider not found: ${id}`);
-      const current = decode(cache[index]);
-      const provider: IProvider = {
-        ...current,
-        ...input,
-        id,
-        platform: input.platform?.trim() ?? current.platform,
-        name: input.name?.trim() ?? current.name,
-        base_url: input.base_url?.trim() ?? current.base_url,
-      };
-      const next = [...cache];
-      next[index] = encode(provider);
-      await persist(next);
-      return provider;
+    update(id, input) {
+      return exclusive(async () => {
+        await ensureLoaded();
+        const index = cache.findIndex((provider) => provider.id === id);
+        if (index < 0) throw new Error(`Provider not found: ${id}`);
+        const stored = cache[index];
+
+        let existingSecrets: ProviderSecrets;
+        try {
+          existingSecrets = decodeSecrets(stored);
+        } catch (error) {
+          const replacementApiKey = input.api_key?.trim();
+          const replacementBedrockSecret = input.bedrock_config?.secret_access_key?.trim();
+          const nextPlatform = input.platform?.trim() ?? stored.platform;
+          const nextBedrockAuth = input.bedrock_config?.auth_method ?? stored.bedrock_config?.auth_method;
+          const requiresApiKey = nextPlatform !== 'bedrock';
+          const requiresBedrockSecret = nextPlatform === 'bedrock' && nextBedrockAuth === 'accessKey';
+          if ((requiresApiKey && !replacementApiKey) || (requiresBedrockSecret && !replacementBedrockSecret)) {
+            throw new Error(
+              'Existing provider credentials could not be decrypted. Update aborted to prevent credential loss; re-enter the credentials explicitly.',
+              { cause: error }
+            );
+          }
+          existingSecrets = {
+            apiKey: replacementApiKey ?? '',
+            bedrockSecretAccessKey: replacementBedrockSecret,
+          };
+        }
+
+        const current = providerFromStored(stored, existingSecrets);
+        const suppliedApiKey = input.api_key?.trim() || undefined;
+        const suppliedBedrockSecret = input.bedrock_config?.secret_access_key?.trim() || undefined;
+        const nextBedrockConfig = input.bedrock_config
+          ? {
+              ...current.bedrock_config,
+              ...input.bedrock_config,
+              secret_access_key: suppliedBedrockSecret ?? current.bedrock_config?.secret_access_key,
+            }
+          : current.bedrock_config;
+        const provider: IProvider = {
+          ...current,
+          ...input,
+          id,
+          platform: input.platform?.trim() ?? current.platform,
+          name: input.name?.trim() ?? current.name,
+          base_url: input.base_url?.trim() ?? current.base_url,
+          api_key: suppliedApiKey ?? current.api_key,
+          bedrock_config: nextBedrockConfig,
+        };
+
+        const secretsChanged =
+          suppliedApiKey !== undefined ||
+          suppliedBedrockSecret !== undefined ||
+          input.bedrock_config?.auth_method !== undefined;
+        const nextStored: StoredProvider = secretsChanged
+          ? encode(provider)
+          : {
+              ...metadataFor(provider),
+              encryptedSecrets: stored.encryptedSecrets,
+              osEncrypted: stored.osEncrypted,
+            };
+        const next = [...cache];
+        next[index] = nextStored;
+        await persist(next);
+        return provider;
+      });
     },
-    async remove(id) {
-      await ensureLoaded();
-      await persist(cache.filter((provider) => provider.id !== id));
+    remove(id) {
+      return exclusive(async () => {
+        await ensureLoaded();
+        await persist(cache.filter((provider) => provider.id !== id));
+      });
     },
   };
 };

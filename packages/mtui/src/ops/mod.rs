@@ -3,15 +3,82 @@ use crate::fs;
 use crate::safety::RiskLevel;
 use serde::Serialize;
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
-const SEARCH_MAX_FILE_BYTES: u64 = 2 * 1024 * 1024;
 const UNDERSTAND_STALE_MAX_PATHS: usize = 200;
+const UNDERSTAND_LOCK_STALE_AFTER: Duration = Duration::from_secs(30);
+const UNDERSTAND_LOCK_WAIT_TIMEOUT: Duration = Duration::from_secs(32);
 
-fn mark_understand_stale(project_root: &Path, changed_path: &Path) {
-    let dir = project_root.join(".aionui").join("understand");
-    let marker = dir.join("stale.json");
+struct UnderstandStaleLock {
+    path: PathBuf,
+}
+
+impl Drop for UnderstandStaleLock {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir(&self.path);
+    }
+}
+
+fn acquire_understand_stale_lock(
+    project_root: &Path,
+    stale_after: Duration,
+    wait_timeout: Duration,
+) -> Option<UnderstandStaleLock> {
+    let lock_path =
+        crate::understand::storage::canonical_understand_dir(project_root).join("stale.lock");
+    let started = Instant::now();
+    let mut retry_delay = Duration::from_millis(2);
+
+    loop {
+        match std::fs::create_dir(&lock_path) {
+            Ok(()) => return Some(UnderstandStaleLock { path: lock_path }),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                let metadata = std::fs::symlink_metadata(&lock_path).ok();
+                if metadata.as_ref().is_some_and(|entry| entry.is_file()) {
+                    // One-time migration from the earlier Rust-only file-lock protocol.
+                    let _ = std::fs::remove_file(&lock_path);
+                    continue;
+                }
+                let stale = stale_after.is_zero()
+                    || metadata
+                        .and_then(|entry| entry.modified().ok())
+                        .and_then(|modified| modified.elapsed().ok())
+                        .is_some_and(|age| age > stale_after);
+                if stale && std::fs::remove_dir(&lock_path).is_ok() {
+                    continue;
+                }
+            }
+            Err(_) => return None,
+        }
+
+        if started.elapsed() >= wait_timeout {
+            return None;
+        }
+        std::thread::sleep(retry_delay);
+        retry_delay = (retry_delay * 2).min(Duration::from_millis(50));
+    }
+}
+
+pub(crate) fn mark_understand_stale(project_root: &Path, changed_path: &Path) {
+    let dir = crate::understand::storage::canonical_understand_dir(project_root);
+    let marker = crate::understand::storage::canonical_stale_marker_path(project_root);
+    if std::fs::create_dir_all(&dir).is_err() {
+        return;
+    }
+
+    // Atomic directory creation is the same advisory-lock primitive used by
+    // the TypeScript graph publisher, so both runtimes serialize marker RMW.
+    let Some(_lock) = acquire_understand_stale_lock(
+        project_root,
+        UNDERSTAND_LOCK_STALE_AFTER,
+        UNDERSTAND_LOCK_WAIT_TIMEOUT,
+    ) else {
+        return;
+    };
+
+    let readable_marker = crate::understand::storage::stale_marker_path(project_root);
     let relative = display_project_path(project_root, changed_path);
-    let existing = std::fs::read_to_string(&marker)
+    let existing = std::fs::read_to_string(&readable_marker)
         .ok()
         .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok());
     let first_updated_at = existing
@@ -19,6 +86,11 @@ fn mark_understand_stale(project_root: &Path, changed_path: &Path) {
         .and_then(|value| value.get("firstUpdatedAt"))
         .and_then(|value| value.as_str())
         .map(ToString::to_string);
+    let mut full_rebuild_required = existing
+        .as_ref()
+        .and_then(|value| value.get("fullRebuildRequired"))
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false);
     let mut paths = existing
         .as_ref()
         .and_then(|value| value.get("paths"))
@@ -26,16 +98,23 @@ fn mark_understand_stale(project_root: &Path, changed_path: &Path) {
         .map(|values| {
             values
                 .iter()
-                .filter_map(|value| value.as_str().map(ToString::to_string))
+                .filter_map(|value| {
+                    value
+                        .as_str()
+                        .map(|path| path.replace('\\', "/").trim_start_matches("./").to_string())
+                })
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default();
-    if !paths.iter().any(|path| path == &relative) {
+    let mut seen = std::collections::HashSet::new();
+    paths.retain(|path| seen.insert(path.clone()));
+    if seen.insert(relative.clone()) {
         paths.push(relative);
     }
+    paths.sort();
     if paths.len() > UNDERSTAND_STALE_MAX_PATHS {
-        let excess = paths.len() - UNDERSTAND_STALE_MAX_PATHS;
-        paths.drain(0..excess);
+        full_rebuild_required = true;
+        paths.truncate(UNDERSTAND_STALE_MAX_PATHS);
     }
     let updated_at = chrono::Utc::now().to_rfc3339();
     let payload = serde_json::json!({
@@ -45,12 +124,12 @@ fn mark_understand_stale(project_root: &Path, changed_path: &Path) {
         "reason": "mtui_write",
         "pathCount": paths.len(),
         "paths": paths,
+        "fullRebuildRequired": full_rebuild_required,
     });
-    let _ = std::fs::create_dir_all(&dir);
-    let _ = std::fs::write(
-        marker,
-        serde_json::to_string_pretty(&payload).unwrap_or_else(|_| "{}".to_string()),
-    );
+    let Ok(encoded) = serde_json::to_vec_pretty(&payload) else {
+        return;
+    };
+    let _ = fs::atomic_write(&marker, &encoded);
 }
 
 fn operation_metadata() -> (Option<String>, Option<String>, Option<String>) {
@@ -845,10 +924,7 @@ pub fn conflict_accept(project_root: &Path, token: Option<&str>) -> ConflictComm
 }
 
 fn summary_cache(project_root: &Path) -> Option<serde_json::Value> {
-    let summary_path = project_root
-        .join(".aionui")
-        .join("understand")
-        .join("summary.json");
+    let summary_path = crate::understand::storage::summary_path(project_root);
     let data = std::fs::read_to_string(summary_path).ok()?;
     serde_json::from_str(&data).ok()
 }
@@ -1461,6 +1537,10 @@ pub fn apply_unified_patch(
             .as_ref()
             .map(|content| String::from_utf8_lossy(content).to_string())
             .unwrap_or_default();
+        let changed = before_text != after_text;
+        if changed {
+            mark_understand_stale(project_root, &absolute);
+        }
         let diff = crate::diff::generate_diff(&before_text, &after_text);
         let diff_path =
             crate::diff::save_diff(project_root, &operation_id, &diff.diff).map_err(|e| {
@@ -1490,7 +1570,7 @@ pub fn apply_unified_patch(
             after_hash,
             backup_path: backup_path.as_ref().map(|path| path.display().to_string()),
             diff_path: Some(diff_path.display().to_string()),
-            changed: before_text != after_text,
+            changed,
             created_at: chrono::Utc::now().to_rfc3339(),
             agent_id,
             task_id,
@@ -3208,19 +3288,17 @@ fn glob_matches(pattern: &glob::Pattern, relative: &str) -> bool {
 }
 
 fn search_path_allowed(
-    project_root: &Path,
-    path: &Path,
+    relative: &str,
     includes: &[glob::Pattern],
     excludes: &[glob::Pattern],
 ) -> bool {
-    let relative = display_project_path(project_root, path).replace('\\', "/");
     (includes.is_empty()
         || includes
             .iter()
-            .any(|pattern| glob_matches(pattern, &relative)))
+            .any(|pattern| glob_matches(pattern, relative)))
         && !excludes
             .iter()
-            .any(|pattern| glob_matches(pattern, &relative))
+            .any(|pattern| glob_matches(pattern, relative))
 }
 
 fn search_regex(query: &str, options: &SearchOptions) -> Result<regex::Regex, MtuiError> {
@@ -3239,8 +3317,8 @@ fn search_regex(query: &str, options: &SearchOptions) -> Result<regex::Regex, Mt
 }
 
 fn search_one_file(
-    project_root: &Path,
     path: &Path,
+    display_path: &str,
     matcher: &regex::Regex,
     options: &SearchOptions,
 ) -> Result<(Vec<SearchMatch>, usize), MtuiError> {
@@ -3249,37 +3327,50 @@ fn search_one_file(
         message: format!("File is not valid UTF-8: {}", path.display()),
         suggestion: "MTUI only searches UTF-8 text files".to_string(),
     })?;
-    let lines = text.lines().collect::<Vec<_>>();
-    let display_path = display_project_path(project_root, path);
     let mut matches = Vec::new();
     let mut matching_lines = 0usize;
-
-    for (line_idx, line) in lines.iter().enumerate() {
+    let mut process_line = |line_idx: usize, line: &str, before: &[&str], after: &[&str]| {
         let Some(found) = matcher.find(line) else {
-            continue;
+            return;
         };
         matching_lines += 1;
         if options.count || options.files_with_matches || matches.len() >= options.limit.max(1) {
-            continue;
+            return;
         }
-        let context_start = line_idx.saturating_sub(options.context);
-        let context_end = (line_idx + options.context + 1).min(lines.len());
         matches.push(SearchMatch {
-            file: display_path.clone(),
+            file: display_path.to_string(),
             line: line_idx + 1,
             column: line[..found.start()].chars().count() + 1,
             preview: search_preview(line, found.start(), found.end() - found.start()),
-            before: lines[context_start..line_idx]
-                .iter()
-                .map(|line| (*line).to_string())
-                .collect(),
-            after: lines[line_idx + 1..context_end]
-                .iter()
-                .map(|line| (*line).to_string())
-                .collect(),
+            before: before.iter().map(|line| (*line).to_string()).collect(),
+            after: after.iter().map(|line| (*line).to_string()).collect(),
         });
+    };
+
+    if options.context == 0 {
+        for (line_idx, line) in text.lines().enumerate() {
+            process_line(line_idx, line, &[], &[]);
+        }
+    } else {
+        let lines = text.lines().collect::<Vec<_>>();
+        for (line_idx, line) in lines.iter().enumerate() {
+            let context_start = line_idx.saturating_sub(options.context);
+            let context_end = (line_idx + options.context + 1).min(lines.len());
+            process_line(
+                line_idx,
+                line,
+                &lines[context_start..line_idx],
+                &lines[line_idx + 1..context_end],
+            );
+        }
     }
     Ok((matches, matching_lines))
+}
+
+struct SearchFileResult {
+    file: String,
+    matches: Vec<SearchMatch>,
+    matching_lines: usize,
 }
 
 #[allow(dead_code)]
@@ -3307,7 +3398,7 @@ pub fn search_with_options(
     path: &Path,
     query: &str,
     options: SearchOptions,
-    _config: &crate::config::MtuiConfig,
+    config: &crate::config::MtuiConfig,
 ) -> Result<SearchResult, MtuiError> {
     let search_path = if path.is_absolute() {
         path.to_path_buf()
@@ -3331,37 +3422,52 @@ pub fn search_with_options(
     let mut counts = Vec::new();
     let mut total_match_count = 0usize;
     let mut truncated = false;
+    let normalized_root = project_root.components().collect::<PathBuf>();
 
-    let candidate_paths = if search_path.is_file() {
-        vec![search_path.clone()]
-    } else {
-        walkdir::WalkDir::new(&search_path)
-            .into_iter()
-            .filter_entry(|entry| {
-                !entry.file_type().is_dir() || !should_skip_search_dir(entry.path())
-            })
-            .filter_map(|e| e.ok())
-            .filter(|entry| entry.file_type().is_file())
-            .map(|entry| entry.path().to_path_buf())
-            .collect::<Vec<_>>()
-    };
+    let file_results = std::sync::Mutex::new(Vec::<SearchFileResult>::new());
+    crate::fs::discovery::visit_files_parallel(
+        project_root,
+        &search_path,
+        &config.ignore.patterns,
+        crate::fs::discovery::DEFAULT_MAX_FILE_BYTES,
+        |entry_path| {
+            let display_path = entry_path
+                .strip_prefix(&normalized_root)
+                .map(|relative| relative.to_string_lossy().replace('\\', "/"))
+                .unwrap_or_else(|_| display_project_path(&normalized_root, &entry_path));
+            if !search_path_allowed(&display_path, &includes, &excludes) {
+                return;
+            }
+            let Ok((matches, matching_lines)) =
+                search_one_file(&entry_path, &display_path, &matcher, &options)
+            else {
+                return;
+            };
+            if matching_lines > 0 {
+                file_results.lock().unwrap().push(SearchFileResult {
+                    file: display_path,
+                    matches,
+                    matching_lines,
+                });
+            }
+        },
+    )
+    .map_err(|error| MtuiError::InvalidArgument {
+        message: format!("Cannot discover search files: {error:#}"),
+        suggestion: "Fix invalid ignore patterns in .mtui/config.toml".to_string(),
+    })?;
+    let mut file_results = file_results.into_inner().map_err(|_| MtuiError::Internal {
+        message: "Search worker result lock was poisoned".to_string(),
+    })?;
+    file_results.sort_unstable_by(|left, right| left.file.cmp(&right.file));
 
-    for entry_path in candidate_paths {
-        if should_skip_search_file(&entry_path)
-            || !search_path_allowed(project_root, &entry_path, &includes, &excludes)
-        {
-            continue;
-        }
-        let Ok((file_matches, matching_lines)) =
-            search_one_file(project_root, &entry_path, &matcher, &options)
-        else {
-            continue;
-        };
-        if matching_lines == 0 {
-            continue;
-        }
+    for file_result in file_results {
+        let SearchFileResult {
+            file: display_path,
+            matches: file_matches,
+            matching_lines,
+        } = file_result;
         total_match_count += matching_lines;
-        let display_path = display_project_path(project_root, &entry_path);
         if options.files_with_matches {
             if files.len() >= limit {
                 truncated = true;
@@ -3440,36 +3546,6 @@ fn search_preview(line: &str, match_start: usize, query_len: usize) -> String {
     }
 
     line[start..end].to_string()
-}
-
-fn should_skip_search_dir(path: &Path) -> bool {
-    path.file_name()
-        .and_then(|name| name.to_str())
-        .map(|name| {
-            matches!(
-                name,
-                ".git"
-                    | ".mtui"
-                    | ".aionui"
-                    | ".cache"
-                    | ".next"
-                    | ".turbo"
-                    | ".vite"
-                    | "coverage"
-                    | "node_modules"
-                    | "target"
-                    | "dist"
-                    | "build"
-                    | "out"
-            )
-        })
-        .unwrap_or(false)
-}
-
-fn should_skip_search_file(path: &Path) -> bool {
-    std::fs::metadata(path)
-        .map(|metadata| metadata.len() > SEARCH_MAX_FILE_BYTES)
-        .unwrap_or(false)
 }
 
 #[derive(Debug, Serialize)]
@@ -3556,9 +3632,117 @@ fn generate_operation_id() -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        compass_read_file, read_file, run_verification, CompassReadOptions, ReadOptions,
-        VerifyOptions,
+        acquire_understand_stale_lock, compass_read_file, mark_understand_stale, read_file,
+        run_verification, summary_cache, CompassReadOptions, ReadOptions, VerifyOptions,
     };
+
+    #[test]
+    fn understand_stale_lock_recovers_an_abandoned_directory() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let understand = temp.path().join(".tomni/understand");
+        let lock_path = understand.join("stale.lock");
+        std::fs::create_dir_all(&lock_path).expect("abandoned lock directory");
+
+        let lock = acquire_understand_stale_lock(
+            temp.path(),
+            std::time::Duration::ZERO,
+            std::time::Duration::from_millis(100),
+        )
+        .expect("recovered lock");
+
+        assert!(lock_path.is_dir());
+        drop(lock);
+        assert!(!lock_path.exists());
+    }
+
+    #[test]
+    fn understand_stale_marker_concurrent_writers_retain_the_complete_union() {
+        const WRITER_COUNT: usize = 64;
+        let temp = tempfile::tempdir().expect("tempdir");
+        let project_root = std::sync::Arc::new(temp.path().to_path_buf());
+        let start = std::sync::Arc::new(std::sync::Barrier::new(WRITER_COUNT));
+        let writers = (0..WRITER_COUNT)
+            .map(|index| {
+                let project_root = std::sync::Arc::clone(&project_root);
+                let start = std::sync::Arc::clone(&start);
+                std::thread::spawn(move || {
+                    start.wait();
+                    mark_understand_stale(
+                        project_root.as_ref(),
+                        &project_root.join(format!("src/concurrent-{index:03}.ts")),
+                    );
+                })
+            })
+            .collect::<Vec<_>>();
+
+        for writer in writers {
+            writer.join().expect("writer thread");
+        }
+
+        let marker = serde_json::from_str::<serde_json::Value>(
+            &std::fs::read_to_string(project_root.join(".tomni/understand/stale.json"))
+                .expect("stale marker"),
+        )
+        .expect("valid stale marker");
+        let paths = marker["paths"]
+            .as_array()
+            .expect("marker paths")
+            .iter()
+            .filter_map(|path| path.as_str())
+            .collect::<std::collections::HashSet<_>>();
+
+        assert_eq!(paths.len(), WRITER_COUNT);
+        for index in 0..WRITER_COUNT {
+            assert!(paths.contains(format!("src/concurrent-{index:03}.ts").as_str()));
+        }
+        assert_eq!(marker["fullRebuildRequired"].as_bool(), Some(false));
+    }
+
+    #[test]
+    fn understand_stale_marker_overflow_requires_a_full_rebuild() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        for index in 0..=super::UNDERSTAND_STALE_MAX_PATHS {
+            mark_understand_stale(
+                temp.path(),
+                &temp.path().join(format!("src/overflow-{index:03}.ts")),
+            );
+        }
+
+        let marker = serde_json::from_str::<serde_json::Value>(
+            &std::fs::read_to_string(temp.path().join(".tomni/understand/stale.json"))
+                .expect("stale marker"),
+        )
+        .expect("valid stale marker");
+
+        assert_eq!(marker["fullRebuildRequired"].as_bool(), Some(true));
+        assert_eq!(
+            marker["paths"].as_array().expect("marker paths").len(),
+            super::UNDERSTAND_STALE_MAX_PATHS
+        );
+    }
+
+    #[test]
+    fn summary_cache_uses_canonical_then_migration_then_legacy_generation() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let summaries = [(".aionui", 1_u64), (".omni", 2_u64), (".tomni", 3_u64)];
+        for (metadata_dir, built_at) in summaries {
+            let understand = temp.path().join(metadata_dir).join("understand");
+            std::fs::create_dir_all(&understand).expect("create understand directory");
+            std::fs::write(
+                understand.join("summary.json"),
+                serde_json::json!({ "builtAt": built_at }).to_string(),
+            )
+            .expect("write summary");
+        }
+
+        assert_eq!(summary_cache(temp.path()).unwrap()["builtAt"], 3);
+        std::fs::remove_file(temp.path().join(".tomni/understand/summary.json"))
+            .expect("remove canonical summary");
+        assert_eq!(summary_cache(temp.path()).unwrap()["builtAt"], 2);
+        std::fs::remove_file(temp.path().join(".omni/understand/summary.json"))
+            .expect("remove migration summary");
+        assert_eq!(summary_cache(temp.path()).unwrap()["builtAt"], 1);
+    }
 
     #[test]
     fn read_file_returns_a_bounded_line_numbered_slice() {

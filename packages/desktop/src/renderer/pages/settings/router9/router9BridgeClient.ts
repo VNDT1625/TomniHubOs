@@ -19,15 +19,68 @@
 
 import { bridge } from '@office-ai/platform';
 import type { Router9Endpoint } from '@/common/router9';
-import type { ApplyPlanRequest, ApplyResult, Router9Result } from '@process/router9/router9Bridge';
+import type {
+  ApplyPlanRequest,
+  ApplyResult,
+  ManagedRouter9Client,
+  ManagedRouter9Model,
+  ManagedRouter9Provider,
+  ManagedRouter9ProviderSync,
+  ManagedRouter9Status,
+  ManagedRouter9UsageStats,
+  ManagedRouter9UsageBreakdown,
+  Router9Result,
+} from '@process/router9/router9Bridge';
 
 /** 9Router IPC channel names. Mirrors `ROUTER9_CHANNELS` in the bridge. */
 const ROUTER9_CHANNELS = {
   applyPlan: 'router9.apply-plan',
+  status: 'router9.status',
+  start: 'router9.start',
+  stop: 'router9.stop',
+  ensureClient: 'router9.ensure-client',
+  listClients: 'router9.list-clients',
+  revokeClient: 'router9.revoke-client',
+  listProviders: 'router9.list-providers',
+  listUsageLogs: 'router9.list-usage-logs',
+  usageStats: 'router9.usage-stats',
+  usageBreakdown: 'router9.usage-breakdown',
+  setAutoStart: 'router9.set-auto-start',
+  listModels: 'router9.list-models',
+  syncTomniProvider: 'router9.sync-tomni-provider',
+  openDashboard: 'router9.open-dashboard',
 } as const;
 
 const channels = {
   applyPlan: bridge.buildProvider<Router9Result<ApplyResult>, ApplyPlanRequest>(ROUTER9_CHANNELS.applyPlan),
+  status: bridge.buildProvider<Router9Result<ManagedRouter9Status>, void>(ROUTER9_CHANNELS.status),
+  start: bridge.buildProvider<Router9Result<ManagedRouter9Status>, void>(ROUTER9_CHANNELS.start),
+  stop: bridge.buildProvider<Router9Result<ManagedRouter9Status>, void>(ROUTER9_CHANNELS.stop),
+  ensureClient: bridge.buildProvider<Router9Result<ManagedRouter9Client>, { name: string }>(
+    ROUTER9_CHANNELS.ensureClient
+  ),
+  listClients: bridge.buildProvider<Router9Result<ManagedRouter9Client[]>, void>(ROUTER9_CHANNELS.listClients),
+  revokeClient: bridge.buildProvider<Router9Result<void>, { id: string }>(ROUTER9_CHANNELS.revokeClient),
+  listProviders: bridge.buildProvider<Router9Result<{ connections?: ManagedRouter9Provider[] }>, void>(
+    ROUTER9_CHANNELS.listProviders
+  ),
+  listUsageLogs: bridge.buildProvider<Router9Result<string[]>, void>(ROUTER9_CHANNELS.listUsageLogs),
+  usageStats: bridge.buildProvider<Router9Result<ManagedRouter9UsageStats>, void>(ROUTER9_CHANNELS.usageStats),
+  usageBreakdown: bridge.buildProvider<Router9Result<ManagedRouter9UsageBreakdown>, void>(
+    ROUTER9_CHANNELS.usageBreakdown
+  ),
+  setAutoStart: bridge.buildProvider<Router9Result<ManagedRouter9Status>, { enabled: boolean }>(
+    ROUTER9_CHANNELS.setAutoStart
+  ),
+  listModels: bridge.buildProvider<Router9Result<ManagedRouter9Model[]>, { clientKey?: string }>(
+    ROUTER9_CHANNELS.listModels
+  ),
+  syncTomniProvider: bridge.buildProvider<Router9Result<ManagedRouter9ProviderSync>, void>(
+    ROUTER9_CHANNELS.syncTomniProvider
+  ),
+  openDashboard: bridge.buildProvider<Router9Result<void>, { section: 'providers' | 'usage' | 'endpoint' }>(
+    ROUTER9_CHANNELS.openDashboard
+  ),
 };
 
 /** Apply writes files — allow a generous budget but still bound it. */
@@ -71,6 +124,38 @@ export const router9Client = {
   /** Write the target's config files (deep-merge, with backup) for the endpoint. */
   applyPlan: (targetId: string, endpoint: Router9Endpoint) =>
     withTimeout(ROUTER9_CHANNELS.applyPlan, () => channels.applyPlan.invoke({ targetId, endpoint }), APPLY_TIMEOUT_MS),
+  status: () => withTimeout(ROUTER9_CHANNELS.status, () => channels.status.invoke(), APPLY_TIMEOUT_MS),
+  start: () => withTimeout(ROUTER9_CHANNELS.start, () => channels.start.invoke(), 60_000),
+  stop: () => withTimeout(ROUTER9_CHANNELS.stop, () => channels.stop.invoke(), APPLY_TIMEOUT_MS),
+  ensureClient: (name: string) =>
+    withTimeout(ROUTER9_CHANNELS.ensureClient, () => channels.ensureClient.invoke({ name }), APPLY_TIMEOUT_MS),
+  listClients: () => withTimeout(ROUTER9_CHANNELS.listClients, () => channels.listClients.invoke(), APPLY_TIMEOUT_MS),
+  revokeClient: (id: string) =>
+    withTimeout(ROUTER9_CHANNELS.revokeClient, () => channels.revokeClient.invoke({ id }), APPLY_TIMEOUT_MS),
+  listProviders: () =>
+    withTimeout(ROUTER9_CHANNELS.listProviders, () => channels.listProviders.invoke(), APPLY_TIMEOUT_MS),
+  listUsageLogs: () =>
+    withTimeout(ROUTER9_CHANNELS.listUsageLogs, () => channels.listUsageLogs.invoke(), APPLY_TIMEOUT_MS),
+  usageStats: () => withTimeout(ROUTER9_CHANNELS.usageStats, () => channels.usageStats.invoke(), APPLY_TIMEOUT_MS),
+  usageBreakdown: () =>
+    withTimeout(ROUTER9_CHANNELS.usageBreakdown, () => channels.usageBreakdown.invoke(), APPLY_TIMEOUT_MS),
+  setAutoStart: (enabled: boolean) =>
+    withTimeout(ROUTER9_CHANNELS.setAutoStart, () => channels.setAutoStart.invoke({ enabled }), APPLY_TIMEOUT_MS),
+  listModels: (clientKey?: string) =>
+    withTimeout(ROUTER9_CHANNELS.listModels, () => channels.listModels.invoke({ clientKey }), APPLY_TIMEOUT_MS),
+  syncTomniProvider: () =>
+    withTimeout(ROUTER9_CHANNELS.syncTomniProvider, () => channels.syncTomniProvider.invoke(), APPLY_TIMEOUT_MS),
+  openDashboard: (section: 'providers' | 'usage' | 'endpoint') =>
+    withTimeout(ROUTER9_CHANNELS.openDashboard, () => channels.openDashboard.invoke({ section }), APPLY_TIMEOUT_MS),
 };
 
-export type { ApplyResult } from '@process/router9/router9Bridge';
+export type {
+  ApplyResult,
+  ManagedRouter9Client,
+  ManagedRouter9Model,
+  ManagedRouter9Provider,
+  ManagedRouter9ProviderSync,
+  ManagedRouter9Status,
+  ManagedRouter9UsageStats,
+  ManagedRouter9UsageBreakdown,
+} from '@process/router9/router9Bridge';

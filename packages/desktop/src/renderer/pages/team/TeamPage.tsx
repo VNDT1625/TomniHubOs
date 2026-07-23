@@ -1,12 +1,12 @@
-import { Message, Modal, Spin } from '@arco-design/web-react';
-import { CloseSmall, FullScreen, Left, OffScreen, Peoples, Right } from '@icon-park/react';
+import { Message, Modal, Spin, Tag } from '@arco-design/web-react';
+import { CloseSmall, FullScreen, Left, Link, OffScreen, Peoples, Right } from '@icon-park/react';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import useSWR, { useSWRConfig } from 'swr';
 import { useAuth } from '@renderer/hooks/context/AuthContext';
 import { useLayoutContext } from '@/renderer/hooks/context/LayoutContext';
 import { ipcBridge } from '@/common';
-import type { TeamAgent, TTeam } from '@/common/types/team/teamTypes';
+import type { TeamAgent, TeamTask, TeamTaskBinding, TTeam } from '@/common/types/team/teamTypes';
 import type { IProvider, TChatConversation, TProviderWithModel } from '@/common/config/storage';
 import ChatLayout from '@/renderer/pages/conversation/components/ChatLayout';
 import ChatSlider from '@renderer/pages/conversation/components/ChatSlider.tsx';
@@ -18,6 +18,9 @@ import { saveAionrsDefaultModel } from '@/renderer/pages/guid/hooks/agentSelecti
 import TeamTabs from './components/TeamTabs';
 import TeamChatView from './components/TeamChatView';
 import TeamAgentIdentity from './components/TeamAgentIdentity';
+import { TeamTasksView } from './components/tasks';
+import { TeamActivityView, TeamWorkspaceNav, type TeamWorkspaceSection } from './components/workspace';
+import { syncTeamTaskContexts } from './taskContext';
 import { TeamTabsProvider, useTeamTabs } from './hooks/TeamTabsContext';
 import { TeamPermissionProvider } from './hooks/TeamPermissionContext';
 import { useTeamSession } from './hooks/useTeamSession';
@@ -32,14 +35,28 @@ type TeamPageContentProps = {
   onRenameTeam: (new_name: string) => Promise<boolean>;
 };
 
+const TASK_ROLE_KEYS = {
+  planner: 'team.workspace.tasks.role.planner',
+  executor: 'team.workspace.tasks.role.executor',
+  reviewer: 'team.workspace.tasks.role.reviewer',
+  tester: 'team.workspace.tasks.role.tester',
+  advisor: 'team.workspace.tasks.role.advisor',
+} as const;
+
+const taskRoleKey = (role: TeamTaskBinding['role']) => TASK_ROLE_KEYS[role];
+
 /** Compact aionrs model selector for the agent header */
 const AionrsHeaderModelSelector: React.FC<{ conversation_id: string; initialModel?: TProviderWithModel }> = ({
   conversation_id,
   initialModel,
 }) => {
   const onSelectModel = useCallback(
-    async (_provider: IProvider, modelName: string) => {
-      const selected = { ..._provider, use_model: modelName } as TProviderWithModel;
+    async (_provider: IProvider, modelName: string, reasoningEffort?: TProviderWithModel['reasoning_effort']) => {
+      const selected = {
+        ..._provider,
+        use_model: modelName,
+        ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
+      } as TProviderWithModel;
       const ok = await ipcBridge.conversation.update.invoke({ id: conversation_id, updates: { model: selected } });
       if (ok) void saveAionrsDefaultModel(_provider.id, modelName);
       return Boolean(ok);
@@ -56,9 +73,23 @@ const AgentChatSlot: React.FC<{
   team_id: string;
   isLeader: boolean;
   isFullscreen?: boolean;
+  task?: TeamTask;
+  taskBinding?: TeamTaskBinding;
   onToggleFullscreen?: () => void;
   onRemove?: () => void;
-}> = ({ agent, team_id, isLeader, isFullscreen = false, onToggleFullscreen, onRemove }) => {
+  onUnpinTask?: () => void;
+}> = ({
+  agent,
+  team_id,
+  isLeader,
+  isFullscreen = false,
+  task,
+  taskBinding,
+  onToggleFullscreen,
+  onRemove,
+  onUnpinTask,
+}) => {
+  const { t } = useTranslation();
   const layout = useLayoutContext();
   const isMobile = layout?.isMobile ?? false;
   const { data: conversation } = useSWR(
@@ -91,15 +122,27 @@ const AgentChatSlot: React.FC<{
             : { background: 'var(--color-bg-2)' }
         }
       >
-        <TeamAgentIdentity
-          agent_name={agent.agent_name}
-          agent_type={agent.agent_type}
-          icon={agent.icon}
-          conversation_id={agent.conversation_id}
-          isLeader={isLeader}
-          className='min-w-0'
-          nameClassName='text-13px text-[color:var(--color-text-2)] font-medium'
-        />
+        <div className='min-w-0 flex items-center gap-8px'>
+          <TeamAgentIdentity
+            agent_name={agent.agent_name}
+            agent_type={agent.agent_type}
+            icon={agent.icon}
+            conversation_id={agent.conversation_id}
+            isLeader={isLeader}
+            className='min-w-0'
+            nameClassName='text-13px text-[color:var(--color-text-2)] font-medium'
+          />
+          {task && taskBinding && (
+            <Tag
+              closable={Boolean(onUnpinTask)}
+              icon={<Link theme='outline' size='12' />}
+              className='max-w-220px [&_.arco-tag-content]:truncate'
+              onClose={onUnpinTask}
+            >
+              {task.title} · {t(taskRoleKey(taskBinding.role))}
+            </Tag>
+          )}
+        </div>
         <div className='flex items-center gap-8px shrink-0'>
           {!isMobile && agent.conversation_id && !isAionrs && isAcpLike && (
             <div className='min-w-0 max-w-140px [&_button]:max-w-full [&_button_span]:truncate'>
@@ -159,7 +202,26 @@ const AgentChatSlot: React.FC<{
 const TeamPageContent: React.FC<TeamPageContentProps> = ({ team, onRenameTeam }) => {
   const { t } = useTranslation();
   const { agents, activeSlotId, statusMap, switchTab } = useTeamTabs();
+  const { mutate } = useSWRConfig();
   const [, messageContext] = Message.useMessage({ maxCount: 1 });
+  const [workspaceSection, setWorkspaceSection] = useState<TeamWorkspaceSection>('communication');
+
+  useEffect(() => {
+    syncTeamTaskContexts(team);
+  }, [team]);
+
+  const unpinTask = useCallback(
+    async (slotId: string, taskId: string) => {
+      try {
+        const next = await ipcBridge.team.unbindTask.invoke({ team_id: team.id, slot_id: slotId, task_id: taskId });
+        await mutate(`team/${team.id}`, next, false);
+        Message.success(t('team.workspace.tasks.pin.removed'));
+      } catch (error) {
+        Message.error(String(error));
+      }
+    },
+    [mutate, t, team.id]
+  );
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const agentRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -169,6 +231,13 @@ const TeamPageContent: React.FC<TeamPageContentProps> = ({ team, onRenameTeam })
 
   const activeAgent = agents.find((a) => a.slot_id === activeSlotId);
   const leadAgent = agents.find((a) => a.role === 'leader');
+  const tasks = team.tasks ?? [];
+  const taskBindings = team.task_bindings ?? [];
+  const taskBindingForSlot = (slotId: string) =>
+    taskBindings.find((binding) => binding.slot_id === slotId && binding.is_primary) ??
+    taskBindings.find((binding) => binding.slot_id === slotId);
+  const taskForBinding = (binding: TeamTaskBinding | undefined) =>
+    binding ? tasks.find((task) => task.id === binding.task_id) : undefined;
 
   const doRemoveAgent = useCallback(
     async (slot_id: string) => {
@@ -332,9 +401,31 @@ const TeamPageContent: React.FC<TeamPageContentProps> = ({ team, onRenameTeam })
     return map;
   }, [agents, pendingCounts]);
 
+  const runningCount = [...statusMap.values()].filter((status) => status.status === 'active').length;
+  const slotTaskLabels = useMemo(() => {
+    const labels = new Map<string, string>();
+    for (const binding of taskBindings) {
+      if (!binding.is_primary || labels.has(binding.slot_id)) continue;
+      const task = tasks.find((candidate) => candidate.id === binding.task_id);
+      if (task) labels.set(binding.slot_id, task.title);
+    }
+    return labels;
+  }, [taskBindings, tasks]);
   const tabsSlot = useMemo(
-    () => <TeamTabs onTabClick={handleTabClick} pendingCounts={slotPendingCounts} />,
-    [handleTabClick, slotPendingCounts]
+    () => (
+      <div className='flex flex-col shrink-0'>
+        <TeamWorkspaceNav
+          value={workspaceSection}
+          onChange={setWorkspaceSection}
+          taskCount={tasks.length}
+          runningCount={runningCount}
+        />
+        {workspaceSection === 'communication' && (
+          <TeamTabs onTabClick={handleTabClick} pendingCounts={slotPendingCounts} taskLabels={slotTaskLabels} />
+        )}
+      </div>
+    ),
+    [handleTabClick, runningCount, slotPendingCounts, slotTaskLabels, tasks.length, workspaceSection]
   );
 
   return (
@@ -363,98 +454,114 @@ const TeamPageContent: React.FC<TeamPageContentProps> = ({ team, onRenameTeam })
           </span>
         }
       >
-        <div className='relative flex h-full'>
-          {fullscreenSlotId ? (
-            // Fullscreen: single agent fills the entire content area
-            (() => {
-              const agent = agents.find((a) => a.slot_id === fullscreenSlotId);
-              if (!agent) return null;
-              const isLeaderSlot = agent.slot_id === leadAgent?.slot_id;
-              return (
-                <div className='flex-1 h-full'>
-                  <AgentChatSlot
-                    agent={agent}
-                    team_id={team.id}
-                    isLeader={isLeaderSlot}
-                    isFullscreen
-                    onToggleFullscreen={() => setFullscreenSlotId(null)}
-                    onRemove={() => handleRemoveAgent(agent.slot_id)}
-                  />
-                </div>
-              );
-            })()
-          ) : (
-            <>
-              {showLeftArrow && (
-                <div
-                  className='absolute left-0 top-0 bottom-0 w-48px z-20 flex items-center justify-center cursor-pointer opacity-80 hover:opacity-100 transition-opacity'
-                  style={{ background: 'linear-gradient(90deg, var(--color-bg-1) 40%, transparent)' }}
-                  onClick={scrollToPrev}
-                >
-                  <div
-                    className='w-32px h-32px rd-full flex items-center justify-center'
-                    style={{ background: 'rgba(0,0,0,0.5)', lineHeight: 0 }}
-                  >
-                    <Left size='24' fill='#fff' />
+        {workspaceSection === 'tasks' ? (
+          <TeamTasksView team={team} />
+        ) : workspaceSection === 'activity' ? (
+          <TeamActivityView team={team} statusMap={statusMap} />
+        ) : (
+          <div className='relative flex h-full'>
+            {fullscreenSlotId ? (
+              // Fullscreen: single agent fills the entire content area
+              (() => {
+                const agent = agents.find((a) => a.slot_id === fullscreenSlotId);
+                if (!agent) return null;
+                const isLeaderSlot = agent.slot_id === leadAgent?.slot_id;
+                const binding = taskBindingForSlot(agent.slot_id);
+                const task = taskForBinding(binding);
+                return (
+                  <div className='flex-1 h-full'>
+                    <AgentChatSlot
+                      agent={agent}
+                      team_id={team.id}
+                      isLeader={isLeaderSlot}
+                      isFullscreen
+                      task={task}
+                      taskBinding={binding}
+                      onUnpinTask={binding ? () => void unpinTask(agent.slot_id, binding.task_id) : undefined}
+                      onToggleFullscreen={() => setFullscreenSlotId(null)}
+                      onRemove={() => handleRemoveAgent(agent.slot_id)}
+                    />
                   </div>
-                </div>
-              )}
-              <div
-                ref={scrollContainerRef}
-                className='flex h-full w-full overflow-x-auto overflow-y-hidden [scrollbar-width:none]'
-                style={{ scrollSnapType: 'x proximity' }}
-              >
-                {agents.map((agent) => {
-                  const isSingle = agents.length <= 2;
-                  const isLeaderSlot = agent.slot_id === leadAgent?.slot_id;
-                  return (
+                );
+              })()
+            ) : (
+              <>
+                {showLeftArrow && (
+                  <div
+                    className='absolute left-0 top-0 bottom-0 w-48px z-20 flex items-center justify-center cursor-pointer opacity-80 hover:opacity-100 transition-opacity'
+                    style={{ background: 'linear-gradient(90deg, var(--color-bg-1) 40%, transparent)' }}
+                    onClick={scrollToPrev}
+                  >
                     <div
-                      key={agent.slot_id}
-                      ref={(el) => {
-                        agentRefs.current[agent.slot_id] = el;
-                      }}
-                      data-slot-id={agent.slot_id}
-                      data-role={isLeaderSlot ? 'leader' : 'member'}
-                      className='relative h-full border-r border-solid border-[color:var(--border-base)]'
-                      style={{
-                        // Always flex-grow to fill available space; each slot starts at 400px
-                        // basis so the layout is stable, but spare room is distributed evenly
-                        // instead of leaving empty gaps to the right. When the team is wider
-                        // than the viewport we preserve the 400px floor (prevents shrinking
-                        // into unreadable cards) so horizontal scroll kicks in naturally.
-                        flex: '1 1 400px',
-                        minWidth: isSingle ? '240px' : '400px',
-                        scrollSnapAlign: 'start',
-                      }}
+                      className='w-32px h-32px rd-full flex items-center justify-center'
+                      style={{ background: 'rgba(0,0,0,0.5)', lineHeight: 0 }}
                     >
-                      <AgentChatSlot
-                        agent={agent}
-                        team_id={team.id}
-                        isLeader={isLeaderSlot}
-                        onToggleFullscreen={() => setFullscreenSlotId(agent.slot_id)}
-                        onRemove={() => handleRemoveAgent(agent.slot_id)}
-                      />
+                      <Left size='24' fill='#fff' />
                     </div>
-                  );
-                })}
-              </div>
-              {showRightArrow && (
-                <div
-                  className='absolute right-0 top-0 bottom-0 w-48px z-20 flex items-center justify-center cursor-pointer opacity-80 hover:opacity-100 transition-opacity'
-                  style={{ background: 'linear-gradient(270deg, var(--color-bg-1) 40%, transparent)' }}
-                  onClick={scrollToNext}
-                >
-                  <div
-                    className='w-32px h-32px rd-full flex items-center justify-center'
-                    style={{ background: 'rgba(0,0,0,0.5)', lineHeight: 0 }}
-                  >
-                    <Right size='24' fill='#fff' />
                   </div>
+                )}
+                <div
+                  ref={scrollContainerRef}
+                  className='flex h-full w-full overflow-x-auto overflow-y-hidden [scrollbar-width:none]'
+                  style={{ scrollSnapType: 'x proximity' }}
+                >
+                  {agents.map((agent) => {
+                    const isSingle = agents.length <= 2;
+                    const isLeaderSlot = agent.slot_id === leadAgent?.slot_id;
+                    const binding = taskBindingForSlot(agent.slot_id);
+                    const task = taskForBinding(binding);
+                    return (
+                      <div
+                        key={agent.slot_id}
+                        ref={(el) => {
+                          agentRefs.current[agent.slot_id] = el;
+                        }}
+                        data-slot-id={agent.slot_id}
+                        data-role={isLeaderSlot ? 'leader' : 'member'}
+                        className='relative h-full border-r border-solid border-[color:var(--border-base)]'
+                        style={{
+                          // Always flex-grow to fill available space; each slot starts at 400px
+                          // basis so the layout is stable, but spare room is distributed evenly
+                          // instead of leaving empty gaps to the right. When the team is wider
+                          // than the viewport we preserve the 400px floor (prevents shrinking
+                          // into unreadable cards) so horizontal scroll kicks in naturally.
+                          flex: '1 1 400px',
+                          minWidth: isSingle ? '240px' : '400px',
+                          scrollSnapAlign: 'start',
+                        }}
+                      >
+                        <AgentChatSlot
+                          agent={agent}
+                          team_id={team.id}
+                          isLeader={isLeaderSlot}
+                          task={task}
+                          taskBinding={binding}
+                          onUnpinTask={binding ? () => void unpinTask(agent.slot_id, binding.task_id) : undefined}
+                          onToggleFullscreen={() => setFullscreenSlotId(agent.slot_id)}
+                          onRemove={() => handleRemoveAgent(agent.slot_id)}
+                        />
+                      </div>
+                    );
+                  })}
                 </div>
-              )}
-            </>
-          )}
-        </div>
+                {showRightArrow && (
+                  <div
+                    className='absolute right-0 top-0 bottom-0 w-48px z-20 flex items-center justify-center cursor-pointer opacity-80 hover:opacity-100 transition-opacity'
+                    style={{ background: 'linear-gradient(270deg, var(--color-bg-1) 40%, transparent)' }}
+                    onClick={scrollToNext}
+                  >
+                    <div
+                      className='w-32px h-32px rd-full flex items-center justify-center'
+                      style={{ background: 'rgba(0,0,0,0.5)', lineHeight: 0 }}
+                    >
+                      <Right size='24' fill='#fff' />
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
       </ChatLayout>
     </TeamPermissionProvider>
   );

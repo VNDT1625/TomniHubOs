@@ -23,6 +23,7 @@ import {
   applyHeadings,
   formatPassage,
   formatText,
+  getOfficeCapabilities,
   insertHtml,
   insertTable,
   insertTableOfContents,
@@ -37,10 +38,50 @@ import {
   type TextFormat,
 } from '@renderer/pages/editor/adapters/onlyOfficeConnector';
 import type { PreviewContentType } from '@/common/types/office/preview';
+import type { EditorToolCapabilities } from '@process/editor/editorToolsBridge';
+import {
+  buildPremiumDeckDesignScript,
+  OBJECT_ANIMATION_EFFECTS,
+  OBJECT_ANIMATION_PURPOSES,
+  OBJECT_ANIMATION_TRIGGERS,
+  preflightDeckDesignPlan,
+  renderDeckPreflightReport,
+  type ObjectAnimationSpec,
+} from '@/common/presentationDesign';
 import { validateOfficeApiScript } from '@/common/types/office/officeApiScript';
 import { emitter } from '@/renderer/utils/emitter';
 
-export type PremiumDeckSlideLayout = 'cover' | 'section' | 'content' | 'split' | 'image' | 'chart' | 'quote';
+export type PremiumDeckSlideLayout =
+  | 'cover'
+  | 'section'
+  | 'content'
+  | 'split'
+  | 'image'
+  | 'chart'
+  | 'quote'
+  | 'agenda'
+  | 'comparison'
+  | 'timeline'
+  | 'process'
+  | 'metrics'
+  | 'architecture'
+  | 'closing';
+
+export type PremiumDeckDesignStyle = 'modern' | 'minimal' | 'editorial' | 'technical' | 'cinematic' | 'academic';
+
+export type PremiumDeckTransition = 'none' | 'fade' | 'push' | 'wipe' | 'split';
+
+export type PremiumDeckItem = {
+  label: string;
+  value?: string;
+  detail?: string;
+  group?: string;
+};
+
+export type PremiumDeckColumn = {
+  heading: string;
+  bullets: string[];
+};
 
 export type PremiumDeckTheme = {
   primary: string;
@@ -58,11 +99,18 @@ export type PremiumDeckSlide = {
   imageUrl?: string;
   accentColor?: string;
   chartValues?: number[][];
+  chartLabels?: string[];
+  items?: PremiumDeckItem[];
+  columns?: PremiumDeckColumn[];
+  source?: string;
+  speakerNotes?: string;
+  transition?: PremiumDeckTransition;
 };
 
 export type PremiumDeckPlan = {
   title: string;
   subtitle?: string;
+  designStyle?: PremiumDeckDesignStyle;
   theme: PremiumDeckTheme;
   slides: PremiumDeckSlide[];
 };
@@ -85,6 +133,8 @@ export type PremiumDocPlan = {
   subtitle?: string;
   theme: PremiumDeckTheme;
   sections: PremiumDocSection[];
+
+  includeToc?: boolean;
 };
 
 export type PremiumSlideVisualSummary = {
@@ -97,6 +147,7 @@ export type PremiumSlideVisualSummary = {
 
 /** A single action the model may request. */
 export type DocAgentAction =
+  | { tool: 'get_capabilities' }
   | { tool: 'read_document' }
   | { tool: 'replace_all'; text: string }
   | { tool: 'search_replace'; search: string; replace: string }
@@ -111,16 +162,31 @@ export type DocAgentAction =
   | { tool: 'set_cells'; start: string; values: Array<Array<string | number>>; sheet?: string }
   | { tool: 'create_premium_doc'; plan: PremiumDocPlan }
   | { tool: 'create_premium_deck'; plan: PremiumDeckPlan }
+  | { tool: 'add_premium_slide'; plan: PremiumDeckPlan }
+  | { tool: 'structure_report'; headings: Array<{ text: string; level: number }>; insertToc: boolean }
+  | { tool: 'add_speaker_notes'; slideIndex: number; text: string }
+  | {
+      tool: 'apply_slide_transitions';
+      effect: Exclude<PremiumDeckTransition, 'none'>;
+      speed: 'slow' | 'medium' | 'fast';
+    }
+  | {
+      tool: 'apply_object_animations';
+      animations: ObjectAnimationSpec[];
+      replaceExistingMainSequence: boolean;
+    }
+  | { tool: 'review_object_animations'; expectedAnimations?: ObjectAnimationSpec[] }
   | { tool: 'review_premium_quality' }
   | { tool: 'open_visual_review' }
   | { tool: 'run_office_api'; code: string }
   | { tool: 'finish'; summary: string };
 
 /** Result of executing one action. `done` ends the loop. */
-export type ToolResult = { observation: string; done: boolean };
+export type ToolResult = { observation: string; done: boolean; capabilities?: EditorToolCapabilities };
 
 /** Human-readable tool list embedded in the system prompt (kept in sync with the union). */
 export const TOOL_GUIDE = [
+  'get_capabilities — inspect live, fail-closed Office support before planning advanced edits. Distinguishes automationApi, objectAnimation, slideShowControl and recording, with concrete unsupported reasons. Args: none.',
   'read_document — read the current document text. Args: none. Returns the text.',
   'replace_all — replace the WHOLE document with new text (Word only). Args: { "text": string }.',
   'search_replace — replace every occurrence of a string. Args: { "search": string, "replace": string }.',
@@ -133,9 +199,16 @@ export const TOOL_GUIDE = [
   'format_passage — format ONE specific passage (Word only) — like selecting the whole paragraph then applying bold/italic/etc. Args: { "find": string, "format": {…same as format_text…}, "until"?: string }. "find" alone targets the first occurrence; "find"+"until" covers everything from the start of "find" through the end of the first following "until" (pass first words as "find", last words as "until" for a long paragraph).',
   'insert_table — insert a table at the end (Word only). Args: { "rows": number, "cols": number, "data"?: string[][] }. When "data" is given it fills the cells and sets the size.',
   'set_cells — write a block of spreadsheet cells (Excel only). Args: { "start": "A1", "values": (string|number)[][], "sheet"?: string }. Values are written row-by-row from "start".',
-  'create_premium_doc - build a polished DOCX from a structured plan. Args: { "plan": { "title": string, "subtitle"?: string, "theme"?: { "primary"?: "#RRGGBB", "secondary"?: "#RRGGBB", "background"?: "#RRGGBB", "text"?: "#RRGGBB", "fontFamily"?: string }, "sections": [{ "heading": string, "body"?: string[], "bullets"?: string[], "callout"?: string, "imageUrl"?: string, "table"?: { "headers": string[], "rows": string[][] } }] } }. Use for reports, proposals, briefs, SOPs and executive docs that need hierarchy, callouts, tables and image blocks rather than plain text.',
+  'create_premium_doc - build a polished DOCX from a structured plan. Args: { plan: { title: string, subtitle?: string, includeToc?: boolean, theme?: { primary?: #RRGGBB, secondary?: #RRGGBB, background?: #RRGGBB, text?: #RRGGBB, fontFamily?: string }, sections: [{ heading: string, body?: string[], bullets?: string[], callout?: string, imageUrl?: string, table?: { headers: string[], rows: string[][] } }] } }. Use for reports, proposals, briefs, SOPs and executive docs that need hierarchy, an optional automatic TOC, callouts, tables and image blocks rather than plain text.',
 
-  'create_premium_deck - build a polished PPTX deck from a structured plan. Args: { "plan": { "title": string, "subtitle"?: string, "theme"?: { "primary"?: "#RRGGBB", "secondary"?: "#RRGGBB", "background"?: "#RRGGBB", "text"?: "#RRGGBB", "fontFamily"?: string }, "slides": [{ "title": string, "subtitle"?: string, "bullets"?: string[], "layout"?: "cover"|"section"|"content"|"split"|"image"|"chart"|"quote", "imageUrl"?: string, "accentColor"?: "#RRGGBB", "chartValues"?: number[][] }] } }. Use after planning the story and visual system; generate or attach image assets first when the deck needs hero visuals.',
+  'create_premium_deck - build a polished PPTX deck from a structured plan. Args: { plan: { title: string, subtitle?: string, designStyle?: modern|minimal|editorial|technical|cinematic|academic, theme?: { primary?: #RRGGBB, secondary?: #RRGGBB, background?: #RRGGBB, text?: #RRGGBB, fontFamily?: string }, slides: [{ title: string, subtitle?: string, bullets?: string[], layout?: cover|section|content|split|image|chart|quote|agenda|comparison|timeline|process|metrics|architecture|closing, imageUrl?: string, items?: object[], columns?: object[], source?: string, speakerNotes?: string, transition?: string, chartValues?: number[][] }] } }. Use after planning the story, evidence and visual system; generate or attach image assets first when the deck needs hero visuals.',
+
+  'add_premium_slide - append one polished slide without rebuilding the deck. Supports agenda, comparison, timeline, process, metrics, architecture and closing layouts plus items, columns, source, notes and transitions.',
+  'structure_report - apply heading levels to report sections and optionally insert an automatic TOC in one operation. Args: { headings: [{ text: string, level: number }], insertToc?: boolean }.',
+  'add_speaker_notes - add presenter notes to a 1-based slide index. Args: { slideIndex: number, text: string }.',
+  'apply_slide_transitions - apply one restrained transition to every slide. Args: { effect: fade|push|wipe|split, speed?: slow|medium|fast }.',
+  'review_object_animations - inspect live object inventory and timeline effects before/after animation work. Returns stable drawing names, ephemeral indices, effect timing and purpose-aware QA. Args: { "expectedAnimations"?: [...] }. Call this first to target drawings safely.',
+  'apply_object_animations - add restrained, purpose-led animation to named/inspected objects in a PPTX. Every item requires slideIndex (1-based), drawingName (preferred) or drawingIndex (0-based fallback), effect, trigger, durationMs, delayMs, repeatCount, purpose and rationale. Args: { "animations": [{ "slideIndex": 1, "drawingName": "Title", "effect": "entranceFade", "trigger": "onclick", "durationMs": 450, "delayMs": 0, "repeatCount": 1, "purpose": "progressive-disclosure", "rationale": "Reveal the conclusion only after its evidence." }], "replaceExistingMainSequence"?: false }. This never claims playback or recording support; it first checks live Office capability and preserves interactive sequences.',
 
   'review_premium_quality - audit the live DOCX/PPTX after creation or edits. Args: none. Returns score, strengths and required improvements; call before final response for premium deliverables.',
   'open_visual_review - open the current DOCX/PPTX/XLSX in the preview panel for visual QA. Args: none. Use after premium creation plus audit so the rendered Office preview is visible before final delivery.',
@@ -146,6 +219,7 @@ export const TOOL_GUIDE = [
 /** Tools available per document kind (others are rejected with guidance). */
 const ALLOWED: Record<OfficeDocKind, ReadonlySet<string>> = {
   word: new Set([
+    'get_capabilities',
     'read_document',
     'replace_all',
     'search_replace',
@@ -158,23 +232,43 @@ const ALLOWED: Record<OfficeDocKind, ReadonlySet<string>> = {
     'format_passage',
     'insert_table',
     'create_premium_doc',
+    'structure_report',
     'review_premium_quality',
+    'open_visual_review',
     'run_office_api',
     'finish',
   ]),
-  cell: new Set(['read_document', 'search_replace', 'insert_text', 'set_cells', 'run_office_api', 'finish']),
+  cell: new Set([
+    'get_capabilities',
+    'read_document',
+    'search_replace',
+    'insert_text',
+    'set_cells',
+    'open_visual_review',
+    'run_office_api',
+    'finish',
+  ]),
   slide: new Set([
+    'get_capabilities',
     'read_document',
     'search_replace',
     'insert_text',
     'create_premium_deck',
+    'add_premium_slide',
+    'add_speaker_notes',
+    'apply_slide_transitions',
+    'apply_object_animations',
+    'review_object_animations',
     'review_premium_quality',
+    'open_visual_review',
     'run_office_api',
     'finish',
   ]),
 };
 
 const OFFICE_API_SCRIPT_TIMEOUT_MS = 12000;
+
+const PREMIUM_DECK_TIMEOUT_MS = 30_000;
 
 const withTimeout = <T>(label: string, promise: Promise<T>, timeoutMs = OFFICE_API_SCRIPT_TIMEOUT_MS): Promise<T> =>
   new Promise<T>((resolve, reject) => {
@@ -201,9 +295,9 @@ const withTimeout = <T>(label: string, promise: Promise<T>, timeoutMs = OFFICE_A
     );
   });
 
-const MAX_PREMIUM_DECK_SLIDES = 12;
+const MAX_PREMIUM_DECK_SLIDES = 20;
 const MAX_PREMIUM_DECK_BULLETS = 6;
-const MAX_PREMIUM_DECK_JSON_CHARS = 5200;
+const MAX_PREMIUM_DECK_JSON_CHARS = 16_000;
 const PREMIUM_DECK_LAYOUTS = new Set<PremiumDeckSlideLayout>([
   'cover',
   'section',
@@ -212,7 +306,23 @@ const PREMIUM_DECK_LAYOUTS = new Set<PremiumDeckSlideLayout>([
   'image',
   'chart',
   'quote',
+  'agenda',
+  'comparison',
+  'timeline',
+  'process',
+  'metrics',
+  'architecture',
+  'closing',
 ]);
+const PREMIUM_DECK_STYLES = new Set<PremiumDeckDesignStyle>([
+  'modern',
+  'minimal',
+  'editorial',
+  'technical',
+  'cinematic',
+  'academic',
+]);
+const PREMIUM_DECK_TRANSITIONS = new Set<PremiumDeckTransition>(['none', 'fade', 'push', 'wipe', 'split']);
 
 const DEFAULT_PREMIUM_DECK_THEME: PremiumDeckTheme = {
   primary: '#246BFD',
@@ -259,6 +369,39 @@ const cleanChartValues = (value: unknown): number[][] | undefined => {
   return rows.length > 0 ? rows : undefined;
 };
 
+const cleanDeckItems = (value: unknown): PremiumDeckItem[] | undefined => {
+  if (!Array.isArray(value)) return undefined;
+  const items = value.slice(0, 8).flatMap((raw): PremiumDeckItem[] => {
+    if (!isRecord(raw)) return [];
+    const label = cleanText(raw.label, 90);
+    if (!label) return [];
+    return [
+      {
+        label,
+        value: cleanText(raw.value, 32),
+        detail: cleanText(raw.detail, 140),
+        group: cleanText(raw.group, 40),
+      },
+    ];
+  });
+  return items.length > 0 ? items : undefined;
+};
+
+const cleanDeckColumns = (value: unknown): PremiumDeckColumn[] | undefined => {
+  if (!Array.isArray(value)) return undefined;
+  const columns = value.slice(0, 3).flatMap((raw): PremiumDeckColumn[] => {
+    if (!isRecord(raw)) return [];
+    const heading = cleanText(raw.heading, 60);
+    if (!heading || !Array.isArray(raw.bullets)) return [];
+    const bullets = raw.bullets.flatMap((item) => {
+      const text = cleanText(item, 120);
+      return text ? [text] : [];
+    });
+    return bullets.length > 0 ? [{ heading, bullets: bullets.slice(0, 5) }] : [];
+  });
+  return columns.length > 0 ? columns : undefined;
+};
+
 export const normalizePremiumDeckPlan = (value: unknown): PremiumDeckPlan | null => {
   if (!isRecord(value)) return null;
   const title = cleanText(value.title, 120);
@@ -273,6 +416,11 @@ export const normalizePremiumDeckPlan = (value: unknown): PremiumDeckPlan | null
     text: cleanHex(themeSource.text, DEFAULT_PREMIUM_DECK_THEME.text),
     fontFamily: cleanText(themeSource.fontFamily, 48) ?? DEFAULT_PREMIUM_DECK_THEME.fontFamily,
   };
+
+  const rawDesignStyle = typeof value.designStyle === 'string' ? value.designStyle : 'modern';
+  const designStyle = PREMIUM_DECK_STYLES.has(rawDesignStyle as PremiumDeckDesignStyle)
+    ? (rawDesignStyle as PremiumDeckDesignStyle)
+    : 'modern';
 
   const slides = value.slides.slice(0, MAX_PREMIUM_DECK_SLIDES).flatMap((raw): PremiumDeckSlide[] => {
     if (!isRecord(raw)) return [];
@@ -297,35 +445,34 @@ export const normalizePremiumDeckPlan = (value: unknown): PremiumDeckPlan | null
         imageUrl: cleanImageUrl(raw.imageUrl),
         accentColor: cleanHex(raw.accentColor, theme.primary),
         chartValues: cleanChartValues(raw.chartValues),
+        chartLabels: cleanStringArray(raw.chartLabels, 8, 40),
+        items: cleanDeckItems(raw.items),
+        columns: cleanDeckColumns(raw.columns),
+        source: cleanText(raw.source, 180),
+        speakerNotes: cleanText(raw.speakerNotes, 1_200),
+        transition:
+          typeof raw.transition === 'string' && PREMIUM_DECK_TRANSITIONS.has(raw.transition as PremiumDeckTransition)
+            ? (raw.transition as PremiumDeckTransition)
+            : undefined,
       },
     ];
   });
 
   if (slides.length === 0) return null;
-  const normalized: PremiumDeckPlan = { title, subtitle: cleanText(value.subtitle, 180), theme, slides };
+  const normalized: PremiumDeckPlan = {
+    title,
+    subtitle: cleanText(value.subtitle, 180),
+    designStyle,
+    theme,
+    slides,
+  };
   return JSON.stringify(normalized).length <= MAX_PREMIUM_DECK_JSON_CHARS ? normalized : null;
 };
 
-export const buildPremiumDeckScript = (plan: PremiumDeckPlan): string =>
-  [
-    'const plan = ' + JSON.stringify(plan) + ';',
-    'const slideW = 12192000;',
-    'const slideH = 6858000;',
-    'const margin = 609600;',
-    'const ApiRef = Api;',
-    "function rgb(hex) { const fallback = '246BFD'; const raw = String(hex || fallback).replace('#', ''); const safe = /^[0-9a-fA-F]{6}$/.test(raw) ? raw : fallback; return ApiRef.RGB(parseInt(safe.slice(0, 2), 16), parseInt(safe.slice(2, 4), 16), parseInt(safe.slice(4, 6), 16)); }",
-    'function solid(hex) { return ApiRef.CreateSolidFill(rgb(hex)); }',
-    'function noFill() { return ApiRef.CreateNoFill(); }',
-    'function stroke(hex, width) { return ApiRef.CreateStroke(width || 0, hex ? solid(hex) : noFill()); }',
-    "function addBox(slide, x, y, w, h, fillHex, strokeHex) { const shape = ApiRef.CreateShape('rect', w, h, fillHex ? solid(fillHex) : noFill(), stroke(strokeHex, strokeHex ? 12700 : 0)); shape.SetPosition(x, y); slide.AddObject(shape); return shape; }",
-    "function addText(slide, text, x, y, w, h, size, color, bold, align) { const shape = addBox(slide, x, y, w, h, null, null); const content = shape.GetDocContent(); if (content && typeof content.RemoveAllElements === 'function') content.RemoveAllElements(); const paragraph = ApiRef.CreateParagraph(); if (paragraph.SetJc) paragraph.SetJc(align || 'left'); if (paragraph.SetFontSize) paragraph.SetFontSize(size || 32); if (paragraph.SetColor) paragraph.SetColor(rgb(color || plan.theme.text)); if (paragraph.SetBold) paragraph.SetBold(Boolean(bold)); paragraph.AddText(String(text || '')); content.Push(paragraph); return shape; }",
-    "function addBullets(slide, bullets, x, y, w, h) { const shape = addBox(slide, x, y, w, h, null, null); const content = shape.GetDocContent(); if (content && typeof content.RemoveAllElements === 'function') content.RemoveAllElements(); for (let i = 0; i < bullets.length; i++) { const paragraph = ApiRef.CreateParagraph(); if (paragraph.SetFontSize) paragraph.SetFontSize(24); if (paragraph.SetColor) paragraph.SetColor(rgb(plan.theme.text)); paragraph.AddText('- ' + bullets[i]); content.Push(paragraph); } return shape; }",
-    'function addBars(slide, values, x, y, w, h, color) { const row = values && values[0] ? values[0] : [35, 55, 80]; const gap = 91440; const barW = Math.floor((w - gap * (row.length - 1)) / row.length); for (let i = 0; i < row.length; i++) { const barH = Math.max(152400, Math.floor(h * row[i] / 100)); addBox(slide, x + i * (barW + gap), y + h - barH, barW, barH, color, null); } }',
-    'const presentation = ApiRef.GetPresentation();',
-    'if (presentation.SetSizes) presentation.SetSizes(slideW, slideH);',
-    "for (let i = 0; i < plan.slides.length; i++) { const spec = plan.slides[i]; const slide = i === 0 ? presentation.GetSlideByIndex(0) : ApiRef.CreateSlide(); if (i > 0) presentation.AddSlide(slide); if (slide.RemoveAllObjects) slide.RemoveAllObjects(); if (spec.imageUrl && (spec.layout === 'image' || spec.layout === 'cover')) { slide.SetBackground(ApiRef.CreateBlipFill(spec.imageUrl, 'stretch')); } else { slide.SetBackground(solid(i === 0 || spec.layout === 'section' ? spec.accentColor : plan.theme.background)); } const accent = spec.accentColor || plan.theme.primary; addBox(slide, 0, 0, 152400, slideH, accent, null); if (spec.layout === 'cover' || spec.layout === 'section') { addText(slide, spec.title, margin, 1828800, slideW - margin * 2, 914400, 44, i === 0 ? '#FFFFFF' : plan.theme.text, true, 'left'); if (spec.subtitle) addText(slide, spec.subtitle, margin, 2895600, slideW - margin * 2, 609600, 24, i === 0 ? '#FFFFFF' : plan.theme.text, false, 'left'); } else if (spec.layout === 'quote') { addText(slide, '\"' + spec.title + '\"', 1219200, 1676400, 9753600, 1371600, 38, plan.theme.text, true, 'center'); if (spec.subtitle) addText(slide, spec.subtitle, 1828800, 3352800, 8534400, 609600, 22, accent, false, 'center'); } else { addText(slide, spec.title, margin, 609600, 6705600, 609600, 34, plan.theme.text, true, 'left'); if (spec.subtitle) addText(slide, spec.subtitle, margin, 1219200, 6096000, 457200, 18, accent, false, 'left'); if (spec.layout === 'chart') addBars(slide, spec.chartValues, 7315200, 1981200, 3657600, 3048000, accent); if (spec.imageUrl && spec.layout !== 'image') addBox(slide, 7315200, 1524000, 3657600, 3048000, '#E8EEF9', accent); addBullets(slide, spec.bullets || [], margin, 1981200, spec.layout === 'split' || spec.layout === 'chart' ? 5791200 : 9753600, 3657600); } }",
-    "return 'Created premium deck with ' + plan.slides.length + ' slides: ' + plan.title;",
-  ].join('\n');
+export const buildPremiumDeckScript = (plan: PremiumDeckPlan): string => buildPremiumDeckDesignScript(plan);
+
+export const buildPremiumDeckAppendScript = (plan: PremiumDeckPlan): string =>
+  buildPremiumDeckDesignScript(plan, { mode: 'append' });
 
 const MAX_PREMIUM_DOC_SECTIONS = 12;
 const MAX_PREMIUM_DOC_PARAGRAPHS = 5;
@@ -395,7 +542,13 @@ export const normalizePremiumDocPlan = (value: unknown): PremiumDocPlan | null =
   });
 
   if (sections.length === 0) return null;
-  const normalized: PremiumDocPlan = { title, subtitle: cleanText(value.subtitle, 180), theme, sections };
+  const normalized: PremiumDocPlan = {
+    title,
+    subtitle: cleanText(value.subtitle, 180),
+    theme,
+    sections,
+    includeToc: value.includeToc === true,
+  };
   return JSON.stringify(normalized).length <= MAX_PREMIUM_DOC_JSON_CHARS ? normalized : null;
 };
 
@@ -484,12 +637,255 @@ const buildSlideVisualSummaryScript = (): string =>
     '    const drawing = drawings[j];',
     '    const content = drawing && drawing.GetContent ? drawing.GetContent() : null;',
     '    if (content) textBoxCount++;',
-    '    const classType = drawing && drawing.GetClassType ? String(drawing.GetClassType()) : ";',
+    '    const classType = drawing && drawing.GetClassType ? String(drawing.GetClassType()) : String();',
     '    if (/image|picture|graphic|chart|shape/i.test(classType) && !content) imageLikeCount++;',
     '  }',
     '}',
     'return JSON.stringify({ slideCount, drawingCount, textBoxCount, imageLikeCount, avgDrawingsPerSlide: slideCount ? drawingCount / slideCount : 0 });',
   ].join('\n');
+
+const buildSpeakerNotesScript = (slideIndex: number, text: string): string =>
+  [
+    'const pres = Api.GetPresentation();',
+    `const index = ${slideIndex - 1};`,
+    `const note = ${JSON.stringify(text)};`,
+    'if (index < 0 || index >= pres.GetSlidesCount()) return "Slide index is out of range.";',
+    'const slide = pres.GetSlideByIndex(index);',
+    'if (!slide || !slide.AddNotesText) return "Speaker notes are not supported by this editor.";',
+    'return slide.AddNotesText(note) ? "Speaker notes added." : "Could not add speaker notes.";',
+  ].join('\n');
+
+const buildSlideTransitionsScript = (
+  effect: Exclude<PremiumDeckTransition, 'none'>,
+  speed: 'slow' | 'medium' | 'fast'
+): string => {
+  const effectMap: Record<Exclude<PremiumDeckTransition, 'none'>, string> = {
+    fade: 'effectFade',
+    push: 'effectPushLeft',
+    wipe: 'effectWipeRight',
+    split: 'effectSplitVerticalIn',
+  };
+  return [
+    'const pres = Api.GetPresentation();',
+    `const effect = ${JSON.stringify(effectMap[effect])};`,
+    `const speed = ${JSON.stringify(speed)};`,
+    'let applied = 0;',
+    'for (let i = 0; i < pres.GetSlidesCount(); i++) {',
+    '  const slide = pres.GetSlideByIndex(i);',
+    '  if (!slide || !slide.SetSlideShowTransition || !Api.CreateSlideShowTransition) continue;',
+    '  const transition = Api.CreateSlideShowTransition();',
+    '  transition.SetEntryEffect(effect);',
+    '  transition.SetSpeed(speed);',
+    '  transition.SetAdvanceOnClick(true);',
+    '  slide.SetSlideShowTransition(transition);',
+    '  applied++;',
+    '}',
+    'return "Applied transitions to " + applied + " slide(s).";',
+  ].join('\n');
+};
+
+/** Build an isolated-realm script that adds only verified, purpose-led main-sequence effects. */
+export const buildObjectAnimationsScript = (
+  animations: ObjectAnimationSpec[],
+  replaceExistingMainSequence: boolean
+): string =>
+  [
+    `const animationPlan = ${JSON.stringify({ animations, replaceExistingMainSequence })};`,
+    'const fail = (message, applied = 0) => JSON.stringify({ ok: false, error: message, applied });',
+    'try {',
+    '  const pres = Api.GetPresentation();',
+    '  if (!pres || typeof pres.GetSlidesCount !== "function") return fail("The presentation API is unavailable.");',
+    '  const slideCount = pres.GetSlidesCount();',
+    '  const resolved = [];',
+    '  for (let inputIndex = 0; inputIndex < animationPlan.animations.length; inputIndex++) {',
+    '    const spec = animationPlan.animations[inputIndex];',
+    '    const slideIndex = spec.slideIndex - 1;',
+    '    if (slideIndex < 0 || slideIndex >= slideCount) return fail("Animation " + inputIndex + " targets an out-of-range slide.");',
+    '    const slide = pres.GetSlideByIndex(slideIndex);',
+    '    if (!slide || typeof slide.GetAllDrawings !== "function" || typeof slide.GetTimeLine !== "function") return fail("Slide " + spec.slideIndex + " lacks drawing or timeline APIs.");',
+    '    const drawings = slide.GetAllDrawings() || [];',
+    '    let drawing = null;',
+    '    let drawingIndex = -1;',
+    '    if (spec.drawingName) {',
+    '      for (let i = 0; i < drawings.length; i++) {',
+    '        if (typeof drawings[i].GetName === "function" && drawings[i].GetName() === spec.drawingName) { drawing = drawings[i]; drawingIndex = i; break; }',
+    '      }',
+    '      if (!drawing) return fail("Slide " + spec.slideIndex + " has no drawing named " + spec.drawingName + ".");',
+    '    }',
+    '    if (typeof spec.drawingIndex === "number") {',
+    '      if (spec.drawingIndex < 0 || spec.drawingIndex >= drawings.length) return fail("Animation " + inputIndex + " targets an out-of-range drawing index.");',
+    '      if (drawing && drawing !== drawings[spec.drawingIndex]) return fail("Drawing name/index mismatch on slide " + spec.slideIndex + ". Re-run animation review.");',
+    '      drawing = drawings[spec.drawingIndex]; drawingIndex = spec.drawingIndex;',
+    '    }',
+    '    if (!drawing) return fail("Animation " + inputIndex + " has no resolvable drawing target.");',
+    '    const timeline = slide.GetTimeLine();',
+    '    const sequence = timeline && typeof timeline.GetMainSequence === "function" ? timeline.GetMainSequence() : null;',
+    '    if (!timeline || !sequence || typeof sequence.AddEffect !== "function" || typeof sequence.RemoveAllEffects !== "function" || typeof sequence.GetCount !== "function") return fail("Slide " + spec.slideIndex + " lacks ONLYOFFICE animation APIs (requires a current Document Server). ");',
+    '    resolved.push({ spec, slide, sequence, drawing, drawingIndex, inputIndex });',
+    '  }',
+    '  resolved.sort((a, b) => a.spec.slideIndex - b.spec.slideIndex || a.spec.order - b.spec.order || a.inputIndex - b.inputIndex);',
+    '  if (typeof pres.CreateNewHistoryPoint === "function") pres.CreateNewHistoryPoint();',
+    '  if (animationPlan.replaceExistingMainSequence) {',
+    '    const cleared = {};',
+    '    for (let i = 0; i < resolved.length; i++) {',
+    '      const slideIndex = resolved[i].spec.slideIndex;',
+    '      if (!cleared[slideIndex]) {',
+    '        if (resolved[i].sequence.RemoveAllEffects() === false) return fail("Could not clear the main animation sequence on slide " + slideIndex + ".");',
+    '        cleared[slideIndex] = true;',
+    '      }',
+    '    }',
+    '  }',
+    '  const applied = [];',
+    '  for (let i = 0; i < resolved.length; i++) {',
+    '    const item = resolved[i];',
+    '    const effect = item.sequence.AddEffect(item.drawing, item.spec.effect, item.spec.trigger);',
+    '    if (!effect) return fail("ONLYOFFICE rejected effect " + item.spec.effect + " on slide " + item.spec.slideIndex + ".", applied.length);',
+    '    if (typeof effect.SetDuration !== "function" || typeof effect.SetDelay !== "function" || typeof effect.SetRepeatCount !== "function") return fail("The animation timing API is unavailable.", applied.length);',
+    '    if (effect.SetDuration(item.spec.durationMs) === false || effect.SetDelay(item.spec.delayMs) === false || effect.SetRepeatCount(item.spec.repeatCount) === false) return fail("Could not apply animation timing on slide " + item.spec.slideIndex + ".", applied.length);',
+    '    applied.push({',
+    '      ...item.spec,',
+    '      drawingIndex: item.drawingIndex,',
+    '      drawingName: typeof item.drawing.GetName === "function" ? String(item.drawing.GetName() || "") : "",',
+    '      drawingId: typeof item.drawing.GetInternalId === "function" ? String(item.drawing.GetInternalId() || "") : "",',
+    '      sequenceIndex: item.sequence.GetCount() - 1,',
+    '    });',
+    '  }',
+    '  return JSON.stringify({ ok: true, applied, replaceExistingMainSequence: animationPlan.replaceExistingMainSequence });',
+    '} catch (cause) {',
+    '  return fail(cause && cause.message ? String(cause.message) : String(cause));',
+    '}',
+  ].join('\n');
+
+/** Build a timeline/object inventory script. It reads both main and interactive sequences without mutating. */
+export const buildObjectAnimationReviewScript = (): string =>
+  [
+    'const fail = (message) => JSON.stringify({ ok: false, error: message, drawings: [], effects: [] });',
+    'try {',
+    '  const pres = Api.GetPresentation();',
+    '  if (!pres || typeof pres.GetSlidesCount !== "function") return fail("The presentation API is unavailable.");',
+    '  const drawingsOut = []; const effects = []; const slideCount = pres.GetSlidesCount();',
+    '  const collect = (sequence, slideIndex, sequenceType, interactiveSequenceIndex, drawings) => {',
+    '    if (!sequence || typeof sequence.GetCount !== "function" || typeof sequence.GetEffect !== "function") return;',
+    '    for (let effectIndex = 0; effectIndex < sequence.GetCount(); effectIndex++) {',
+    '      const effect = sequence.GetEffect(effectIndex); if (!effect) continue;',
+    '      const shape = typeof effect.GetShape === "function" ? effect.GetShape() : null;',
+    '      const drawingId = shape && typeof shape.GetInternalId === "function" ? String(shape.GetInternalId() || "") : "";',
+    '      let drawingIndex = -1;',
+    '      for (let j = 0; j < drawings.length; j++) {',
+    '        const candidateId = typeof drawings[j].GetInternalId === "function" ? String(drawings[j].GetInternalId() || "") : "";',
+    '        if ((drawingId && candidateId === drawingId) || (!drawingId && drawings[j] === shape)) { drawingIndex = j; break; }',
+    '      }',
+    '      effects.push({ slideIndex, sequenceType, interactiveSequenceIndex, sequenceIndex: effectIndex, drawingIndex, drawingName: shape && typeof shape.GetName === "function" ? String(shape.GetName() || "") : "", drawingId, effect: typeof effect.GetEffectType === "function" ? effect.GetEffectType() : null, trigger: typeof effect.GetTriggerType === "function" ? String(effect.GetTriggerType() || "") : "", durationMs: typeof effect.GetDuration === "function" ? Number(effect.GetDuration() || 0) : 0, delayMs: typeof effect.GetDelay === "function" ? Number(effect.GetDelay() || 0) : 0, repeatCount: typeof effect.GetRepeatCount === "function" ? Number(effect.GetRepeatCount() || 0) : 0 });',
+    '    }',
+    '  };',
+    '  for (let slideZeroIndex = 0; slideZeroIndex < slideCount; slideZeroIndex++) {',
+    '    const slide = pres.GetSlideByIndex(slideZeroIndex);',
+    '    const drawings = slide && typeof slide.GetAllDrawings === "function" ? slide.GetAllDrawings() || [] : [];',
+    '    for (let drawingIndex = 0; drawingIndex < drawings.length; drawingIndex++) {',
+    '      const drawing = drawings[drawingIndex]; drawingsOut.push({ slideIndex: slideZeroIndex + 1, drawingIndex, drawingName: typeof drawing.GetName === "function" ? String(drawing.GetName() || "") : "", drawingId: typeof drawing.GetInternalId === "function" ? String(drawing.GetInternalId() || "") : "", classType: typeof drawing.GetClassType === "function" ? String(drawing.GetClassType() || "") : "" });',
+    '    }',
+    '    if (!slide || typeof slide.GetTimeLine !== "function") continue;',
+    '    const timeline = slide.GetTimeLine(); if (!timeline || typeof timeline.GetMainSequence !== "function") continue;',
+    '    collect(timeline.GetMainSequence(), slideZeroIndex + 1, "main", null, drawings);',
+    '    const interactive = typeof timeline.GetInteractiveSequences === "function" ? timeline.GetInteractiveSequences() || [] : [];',
+    '    for (let i = 0; i < interactive.length; i++) collect(interactive[i], slideZeroIndex + 1, "interactive", i, drawings);',
+    '  }',
+    '  return JSON.stringify({ ok: true, slideCount, drawings: drawingsOut, effects });',
+    '} catch (cause) {',
+    '  return fail(cause && cause.message ? String(cause.message) : String(cause));',
+    '}',
+  ].join('\n');
+
+type ObjectAnimationReviewEffect = {
+  slideIndex: number;
+  sequenceType: 'main' | 'interactive';
+  drawingName: string;
+  drawingId: string;
+  effect: string | null;
+  trigger: string;
+  durationMs: number;
+  delayMs: number;
+  repeatCount: number;
+};
+
+const reviewObjectAnimations = (value: string, expected: ObjectAnimationSpec[] | undefined): string => {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(value);
+  } catch {
+    return 'Purposeful animation QA could not parse the Office timeline response.';
+  }
+  if (!isRecord(raw) || raw.ok !== true || !Array.isArray(raw.effects) || !Array.isArray(raw.drawings)) {
+    return `Purposeful animation QA failed: ${isRecord(raw) && typeof raw.error === 'string' ? raw.error : 'Office animation APIs are unavailable.'}`;
+  }
+  const effects = raw.effects.filter((effect): effect is ObjectAnimationReviewEffect => {
+    if (!isRecord(effect)) return false;
+    return (
+      typeof effect.slideIndex === 'number' &&
+      (effect.sequenceType === 'main' || effect.sequenceType === 'interactive') &&
+      typeof effect.drawingName === 'string' &&
+      typeof effect.drawingId === 'string' &&
+      (typeof effect.effect === 'string' || effect.effect === null) &&
+      typeof effect.trigger === 'string' &&
+      typeof effect.durationMs === 'number' &&
+      typeof effect.delayMs === 'number' &&
+      typeof effect.repeatCount === 'number'
+    );
+  });
+  const issues: string[] = [];
+  if (effects.length === 0) issues.push('[required] no object animation effects were found.');
+  const bySlide = new Map<number, ObjectAnimationReviewEffect[]>();
+  for (const effect of effects) {
+    const slideEffects = bySlide.get(effect.slideIndex) ?? [];
+    slideEffects.push(effect);
+    bySlide.set(effect.slideIndex, slideEffects);
+    if (effect.durationMs < 150 || effect.durationMs > 2500)
+      issues.push(`[recommended] slide ${effect.slideIndex}: duration should usually be 150–2500 ms.`);
+    if (effect.delayMs > 2000)
+      issues.push(`[recommended] slide ${effect.slideIndex}: delay above 2000 ms disrupts pacing.`);
+    if (effect.repeatCount > 2)
+      issues.push(`[recommended] slide ${effect.slideIndex}: repeat count above 2 is rarely purposeful.`);
+  }
+  for (const [slideIndex, slideEffects] of bySlide) {
+    if (slideEffects.length > 6)
+      issues.push(`[recommended] slide ${slideIndex}: more than six effects risks visual noise.`);
+    if (slideEffects.filter((effect) => effect.trigger === 'onclick').length > 4)
+      issues.push(`[recommended] slide ${slideIndex}: more than four click stops fragments delivery.`);
+  }
+  if (expected) {
+    const missing = expected.filter(
+      (target) =>
+        !effects.some(
+          (effect) =>
+            effect.sequenceType === 'main' &&
+            effect.slideIndex === target.slideIndex &&
+            effect.effect === target.effect &&
+            effect.trigger === target.trigger &&
+            (!target.drawingName || effect.drawingName === target.drawingName)
+        )
+    );
+    if (missing.length > 0)
+      issues.push(`[required] ${missing.length} expected purpose-led animation(s) do not match the live timeline.`);
+  }
+  const drawings = raw.drawings
+    .filter(isRecord)
+    .slice(0, 200)
+    .map(
+      (drawing) =>
+        `- slide ${drawing.slideIndex} [${drawing.drawingIndex}] "${drawing.drawingName || '(unnamed)'}" (${drawing.classType || 'drawing'})`
+    );
+  const required = issues.filter((issue) => issue.startsWith('[required]')).length;
+  const score = Math.max(0, 100 - required * 20 - (issues.length - required) * 5);
+  return [
+    `Purposeful animation QA: ${score}/100 (${required === 0 ? 'passed' : 'revision required'}).`,
+    `Effects: ${effects.length}; drawings inspected: ${raw.drawings.length}.`,
+    ...(issues.length > 0
+      ? ['Issues:', ...issues.map((issue) => `- ${issue}`)]
+      : ['No timing, density, or expected-timeline issues detected.']),
+    'Drawing inventory (prefer drawingName; index is only a same-session fallback):',
+    ...drawings,
+  ].join('\n');
+};
 
 export const reviewPremiumQuality = (
   kind: OfficeDocKind,
@@ -531,11 +927,18 @@ export const reviewPremiumQuality = (
       issues.push('Could not inspect slide visual objects; run a visual/preview check before final delivery.');
       score -= 10;
     }
-    if (/chart|metric|growth|revenue|pipeline|trend|score|%/i.test(text) === false) {
+    if (
+      /chart|metric|growth|revenue|pipeline|trend|score|%|biểu đồ|chỉ số|tăng trưởng|độ chính xác|tỷ lệ|điểm số/i.test(
+        text
+      ) === false
+    ) {
       issues.push('No clear quantitative proof or chart cue detected; add a metric/chart slide.');
       score -= 15;
     }
-    if (/image|visual|diagram|map|workflow|architecture/i.test(text) === false) {
+    if (
+      /image|visual|diagram|map|workflow|architecture|hình ảnh|sơ đồ|bản đồ|quy trình|luồng|kiến trúc/i.test(text) ===
+      false
+    ) {
       issues.push(
         'No visual/diagram cue detected in text; add at least one strong visual slide or image-backed section.'
       );
@@ -553,11 +956,19 @@ export const reviewPremiumQuality = (
     } else {
       strengths.push('Document appears to have multiple scannable sections.');
     }
-    if (/table|metric|comparison|option|risk|impact|timeline/i.test(text) === false) {
+    if (
+      /table|metric|comparison|option|risk|impact|timeline|bảng|chỉ số|so sánh|phương án|rủi ro|tác động|lộ trình/i.test(
+        text
+      ) === false
+    ) {
       issues.push('No table/comparison/metric cue detected; add a decision table or quantified proof block.');
       score -= 15;
     }
-    if (/recommend|next step|action|decision|priority/i.test(text) === false) {
+    if (
+      /recommend|next step|action|decision|priority|khuyến nghị|bước tiếp theo|hành động|quyết định|ưu tiên/i.test(
+        text
+      ) === false
+    ) {
       issues.push('No clear recommendation or next action detected; add an executive decision section.');
       score -= 15;
     }
@@ -598,12 +1009,75 @@ const parseTextFormat = (value: unknown): TextFormat | null => {
   return fmt;
 };
 
+const parseObjectAnimationSpecs = (value: unknown): ObjectAnimationSpec[] | null => {
+  if (!Array.isArray(value) || value.length === 0 || value.length > 256) return null;
+  const animations: ObjectAnimationSpec[] = [];
+  for (let inputIndex = 0; inputIndex < value.length; inputIndex++) {
+    const raw = value[inputIndex];
+    if (!isRecord(raw)) return null;
+    const slideIndex = typeof raw.slideIndex === 'number' ? Math.round(raw.slideIndex) : 0;
+    const drawingName = cleanText(raw.drawingName, 180);
+    const drawingIndex = typeof raw.drawingIndex === 'number' ? Math.round(raw.drawingIndex) : undefined;
+    const effect =
+      typeof raw.effect === 'string' && OBJECT_ANIMATION_EFFECTS.includes(raw.effect as ObjectAnimationSpec['effect'])
+        ? (raw.effect as ObjectAnimationSpec['effect'])
+        : null;
+    const trigger =
+      typeof raw.trigger === 'string' &&
+      OBJECT_ANIMATION_TRIGGERS.includes(raw.trigger as ObjectAnimationSpec['trigger'])
+        ? (raw.trigger as ObjectAnimationSpec['trigger'])
+        : null;
+    const purpose =
+      typeof raw.purpose === 'string' &&
+      OBJECT_ANIMATION_PURPOSES.includes(raw.purpose as ObjectAnimationSpec['purpose'])
+        ? (raw.purpose as ObjectAnimationSpec['purpose'])
+        : null;
+    const durationMs = typeof raw.durationMs === 'number' ? Math.round(raw.durationMs) : 500;
+    const delayMs = typeof raw.delayMs === 'number' ? Math.round(raw.delayMs) : 0;
+    const repeatCount = typeof raw.repeatCount === 'number' ? Math.round(raw.repeatCount) : 1;
+    const order = typeof raw.order === 'number' ? Math.round(raw.order) : inputIndex;
+    const rationale = cleanText(raw.rationale, 500);
+    if (
+      slideIndex < 1 ||
+      (!drawingName && (drawingIndex === undefined || drawingIndex < 0)) ||
+      !effect ||
+      !trigger ||
+      !purpose ||
+      durationMs < 100 ||
+      durationMs > 10_000 ||
+      delayMs < 0 ||
+      delayMs > 30_000 ||
+      repeatCount < 1 ||
+      repeatCount > 10 ||
+      order < 0 ||
+      rationale.length < 8
+    ) {
+      return null;
+    }
+    animations.push({
+      slideIndex,
+      drawingName: drawingName || undefined,
+      drawingIndex,
+      effect,
+      trigger,
+      durationMs,
+      delayMs,
+      repeatCount,
+      order,
+      purpose,
+      rationale,
+    });
+  }
+  return animations;
+};
+
 /** Validate that `value` is a well-formed {@link DocAgentAction}. */
 export const parseAction = (value: unknown): DocAgentAction | null => {
   if (typeof value !== 'object' || value === null) return null;
   const v = value as Record<string, unknown>;
   const tool = v.tool;
   switch (tool) {
+    case 'get_capabilities':
     case 'read_document':
       return { tool };
     case 'replace_all':
@@ -682,6 +1156,51 @@ export const parseAction = (value: unknown): DocAgentAction | null => {
       const plan = normalizePremiumDeckPlan(v.plan);
       return plan ? { tool, plan } : null;
     }
+    case 'add_premium_slide': {
+      const plan = normalizePremiumDeckPlan(v.plan);
+      return plan && plan.slides.length === 1 ? { tool, plan } : null;
+    }
+    case 'structure_report': {
+      if (!Array.isArray(v.headings)) return null;
+      const headings = v.headings.flatMap((raw): Array<{ text: string; level: number }> => {
+        if (!isRecord(raw)) return [];
+        const text = cleanText(raw.text, 120);
+        if (!text || typeof raw.level !== 'number') return [];
+        return [{ text, level: Math.min(9, Math.max(1, Math.round(raw.level))) }];
+      });
+      return headings.length > 0 ? { tool, headings, insertToc: v.insertToc !== false } : null;
+    }
+    case 'add_speaker_notes': {
+      const slideIndex = typeof v.slideIndex === 'number' ? Math.round(v.slideIndex) : 0;
+      const text = cleanText(v.text, 2_000);
+      return slideIndex >= 1 && text ? { tool, slideIndex, text } : null;
+    }
+    case 'apply_slide_transitions': {
+      const effect =
+        typeof v.effect === 'string' && PREMIUM_DECK_TRANSITIONS.has(v.effect as PremiumDeckTransition)
+          ? (v.effect as PremiumDeckTransition)
+          : null;
+      const speed = v.speed === 'slow' || v.speed === 'fast' ? v.speed : 'medium';
+      return effect && effect !== 'none' ? { tool, effect, speed } : null;
+    }
+    case 'apply_object_animations': {
+      const animations = parseObjectAnimationSpecs(v.animations);
+      return animations
+        ? {
+            tool,
+            animations,
+            replaceExistingMainSequence: v.replaceExistingMainSequence === true,
+          }
+        : null;
+    }
+    case 'review_object_animations': {
+      if (v.expectedAnimations === undefined) return { tool };
+      const expectedAnimations = parseObjectAnimationSpecs(v.expectedAnimations);
+      return expectedAnimations ? { tool, expectedAnimations } : null;
+    }
+    case 'review_premium_quality':
+    case 'open_visual_review':
+      return { tool };
     case 'run_office_api':
       if (typeof v.code !== 'string') return null;
       const validation = validateOfficeApiScript(v.code);
@@ -712,6 +1231,14 @@ export const runTool = async (filePath: string, kind: OfficeDocKind, action: Doc
   }
   try {
     switch (action.tool) {
+      case 'get_capabilities': {
+        const capabilities = getOfficeCapabilities(filePath);
+        return {
+          observation: `Office capabilities:\n${JSON.stringify(capabilities, null, 2)}`,
+          done: false,
+          capabilities,
+        };
+      }
       case 'read_document': {
         const text = await readText(filePath);
         const clipped = text.length > MAX_READ_CHARS ? `${text.slice(0, MAX_READ_CHARS)}\n…(truncated)` : text;
@@ -781,17 +1308,115 @@ export const runTool = async (filePath: string, kind: OfficeDocKind, action: Doc
         const html = buildPremiumDocHtml(action.plan);
         await replaceAllText(filePath, '');
         await insertHtml(filePath, html);
-        return { observation: `Created premium document with ${action.plan.sections.length} section(s).`, done: false };
+        let tocSummary = '';
+        if (action.plan.includeToc) {
+          const headings = action.plan.sections.map((section) => ({ text: section.heading, level: 1 }));
+          const applied = await applyHeadings(filePath, headings);
+          await insertTableOfContents(filePath, true);
+          tocSummary = ` Applied ${applied} heading style(s) and inserted an automatic TOC.`;
+        }
+        return {
+          observation: `Created premium document with ${action.plan.sections.length} section(s).${tocSummary}`,
+          done: false,
+        };
       }
 
       case 'create_premium_deck': {
+        const preflight = preflightDeckDesignPlan(action.plan);
+        if (!preflight.passed) {
+          return { observation: renderDeckPreflightReport(preflight), done: false };
+        }
         const script = buildPremiumDeckScript(action.plan);
-        const result = await withTimeout('Premium deck generation', runOfficeScript(filePath, script));
+        const result = await withTimeout(
+          'Premium deck generation',
+          runOfficeScript(filePath, script),
+          PREMIUM_DECK_TIMEOUT_MS
+        );
+        const recommendations = preflight.issues.length > 0 ? `\n${renderDeckPreflightReport(preflight)}` : '';
         return {
           observation:
-            result.length > 0 ? result.slice(0, 500) : `Created premium deck with ${action.plan.slides.length} slides.`,
+            (result.length > 0
+              ? result.slice(0, 500)
+              : `Created premium deck with ${action.plan.slides.length} slides.`) + recommendations,
           done: false,
         };
+      }
+
+      case 'add_premium_slide': {
+        const preflight = preflightDeckDesignPlan(action.plan, 'append');
+        if (!preflight.passed) {
+          return { observation: renderDeckPreflightReport(preflight), done: false };
+        }
+        const script = buildPremiumDeckAppendScript(action.plan);
+        const result = await withTimeout(
+          'Premium slide generation',
+          runOfficeScript(filePath, script),
+          PREMIUM_DECK_TIMEOUT_MS
+        );
+        const recommendations = preflight.issues.length > 0 ? `\n${renderDeckPreflightReport(preflight)}` : '';
+        return {
+          observation: (result.length > 0 ? result.slice(0, 500) : 'Appended one premium slide.') + recommendations,
+          done: false,
+        };
+      }
+
+      case 'structure_report': {
+        const applied = await applyHeadings(filePath, action.headings);
+        if (action.insertToc) await insertTableOfContents(filePath, true);
+        return {
+          observation: `Applied ${applied} of ${action.headings.length} heading style(s)${action.insertToc ? ' and inserted an automatic TOC' : ''}.`,
+          done: false,
+        };
+      }
+
+      case 'add_speaker_notes': {
+        const result = await withTimeout(
+          'Add speaker notes',
+          runOfficeScript(filePath, buildSpeakerNotesScript(action.slideIndex, action.text))
+        );
+        return { observation: result || 'Speaker notes command completed.', done: false };
+      }
+
+      case 'apply_slide_transitions': {
+        const result = await withTimeout(
+          'Apply slide transitions',
+          runOfficeScript(filePath, buildSlideTransitionsScript(action.effect, action.speed))
+        );
+        return { observation: result || 'Slide transitions applied.', done: false };
+      }
+
+      case 'apply_object_animations': {
+        const capability = getOfficeCapabilities(filePath).objectAnimation;
+        if (!capability.supported) {
+          return { observation: `Object animation is unavailable: ${capability.reason}`, done: false };
+        }
+        const result = await withTimeout(
+          'Apply object animations',
+          runOfficeScript(filePath, buildObjectAnimationsScript(action.animations, action.replaceExistingMainSequence))
+        );
+        return { observation: result || 'Object animation command completed.', done: false };
+      }
+
+      case 'review_object_animations': {
+        const capability = getOfficeCapabilities(filePath).objectAnimation;
+        if (!capability.supported) {
+          return { observation: `Object animation review is unavailable: ${capability.reason}`, done: false };
+        }
+        const result = await withTimeout(
+          'Review object animations',
+          runOfficeScript(filePath, buildObjectAnimationReviewScript())
+        );
+        return { observation: reviewObjectAnimations(result, action.expectedAnimations), done: false };
+      }
+
+      case 'open_visual_review': {
+        const contentType: PreviewContentType = kind === 'slide' ? 'ppt' : kind === 'cell' ? 'excel' : 'word';
+        emitter.emit('preview.open', {
+          content: filePath,
+          contentType,
+          metadata: { title: filePath.split(/[\\/]/).at(-1), file_name: filePath, file_path: filePath },
+        });
+        return { observation: 'Opened the current Office file in the visual preview panel.', done: false };
       }
 
       case 'review_premium_quality': {

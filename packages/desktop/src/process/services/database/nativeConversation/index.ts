@@ -5,4 +5,5 @@ export {
   type NativeConversationEvents,
   type NativeConversationRuntime,
   type NativeSendMessageParams,
+  type NativeConversationWorkspaceProvisioner,
 } from './service';

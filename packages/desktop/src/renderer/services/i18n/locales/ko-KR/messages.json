@@ -66,5 +66,21 @@
     "yesAlwaysAllowTool": "예, 서버 \"{{serverName}}\"의 도구 \"{{toolName}}\" 항상 허용",
     "yesAlwaysAllowServer": "예, 서버 \"{{serverName}}\"의 모든 도구 항상 허용",
     "no": "아니요 (esc)"
+  },
+  "steps": {
+    "title": "작업 단계 {{count}}개",
+    "live": "실행 중",
+    "status": {
+      "pending": "대기 중",
+      "running": "실행 중",
+      "completed": "완료",
+      "error": "실패",
+      "canceled": "취소됨"
+    },
+    "loadingDetail": "단계 세부 정보를 불러오는 중...",
+    "loadDetailFailed": "단계 세부 정보를 불러오지 못했습니다",
+    "input": "입력",
+    "output": "출력",
+    "viewFull": "전체 보기"
   }
 }

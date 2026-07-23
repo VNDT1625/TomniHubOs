@@ -24,8 +24,21 @@
  * Process boundary: Main-process (Node.js) module. No DOM APIs.
  */
 
+import { createHash, randomUUID } from 'node:crypto';
 import * as path from 'node:path';
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  createViuPreCodeReviewService,
+  type CreateViuPreviewFeedbackInput,
+  type CreateViuPreviewSnapshotInput,
+  type CreateViuTeamPreviewPackageInput,
+  type ViuPreCodeReviewArchive,
+  type ViuPreviewFeedbackEvent,
+  type ViuProjectState,
+  type ViuTeamPreviewPackage,
+} from '@/common/viu';
 import { editReplaceWithMtui, writeTextFileWithMtui, type MtuiResponse } from '@process/terminal/mtuiBridge';
+import { getDataPath } from '@process/utils/utils';
 import {
   createTeamEditCoordinator,
   normalizeRelPath,
@@ -39,6 +52,44 @@ import {
 // from the service module without reaching into the coordinator.
 export type { FileLease, TeamActivity, TeamParticipant } from './teamEditCoordinator';
 
+export type IdeTeamTaskStatus = 'todo' | 'in_progress' | 'review' | 'done';
+export type IdeTeamTaskScope = 'personal' | 'group';
+
+export type IdeTeamGroup = {
+  id: string;
+  name: string;
+  parentGroupId: string | null;
+  memberIds: string[];
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type IdeTeamTask = {
+  id: string;
+  title: string;
+  description: string;
+  scope: IdeTeamTaskScope;
+  groupId: string | null;
+  parentTaskId: string | null;
+  creatorId: string;
+  assigneeId: string | null;
+  pinnedAgentId: string | null;
+  status: IdeTeamTaskStatus;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type IdeTeamMessage = {
+  id: string;
+  senderId: string;
+  body: string;
+  taskId: string | null;
+  createdAt: number;
+};
+
+export type IdeTeamTaskInput = Omit<IdeTeamTask, 'id' | 'createdAt' | 'updatedAt'> & { id?: string };
+export type IdeTeamGroupInput = Omit<IdeTeamGroup, 'id' | 'createdAt' | 'updatedAt'> & { id?: string };
+
 /** A point-in-time view of one workspace's team-edit state (pushed to the UI). */
 export type TeamEditSnapshot = {
   /** Absolute workspace root this snapshot belongs to. */
@@ -49,6 +100,12 @@ export type TeamEditSnapshot = {
   leases: FileLease[];
   /** The tail of the activity feed (newest last). */
   activity: TeamActivity[];
+  /** Nested organization groups for this workspace. */
+  groups: IdeTeamGroup[];
+  /** Personal and group tasks visible to the workspace. */
+  tasks: IdeTeamTask[];
+  /** Workspace communication messages. */
+  messages: IdeTeamMessage[];
 };
 
 /** Result of a guarded write attempt. */
@@ -76,6 +133,51 @@ export type GuardedEditResult =
   | { ok: false; reason: 'ambiguous'; detail: string }
   | { ok: false; reason: 'error'; error: string };
 
+export type TeamPreviewPersistence = {
+  load: (rootPath: string) => ViuPreCodeReviewArchive | undefined;
+  save: (rootPath: string, archive: ViuPreCodeReviewArchive) => void;
+};
+
+const isPreviewArchive = (value: unknown): value is ViuPreCodeReviewArchive => {
+  if (!value || typeof value !== 'object') return false;
+  const record = value as Record<string, unknown>;
+  return (
+    record.version === 1 &&
+    Array.isArray(record.packages) &&
+    Boolean(record.feedback) &&
+    typeof record.feedback === 'object'
+  );
+};
+
+/** Atomic machine-local persistence for immutable Team preview packages and feedback. */
+export const createTeamPreviewFilePersistence = (directory?: string): TeamPreviewPersistence => {
+  const resolveDirectory = (): string => directory ?? path.join(getDataPath(), 'viu-team-previews');
+  const filePath = (rootPath: string): string => {
+    const key = createHash('sha256').update(path.resolve(rootPath)).digest('hex');
+    return path.join(resolveDirectory(), `${key}.json`);
+  };
+  return {
+    load: (rootPath) => {
+      const target = filePath(rootPath);
+      if (!existsSync(target)) return undefined;
+      const parsed: unknown = JSON.parse(readFileSync(target, 'utf8'));
+      if (!isPreviewArchive(parsed)) throw new Error('The stored VIU Team preview archive is invalid.');
+      return parsed;
+    },
+    save: (rootPath, archive) => {
+      const target = filePath(rootPath);
+      mkdirSync(path.dirname(target), { recursive: true });
+      const temporary = `${target}.${randomUUID()}.tmp`;
+      try {
+        writeFileSync(temporary, JSON.stringify(archive), { encoding: 'utf8', mode: 0o600 });
+        renameSync(temporary, target);
+      } finally {
+        rmSync(temporary, { force: true });
+      }
+    },
+  };
+};
+
 /** Injected collaborators for {@link createTeamEditService}. */
 export type TeamEditServiceDeps = {
   /** MTUI-backed text writer (diff/undo). Defaults to the real {@link writeTextFileWithMtui}. */
@@ -91,6 +193,8 @@ export type TeamEditServiceDeps = {
   onChange?: (snapshot: TeamEditSnapshot) => void;
   /** Time source forwarded to coordinators (tests). */
   now?: () => number;
+  /** Optional durable storage. The production singleton uses a machine-local atomic JSON archive. */
+  previewPersistence?: TeamPreviewPersistence;
 };
 
 /** The team-edit service surface (per-workspace coordination + guarded writes). */
@@ -130,6 +234,39 @@ export type TeamEditService = {
     oldText: string,
     newText: string
   ) => Promise<GuardedEditResult>;
+  /** Create or update a workspace task. */
+  saveTask: (rootPath: string, input: IdeTeamTaskInput) => IdeTeamTask;
+  /** Remove a task and every descendant task. */
+  removeTask: (rootPath: string, taskId: string) => boolean;
+  /** Create or update a nested workspace group. */
+  saveGroup: (rootPath: string, input: IdeTeamGroupInput) => IdeTeamGroup;
+  /** Remove a group and its descendants; affected tasks become ungrouped. */
+  removeGroup: (rootPath: string, groupId: string) => boolean;
+  /** Add a message to workspace communication. */
+  postMessage: (rootPath: string, senderId: string, body: string, taskId?: string | null) => IdeTeamMessage;
+  /** Register one immutable VIU snapshot for local Team testing. */
+  publishPreview: (
+    rootPath: string,
+    state: ViuProjectState,
+    snapshot: CreateViuPreviewSnapshotInput,
+    share: CreateViuTeamPreviewPackageInput
+  ) => ViuTeamPreviewPackage;
+  /** List immutable VIU packages registered in this workspace. */
+  listPreviews: (rootPath: string) => readonly ViuTeamPreviewPackage[];
+  /** Open the exact package shared by both user and agent preview consumers. */
+  getPreview: (
+    rootPath: string,
+    packageId: string,
+    consumer: 'user-preview' | 'agent-preview'
+  ) => ViuTeamPreviewPackage;
+  /** Append feedback anchored to the package's immutable snapshot. */
+  appendPreviewFeedback: (
+    rootPath: string,
+    packageId: string,
+    input: CreateViuPreviewFeedbackInput
+  ) => ViuPreviewFeedbackEvent;
+  /** List append-only feedback for one immutable package. */
+  listPreviewFeedback: (rootPath: string, packageId: string) => readonly ViuPreviewFeedbackEvent[];
   /** A fresh snapshot of a workspace's team-edit state. */
   snapshot: (rootPath: string) => TeamEditSnapshot;
   /** Drop a workspace's coordinator entirely (folder closed). */
@@ -160,6 +297,44 @@ export const createTeamEditService = (deps: TeamEditServiceDeps = {}): TeamEditS
   const writeFile = deps.writeFile ?? writeTextFileWithMtui;
   const editReplaceFile = deps.editReplace ?? editReplaceWithMtui;
   const coordinators = new Map<string, TeamEditCoordinator>();
+  const workspaceData = new Map<
+    string,
+    {
+      groups: IdeTeamGroup[];
+      tasks: IdeTeamTask[];
+      messages: IdeTeamMessage[];
+      previewReview: ReturnType<typeof createViuPreCodeReviewService>;
+    }
+  >();
+
+  const dataFor = (rootPath: string) => {
+    let data = workspaceData.get(rootPath);
+    if (!data) {
+      let previewReview: ReturnType<typeof createViuPreCodeReviewService>;
+      try {
+        previewReview = createViuPreCodeReviewService(deps.previewPersistence?.load(rootPath));
+      } catch (error) {
+        console.error('[teamEditService] Ignoring an invalid VIU preview archive:', error);
+        previewReview = createViuPreCodeReviewService();
+      }
+      data = { groups: [], tasks: [], messages: [], previewReview };
+      workspaceData.set(rootPath, data);
+    }
+    return data;
+  };
+
+  const mutatePreviewReview = <T>(
+    rootPath: string,
+    mutation: (review: ReturnType<typeof createViuPreCodeReviewService>) => T
+  ): T => {
+    const data = dataFor(rootPath);
+    if (!deps.previewPersistence) return mutation(data.previewReview);
+    const candidate = createViuPreCodeReviewService(data.previewReview.exportArchive());
+    const result = mutation(candidate);
+    deps.previewPersistence.save(rootPath, candidate.exportArchive());
+    data.previewReview = candidate;
+    return result;
+  };
 
   const coordinatorFor = (rootPath: string): TeamEditCoordinator => {
     let c = coordinators.get(rootPath);
@@ -172,11 +347,15 @@ export const createTeamEditService = (deps: TeamEditServiceDeps = {}): TeamEditS
 
   const snapshot = (rootPath: string): TeamEditSnapshot => {
     const c = coordinatorFor(rootPath);
+    const data = dataFor(rootPath);
     return {
       rootPath,
       participants: c.listParticipants(),
       leases: c.listLeases(),
       activity: c.listActivity(50),
+      groups: structuredClone(data.groups),
+      tasks: structuredClone(data.tasks),
+      messages: structuredClone(data.messages),
     };
   };
 
@@ -312,16 +491,210 @@ export const createTeamEditService = (deps: TeamEditServiceDeps = {}): TeamEditS
     }
   };
 
+  const saveTask = (rootPath: string, input: IdeTeamTaskInput): IdeTeamTask => {
+    const data = dataFor(rootPath);
+    const title = input.title.trim();
+    if (!title) throw new Error('Task title is required.');
+    if (input.parentTaskId && !data.tasks.some((task) => task.id === input.parentTaskId)) {
+      throw new Error('Unknown parent task.');
+    }
+    if (input.groupId && !data.groups.some((group) => group.id === input.groupId)) {
+      throw new Error('Unknown task group.');
+    }
+    const timestamp = deps.now?.() ?? Date.now();
+    const existing = input.id ? data.tasks.find((task) => task.id === input.id) : undefined;
+    if (existing && input.parentTaskId) {
+      let cursor: string | null = input.parentTaskId;
+      while (cursor) {
+        if (cursor === existing.id) throw new Error('Task hierarchy cannot contain a cycle.');
+        cursor = data.tasks.find((task) => task.id === cursor)?.parentTaskId ?? null;
+      }
+    }
+    const task: IdeTeamTask = {
+      id: existing?.id ?? randomUUID(),
+      title,
+      description: input.description.trim(),
+      scope: input.scope,
+      groupId: input.groupId,
+      parentTaskId: input.parentTaskId,
+      creatorId: input.creatorId,
+      assigneeId: input.assigneeId,
+      pinnedAgentId: input.pinnedAgentId,
+      status: input.status,
+      createdAt: existing?.createdAt ?? timestamp,
+      updatedAt: timestamp,
+    };
+    if (existing) Object.assign(existing, task);
+    else data.tasks.push(task);
+    emitChange(rootPath);
+    return structuredClone(task);
+  };
+
+  const removeTask = (rootPath: string, taskId: string): boolean => {
+    const data = dataFor(rootPath);
+    if (!data.tasks.some((task) => task.id === taskId)) return false;
+    const removed = new Set<string>([taskId]);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const task of data.tasks) {
+        if (task.parentTaskId && removed.has(task.parentTaskId) && !removed.has(task.id)) {
+          removed.add(task.id);
+          changed = true;
+        }
+      }
+    }
+    data.tasks = data.tasks.filter((task) => !removed.has(task.id));
+    data.messages = data.messages.filter((message) => !message.taskId || !removed.has(message.taskId));
+    emitChange(rootPath);
+    return true;
+  };
+
+  const saveGroup = (rootPath: string, input: IdeTeamGroupInput): IdeTeamGroup => {
+    const data = dataFor(rootPath);
+    const name = input.name.trim();
+    if (!name) throw new Error('Group name is required.');
+    if (input.parentGroupId && !data.groups.some((group) => group.id === input.parentGroupId)) {
+      throw new Error('Unknown parent group.');
+    }
+    const timestamp = deps.now?.() ?? Date.now();
+    const existing = input.id ? data.groups.find((group) => group.id === input.id) : undefined;
+    if (existing && input.parentGroupId) {
+      let cursor: string | null = input.parentGroupId;
+      while (cursor) {
+        if (cursor === existing.id) throw new Error('Group hierarchy cannot contain a cycle.');
+        cursor = data.groups.find((group) => group.id === cursor)?.parentGroupId ?? null;
+      }
+    }
+    const group: IdeTeamGroup = {
+      id: existing?.id ?? randomUUID(),
+      name,
+      parentGroupId: input.parentGroupId,
+      memberIds: [...new Set(input.memberIds)],
+      createdAt: existing?.createdAt ?? timestamp,
+      updatedAt: timestamp,
+    };
+    if (existing) Object.assign(existing, group);
+    else data.groups.push(group);
+    emitChange(rootPath);
+    return structuredClone(group);
+  };
+
+  const removeGroup = (rootPath: string, groupId: string): boolean => {
+    const data = dataFor(rootPath);
+    if (!data.groups.some((group) => group.id === groupId)) return false;
+    const removed = new Set<string>([groupId]);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const group of data.groups) {
+        if (group.parentGroupId && removed.has(group.parentGroupId) && !removed.has(group.id)) {
+          removed.add(group.id);
+          changed = true;
+        }
+      }
+    }
+    data.groups = data.groups.filter((group) => !removed.has(group.id));
+    for (const task of data.tasks) {
+      if (task.groupId && removed.has(task.groupId)) {
+        task.groupId = null;
+        task.scope = 'personal';
+        task.updatedAt = deps.now?.() ?? Date.now();
+      }
+    }
+    emitChange(rootPath);
+    return true;
+  };
+
+  const postMessage = (rootPath: string, senderId: string, body: string, taskId?: string | null): IdeTeamMessage => {
+    const data = dataFor(rootPath);
+    const content = body.trim();
+    if (!content) throw new Error('Message body is required.');
+    if (taskId && !data.tasks.some((task) => task.id === taskId)) throw new Error('Unknown linked task.');
+    const message: IdeTeamMessage = {
+      id: randomUUID(),
+      senderId,
+      body: content,
+      taskId: taskId ?? null,
+      createdAt: deps.now?.() ?? Date.now(),
+    };
+    data.messages.push(message);
+    if (data.messages.length > 500) data.messages.splice(0, data.messages.length - 500);
+    emitChange(rootPath);
+    return structuredClone(message);
+  };
+
+  const publishPreview = (
+    rootPath: string,
+    state: ViuProjectState,
+    snapshotInput: CreateViuPreviewSnapshotInput,
+    shareInput: CreateViuTeamPreviewPackageInput
+  ): ViuTeamPreviewPackage => {
+    const data = dataFor(rootPath);
+    if (shareInput.teamWorkspaceKey !== rootPath) {
+      throw new Error('Preview package workspace does not match the active Team workspace.');
+    }
+    if (shareInput.teamTaskId && !data.tasks.some((task) => task.id === shareInput.teamTaskId)) {
+      throw new Error('Unknown Team task for preview package.');
+    }
+    const item = mutatePreviewReview(rootPath, (review) => review.publish(state, snapshotInput, shareInput));
+    emitChange(rootPath);
+    return item;
+  };
+
+  const listPreviews = (rootPath: string): readonly ViuTeamPreviewPackage[] =>
+    dataFor(rootPath).previewReview.listTeamPackages(rootPath);
+
+  const getPreview = (
+    rootPath: string,
+    packageId: string,
+    consumer: 'user-preview' | 'agent-preview'
+  ): ViuTeamPreviewPackage => dataFor(rootPath).previewReview.open(packageId, consumer);
+
+  const appendPreviewFeedback = (
+    rootPath: string,
+    packageId: string,
+    input: CreateViuPreviewFeedbackInput
+  ): ViuPreviewFeedbackEvent => {
+    const event = mutatePreviewReview(rootPath, (review) => review.appendFeedback(packageId, input));
+    emitChange(rootPath);
+    return event;
+  };
+
+  const listPreviewFeedback = (rootPath: string, packageId: string): readonly ViuPreviewFeedbackEvent[] =>
+    dataFor(rootPath).previewReview.listFeedback(packageId);
+
   const reset = (rootPath: string): void => {
     const c = coordinators.get(rootPath);
     if (c) {
       c.reset();
       coordinators.delete(rootPath);
-      emitChange(rootPath);
     }
+    workspaceData.delete(rootPath);
+    emitChange(rootPath);
   };
 
-  return { join, claim, heartbeat, release, releaseAll, write, editReplace, snapshot, reset };
+  return {
+    join,
+    claim,
+    heartbeat,
+    release,
+    releaseAll,
+    write,
+    editReplace,
+    saveTask,
+    removeTask,
+    saveGroup,
+    removeGroup,
+    postMessage,
+    publishPreview,
+    listPreviews,
+    getPreview,
+    appendPreviewFeedback,
+    listPreviewFeedback,
+    snapshot,
+    reset,
+  };
 };
 
 /** Lazily-built singleton so the UI bridge + the agent MCP tools share one service. */
@@ -346,6 +719,11 @@ export const setTeamEditChangeListener = (listener: (snapshot: TeamEditSnapshot)
 
 /** Resolve the shared {@link TeamEditService} singleton (both planes use it). */
 export const getTeamEditService = (): TeamEditService => {
-  if (!singleton) singleton = createTeamEditService({ onChange: (s) => singletonOnChange?.(s) });
+  if (!singleton) {
+    singleton = createTeamEditService({
+      onChange: (snapshot) => singletonOnChange?.(snapshot),
+      previewPersistence: createTeamPreviewFilePersistence(),
+    });
+  }
   return singleton;
 };

@@ -1,4 +1,4 @@
-﻿import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import type { IMcpServer } from '@/common/config/storage';
 import { McpRegistry, type McpRegistryStore } from '@process/resources/mcpRegistry';
 
@@ -32,7 +32,11 @@ describe('Main-process MCP registry', () => {
   it('serializes concurrent imports without losing either server', async () => {
     const store = new MemoryStore();
     let id = 0;
-    const registry = new McpRegistry(store, () => 100, () => `id-${++id}`);
+    const registry = new McpRegistry(
+      store,
+      () => 100,
+      () => `id-${++id}`
+    );
 
     await Promise.all([registry.importMany([draft('alpha')]), registry.importMany([draft('beta')])]);
 
@@ -44,7 +48,11 @@ describe('Main-process MCP registry', () => {
 
   it('deduplicates names case-insensitively during imports', async () => {
     const store = new MemoryStore();
-    const registry = new McpRegistry(store, () => 100, () => 'id-1');
+    const registry = new McpRegistry(
+      store,
+      () => 100,
+      () => 'id-1'
+    );
 
     const imported = await registry.importMany([draft('Tomny'), draft(' tomny ')]);
 
@@ -54,7 +62,11 @@ describe('Main-process MCP registry', () => {
 
   it('rejects duplicate create and leaves the persisted catalog unchanged', async () => {
     const store = new MemoryStore();
-    const registry = new McpRegistry(store, () => 100, () => 'id-1');
+    const registry = new McpRegistry(
+      store,
+      () => 100,
+      () => 'id-1'
+    );
     await registry.create(draft('Tomny'));
 
     await expect(registry.create(draft(' tomny '))).rejects.toThrow('already exists');
@@ -64,7 +76,11 @@ describe('Main-process MCP registry', () => {
   it('recovers its write queue after persistence fails', async () => {
     const store = new MemoryStore();
     let id = 0;
-    const registry = new McpRegistry(store, () => 100, () => `id-${++id}`);
+    const registry = new McpRegistry(
+      store,
+      () => 100,
+      () => `id-${++id}`
+    );
     store.failNextWrite = true;
 
     await expect(registry.create(draft('failed'))).rejects.toThrow('disk full');
@@ -75,7 +91,11 @@ describe('Main-process MCP registry', () => {
   it('updates, toggles, and removes one server without mutating returned snapshots', async () => {
     const store = new MemoryStore();
     let now = 100;
-    const registry = new McpRegistry(store, () => now++, () => 'id-1');
+    const registry = new McpRegistry(
+      store,
+      () => now++,
+      () => 'id-1'
+    );
     const created = await registry.create(draft('alpha'));
     created.name = 'external mutation';
 
@@ -86,6 +106,36 @@ describe('Main-process MCP registry', () => {
     await expect(registry.toggle('id-1')).resolves.toMatchObject({ enabled: false });
     await registry.remove('id-1');
     await expect(registry.list()).resolves.toEqual([]);
+  });
+
+  it('persists native connection test status, tools, and bounded errors', async () => {
+    const store = new MemoryStore();
+    const registry = new McpRegistry(
+      store,
+      () => 500,
+      () => 'id-1'
+    );
+    await registry.create(draft('alpha'));
+
+    await expect(
+      registry.recordTest('id-1', {
+        success: true,
+        testedAt: 450,
+        tools: [{ name: 'read_file', description: 'Reads a file' }],
+      })
+    ).resolves.toMatchObject({
+      last_test_status: 'connected',
+      last_test_at: 450,
+      last_connected: 450,
+      tools: [{ name: 'read_file' }],
+    });
+    await expect(
+      registry.recordTest('id-1', { success: false, testedAt: 475, error: 'x'.repeat(3_000) })
+    ).resolves.toMatchObject({
+      last_test_status: 'error',
+      last_test_at: 475,
+      last_test_error: 'x'.repeat(2_000),
+    });
   });
 
   it('reports missing update targets instead of silently creating data', async () => {

@@ -1,66 +1,79 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const tunnel = vi.hoisted(() => ({
-  start: vi.fn(),
-  stop: vi.fn(),
+const mocks = vi.hoisted(() => ({
+  startTunnel: vi.fn(),
+  stopTunnel: vi.fn(),
+  startGateway: vi.fn(),
+  configureGateway: vi.fn(),
+  stopGateway: vi.fn(),
+  configureHost: vi.fn(),
 }));
 
 vi.mock('@process/studio/cloudflareTunnel', () => ({
-  startTunnel: tunnel.start,
-  stopTunnel: tunnel.stop,
+  startTunnel: mocks.startTunnel,
+  stopTunnel: mocks.stopTunnel,
+}));
+vi.mock('@process/services/remoteGateway/registry', () => ({
+  startRegisteredTomniRemoteGateway: mocks.startGateway,
+  configureRegisteredTomniRemoteGateway: mocks.configureGateway,
+  stopRegisteredTomniRemoteGateway: mocks.stopGateway,
 }));
 
 describe('Telegram remote startup', () => {
-  const originalSecret = process.env.AIONUI_TELEGRAM_REMOTE_SECRET;
+  const oldTomniSecret = process.env.TOMNI_TELEGRAM_REMOTE_SECRET;
+  const oldLegacySecret = process.env.AIONUI_TELEGRAM_REMOTE_SECRET;
 
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
+    delete process.env.TOMNI_TELEGRAM_REMOTE_SECRET;
     delete process.env.AIONUI_TELEGRAM_REMOTE_SECRET;
+    mocks.startGateway.mockResolvedValue({
+      localUrl: 'http://127.0.0.1:45678',
+      configure: mocks.configureHost,
+    });
   });
 
   afterEach(() => {
-    vi.unstubAllGlobals();
-    if (originalSecret === undefined) delete process.env.AIONUI_TELEGRAM_REMOTE_SECRET;
-    else process.env.AIONUI_TELEGRAM_REMOTE_SECRET = originalSecret;
+    if (oldTomniSecret === undefined) delete process.env.TOMNI_TELEGRAM_REMOTE_SECRET;
+    else process.env.TOMNI_TELEGRAM_REMOTE_SECRET = oldTomniSecret;
+    if (oldLegacySecret === undefined) delete process.env.AIONUI_TELEGRAM_REMOTE_SECRET;
+    else process.env.AIONUI_TELEGRAM_REMOTE_SECRET = oldLegacySecret;
   });
 
-  it('creates one inherited 256-bit secret and reuses it', async () => {
+  it('creates one Tomni-owned 256-bit secret and reuses it', async () => {
     const { prepareTelegramRemoteSecret } = await import('@/process/startup/telegramRemoteStartup');
     const first = prepareTelegramRemoteSecret();
-    const second = prepareTelegramRemoteSecret();
-
-    expect(first).toMatch(/^[a-f0-9]{64}$/);
-    expect(second).toBe(first);
+    expect(first).toMatch(/^[a-f0-9]{64}$/u);
+    expect(prepareTelegramRemoteSecret()).toBe(first);
+    expect(process.env.TOMNI_TELEGRAM_REMOTE_SECRET).toBe(first);
   });
 
-  it('registers the HTTPS tunnel origin with aioncore', async () => {
-    tunnel.start.mockResolvedValue({ ok: true, url: 'https://remote.trycloudflare.com' });
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
-    vi.stubGlobal('fetch', fetchMock);
+  it('targets the native gateway without a legacy port or /api call', async () => {
+    mocks.startTunnel.mockResolvedValue({ ok: true, url: 'https://remote.trycloudflare.com' });
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
     const { startTelegramRemoteTunnel } = await import('@/process/startup/telegramRemoteStartup');
 
-    await expect(startTelegramRemoteTunnel(43123, 'vi-VN')).resolves.toEqual({
+    await expect(startTelegramRemoteTunnel('vi-VN')).resolves.toEqual({
       ok: true,
       url: 'https://remote.trycloudflare.com',
     });
-    expect(fetchMock).toHaveBeenCalledWith(
-      'http://127.0.0.1:43123/api/channel/remote/public-url',
-      expect.objectContaining({
-        method: 'POST',
-        headers: expect.objectContaining({ 'x-aionui-remote-secret': expect.stringMatching(/^[a-f0-9]{64}$/) }),
-        body: JSON.stringify({ public_url: 'https://remote.trycloudflare.com', language: 'vi-VN' }),
-      })
-    );
+    expect(mocks.startTunnel).toHaveBeenCalledWith('telegram-remote', 'http://127.0.0.1:45678');
+    expect(mocks.startGateway).toHaveBeenCalledWith({
+      secret: expect.stringMatching(/^[a-f0-9]{64}$/u),
+      language: 'vi-VN',
+    });
+    expect(mocks.configureHost).toHaveBeenCalledWith({
+      publicUrl: 'https://remote.trycloudflare.com',
+      language: 'vi-VN',
+    });
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it('keeps Telegram grid controls when a tunnel cannot start', async () => {
-    tunnel.start.mockResolvedValue({ ok: false, reason: 'not-installed' });
-    const fetchMock = vi.fn();
-    vi.stubGlobal('fetch', fetchMock);
+  it('keeps the native gateway alive when cloudflared is unavailable', async () => {
+    mocks.startTunnel.mockResolvedValue({ ok: false, reason: 'not-installed' });
     const { startTelegramRemoteTunnel } = await import('@/process/startup/telegramRemoteStartup');
-
-    await expect(startTelegramRemoteTunnel(43123)).resolves.toEqual({ ok: false, reason: 'not-installed' });
-    expect(fetchMock).not.toHaveBeenCalled();
+    await expect(startTelegramRemoteTunnel()).resolves.toEqual({ ok: false, reason: 'not-installed' });
+    expect(mocks.startGateway).toHaveBeenCalledOnce();
   });
 });

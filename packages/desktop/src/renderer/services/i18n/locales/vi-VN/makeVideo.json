@@ -87,6 +87,41 @@
     "duration": "Thời lượng clip",
     "supportsEndFrame": "Mô hình này hỗ trợ nội suy frame đầu + frame cuối"
   },
+  "editor": {
+    "storyboard": "Phân cảnh",
+    "timeline": "Dòng thời gian",
+    "noPreview": "Di chuyển đầu phát lên clip video để xem trước.",
+    "inspector": "Thuộc tính clip",
+    "selectClip": "Chọn một clip trên dòng thời gian.",
+    "trackLabel": "Track",
+    "start": "Bắt đầu (giây)",
+    "duration": "Thời lượng (giây)",
+    "volume": "Âm lượng",
+    "split": "Tách",
+    "delete": "Xóa",
+    "play": "Phát",
+    "pause": "Tạm dừng",
+    "undo": "Hoàn tác",
+    "redo": "Làm lại",
+    "zoom": "Thu phóng",
+    "save": "Lưu timeline",
+    "snapping": "Bắt dính",
+    "ripple": "Chỉnh sửa ripple",
+    "transitionIn": "Chuyển cảnh vào",
+    "transitionOut": "Chuyển cảnh ra",
+    "transition": {
+      "cut": "Cắt thẳng",
+      "fade": "Mờ dần",
+      "dissolve": "Hòa tan"
+    },
+    "track": {
+      "video": "Video",
+      "voice": "Lời thoại",
+      "music": "Nhạc",
+      "sfx": "Hiệu ứng âm thanh",
+      "subtitle": "Phụ đề"
+    }
+  },
   "export": {
     "success": "Đã xuất video: {{path}}"
   }

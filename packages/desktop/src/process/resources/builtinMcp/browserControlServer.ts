@@ -69,12 +69,15 @@
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { dirname } from 'node:path';
 import type { BrowserTabId, IBrowserViewManager } from '@process/browser/browserViewManager';
 import type { IHumanLikeInput, InputSink, MouseButton, Point } from '@process/browser/humanLikeInput';
 import type { IPagePerception, LeaseCoordinator } from '@process/browser/pagePerception';
 import type { IMediaPipeline, MediaSource } from '@process/browser/mediaPipeline';
 import type { IEditorFrameStore } from '@process/editor/editorFrameStore';
 import type { ExtractSource, ExtractOutcome } from '@process/services/contentExtract';
+import { protectedMcpTextContent } from '@process/agentRuntime/agentMesh/security';
 
 import type { QuickTestLifecycleService } from '@process/services/quick-test/lifecycle';
 import {
@@ -149,6 +152,21 @@ export type BrowserControlDeps = {
     repository: string;
     secretAlias: string;
   }) => Promise<void>;
+  /**
+   * Securely fills one field from a Core Personal Secret set. Resolution stays
+   * in the trusted Main process; only the opaque handle and variable name are
+   * accepted from the model-facing tool.
+   */
+  fillPersonalSecret?: (request: {
+    tabId: BrowserTabId;
+    selector: string;
+    handle: string;
+    field: string;
+    /** Exact hostname bound by a trusted caller; omitted for direct browser-tool use. */
+    expectedTarget?: string;
+  }) => Promise<void>;
+  /** Persist a protected browser PNG as a durable report-ready artifact. */
+  persistScreenshot?: (tabId: BrowserTabId, png: Uint8Array) => Promise<string>;
   /** Delay primitive for scroll pacing and `browser_wait_for` polling. Defaults to `setTimeout`. */
   sleep?: (ms: number) => Promise<void>;
   /** Wall-clock source (Unix ms) used by `browser_wait_for` timeouts. Defaults to `Date.now`. */
@@ -185,8 +203,11 @@ export type BrowserControlDeps = {
   captureEvidence?: (
     contents: PageContents,
     rootPath: string,
-    mode: InspectScreenshotMode
+    mode: InspectScreenshotMode,
+    options: { persist: false }
   ) => Promise<InspectScreenshotResult | null>;
+  /** Persist only the protected PNG; no raw evidence file may be created first. */
+  persistProtectedEvidence?: (filePath: string, png: Uint8Array) => Promise<void>;
   quickTest?: QuickTestControl;
 };
 
@@ -210,7 +231,7 @@ type ToolTextResult = { content: Array<{ type: 'text'; text: string }>; isError?
 
 /** Build a standard MCP text payload, optionally flagged as an error. */
 const textResult = (text: string, isError = false): ToolTextResult => ({
-  content: [{ type: 'text' as const, text }],
+  content: protectedMcpTextContent(text),
   ...(isError ? { isError: true } : {}),
 });
 
@@ -542,6 +563,48 @@ Returns confirmation only. It never returns the secret value.`,
     }
   );
 
+  // --- browser_personal_secret_type (Core Personal Secret injection) -------
+  server.tool(
+    'browser_personal_secret_type',
+    `Fill a browser form field from a Core Personal Secret set without exposing the value to the
+model, chat, MCP response, logs, or renderer. A secret set may contain several named variables,
+for example USERNAME and PASSWORD. Call this tool once for each field that must be filled.
+
+Input:
+- handle: opaque secret-set handle from Personal Context, for example secret://... (required)
+- variable_name: variable name advertised with the handle, for example USERNAME (required)
+- selector: CSS selector of the input or textarea to fill (required)
+- tabId: which tab to act on; omit to use the active/only tab (optional)
+
+Returns confirmation only. It never returns the secret value.`,
+    {
+      handle: z
+        .string()
+        .regex(/^secret:\/\/[A-Za-z0-9-]+$/)
+        .describe('Opaque Core secret-set handle.'),
+      variable_name: z
+        .string()
+        .regex(/^[A-Za-z_][A-Za-z0-9_]{0,127}$/)
+        .describe('Variable name from the secret-set metadata. Never pass a secret value.'),
+      selector: z.string().min(1).describe('CSS selector of the input or textarea to fill.'),
+      tabId: z.string().optional().describe('Tab to act on; defaults to the active/only tab.'),
+    },
+    async ({ handle, variable_name, selector, tabId }) => {
+      try {
+        if (!deps.fillPersonalSecret) {
+          return textResult('Core Personal Secret browser filling is unavailable in this application runtime.', true);
+        }
+        const id = resolveTabId(tabId);
+        await deps.fillPersonalSecret({ tabId: id, selector, handle, field: variable_name });
+        return textResult(
+          `Filled ${selector} in tab ${id} from variable ${variable_name} in an opaque Personal Secret set. The value was not exposed.`
+        );
+      } catch {
+        return textResult(`Unable to fill Personal Secret variable ${variable_name} in the browser form.`, true);
+      }
+    }
+  );
+
   // --- browser_scroll (incremental wheel events, tab-isolated) -------------
   server.tool(
     'browser_scroll',
@@ -639,21 +702,34 @@ so no extra lease is taken here.
 
 Input:
 - tabId: which tab to capture; omit to use the active/only tab (optional)
+- persist: save a durable PNG artifact and return its filePath for reports (optional, default false)
 
-Returns a PNG image plus its dimensions.`,
+Returns a PNG image plus its dimensions and, when persisted, an absolute filePath.`,
     {
       tabId: z.string().optional().describe('Tab to capture; defaults to the active/only tab.'),
+      persist: z.boolean().optional().describe('Save the PNG so another report/document tool can attach it.'),
     },
-    async ({ tabId }) => {
+    async ({ tabId, persist }) => {
       try {
         const id = resolveTabId(tabId);
         const result = await pagePerception.capture(id);
         const commaIndex = result.dataUrl.indexOf(',');
         const base64 = commaIndex >= 0 ? result.dataUrl.slice(commaIndex + 1) : result.dataUrl;
+        const filePath = persist ? await deps.persistScreenshot?.(id, result.png) : undefined;
+        if (persist && !filePath) return textResult('Screenshot persistence is unavailable in this runtime.', true);
         return {
           content: [
             { type: 'image' as const, data: base64, mimeType: 'image/png' },
-            { type: 'text' as const, text: `Captured ${result.width}x${result.height} screenshot of tab ${id}.` },
+            {
+              type: 'text' as const,
+              text: JSON.stringify({
+                tabId: id,
+                width: result.width,
+                height: result.height,
+                filePath,
+                secretContext: result.secretContext,
+              }),
+            },
           ],
         };
       } catch (error) {
@@ -720,12 +796,7 @@ Returns the page's readable text (truncated).`,
         hiddenId = viewManager.createTab({ visible: false, bounds: { x: -10000, y: 0, width: 1280, height: 900 } });
         await viewManager.loadURL(hiddenId, target);
         await sleep(1200); // let the page settle
-        const contents = requireContents(hiddenId);
-        const text = await evaluate(
-          contents,
-          `(() => { const el = document.body; const t = el && (el.innerText != null ? el.innerText : el.textContent); return t ? String(t).trim() : ''; })()`
-        );
-        const out = typeof text === 'string' ? text : '';
+        const out = await pagePerception.readText(hiddenId);
         const clipped = out.length > 6000 ? `${out.slice(0, 6000)}\n…(truncated)` : out;
         return textResult(`Researched ${target} (hidden):\n${clipped}`);
       } catch (error) {
@@ -951,16 +1022,36 @@ The PNG is saved under .omni/inspect for follow-up agent analysis and returned i
       async ({ sessionId, mode }) => {
         try {
           const { session, contents } = await resolveQuickTestPage(sessionId);
-          const capture = await (deps.captureEvidence ?? captureInspectScreenshot)(contents, session.rootPath, mode);
+          let capture: InspectScreenshotResult | null = null;
+          const protectedCapture = await pagePerception.protectCapture(session.tabId, mode, async () => {
+            capture = await (deps.captureEvidence ?? captureInspectScreenshot)(contents, session.rootPath, mode, {
+              persist: false,
+            });
+            if (!capture) throw new Error('Quick Test capture returned an empty image.');
+            const commaIndex = capture.dataUrl.indexOf(',');
+            const encoded = commaIndex >= 0 ? capture.dataUrl.slice(commaIndex + 1) : capture.dataUrl;
+            return Buffer.from(encoded, 'base64');
+          });
           if (!capture) return textResult('Quick Test capture returned an empty image.', true);
-          const commaIndex = capture.dataUrl.indexOf(',');
-          const data = commaIndex >= 0 ? capture.dataUrl.slice(commaIndex + 1) : capture.dataUrl;
+          if (deps.persistProtectedEvidence) {
+            await deps.persistProtectedEvidence(capture.filePath, protectedCapture.png);
+          } else {
+            await mkdir(dirname(capture.filePath), { recursive: true });
+            await writeFile(capture.filePath, protectedCapture.png);
+          }
+          const commaIndex = protectedCapture.dataUrl.indexOf(',');
+          const data = commaIndex >= 0 ? protectedCapture.dataUrl.slice(commaIndex + 1) : protectedCapture.dataUrl;
           return {
             content: [
               { type: 'image' as const, data, mimeType: 'image/png' },
               {
                 type: 'text' as const,
-                text: JSON.stringify({ filePath: capture.filePath, mode: capture.mode, tabId: session.tabId }),
+                text: JSON.stringify({
+                  filePath: capture.filePath,
+                  mode: capture.mode,
+                  tabId: session.tabId,
+                  secretContext: protectedCapture.secretContext,
+                }),
               },
             ],
           };

@@ -37,6 +37,12 @@ describe('officeEditorGuidance', () => {
     expect(rules).toContain('visual system, clear hierarchy');
     expect(rules).toContain('generated or user-provided images');
     expect(rules).toContain('office_review_premium_quality');
+    expect(rules).toContain('office_review_object_animations');
+    expect(rules).toContain('office_apply_object_animations');
+
+    expect(rules).toContain('office_add_architecture_slide');
+    expect(rules).toContain('office_structure_report');
+    expect(rules).toContain('office_open_visual_review');
     expect(rules).toContain('If it lists required improvements, revise');
     expect(rules).toContain('Never edit the open `.docx`, `.xlsx`, or `.pptx` by shelling out');
     expect(rules).toContain('verify the result with `office_read_document`');

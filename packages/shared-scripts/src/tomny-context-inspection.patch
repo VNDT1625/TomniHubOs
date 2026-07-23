@@ -1,0 +1,1032 @@
+diff --git a/crates/aion-agent/src/bootstrap.rs b/crates/aion-agent/src/bootstrap.rs
+index 2878a5e..63a4daf 100644
+--- a/crates/aion-agent/src/bootstrap.rs
++++ b/crates/aion-agent/src/bootstrap.rs
+@@ -19,7 +19,7 @@ use aion_tools::glob::GlobTool;
+ use aion_tools::grep::GrepTool;
+ use aion_tools::read::ReadTool;
+ use aion_tools::registry::ToolRegistry;
+-use aion_tools::tool_search::ToolSearchTool;
++use aion_tools::tool_search::{ActionSchemaState, StartActionTool, ToolSearchTool};
+ use aion_tools::write::WriteTool;
+ use anyhow::Result;
+ use tracing::info;
+@@ -161,10 +161,17 @@ impl AgentBootstrap {
+         self.register_agent_tools(&mut registry, &provider, &environment.workspace, skills);
+         let plan_active_flag = self.register_plan_tools(&mut registry);
+         self.register_tool_search(&mut registry);
++        let action_schema_state = self.register_action_tool(&mut registry);
+ 
+         let has_mcp = mcp.has_mcp();
+         let mcp_managers = mcp.managers;
+-        let engine = self.into_engine(provider.clone(), registry, plan_active_flag, environment.workspace);
++        let engine = self.into_engine(
++            provider.clone(),
++            registry,
++            plan_active_flag,
++            action_schema_state,
++            environment.workspace,
++        );
+ 
+         Ok(BootstrapResult {
+             engine,
+@@ -326,11 +333,22 @@ impl AgentBootstrap {
+         registry.register(Box::new(ToolSearchTool::new(tool_defs_snapshot)));
+     }
+ 
++    fn register_action_tool(&self, registry: &mut ToolRegistry) -> Arc<RwLock<ActionSchemaState>> {
++        let surface_only = self
++            .config
++            .system_prompt
++            .as_deref()
++            .is_some_and(|prompt| prompt.starts_with("[TomnyExactSurfacePrompt]"));
++        let state = Arc::new(RwLock::new(ActionSchemaState::new(surface_only)));
++        registry.register(Box::new(StartActionTool::new(Arc::clone(&state))));
++        state
++    }
+     fn into_engine(
+         self,
+         provider: Arc<dyn LlmProvider>,
+         registry: ToolRegistry,
+         plan_active_flag: Arc<AtomicBool>,
++        action_schema_state: Arc<RwLock<ActionSchemaState>>,
+         workspace: PathBuf,
+     ) -> AgentEngine {
+         let runtime_env = self.runtime_env.clone();
+@@ -349,6 +367,8 @@ impl AgentBootstrap {
+         };
+         engine.set_plan_active_flag(plan_active_flag);
+         engine.set_tool_policy(self.tool_policy);
++        engine.set_action_schema_state(action_schema_state);
++        engine.refresh_action_catalog();
+         engine
+     }
+ }
+diff --git a/crates/aion-agent/src/context.rs b/crates/aion-agent/src/context.rs
+index 9f96941..43e10d4 100644
+--- a/crates/aion-agent/src/context.rs
++++ b/crates/aion-agent/src/context.rs
+@@ -216,6 +216,18 @@ pub(crate) fn build_system_prompt_with_shell_and_tool_policy(
+     toon_enabled: bool,
+     tool_policy: &ToolPolicy,
+ ) -> String {
++    const EXACT_SURFACE_PROMPT_MARKER: &[u8] = &[
++        91, 84, 111, 109, 110, 121, 69, 120, 97, 99, 116, 83, 117, 114, 102, 97, 99, 101, 80, 114, 111, 109, 112, 116,
++        93,
++    ];
++    if let Some(exact_prompt) =
++        custom_prompt.filter(|prompt| prompt.as_bytes().starts_with(EXACT_SURFACE_PROMPT_MARKER))
++    {
++        cache.joined = Some(exact_prompt.to_string());
++        cache.last_plan_mode = plan_mode_active;
++        cache.last_toon_enabled = toon_enabled;
++        return exact_prompt.to_string();
++    }
+     if cache.last_tool_policy != *tool_policy {
+         cache.invalidate("tool_guidance");
+         cache.invalidate("skills");
+diff --git a/crates/aion-agent/src/engine.rs b/crates/aion-agent/src/engine.rs
+index d878a49..b65f3c7 100644
+--- a/crates/aion-agent/src/engine.rs
++++ b/crates/aion-agent/src/engine.rs
+@@ -1,7 +1,7 @@
+ use std::mem::replace;
+ use std::path::PathBuf;
+ use std::sync::atomic::{AtomicBool, Ordering};
+-use std::sync::{Arc, Mutex};
++use std::sync::{Arc, Mutex, RwLock};
+ 
+ use crate::cache_diagnostics::{CacheBreakDetector, CacheDiagnostic, CacheStats};
+ use crate::commands::{CommandContext, CommandRegistry, CommandResult, SlashCommand, default_registry};
+@@ -35,12 +35,13 @@ use aion_protocol::events::ToolCategory;
+ use aion_protocol::writer::ProtocolEmitter;
+ use aion_providers::provider::{LlmProvider, create_provider};
+ use aion_tools::registry::ToolRegistry;
++use aion_tools::tool_search::ActionSchemaState;
+ use aion_types::llm::{LlmEvent, LlmRequest, ThinkingConfig};
+ use aion_types::message::{ContentBlock, Message, Role, StopReason, TokenUsage};
+ use aion_types::skill_types::{ContextModifier, PlanModeTransition, effort_to_string};
+ use anyhow::{Error as AnyhowError, Result as AnyhowResult};
+ use chrono::Utc;
+-use serde_json::to_string;
++use serde_json::{Value, to_string};
+ use tokio::sync::mpsc::Receiver;
+ use tracing::{Instrument, debug, error, info, info_span, warn};
+ 
+@@ -124,6 +125,8 @@ pub struct AgentEngine {
+     /// Shared flag read by EnterPlanMode/ExitPlanMode tools to validate transitions.
+     /// Updated by the engine when processing PlanModeTransition modifiers.
+     plan_active_flag: Option<Arc<AtomicBool>>,
++    /// Core-owned action gateway and its surface-provided nested schemas.
++    action_schema_state: Option<Arc<RwLock<ActionSchemaState>>>,
+ 
+     // Diagnostics and command handling.
+     /// Prompt cache break detector for diagnostics.
+@@ -206,6 +209,7 @@ impl AgentEngine {
+             toon_enabled: config.compact.toon,
+             plan_state: PlanState::default(),
+             plan_active_flag: None,
++            action_schema_state: None,
+             cache_detector: CacheBreakDetector::new(),
+             commands: default_registry(),
+         }
+@@ -293,6 +297,7 @@ impl AgentEngine {
+             toon_enabled: config.compact.toon,
+             plan_state: PlanState::default(),
+             plan_active_flag: None,
++            action_schema_state: None,
+             cache_detector: CacheBreakDetector::new(),
+             commands: default_registry(),
+         }
+@@ -316,6 +321,35 @@ impl AgentEngine {
+         self.tools.tool_names()
+     }
+ 
++    /// Return the exact model context owned by this engine without mutating the conversation.
++    pub fn context_snapshot(&self) -> (String, Vec<Value>, Vec<Value>, String, Value, Vec<Value>) {
++        let tools = self
++            .tools
++            .to_tool_defs_filtered(|tool| self.tool_policy.allows(tool.name()) && tool.name() == "StartAction")
++            .into_iter()
++            .map(|tool| serde_json::to_value(tool).unwrap_or(Value::Null))
++            .collect();
++        let (summary, working_memory, tool_cache) = self
++            .action_schema_state
++            .as_ref()
++            .and_then(|state| state.read().ok())
++            .map(|state| (state.capability_summary(), state.working_memory(), state.tool_cache()))
++            .unwrap_or_else(|| (String::new(), serde_json::json!({}), Vec::new()));
++        let messages = self
++            .messages
++            .iter()
++            .map(|message| serde_json::to_value(message).unwrap_or(Value::Null))
++            .collect();
++        (
++            self.system_with_capability_summary(&summary),
++            tools,
++            messages,
++            summary,
++            working_memory,
++            tool_cache,
++        )
++    }
++
+     pub fn registry_mut(&mut self) -> &mut ToolRegistry {
+         &mut self.tools
+     }
+@@ -356,11 +390,38 @@ impl AgentEngine {
+     pub fn set_plan_active_flag(&mut self, flag: Arc<AtomicBool>) {
+         self.plan_active_flag = Some(flag);
+     }
++    pub fn set_action_schema_state(&mut self, state: Arc<RwLock<ActionSchemaState>>) {
++        self.action_schema_state = Some(state);
++    }
++
++    /// Refresh hidden surface schemas after bootstrap or dynamic MCP registration.
++    pub fn refresh_action_catalog(&mut self) {
++        let Some(state) = &self.action_schema_state else {
++            return;
++        };
++        let surface_only = state.read().map(|state| state.surface_only()).unwrap_or(false);
++        let defs = self.tools.to_tool_defs_filtered(|tool| {
++            self.tool_policy.allows(tool.name())
++                && tool.name() != "StartAction"
++                && tool.name() != "ToolSearch"
++                && (!surface_only
++                    || tool.category() == ToolCategory::Mcp
++                    || tool.name() == "tomny_session_actions")
++        });
++        if let Ok(mut state) = state.write() {
++            state.refresh_catalog(defs);
++        }
++    }
+ }
+ 
+ impl AgentEngine {
+     /// Run the agent loop with user input
+     pub async fn run(&mut self, user_input: &str, msg_id: &str) -> Result<AgentResult, AgentError> {
++        if let Some(state) = &self.action_schema_state
++            && let Ok(mut state) = state.write()
++        {
++            state.reset_for_action();
++        }
+         let session_id = self.current_session.as_ref().map(|s| s.id.clone()).unwrap_or_default();
+         let span = info_span!(
+             target: "aion_agent",
+@@ -452,17 +513,18 @@ impl AgentEngine {
+             };
+ 
+             // need to execute tool calls before the next turn
++            let resolved_tool_calls = self.resolve_action_tool_calls(&tool_calls);
+             let ToolRoundOutput {
+                 tool_results,
+                 tool_modifiers,
+                 tool_call_malformed_fingerprint,
+                 tool_call_failure_fingerprint,
+-            } = self.execute_tool_round(&tool_calls, &assistant_text).await?;
++            } = self.execute_tool_round(&resolved_tool_calls, &assistant_text).await?;
+ 
+             // Apply any context modifiers from skill executions before the next turn.
+             self.apply_context_modifiers(&tool_modifiers);
+ 
+-            self.emit_tool_results(&tool_calls, &tool_results);
++            self.emit_tool_results(&resolved_tool_calls, &tool_results);
+ 
+             self.messages.push(Message::now(Role::User, tool_results));
+ 
+@@ -492,6 +554,9 @@ impl AgentEngine {
+         // Build tool list: filter based on plan mode state
+         let tools = if kind.disable_tools() {
+             Vec::new()
++        } else if self.action_schema_state.is_some() {
++            self.tools
++                .to_tool_defs_filtered(|tool| self.tool_policy.allows(tool.name()) && tool.name() == "StartAction")
+         } else if self.plan_state.is_active {
+             // Plan mode: only Info-category tools (excluding EnterPlanMode)
+             self.tools.to_tool_defs_filtered(|t| {
+@@ -504,11 +569,22 @@ impl AgentEngine {
+         };
+ 
+         // Build system prompt: append plan mode instructions when active
+-        let system = if self.plan_state.is_active {
++        let base_system = if self.plan_state.is_active {
+             format!("{}\n\n{}", self.system_prompt, plan_mode_instructions())
+         } else {
+             self.system_prompt.clone()
+         };
++        let summary = self
++            .action_schema_state
++            .as_ref()
++            .and_then(|state| state.read().ok())
++            .map(|state| state.capability_summary())
++            .unwrap_or_default();
++        let system = if summary.is_empty() {
++            base_system
++        } else {
++            format!("{base_system}\n\n[ToolMap summary]\n{summary}")
++        };
+ 
+         // Record prompt state for cache diagnostics
+         self.cache_detector.record_request(&system, &tools);
+@@ -534,6 +610,96 @@ impl AgentEngine {
+         }
+     }
+ 
++    fn system_with_capability_summary(&self, summary: &str) -> String {
++        if summary.is_empty() {
++            self.system_prompt.clone()
++        } else {
++            format!("{}\n\n[ToolMap summary]\n{}", self.system_prompt, summary)
++        }
++    }
++
++    fn search_retained_history(&self, query: &str) -> String {
++        let query = query.trim().to_lowercase();
++        if query.is_empty() {
++            return "HistorySearch requires a query.".to_string();
++        }
++        let mut matches = self
++            .messages
++            .iter()
++            .rev()
++            .filter_map(|message| serde_json::to_string(message).ok())
++            .filter(|message| message.to_lowercase().contains(&query))
++            .take(6)
++            .map(|message| message.chars().take(2_000).collect::<String>())
++            .collect::<Vec<_>>();
++        matches.reverse();
++        if matches.is_empty() {
++            "No matching retained history was found.".to_string()
++        } else {
++            matches.join("\n")
++        }
++    }
++
++    /// Route a nested StartAction run through the normal registry, policy,
++    /// approval and hook pipeline while preserving the provider call id.
++    fn resolve_action_tool_calls(&self, tool_calls: &[ContentBlock]) -> Vec<ContentBlock> {
++        tool_calls
++            .iter()
++            .map(|call| {
++                let ContentBlock::ToolUse { id, name, input, extra } = call else {
++                    return call.clone();
++                };
++                if name != "StartAction" {
++                    return call.clone();
++                }
++                let operation = input.get("operation").and_then(Value::as_str);
++                if operation == Some("run") {
++                    let resolved = self
++                        .action_schema_state
++                        .as_ref()
++                        .and_then(|state| state.read().ok())
++                        .map(|state| state.resolve_run(input));
++                    return match resolved {
++                        Some(Ok((tool, arguments))) => ContentBlock::ToolUse {
++                            id: id.clone(),
++                            name: tool,
++                            input: arguments,
++                            extra: extra.clone(),
++                        },
++                        Some(Err(error)) => {
++                            let mut next = input.clone();
++                            if let Some(object) = next.as_object_mut() {
++                                object.insert("_action_error".to_string(), Value::String(error));
++                            }
++                            ContentBlock::ToolUse {
++                                id: id.clone(),
++                                name: name.clone(),
++                                input: next,
++                                extra: extra.clone(),
++                            }
++                        }
++                        None => call.clone(),
++                    };
++                }
++                if operation == Some("history") {
++                    let mut next = input.clone();
++                    let history =
++                        self.search_retained_history(input.get("query").and_then(Value::as_str).unwrap_or(""));
++                    if let Some(object) = next.as_object_mut() {
++                        object.insert("_history_results".to_string(), Value::String(history));
++                    }
++                    return ContentBlock::ToolUse {
++                        id: id.clone(),
++                        name: name.clone(),
++                        input: next,
++                        extra: extra.clone(),
++                    };
++                }
++                call.clone()
++            })
++            .collect()
++    }
++
+     /// Classify, execute and re-merge one model turn's tool calls.
+     ///
+     /// Malformed calls get synthetic error results; the rest are executed via
+diff --git a/crates/aion-agent/src/engine_test.rs b/crates/aion-agent/src/engine_test.rs
+index 60c7285..7432385 100644
+--- a/crates/aion-agent/src/engine_test.rs
++++ b/crates/aion-agent/src/engine_test.rs
+@@ -73,6 +73,7 @@ mod tests_set_config {
+             toon_enabled: false,
+             plan_state: Default::default(),
+             plan_active_flag: None,
++            action_schema_state: None,
+             cache_detector: super::CacheBreakDetector::new(),
+             commands: crate::commands::default_registry(),
+         }
+@@ -342,6 +343,106 @@ mod tests_set_config {
+         assert!(engine.reasoning_effort.is_none());
+         assert!(changes.iter().any(|c| c.contains("cleared")));
+     }
++
++    #[tokio::test]
++    async fn action_context_always_exposes_one_tool_and_caches_nested_schemas() {
++        use aion_protocol::events::ToolCategory;
++        use aion_tools::Tool;
++        use aion_tools::tool_search::{ActionSchemaState, StartActionTool, ToolSearchTool};
++        use aion_types::tool::ToolResult;
++        use serde_json::{Value, json};
++        use std::sync::RwLock;
++
++        struct SurfaceRead;
++        #[async_trait::async_trait]
++        impl Tool for SurfaceRead {
++            fn name(&self) -> &str {
++                "surface_read"
++            }
++            fn description(&self) -> &str {
++                "Read a surface project file"
++            }
++            fn input_schema(&self) -> Value {
++                json!({"type":"object","properties":{"path":{"type":"string"}},"required":["path"]})
++            }
++            fn is_concurrency_safe(&self, _: &Value) -> bool {
++                true
++            }
++            async fn execute(&self, _: Value) -> ToolResult {
++                ToolResult {
++                    content: "ok".into(),
++                    is_error: false,
++                }
++            }
++            fn category(&self) -> ToolCategory {
++                ToolCategory::Mcp
++            }
++        }
++
++        let mut engine = make_engine("m");
++        let state = Arc::new(RwLock::new(ActionSchemaState::new(false)));
++        engine.registry_mut().register(Box::new(SurfaceRead));
++        engine
++            .registry_mut()
++            .register(Box::new(StartActionTool::new(Arc::clone(&state))));
++        engine
++            .registry_mut()
++            .register(Box::new(ToolSearchTool::with_action_state(
++                Vec::new(),
++                Arc::clone(&state),
++            )));
++        engine.set_action_schema_state(Arc::clone(&state));
++        engine.refresh_action_catalog();
++
++        let (_, initial, _, initial_summary, _, initial_cache) = engine.context_snapshot();
++        assert_eq!(
++            initial
++                .iter()
++                .filter_map(|tool| tool.get("name").and_then(serde_json::Value::as_str))
++                .collect::<Vec<_>>(),
++            vec!["StartAction"]
++        );
++        assert!(initial_summary.is_empty());
++        assert!(initial_cache.is_empty());
++
++        engine
++            .tools
++            .get("StartAction")
++            .unwrap()
++            .execute(serde_json::json!({"goal":"fix"}))
++            .await;
++        assert!(engine.context_snapshot().5.is_empty());
++        engine
++            .tools
++            .get("ToolSearch")
++            .unwrap()
++            .execute(serde_json::json!({"query":"read"}))
++            .await;
++
++        let (system, opened, _, summary, _, cache) = engine.context_snapshot();
++        assert_eq!(opened.len(), 1);
++        assert_eq!(opened[0]["name"], "StartAction");
++        assert!(summary.contains("project reading and search"));
++        assert!(system.contains("[ToolMap summary]"));
++        assert_eq!(cache.len(), 1);
++        assert_eq!(cache[0]["name"], "surface_read");
++
++        state.write().unwrap().finish_action();
++        state.write().unwrap().reset_for_action();
++        let (_, _, _, _, _, retained_cache) = engine.context_snapshot();
++        assert_eq!(retained_cache.len(), 1);
++
++        let reopened = engine
++            .tools
++            .get("StartAction")
++            .unwrap()
++            .execute(serde_json::json!({"goal":"continue"}))
++            .await;
++        assert!(!reopened.is_error);
++        let (_, _, _, _, _, next_action_cache) = engine.context_snapshot();
++        assert_eq!(next_action_cache.len(), 1);
++        assert_eq!(next_action_cache[0]["name"], "surface_read");
++    }
+ }
+ 
+ // ---------------------------------------------------------------------------
+@@ -414,6 +492,7 @@ mod tests_phase6 {
+             toon_enabled: false,
+             plan_state: Default::default(),
+             plan_active_flag: None,
++            action_schema_state: None,
+             cache_detector: super::CacheBreakDetector::new(),
+             commands: crate::commands::default_registry(),
+         }
+@@ -655,6 +734,7 @@ mod tests_compact {
+             toon_enabled: false,
+             plan_state: Default::default(),
+             plan_active_flag: None,
++            action_schema_state: None,
+             cache_detector: super::CacheBreakDetector::new(),
+             commands: crate::commands::default_registry(),
+         }
+@@ -1022,6 +1102,7 @@ mod tests_plan_mode {
+             toon_enabled: false,
+             plan_state: PlanState::default(),
+             plan_active_flag: Some(flag),
++            action_schema_state: None,
+             cache_detector: super::CacheBreakDetector::new(),
+             commands: crate::commands::default_registry(),
+         }
+@@ -1230,6 +1311,7 @@ mod tests_handle_command {
+             toon_enabled: false,
+             plan_state: Default::default(),
+             plan_active_flag: None,
++            action_schema_state: None,
+             cache_detector: super::CacheBreakDetector::new(),
+             commands: crate::commands::default_registry(),
+         }
+@@ -1729,6 +1811,7 @@ mod tests_tool_policy_enforcement {
+             toon_enabled: false,
+             plan_state: Default::default(),
+             plan_active_flag: None,
++            action_schema_state: None,
+             cache_detector: CacheBreakDetector::new(),
+             commands: default_registry(),
+         }
+diff --git a/crates/aion-cli/src/json_stream/dispatch.rs b/crates/aion-cli/src/json_stream/dispatch.rs
+index 31c294a..8bfaf8d 100644
+--- a/crates/aion-cli/src/json_stream/dispatch.rs
++++ b/crates/aion-cli/src/json_stream/dispatch.rs
+@@ -87,6 +87,17 @@ pub(super) fn handle(cmd: ProtocolCommand, engine: &mut AgentEngine, ctx: &Strea
+                 "AddMcpServer '{name}': rejected — only allowed before first Message"
+             ));
+         }
++        ProtocolCommand::ContextSnapshot => {
++            let (system, tools, messages, capability_summary, working_memory, tool_cache) = engine.context_snapshot();
++            let _ = ctx.writer.emit(&ProtocolEvent::ContextSnapshot {
++                system,
++                tools,
++                messages,
++                capability_summary,
++                working_memory,
++                tool_cache,
++            });
++        }
+         ProtocolCommand::Ping => {
+             let _ = ctx.writer.emit(&ProtocolEvent::Pong);
+         }
+diff --git a/crates/aion-cli/src/json_stream/pre_message.rs b/crates/aion-cli/src/json_stream/pre_message.rs
+index de05d8c..6b0aee6 100644
+--- a/crates/aion-cli/src/json_stream/pre_message.rs
++++ b/crates/aion-cli/src/json_stream/pre_message.rs
+@@ -26,6 +26,7 @@ fn to_mcp_server_config(
+     env: Option<HashMap<String, String>>,
+     url: Option<String>,
+     headers: Option<HashMap<String, String>>,
++    deferred: Option<bool>,
+ ) -> Result<McpServerConfig, String> {
+     let transport_type = match transport {
+         "stdio" => TransportType::Stdio,
+@@ -40,7 +41,7 @@ fn to_mcp_server_config(
+         env,
+         url,
+         headers,
+-        deferred: Some(false),
++        deferred: Some(deferred.unwrap_or(true)),
+         startup_timeout_ms: None,
+     })
+ }
+@@ -79,9 +80,10 @@ pub(super) async fn run(
+                 env,
+                 url,
+                 headers,
++                deferred,
+             } => {
+                 tracing::info!(target: "aion_mcp", %name, %transport, ?command, "AddMcpServer received");
+-                let config = match to_mcp_server_config(&transport, command, args, env, url, headers) {
++                let config = match to_mcp_server_config(&transport, command, args, env, url, headers, deferred) {
+                     Ok(c) => c,
+                     Err(e) => {
+                         output.emit_error(&format!("AddMcpServer '{name}': {e}"));
+@@ -105,6 +107,7 @@ pub(super) async fn run(
+                             &builtin_names,
+                             config.deferred.unwrap_or(true),
+                         );
++                        engine.refresh_action_catalog();
+                         dynamic_managers.push(mgr_arc);
+                         let _ = writer.emit(&ProtocolEvent::McpReady {
+                             name,
+diff --git a/crates/aion-protocol/src/commands.rs b/crates/aion-protocol/src/commands.rs
+index 4a116bb..c660156 100644
+--- a/crates/aion-protocol/src/commands.rs
++++ b/crates/aion-protocol/src/commands.rs
+@@ -63,7 +63,10 @@ pub enum ProtocolCommand {
+         url: Option<String>,
+         #[serde(default)]
+         headers: Option<HashMap<String, String>>,
++        #[serde(default)]
++        deferred: Option<bool>,
+     },
++    ContextSnapshot,
+     Ping,
+ }
+ 
+diff --git a/crates/aion-protocol/src/commands_test.rs b/crates/aion-protocol/src/commands_test.rs
+index 90df9a1..77864cd 100644
+--- a/crates/aion-protocol/src/commands_test.rs
++++ b/crates/aion-protocol/src/commands_test.rs
+@@ -122,6 +122,7 @@ mod tests {
+                 env,
+                 url,
+                 headers,
++                deferred,
+             } => {
+                 assert_eq!(name, "team-tools");
+                 assert_eq!(transport, "stdio");
+@@ -130,6 +131,7 @@ mod tests {
+                 assert_eq!(env.unwrap().get("TOKEN").unwrap(), "abc123");
+                 assert!(url.is_none());
+                 assert!(headers.is_none());
++                assert!(deferred.is_none());
+             }
+             _ => panic!("expected AddMcpServer"),
+         }
+diff --git a/crates/aion-protocol/src/events.rs b/crates/aion-protocol/src/events.rs
+index 0619172..8823c63 100644
+--- a/crates/aion-protocol/src/events.rs
++++ b/crates/aion-protocol/src/events.rs
+@@ -69,6 +69,14 @@ pub enum ProtocolEvent {
+         name: String,
+         tools: Vec<String>,
+     },
++    ContextSnapshot {
++        system: String,
++        tools: Vec<Value>,
++        messages: Vec<Value>,
++        capability_summary: String,
++        working_memory: Value,
++        tool_cache: Vec<Value>,
++    },
+     Pong,
+ }
+ 
+diff --git a/crates/aion-tools/src/tool_search.rs b/crates/aion-tools/src/tool_search.rs
+index 09f3028..fb4161f 100644
+--- a/crates/aion-tools/src/tool_search.rs
++++ b/crates/aion-tools/src/tool_search.rs
+@@ -1,3 +1,6 @@
++use std::collections::BTreeSet;
++use std::sync::{Arc, RwLock};
++
+ use async_trait::async_trait;
+ use serde_json::{Value, json};
+ 
+@@ -6,6 +9,317 @@ use aion_types::tool::{JsonSchema, ToolDef, ToolResult};
+ 
+ use crate::Tool;
+ 
++const START_ACTION_NAME: &str = "StartAction";
++
++#[derive(Debug)]
++pub struct ActionSchemaState {
++    started: bool,
++    map_initialized: bool,
++    surface_only: bool,
++    tool_defs: Vec<ToolDef>,
++    loaded: BTreeSet<String>,
++    working_memory: Value,
++}
++
++impl ActionSchemaState {
++    pub fn new(surface_only: bool) -> Self {
++        Self {
++            started: false,
++            map_initialized: false,
++            surface_only,
++            tool_defs: Vec::new(),
++            loaded: BTreeSet::new(),
++            working_memory: json!({}),
++        }
++    }
++
++    pub fn surface_only(&self) -> bool {
++        self.surface_only
++    }
++
++    pub fn reset_for_action(&mut self) {
++        self.started = false;
++    }
++
++    pub fn refresh_catalog(&mut self, tool_defs: Vec<ToolDef>) {
++        self.tool_defs = tool_defs;
++        let available = self
++            .tool_defs
++            .iter()
++            .map(|tool| tool.name.as_str())
++            .collect::<BTreeSet<_>>();
++        self.loaded.retain(|name| available.contains(name.as_str()));
++    }
++
++    pub fn capability_summary(&self) -> String {
++        if !self.map_initialized {
++            return String::new();
++        }
++        let mut groups = BTreeSet::new();
++        for tool in &self.tool_defs {
++            let text = format!("{} {}", tool.name, tool.description).to_lowercase();
++            let group = if text.contains("secret") || text.contains("credential") {
++                "secret aliases"
++            } else if text.contains("browser") || text.contains("web") {
++                "browser and web"
++            } else if text.contains("memory") || text.contains("context") || text.contains("history") {
++                "memory and context"
++            } else if text.contains("git") || text.contains("diff") || text.contains("commit") {
++                "version control"
++            } else if text.contains("test")
++                || text.contains("terminal")
++                || text.contains("command")
++                || text.contains("exec")
++            {
++                "commands and tests"
++            } else if text.contains("write")
++                || text.contains("edit")
++                || text.contains("patch")
++                || text.contains("create")
++            {
++                "project editing"
++            } else if text.contains("read") || text.contains("search") || text.contains("grep") || text.contains("map")
++            {
++                "project reading and search"
++            } else if text.contains("team") || text.contains("agent") || text.contains("spawn") {
++                "agent collaboration"
++            } else if text.contains("database") || text.contains("table") || text.contains("query") {
++                "data access"
++            } else {
++                "other surface actions"
++            };
++            groups.insert(group);
++        }
++        if groups.is_empty() {
++            "No surface tools are currently available.".to_string()
++        } else {
++            format!(
++                "Available surface capabilities: {}.",
++                groups.into_iter().collect::<Vec<_>>().join("; ")
++            )
++        }
++    }
++
++    pub fn working_memory(&self) -> Value {
++        self.working_memory.clone()
++    }
++
++    pub fn tool_cache(&self) -> Vec<Value> {
++        self.tool_defs
++            .iter()
++            .filter(|tool| self.loaded.contains(&tool.name))
++            .map(|tool| serde_json::to_value(tool).unwrap_or(Value::Null))
++            .collect()
++    }
++
++    pub fn resolve_run(&self, input: &Value) -> Result<(String, Value), String> {
++        if !self.started {
++            return Err("Start the current action before running a surface tool.".to_string());
++        }
++        let name = input.get("tool").and_then(Value::as_str).unwrap_or("");
++        if !self.loaded.contains(name) {
++            return Err(format!(
++                "Tool {name} is not loaded. Search for it through StartAction first."
++            ));
++        }
++        Ok((
++            name.to_string(),
++            input.get("arguments").cloned().unwrap_or_else(|| json!({})),
++        ))
++    }
++
++    fn map(&mut self, group: &str) -> Value {
++        self.map_initialized = true;
++        let group = group.to_lowercase();
++        Value::Array(
++            self.tool_defs
++                .iter()
++                .filter(|tool| {
++                    group.is_empty()
++                        || tool.name.to_lowercase().contains(&group)
++                        || tool.description.to_lowercase().contains(&group)
++                })
++                .map(|tool| json!({"name":tool.name,"description":tool.description}))
++                .collect(),
++        )
++    }
++
++    fn search(&mut self, query: &str) -> Vec<String> {
++        let query = query.trim().to_lowercase();
++        if query.is_empty() {
++            return Vec::new();
++        }
++        let tokens = query
++            .split_whitespace()
++            .map(|token| {
++                token.trim_matches(|character: char| {
++                    !character.is_alphanumeric() && character != '_' && character != '-'
++                })
++            })
++            .filter(|token| token.len() >= 3)
++            .collect::<Vec<_>>();
++        let mut ranked = self
++            .tool_defs
++            .iter()
++            .filter_map(|tool| {
++                let name = tool.name.to_lowercase();
++                let description = tool.description.to_lowercase();
++                let mut score = if name == query { 1_000 } else { 0 };
++                for token in &tokens {
++                    if name == *token {
++                        score += 500;
++                    } else if name.contains(*token) {
++                        score += 100;
++                    }
++                    if description.contains(*token) {
++                        score += 10;
++                    }
++                }
++                (score > 0).then(|| (score, tool.name.clone()))
++            })
++            .collect::<Vec<_>>();
++        ranked.sort_by(|left, right| right.0.cmp(&left.0).then_with(|| left.1.cmp(&right.1)));
++        let matches = ranked
++            .into_iter()
++            .map(|(_, name)| name)
++            .take(8)
++            .collect::<Vec<_>>();
++        self.loaded.extend(matches.iter().cloned());
++        matches
++    }
++
++    fn input_schema(&self) -> JsonSchema {
++        if !self.started {
++            return json!({
++                "type":"object",
++                "properties":{"goal":{"type":"string","description":"The concrete goal for this action."}},
++                "required":["goal"],
++                "additionalProperties":false
++            });
++        }
++        let mut variants = vec![
++            json!({"type":"object","properties":{"operation":{"const":"map"},"group":{"type":"string"}},"required":["operation"],"additionalProperties":false}),
++            json!({"type":"object","properties":{"operation":{"const":"history"},"query":{"type":"string"}},"required":["operation","query"],"additionalProperties":false}),
++            json!({"type":"object","properties":{"operation":{"const":"memory"},"memory":{"type":"object","additionalProperties":true}},"required":["operation","memory"],"additionalProperties":false}),
++        ];
++        for tool in self.tool_defs.iter().filter(|tool| self.loaded.contains(&tool.name)) {
++            variants.push(json!({
++                "type":"object",
++                "properties":{
++                    "operation":{"const":"run"},
++                    "tool":{"const":tool.name},
++                    "arguments":tool.input_schema
++                },
++                "required":["operation","tool","arguments"],
++                "additionalProperties":false
++            }));
++        }
++        json!({"oneOf":variants})
++    }
++}
++
++pub struct StartActionTool {
++    state: Arc<RwLock<ActionSchemaState>>,
++}
++
++impl StartActionTool {
++    pub fn new(state: Arc<RwLock<ActionSchemaState>>) -> Self {
++        Self { state }
++    }
++}
++
++#[async_trait]
++impl Tool for StartActionTool {
++    fn name(&self) -> &str {
++        START_ACTION_NAME
++    }
++
++    fn description(&self) -> &str {
++        "Core action gateway. Start each user action here, then map capabilities, search exact tool schemas, maintain bounded context, or run a loaded surface tool through its nested schema."
++    }
++
++    fn input_schema(&self) -> JsonSchema {
++        self.state
++            .read()
++            .map(|state| state.input_schema())
++            .unwrap_or_else(|_| json!({"type":"object"}))
++    }
++
++    fn is_concurrency_safe(&self, _input: &Value) -> bool {
++        false
++    }
++
++    async fn execute(&self, input: Value) -> ToolResult {
++        let Ok(mut state) = self.state.write() else {
++            return ToolResult {
++                content: "Action context is unavailable.".into(),
++                is_error: true,
++            };
++        };
++        if let Some(error) = input.get("_action_error").and_then(Value::as_str) {
++            return ToolResult {
++                content: error.to_string(),
++                is_error: true,
++            };
++        }
++        match input.get("operation").and_then(Value::as_str) {
++            None => {
++                state.started = true;
++                let map = state.map("");
++                ToolResult {
++                    content: format!(
++                        "Action started. {}\nToolMap: {}\nUse StartAction again with operation=search before running a surface tool.",
++                        state.capability_summary(),
++                        serde_json::to_string(&map).unwrap_or_default()
++                    ),
++                    is_error: false,
++                }
++            }
++            Some("map") => {
++                let map = state.map(input.get("group").and_then(Value::as_str).unwrap_or(""));
++                ToolResult {
++                    content: format!(
++                        "{}\nToolMap: {}",
++                        state.capability_summary(),
++                        serde_json::to_string(&map).unwrap_or_default()
++                    ),
++                    is_error: false,
++                }
++            }
++            Some("search") => ToolResult {
++                content: "StartAction does not load schemas. Use ToolSearch after opening the gate.".into(),
++                is_error: true,
++            },
++            Some("history") => ToolResult {
++                content: input
++                    .get("_history_results")
++                    .and_then(Value::as_str)
++                    .unwrap_or("No matching retained history was found.")
++                    .to_string(),
++                is_error: false,
++            },
++            Some("memory") => {
++                state.working_memory = input.get("memory").cloned().unwrap_or_else(|| json!({}));
++                ToolResult {
++                    content: "Working memory updated.".into(),
++                    is_error: false,
++                }
++            }
++            Some("run") => ToolResult {
++                content: "The requested surface tool could not be routed.".into(),
++                is_error: true,
++            },
++            Some(other) => ToolResult {
++                content: format!("Unknown StartAction operation: {other}"),
++                is_error: true,
++            },
++        }
++    }
++
++    fn category(&self) -> ToolCategory {
++        ToolCategory::Info
++    }
++}
+ /// Built-in tool that searches for deferred tools and loads their full schema.
+ /// Core tool (never deferred itself) — always available to the LLM.
+ pub struct ToolSearchTool {
+diff --git a/crates/aion-tools/src/tool_search_test.rs b/crates/aion-tools/src/tool_search_test.rs
+index f77f4a9..db2acf0 100644
+--- a/crates/aion-tools/src/tool_search_test.rs
++++ b/crates/aion-tools/src/tool_search_test.rs
+@@ -75,4 +75,37 @@ mod tests {
+         let result = tool.execute(json!({"query": ""})).await;
+         assert!(result.is_error);
+     }
++    #[tokio::test]
++    async fn start_action_maps_surface_tools_and_keeps_a_short_summary() {
++        let state = Arc::new(RwLock::new(ActionSchemaState::new(false)));
++        state.write().unwrap().refresh_catalog(build_tool_defs());
++        let tool = StartActionTool::new(Arc::clone(&state));
++
++        let result = tool.execute(json!({"goal":"fix context"})).await;
++
++        assert!(!result.is_error);
++        assert!(result.content.contains("ToolMap"));
++        assert!(result.content.contains("Read"));
++        assert!(
++            state
++                .read()
++                .unwrap()
++                .capability_summary()
++                .contains("Available surface capabilities")
++        );
++    }
++
++    #[tokio::test]
++    async fn start_action_search_cannot_populate_schema_cache() {
++        let state = Arc::new(RwLock::new(ActionSchemaState::new(false)));
++        state.write().unwrap().refresh_catalog(build_tool_defs());
++        let tool = StartActionTool::new(Arc::clone(&state));
++        tool.execute(json!({"goal":"fix context"})).await;
++
++        let result = tool.execute(json!({"operation":"search","query":"spawn"})).await;
++
++        assert!(result.is_error);
++        assert!(result.content.contains("ToolSearch"));
++        assert!(state.read().unwrap().tool_cache().is_empty());
++    }
+ }
+diff --git a/crates/aion-types/src/tool.rs b/crates/aion-types/src/tool.rs
+index cefab45..8ed682e 100644
+--- a/crates/aion-types/src/tool.rs
++++ b/crates/aion-types/src/tool.rs
+@@ -1,3 +1,4 @@
++use serde::Serialize;
+ use serde_json::Value;
+ 
+ /// Schema for a tool parameter, in JSON Schema format
+@@ -31,7 +32,7 @@ pub fn truncate_deferred_description(desc: &str) -> String {
+ }
+ 
+ /// Definition of a tool for the API
+-#[derive(Debug, Clone)]
++#[derive(Debug, Clone, Serialize)]
+ pub struct ToolDef {
+     pub name: String,
+     pub description: String,

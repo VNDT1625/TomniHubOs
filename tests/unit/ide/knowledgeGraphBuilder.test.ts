@@ -12,6 +12,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   aggregateModules,
+  buildRepoSummaryPayload,
   createKnowledgeGraphBuilder,
   extractSymbols,
   fallbackSummary,
@@ -320,6 +321,88 @@ describe('createKnowledgeGraphBuilder.build', () => {
     expect(byId.get('src/index.ts')?.importedBy).toBe(0);
     // Structural symbols were extracted deterministically.
     expect(byId.get('src/data.ts')?.symbols.some((s) => s.name === 'read')).toBe(true);
+  });
+
+  it('records the source snapshot before file collection while builtAt remains completion time', async () => {
+    let clock = 100;
+    const builder = createKnowledgeGraphBuilder({
+      chat: constantChat('[]'),
+      collectFiles: async () => {
+        clock = 200;
+        return sampleFiles;
+      },
+      now: () => clock,
+    });
+
+    const graph = await builder.build('/repo', 'gpt');
+
+    expect(graph.sourceSnapshotAt).toBe(100);
+    expect(graph.builtAt).toBe(200);
+  });
+
+  it('keeps aliased IPC dependencies deterministic across scan order', async () => {
+    const files = [
+      {
+        relPath: 'packages/desktop/src/renderer/pages/chat/Send.tsx',
+        content: [
+          "import { ipcBridge } from '@/common/adapter/ipcBridge';",
+          "export { View } from '@renderer/pages/chat/View';",
+          "const worker = import('@worker/index');",
+        ].join('\n'),
+      },
+      {
+        relPath: 'packages/desktop/src/process/services/chat/bridge.ts',
+        content: [
+          "import { ipcBridge } from '@/common/adapter/ipcBridge';",
+          "import { service } from '@process/services/chat/service';",
+        ].join('\n'),
+      },
+      { relPath: 'packages/desktop/src/common/adapter/ipcBridge.ts', content: 'export const ipcBridge = {};' },
+      { relPath: 'packages/desktop/src/process/services/chat/service.ts', content: 'export const service = {};' },
+      { relPath: 'packages/desktop/src/process/worker/index.ts', content: 'export const worker = {};' },
+      { relPath: 'packages/desktop/src/renderer/pages/chat/View.tsx', content: 'export const View = null;' },
+    ];
+    const buildStructural = async (orderedFiles: typeof files): Promise<KnowledgeGraph> => {
+      const controller = new AbortController();
+      return createKnowledgeGraphBuilder({
+        chat: constantChat('[]'),
+        collectFiles: filesFrom(orderedFiles),
+        now: () => 1,
+      }).build('/repo', 'gpt', undefined, {
+        signal: controller.signal,
+        onPhase: (phase) => {
+          if (phase === 'parsing') controller.abort();
+        },
+      });
+    };
+
+    const forward = await buildStructural(files);
+    const reversed = await buildStructural([...files].reverse());
+    const expected: KnowledgeEdge[] = [
+      {
+        from: 'packages/desktop/src/process/services/chat/bridge.ts',
+        to: 'packages/desktop/src/common/adapter/ipcBridge.ts',
+      },
+      {
+        from: 'packages/desktop/src/process/services/chat/bridge.ts',
+        to: 'packages/desktop/src/process/services/chat/service.ts',
+      },
+      {
+        from: 'packages/desktop/src/renderer/pages/chat/Send.tsx',
+        to: 'packages/desktop/src/common/adapter/ipcBridge.ts',
+      },
+      {
+        from: 'packages/desktop/src/renderer/pages/chat/Send.tsx',
+        to: 'packages/desktop/src/process/worker/index.ts',
+      },
+      {
+        from: 'packages/desktop/src/renderer/pages/chat/Send.tsx',
+        to: 'packages/desktop/src/renderer/pages/chat/View.tsx',
+      },
+    ];
+
+    expect(forward.edges).toEqual(expected);
+    expect(reversed.edges).toEqual(expected);
   });
 
   it('applies parsed summaries from the fake chat (semantic pass)', async () => {
@@ -799,9 +882,9 @@ describe('graph freshness', () => {
       const os = await import('node:os');
       const path = await import('node:path');
       const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'aionui-graph-freshness-'));
-      await fs.mkdir(path.join(dir, '.aionui', 'understand'), { recursive: true });
+      await fs.mkdir(path.join(dir, '.tomni', 'understand'), { recursive: true });
       await fs.writeFile(
-        path.join(dir, '.aionui', 'understand', 'stale.json'),
+        path.join(dir, '.tomni', 'understand', 'stale.json'),
         JSON.stringify({ updatedAt: '2026-06-06T00:00:00.000Z', paths: ['src/b.ts', 'src/a.ts', 'src/a.ts'] })
       );
       return dir;
@@ -896,5 +979,40 @@ describe('build — display language', () => {
     // chat WAS called for the summary pass (no language-mismatched reuse).
     const summaryCalls = chat.mock.calls.filter((c) => String(c[1]).includes('codebase folders'));
     expect(summaryCalls.length).toBeGreaterThan(0);
+  });
+});
+
+describe('canonical MTUI summary payload', () => {
+  it('exports file-level dependency edges with the current schema version', () => {
+    const graph: KnowledgeGraph = {
+      rootPath: '/repo',
+      version: 5,
+      builtAt: 123,
+      sourceSnapshotAt: 100,
+      nodes: [
+        {
+          id: 'src/send.ts',
+          label: 'send.ts',
+          group: 'src',
+          layer: 'ui',
+          summary: 'Sends a message.',
+          tags: ['chat'],
+          symbols: [],
+          language: 'typescript',
+          importedBy: 0,
+        },
+      ],
+      edges: [{ from: 'src/send.ts', to: 'src/service.ts' }],
+      tours: [],
+      truncated: false,
+      fileCount: 1,
+    };
+
+    const payload = buildRepoSummaryPayload(graph);
+
+    expect(payload.version).toBe(3);
+    expect(payload.sourceSnapshotAt).toBe(100);
+    expect(payload.edges).toEqual([{ from: 'src/send.ts', to: 'src/service.ts' }]);
+    expect(payload.files[0]?.path).toBe('src/send.ts');
   });
 });

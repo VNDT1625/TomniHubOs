@@ -10,15 +10,24 @@
  * + clock are injected so no real CLI is spawned.
  */
 
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
+import { createPremiumStarterProject, type ViuProjectState } from '@/common/viu';
 import {
   createTeamEditService,
+  createTeamPreviewFilePersistence,
   getTeamEditService,
   setTeamEditChangeListener,
 } from '@/process/ide/teamEdit/teamEditService';
 import type { MtuiResponse } from '@/process/terminal/mtuiBridge';
 
 const ROOT = '/repo';
+
+const failTeamServiceOperation = (): never => {
+  throw new Error('service blocked');
+};
 
 /** A fake MTUI writer that records calls and returns a configurable result. */
 const makeWriter = (ok = true) => {
@@ -241,6 +250,193 @@ describe('teamEditService — change notifications', () => {
   });
 });
 
+describe('teamEditService — immutable VIU preview packages', () => {
+  const publish = (
+    service: ReturnType<typeof createTeamEditService>,
+    state: ViuProjectState,
+    packageId = 'preview-home',
+    teamTaskId?: string
+  ) =>
+    service.publishPreview(
+      ROOT,
+      state,
+      {
+        snapshotId: 'snapshot-' + packageId,
+        createdAt: 100,
+        startScreenId: 'screen-home',
+        metadata: { title: 'Checkout prototype', createdBy: 'agent-design' },
+      },
+      { packageId, createdAt: 101, teamWorkspaceKey: ROOT, ...(teamTaskId ? { teamTaskId } : {}) }
+    );
+
+  it('rejects publication into a different Team workspace', () => {
+    const service = createTeamEditService();
+    const state = createPremiumStarterProject('project-preview-workspace');
+
+    expect(() =>
+      service.publishPreview(
+        ROOT,
+        state,
+        {
+          snapshotId: 'snapshot-wrong-workspace',
+          createdAt: 100,
+          startScreenId: 'screen-home',
+          metadata: { title: 'Wrong workspace', createdBy: 'agent-design' },
+        },
+        { packageId: 'package-wrong-workspace', createdAt: 101, teamWorkspaceKey: '/another-repo' }
+      )
+    ).toThrow('does not match');
+  });
+
+  it('rejects a package linked to a missing Team task', () => {
+    const service = createTeamEditService();
+    const state = createPremiumStarterProject('project-preview-task');
+
+    expect(() => publish(service, state, 'preview-missing-task', 'missing-task')).toThrow('Unknown Team task');
+  });
+
+  it('freezes the published snapshot independently from later project edits', () => {
+    const service = createTeamEditService();
+    const state = createPremiumStarterProject('project-preview-immutable');
+    const item = publish(service, state);
+    state.nodes['node-home-title']!.content = { text: 'Changed after publication' };
+
+    expect(Object.isFrozen(item)).toBe(true);
+    expect(Object.isFrozen(item.snapshot.project)).toBe(true);
+    expect(item.snapshot.project.nodes['node-home-title']?.content?.text).not.toBe('Changed after publication');
+  });
+
+  it('keeps version one immutable and rejects duplicate package ids', () => {
+    const service = createTeamEditService();
+    const state = createPremiumStarterProject('project-preview-version');
+    const item = publish(service, state, 'preview-versioned');
+
+    expect(item.version).toBe(1);
+    expect(() => publish(service, state, 'preview-versioned')).toThrow('already exists');
+  });
+
+  it('validates feedback anchors against the exact published snapshot', () => {
+    const service = createTeamEditService();
+    const state = createPremiumStarterProject('project-preview-feedback');
+    const item = publish(service, state, 'preview-feedback');
+
+    expect(() =>
+      service.appendPreviewFeedback(ROOT, item.packageId, {
+        feedbackId: 'feedback-invalid',
+        authorId: 'user',
+        authorKind: 'user',
+        createdAt: 200,
+        kind: 'issue',
+        body: 'Wrong screen',
+        screenId: 'screen-missing',
+      })
+    ).toThrow('does not exist');
+    const event = service.appendPreviewFeedback(ROOT, item.packageId, {
+      feedbackId: 'feedback-valid',
+      authorId: 'user',
+      authorKind: 'user',
+      createdAt: 201,
+      kind: 'comment',
+      body: 'Make the CTA clearer',
+      screenId: 'screen-home',
+      nodeId: 'node-home-cta',
+    });
+    expect(event.snapshotId).toBe(item.snapshot.snapshotId);
+    expect(service.listPreviewFeedback(ROOT, item.packageId)).toEqual([event]);
+  });
+
+  it('restores published packages and append-only feedback after a service restart', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'aionui-viu-preview-'));
+    try {
+      const persistence = createTeamPreviewFilePersistence(directory);
+      const first = createTeamEditService({ previewPersistence: persistence });
+      const state = createPremiumStarterProject('project-preview-persisted');
+      const item = publish(first, state, 'preview-persisted');
+      first.appendPreviewFeedback(ROOT, item.packageId, {
+        feedbackId: 'feedback-persisted',
+        authorId: 'reviewer',
+        authorKind: 'user',
+        createdAt: 202,
+        kind: 'approval',
+        body: 'Ready to build',
+        screenId: 'screen-home',
+      });
+
+      const restarted = createTeamEditService({ previewPersistence: persistence });
+      const restored = restarted.getPreview(ROOT, item.packageId, 'user-preview');
+
+      expect(restored.snapshot.contentDigest).toBe(item.snapshot.contentDigest);
+      expect(Object.isFrozen(restored.snapshot.project)).toBe(true);
+      expect(restarted.listPreviewFeedback(ROOT, item.packageId)).toMatchObject([
+        { feedbackId: 'feedback-persisted', body: 'Ready to build' },
+      ]);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects a tampered on-disk preview archive without exposing forged content', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'aionui-viu-preview-tamper-'));
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const persistence = createTeamPreviewFilePersistence(directory);
+      const first = createTeamEditService({ previewPersistence: persistence });
+      const state = createPremiumStarterProject('project-preview-tampered');
+      publish(first, state, 'preview-tampered');
+
+      const storedFile = join(directory, readdirSync(directory)[0]!);
+      const archive = JSON.parse(readFileSync(storedFile, 'utf8')) as {
+        packages: Array<{ snapshot: { contentDigest: string } }>;
+      };
+      archive.packages[0]!.snapshot.contentDigest = 'forged-digest';
+      writeFileSync(storedFile, JSON.stringify(archive), 'utf8');
+
+      const restarted = createTeamEditService({ previewPersistence: persistence });
+      expect(restarted.listPreviews(ROOT)).toEqual([]);
+      expect(consoleError).toHaveBeenCalledWith(
+        '[teamEditService] Ignoring an invalid VIU preview archive:',
+        expect.any(Error)
+      );
+    } finally {
+      consoleError.mockRestore();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('does not expose an unpublished in-memory package when durable save fails', () => {
+    const persistence = {
+      load: vi.fn(() => undefined),
+      save: vi.fn(() => {
+        throw new Error('disk full');
+      }),
+    };
+    const service = createTeamEditService({ previewPersistence: persistence });
+    const state = createPremiumStarterProject('project-preview-transaction');
+
+    expect(() => publish(service, state, 'preview-not-saved')).toThrow('disk full');
+    expect(service.listPreviews(ROOT)).toEqual([]);
+  });
+
+  it('creates only opaque local references without paths or credentials', async () => {
+    const { createViuLocalTestReference } = await import('@renderer/pages/studio/ide/teamEdit/teamEditClient');
+    const reference = createViuLocalTestReference('preview-home_01');
+
+    expect(reference).toBe('viu-preview://team-test/preview-home_01');
+    expect(reference).not.toContain(ROOT);
+    expect(reference).not.toMatch(/(?:token|password|secret)=/i);
+    expect(() => createViuLocalTestReference('../repo?token=secret')).toThrow('opaque identifier');
+  });
+
+  it('returns the same immutable package to user and agent preview consumers', () => {
+    const service = createTeamEditService();
+    const state = createPremiumStarterProject('project-preview-parity');
+    const item = publish(service, state, 'preview-parity');
+
+    expect(service.getPreview(ROOT, item.packageId, 'user-preview')).toBe(item);
+    expect(service.getPreview(ROOT, item.packageId, 'agent-preview')).toBe(item);
+  });
+});
+
 describe('teamEditService — shared singleton (UI + agent plane)', () => {
   it('returns ONE instance regardless of call order vs the change listener (no split-brain)', () => {
     // Agent plane resolves the service BEFORE the bridge wires its listener
@@ -256,5 +452,275 @@ describe('teamEditService — shared singleton (UI + agent plane)', () => {
     expect(events).toContain(ROOT);
     expect(first.snapshot(ROOT).leases.map((l) => l.agentId)).toEqual(['agent-a']);
     first.reset(ROOT);
+  });
+});
+
+describe('teamEditBridge - Main IPC envelopes', () => {
+  afterEach(() => {
+    vi.doUnmock('@office-ai/platform');
+    vi.doUnmock('@/process/ide/teamEdit/teamEditService');
+    vi.resetModules();
+  });
+
+  it('binds every provider, emits changes, and forwards success results', async () => {
+    vi.resetModules();
+    const providers = new Map<string, (request: never) => Promise<unknown>>();
+    const emit = vi.fn();
+    let changeListener: ((snapshot: unknown) => void) | undefined;
+    const service = {
+      snapshot: vi.fn(() => ({ rootPath: ROOT })),
+      join: vi.fn(),
+      claim: vi.fn(() => ({ ok: true, lease: { relPath: 'src/app.ts' }, renewed: false })),
+      release: vi.fn(() => true),
+      reset: vi.fn(),
+      write: vi.fn(async () => ({ ok: true, bytes: 4 })),
+      editReplace: vi.fn(async () => ({ ok: true, matches: 1 })),
+      saveTask: vi.fn(() => ({ id: 'task-1' })),
+      removeTask: vi.fn(() => true),
+      saveGroup: vi.fn(() => ({ id: 'group-1' })),
+      removeGroup: vi.fn(() => true),
+      postMessage: vi.fn(() => ({ id: 'message-1' })),
+      publishPreview: vi.fn(() => ({ packageId: 'package-1' })),
+      listPreviews: vi.fn(() => [{ packageId: 'package-1' }]),
+      getPreview: vi.fn(() => ({ packageId: 'package-1' })),
+      appendPreviewFeedback: vi.fn(() => ({ feedbackId: 'feedback-1' })),
+      listPreviewFeedback: vi.fn(() => [{ feedbackId: 'feedback-1' }]),
+    };
+
+    vi.doMock('@office-ai/platform', () => ({
+      bridge: {
+        buildProvider: (channel: string) => ({
+          provider: (handler: (request: never) => Promise<unknown>) => providers.set(channel, handler),
+        }),
+        buildEmitter: () => ({ emit }),
+      },
+    }));
+    vi.doMock('@/process/ide/teamEdit/teamEditService', () => ({
+      getTeamEditService: () => service,
+      setTeamEditChangeListener: (listener: (snapshot: unknown) => void) => {
+        changeListener = listener;
+      },
+    }));
+
+    const { registerTeamEditBridge } = await import('@/process/ide/teamEdit/teamEditBridge');
+    registerTeamEditBridge();
+
+    const requests: Record<string, unknown> = {
+      'ide.team-snapshot': { rootPath: ROOT },
+      'ide.team-join': { rootPath: ROOT, agentId: 'user', label: 'You', isUser: true },
+      'ide.team-claim': { rootPath: ROOT, agentId: 'user', relPath: 'src/app.ts', intent: 'review' },
+      'ide.team-release': { rootPath: ROOT, agentId: 'user', relPath: 'src/app.ts' },
+      'ide.team-reset': { rootPath: ROOT },
+      'ide.team-write': { rootPath: ROOT, agentId: 'agent-a', relPath: 'src/app.ts', data: 'next' },
+      'ide.team-edit': {
+        rootPath: ROOT,
+        agentId: 'agent-a',
+        relPath: 'src/app.ts',
+        oldText: 'old',
+        newText: 'new',
+      },
+      'ide.team-task-save': { rootPath: ROOT, task: { id: 'task-1' } },
+      'ide.team-task-remove': { rootPath: ROOT, taskId: 'task-1' },
+      'ide.team-group-save': { rootPath: ROOT, group: { id: 'group-1' } },
+      'ide.team-group-remove': { rootPath: ROOT, groupId: 'group-1' },
+      'ide.team-message-post': { rootPath: ROOT, senderId: 'user', body: 'Review', taskId: 'task-1' },
+      'ide.team-preview-publish': { rootPath: ROOT, state: {}, snapshot: {}, share: {} },
+      'ide.team-preview-list': { rootPath: ROOT },
+      'ide.team-preview-get': { rootPath: ROOT, packageId: 'package-1', consumer: 'user-preview' },
+      'ide.team-preview-feedback-append': { rootPath: ROOT, packageId: 'package-1', feedback: {} },
+      'ide.team-preview-feedback-list': { rootPath: ROOT, packageId: 'package-1' },
+    };
+
+    expect(new Set(providers.keys())).toEqual(new Set(Object.keys(requests)));
+    await Promise.all(
+      Object.entries(requests).map(([channel, request]) =>
+        expect(providers.get(channel)?.(request as never)).resolves.toMatchObject({ ok: true })
+      )
+    );
+
+    changeListener?.({ rootPath: ROOT });
+    expect(emit).toHaveBeenCalledWith({ snapshot: { rootPath: ROOT } });
+    expect(service.getPreview).toHaveBeenCalledWith(ROOT, 'package-1', 'user-preview');
+    expect(service.appendPreviewFeedback).toHaveBeenCalledWith(ROOT, 'package-1', {});
+  });
+
+  it('turns failures from every service boundary into resolving error envelopes', async () => {
+    vi.resetModules();
+    const providers = new Map<string, (request: never) => Promise<unknown>>();
+    const fail = failTeamServiceOperation;
+    const service = {
+      snapshot: vi.fn(fail),
+      join: vi.fn(fail),
+      claim: vi.fn(fail),
+      release: vi.fn(fail),
+      reset: vi.fn(fail),
+      write: vi.fn(fail),
+      editReplace: vi.fn(fail),
+      saveTask: vi.fn(fail),
+      removeTask: vi.fn(fail),
+      saveGroup: vi.fn(fail),
+      removeGroup: vi.fn(fail),
+      postMessage: vi.fn(fail),
+      publishPreview: vi.fn(fail),
+      listPreviews: vi.fn(fail),
+      getPreview: vi.fn(fail),
+      appendPreviewFeedback: vi.fn(fail),
+      listPreviewFeedback: vi.fn(fail),
+    };
+
+    vi.doMock('@office-ai/platform', () => ({
+      bridge: {
+        buildProvider: (channel: string) => ({
+          provider: (handler: (request: never) => Promise<unknown>) => providers.set(channel, handler),
+        }),
+        buildEmitter: () => ({ emit: vi.fn() }),
+      },
+    }));
+    vi.doMock('@/process/ide/teamEdit/teamEditService', () => ({
+      getTeamEditService: () => service,
+      setTeamEditChangeListener: vi.fn(),
+    }));
+
+    const { registerTeamEditBridge } = await import('@/process/ide/teamEdit/teamEditBridge');
+    registerTeamEditBridge();
+
+    const request = {
+      rootPath: ROOT,
+      agentId: 'agent-a',
+      label: 'Agent A',
+      relPath: 'src/app.ts',
+      intent: 'review',
+      data: 'next',
+      oldText: 'old',
+      newText: 'new',
+      task: {},
+      taskId: 'task-1',
+      group: {},
+      groupId: 'group-1',
+      senderId: 'user',
+      body: 'Review',
+      state: {},
+      snapshot: {},
+      share: {},
+      packageId: 'package-1',
+      consumer: 'agent-preview',
+      feedback: {},
+    };
+
+    await Promise.all(
+      [...providers.values()].map((handler) =>
+        expect(handler(request as never)).resolves.toEqual({ ok: false, error: 'service blocked' })
+      )
+    );
+  });
+});
+describe('teamEditClient - renderer IPC contract', () => {
+  afterEach(() => {
+    vi.doUnmock('@office-ai/platform');
+    vi.resetModules();
+    vi.useRealTimers();
+  });
+
+  it('forwards every Team operation with its complete typed payload', async () => {
+    vi.resetModules();
+    const invoke = vi.fn(async (channel: string, payload: unknown) => ({ ok: true, data: { channel, payload } }));
+    let changedListener: ((value: { snapshot: { rootPath: string } }) => void) | undefined;
+    const unsubscribe = vi.fn();
+
+    vi.doMock('@office-ai/platform', () => ({
+      bridge: {
+        buildProvider: (channel: string) => ({
+          invoke: (payload?: unknown) => invoke(channel, payload),
+        }),
+        buildEmitter: () => ({
+          on: (listener: (value: { snapshot: { rootPath: string } }) => void) => {
+            changedListener = listener;
+            return unsubscribe;
+          },
+        }),
+      },
+    }));
+
+    const { teamEditClient } = await import('@renderer/pages/studio/ide/teamEdit/teamEditClient');
+    const task = { id: 'task-1', title: 'Review checkout' };
+    const group = { id: 'group-1', name: 'Frontend' };
+    const state = { projectId: 'project-1' };
+    const snapshot = { snapshotId: 'snapshot-1' };
+    const share = { packageId: 'package-1' };
+    const feedback = { feedbackId: 'feedback-1', body: 'Ready' };
+
+    await teamEditClient.snapshot(ROOT);
+    await teamEditClient.join(ROOT, 'user', 'You');
+    await teamEditClient.claim(ROOT, 'user', 'src/app.ts', 'review');
+    await teamEditClient.release(ROOT, 'user', 'src/app.ts');
+    await teamEditClient.reset(ROOT);
+    await teamEditClient.write(ROOT, 'agent-a', 'src/app.ts', 'next');
+    await teamEditClient.edit(ROOT, 'agent-a', 'src/app.ts', 'old', 'new');
+    await teamEditClient.saveTask(ROOT, task as never);
+    await teamEditClient.removeTask(ROOT, 'task-1');
+    await teamEditClient.saveGroup(ROOT, group as never);
+    await teamEditClient.removeGroup(ROOT, 'group-1');
+    await teamEditClient.postMessage(ROOT, 'user', 'Please review', 'task-1');
+    await teamEditClient.publishPreview(ROOT, state as never, snapshot as never, share as never);
+    await teamEditClient.listPreviews(ROOT);
+    await teamEditClient.getPreview(ROOT, 'package-1', 'agent-preview');
+    await teamEditClient.appendPreviewFeedback(ROOT, 'package-1', feedback as never);
+    await teamEditClient.listPreviewFeedback(ROOT, 'package-1');
+
+    expect(invoke.mock.calls.map(([channel]) => channel)).toEqual([
+      'ide.team-snapshot',
+      'ide.team-join',
+      'ide.team-claim',
+      'ide.team-release',
+      'ide.team-reset',
+      'ide.team-write',
+      'ide.team-edit',
+      'ide.team-task-save',
+      'ide.team-task-remove',
+      'ide.team-group-save',
+      'ide.team-group-remove',
+      'ide.team-message-post',
+      'ide.team-preview-publish',
+      'ide.team-preview-list',
+      'ide.team-preview-get',
+      'ide.team-preview-feedback-append',
+      'ide.team-preview-feedback-list',
+    ]);
+    expect(invoke).toHaveBeenCalledWith('ide.team-join', {
+      rootPath: ROOT,
+      agentId: 'user',
+      label: 'You',
+      isUser: true,
+    });
+    expect(invoke).toHaveBeenCalledWith('ide.team-preview-get', {
+      rootPath: ROOT,
+      packageId: 'package-1',
+      consumer: 'agent-preview',
+    });
+
+    const listener = vi.fn();
+    expect(teamEditClient.onChanged(listener)).toBe(unsubscribe);
+    changedListener?.({ snapshot: { rootPath: ROOT } });
+    expect(listener).toHaveBeenCalledWith({ rootPath: ROOT });
+  });
+
+  it('rejects provider failures and a missing IPC reply with explicit errors', async () => {
+    vi.useFakeTimers();
+    const invoke = vi.fn<() => Promise<unknown>>();
+    vi.doMock('@office-ai/platform', () => ({
+      bridge: {
+        buildProvider: () => ({ invoke }),
+        buildEmitter: () => ({ on: vi.fn() }),
+      },
+    }));
+
+    const { TeamEditTimeoutError, teamEditClient } = await import('@renderer/pages/studio/ide/teamEdit/teamEditClient');
+    invoke.mockRejectedValueOnce('bridge failed');
+    await expect(teamEditClient.snapshot(ROOT)).rejects.toThrow('bridge failed');
+
+    invoke.mockReturnValueOnce(new Promise(() => {}));
+    const pending = expect(teamEditClient.snapshot(ROOT)).rejects.toBeInstanceOf(TeamEditTimeoutError);
+    await vi.advanceTimersByTimeAsync(10_000);
+    await pending;
   });
 });

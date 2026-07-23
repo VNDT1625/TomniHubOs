@@ -6,7 +6,12 @@
 
 import type { IChannelPluginStatus } from '@/common/types/channel/channel';
 import type { IProvider, TProviderWithModel } from '@/common/config/storage';
-import { channel, webui, type IWebUIStatus } from '@/common/adapter/ipcBridge';
+import {
+  channel,
+  telegramChannel as nativeTelegramChannel,
+  webui,
+  type IWebUIStatus,
+} from '@/common/adapter/ipcBridge';
 import { configService } from '@/common/config/configService';
 import AionScrollArea from '@/renderer/components/base/AionScrollArea';
 import { useModelProviderList } from '@/renderer/hooks/agent/useModelProviderList';
@@ -186,9 +191,12 @@ const ChannelModalContent: React.FC = () => {
   const loadPluginStatus = useCallback(async () => {
     try {
       // getPluginStatus returns IChannelPluginStatus[] directly
-      const plugins = await channel.getPluginStatus.invoke();
+      const [plugins, nativeTelegram] = await Promise.all([
+        channel.getPluginStatus.invoke().catch((): IChannelPluginStatus[] => []),
+        nativeTelegramChannel.getPluginStatus.invoke(),
+      ]);
       if (plugins) {
-        const telegramPlugin = plugins.find((p) => p.type === 'telegram');
+        const telegramPlugin = nativeTelegram[0];
         const larkPlugin = plugins.find((p) => p.type === 'lark');
         const dingtalkPlugin = plugins.find((p) => p.type === 'dingtalk');
         const weixinPlugin = plugins.find((p) => p.type === 'weixin');
@@ -276,7 +284,11 @@ const ChannelModalContent: React.FC = () => {
         }));
       }
     });
-    return () => unsubscribe();
+    const unsubscribeTelegram = nativeTelegramChannel.pluginStatusChanged.on(({ status }) => setPluginStatus(status));
+    return () => {
+      unsubscribe();
+      unsubscribeTelegram();
+    };
   }, []);
 
   // Toggle collapse
@@ -301,7 +313,7 @@ const ChannelModalContent: React.FC = () => {
         }
 
         // enablePlugin returns void; success if no throw
-        await channel.enablePlugin.invoke({
+        await nativeTelegramChannel.enablePlugin.invoke({
           plugin_id: 'telegram',
           config: pendingToken ? { credentials: { token: pendingToken } } : {},
         });
@@ -310,7 +322,7 @@ const ChannelModalContent: React.FC = () => {
         await loadPluginStatus();
       } else {
         // disablePlugin returns void; success if no throw
-        await channel.disablePlugin.invoke({
+        await nativeTelegramChannel.disablePlugin.invoke({
           plugin_id: 'telegram',
         });
 

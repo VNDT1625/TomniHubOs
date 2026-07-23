@@ -12,7 +12,9 @@
  * hosted **in-process** over a loopback SSE endpoint (`testingMcpHost.ts`)
  * rather than spawned as a stdio child. The loopback port is ephemeral (changes
  * each boot), so this registration is idempotent: it finds the existing catalog
- * entry by name and updates its URL, or creates it the first time.
+ * entry by name and updates its URL, or creates it the first time. The live
+ * bearer header is deliberately omitted because runtime credentials must never
+ * be persisted in the durable catalog.
  *
  * Called once after the backend is ready (from `runBackendMigrations`). Failures
  * are swallowed/logged — a registration problem must never block boot, and the
@@ -67,7 +69,10 @@ export const ensureTestingMcpRegistered = async (): Promise<boolean> => {
 
     // Refresh the URL if the ephemeral port changed since the last boot.
     const sameUrl = current.transport.type === 'sse' && current.transport.url === host.url;
-    if (!sameUrl) {
+    const hasPersistedHeaders =
+      current.transport.type !== 'stdio' && Object.keys(current.transport.headers ?? {}).length > 0;
+    const hasStaleOriginalJson = current.original_json !== original_json;
+    if (!sameUrl || hasPersistedHeaders || hasStaleOriginalJson) {
       await getMcpRegistry().update(current.id, { transport, original_json, builtin: true });
       console.log(`[TestingMCP] Updated "${BUILTIN_TESTING_NAME}" URL → ${host.url}.`);
     }

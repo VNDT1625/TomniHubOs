@@ -12,5 +12,5 @@
  */
 export * from './types';
 export { CONNECTOR_TARGETS, getConnectorTarget } from './targets';
-export { buildConnectorPlan, resolveBaseUrl, toOrigin, toV1 } from './connectorEngine';
+export { buildConnectorPlan, resolveBaseUrl, toOrigin, toV1, withRouter9ReasoningEffort } from './connectorEngine';
 export { deepMerge, expandHome, mergeConfigContent } from './applyPlan';

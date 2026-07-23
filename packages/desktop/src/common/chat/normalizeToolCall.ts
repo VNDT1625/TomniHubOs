@@ -2,11 +2,17 @@ import type { IMessageAcpToolCall, IMessageToolCall, IMessageToolGroup } from '.
 
 export type NormalizedToolStatus = 'pending' | 'running' | 'completed' | 'error' | 'canceled';
 
+const CONTROL_PLANE_TOOL_NAMES = new Set(['startaction', 'toolsearch', 'tool_search', 'tool-search']);
+
+export const isControlPlaneToolName = (name: string): boolean =>
+  CONTROL_PLANE_TOOL_NAMES.has(name.trim().toLowerCase());
+
 export interface NormalizedToolCall {
   key: string;
   name: string;
   status: NormalizedToolStatus;
   description?: string;
+  agentId?: string;
   input?: string;
   output?: string;
   truncated?: boolean;
@@ -25,10 +31,23 @@ const formatValue = (value: unknown): string => {
 
 // ===== tool_group → NormalizedToolCall[] =====
 
-function normalizeToolGroupStatus(status: string): NormalizedToolStatus {
+const TOOL_ERROR_ENVELOPE =
+  /^\s*(?:mcp\s+error(?:\s+-?\d+)?\s*:|input\s+validation\s+error\b|invalid\s+arguments?\s+for\s+tool\b|\{?\s*["']?is[_ ]?error["']?\s*[:=]\s*true\b)/iu;
+
+const isToolErrorPayload = (value: unknown): boolean => {
+  if (value === undefined || value === null) return false;
+  const text = typeof value === 'string' ? value : formatValue(value);
+  // Tool stdout can quote an earlier failure; only the payload envelope is authoritative.
+  return TOOL_ERROR_ENVELOPE.test(text);
+};
+
+function normalizeToolGroupStatus(
+  status: string,
+  resultDisplay?: IMessageToolGroup['content'][number]['result_display']
+): NormalizedToolStatus {
   switch (status) {
     case 'Success':
-      return 'completed';
+      return isToolErrorPayload(resultDisplay) ? 'error' : 'completed';
     case 'Error':
       return 'error';
     case 'Canceled':
@@ -54,31 +73,36 @@ const getResultDisplayText = (
 
 export function normalizeToolGroup(message: IMessageToolGroup): NormalizedToolCall[] {
   if (!Array.isArray(message.content)) return [];
-  return message.content.map(({ name, call_id, description, confirmationDetails, status, result_display }) => {
-    let desc = typeof description === 'string' ? description.slice(0, 100) : '';
-    const type = confirmationDetails?.type;
-    if (type === 'edit') desc = confirmationDetails.file_name;
-    if (type === 'exec') desc = confirmationDetails.command;
-    if (type === 'info') desc = confirmationDetails.urls?.join(';') || confirmationDetails.title;
-    if (type === 'mcp') desc = confirmationDetails.server_name + ':' + confirmationDetails.tool_name;
+  return message.content.map(
+    ({ name, call_id, description, confirmationDetails, status, result_display, input, agent_id }) => {
+      let desc = typeof description === 'string' ? description.slice(0, 100) : '';
+      const type = confirmationDetails?.type;
+      if (type === 'edit') desc = confirmationDetails.file_name;
+      if (type === 'exec') desc = confirmationDetails.command;
+      if (type === 'info') desc = confirmationDetails.urls?.join(';') || confirmationDetails.title;
+      if (type === 'mcp') desc = confirmationDetails.server_name + ':' + confirmationDetails.tool_name;
 
-    let input: string | undefined;
-    if (confirmationDetails) {
-      const { title: _title, type: _type, ...rest } = confirmationDetails;
-      if (Object.keys(rest).length) input = formatValue(rest);
-    } else if (description) {
-      input = description;
+      let displayInput: string | undefined;
+      if (input !== undefined) {
+        displayInput = formatValue(input);
+      } else if (confirmationDetails) {
+        const { title: _title, type: _type, ...rest } = confirmationDetails;
+        if (Object.keys(rest).length) displayInput = formatValue(rest);
+      } else if (description) {
+        displayInput = description;
+      }
+
+      return {
+        key: call_id,
+        name,
+        status: normalizeToolGroupStatus(status, result_display),
+        description: desc,
+        agentId: agent_id,
+        input: displayInput,
+        output: getResultDisplayText(result_display),
+      };
     }
-
-    return {
-      key: call_id,
-      name,
-      status: normalizeToolGroupStatus(status),
-      description: desc,
-      input,
-      output: getResultDisplayText(result_display),
-    };
-  });
+  );
 }
 
 // ===== acp_tool_call → NormalizedToolCall =====
@@ -194,7 +218,7 @@ function normalizeToolCallStatus(status?: string): NormalizedToolStatus {
 }
 
 export function normalizeToolCall(message: IMessageToolCall): NormalizedToolCall | undefined {
-  const { call_id, name, status, input, output, args, description } = message.content;
+  const { call_id, name, status, input, output, args, description, error } = message.content;
   if (!call_id) return undefined;
 
   const displayInput = input
@@ -206,10 +230,10 @@ export function normalizeToolCall(message: IMessageToolCall): NormalizedToolCall
   return {
     key: call_id,
     name,
-    status: normalizeToolCallStatus(status),
+    status: error || isToolErrorPayload(output) ? 'error' : normalizeToolCallStatus(status),
     description: description || undefined,
     input: displayInput,
-    output,
+    output: output || error,
   };
 }
 
@@ -229,16 +253,5 @@ export function normalizeToolMessages(messages: ToolMessage[]): NormalizedToolCa
 }
 
 export function hasRunningToolMessages(messages: ToolMessage[]): boolean {
-  return messages.some((m) => {
-    if (m.type === 'tool_group') {
-      return Array.isArray(m.content) && m.content.some((t) => normalizeToolGroupStatus(t.status) === 'running');
-    }
-    if (m.type === 'acp_tool_call') {
-      return m.content?.update && normalizeAcpStatus(m.content.update.status) === 'running';
-    }
-    if (m.type === 'tool_call') {
-      return normalizeToolCallStatus(m.content?.status) === 'running';
-    }
-    return false;
-  });
+  return normalizeToolMessages(messages).some((item) => item.status === 'running');
 }

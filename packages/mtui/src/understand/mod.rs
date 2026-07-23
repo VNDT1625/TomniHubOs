@@ -1,3 +1,5 @@
+mod ranking;
+pub(crate) mod storage;
 pub mod wiki;
 use crate::error::MtuiError;
 use serde::{Deserialize, Serialize};
@@ -8,10 +10,14 @@ use std::time::{SystemTime, UNIX_EPOCH};
 #[serde(rename_all = "camelCase")]
 struct SummaryCache {
     built_at: u64,
+    #[serde(default)]
+    source_snapshot_at: Option<u64>,
     overview: Option<ProjectOverview>,
     runbook: Option<serde_json::Value>,
     modules: Vec<ModuleSummary>,
     files: Vec<FileSummary>,
+    #[serde(default)]
+    edges: Vec<ranking::FileEdge>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -81,9 +87,16 @@ pub struct ContextCandidate {
 }
 
 #[derive(Debug, Serialize, Clone)]
+pub struct ContextRelation {
+    pub from: String,
+    pub to: String,
+}
+
+#[derive(Debug, Serialize, Clone)]
 pub struct FreshnessSummary {
     pub fresh: bool,
     pub stale_marker: bool,
+    pub full_rebuild_required: bool,
     pub marker_changed_count: usize,
     pub changed_count: usize,
     pub missing_count: usize,
@@ -103,6 +116,8 @@ pub struct ContextResult {
     pub freshness: FreshnessSummary,
     pub candidate_count: usize,
     pub candidates: Vec<ContextCandidate>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub relations: Vec<ContextRelation>,
 }
 
 #[derive(Debug, Serialize)]
@@ -173,29 +188,27 @@ pub struct MapResult {
 }
 
 fn cache_path(project_root: &Path) -> std::path::PathBuf {
-    project_root
-        .join(".aionui")
-        .join("understand")
-        .join("summary.json")
+    storage::summary_path(project_root)
 }
 
 fn stale_marker_path(project_root: &Path) -> std::path::PathBuf {
-    project_root
-        .join(".aionui")
-        .join("understand")
-        .join("stale.json")
+    storage::stale_marker_path(project_root)
 }
 
-fn cache_has_stale_marker(project_root: &Path) -> bool {
-    stale_marker_path(project_root).exists()
+const FULL_REBUILD_MARKER_SENTINEL: &str = "\0full-rebuild-required";
+
+#[derive(Debug, Default)]
+struct StaleMarkerState {
+    paths: Vec<String>,
+    full_rebuild_required: bool,
 }
 
-fn stale_marker_paths(project_root: &Path) -> Vec<String> {
+fn stale_marker_state(project_root: &Path) -> StaleMarkerState {
     let Ok(text) = std::fs::read_to_string(stale_marker_path(project_root)) else {
-        return Vec::new();
+        return StaleMarkerState::default();
     };
     let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) else {
-        return Vec::new();
+        return StaleMarkerState::default();
     };
     let mut paths = json
         .get("paths")
@@ -203,13 +216,63 @@ fn stale_marker_paths(project_root: &Path) -> Vec<String> {
         .map(|items| {
             items
                 .iter()
-                .filter_map(|item| item.as_str().map(|path| path.replace('\\', "/")))
+                .filter_map(|item| {
+                    item.as_str()
+                        .map(|path| path.replace('\\', "/").trim_start_matches("./").to_string())
+                })
+                .filter(|path| !should_ignore_stale_marker_path(path))
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default();
     paths.sort();
     paths.dedup();
+    StaleMarkerState {
+        paths,
+        full_rebuild_required: json
+            .get("fullRebuildRequired")
+            .and_then(|value| value.as_bool())
+            .unwrap_or(false),
+    }
+}
+
+#[cfg(test)]
+fn stale_marker_paths(project_root: &Path) -> Vec<String> {
+    stale_marker_state(project_root).paths
+}
+
+fn stale_marker_set(project_root: &Path) -> std::collections::HashSet<String> {
+    let marker = stale_marker_state(project_root);
+    let mut paths = marker
+        .paths
+        .into_iter()
+        .collect::<std::collections::HashSet<_>>();
+    if marker.full_rebuild_required {
+        paths.insert(FULL_REBUILD_MARKER_SENTINEL.to_string());
+    }
     paths
+}
+
+fn should_ignore_stale_marker_path(path: &str) -> bool {
+    const IGNORED_ROOTS: &[&str] = &[
+        ".git",
+        ".mtui",
+        ".tomni",
+        ".omni",
+        ".aionui",
+        ".tmp",
+        ".next",
+        ".turbo",
+        "node_modules",
+        "target",
+        "dist",
+        "build",
+        "coverage",
+    ];
+
+    let path = path.trim_matches('/');
+    IGNORED_ROOTS
+        .iter()
+        .any(|root| path == *root || path.starts_with(&format!("{root}/")))
 }
 
 fn load_cache(project_root: &Path) -> Result<SummaryCache, MtuiError> {
@@ -229,9 +292,20 @@ fn normalize_rel(path: &Path, project_root: &Path) -> String {
     } else {
         project_root.join(path)
     };
-    absolute
+    let relative = absolute
         .strip_prefix(project_root)
-        .unwrap_or(&absolute)
+        .map(Path::to_path_buf)
+        .ok()
+        .or_else(|| {
+            let canonical_root = std::fs::canonicalize(project_root).ok()?;
+            let canonical_path = std::fs::canonicalize(&absolute).ok()?;
+            canonical_path
+                .strip_prefix(canonical_root)
+                .map(Path::to_path_buf)
+                .ok()
+        })
+        .unwrap_or(absolute);
+    relative
         .to_string_lossy()
         .replace('\\', "/")
         .trim_start_matches("./")
@@ -252,18 +326,6 @@ fn resolve_target_path(project_root: &Path, path: &Path) -> PathBuf {
     } else {
         project_root.join(path)
     }
-}
-
-fn should_skip_fallback_dir(path: &Path) -> bool {
-    path.file_name()
-        .and_then(|name| name.to_str())
-        .map(|name| {
-            matches!(
-                name,
-                ".git" | ".mtui" | ".aionui" | "node_modules" | "target" | "dist" | "build"
-            )
-        })
-        .unwrap_or(false)
 }
 
 fn language_for_path(path: &Path) -> &'static str {
@@ -369,19 +431,21 @@ fn fallback_folder_files(project_root: &Path, folder_path: &Path, limit: usize) 
     if !folder.exists() {
         return Vec::new();
     }
-    let mut files = walkdir::WalkDir::new(folder)
-        .into_iter()
-        .filter_entry(|entry| {
-            !entry.file_type().is_dir() || !should_skip_fallback_dir(entry.path())
-        })
-        .filter_map(Result::ok)
-        .filter(|entry| entry.file_type().is_file())
-        .map(|entry| entry.path().to_path_buf())
-        .filter(|path| is_code_like_file(path))
-        .collect::<Vec<_>>();
-    files.sort();
-    files.truncate(limit.max(1));
+    let ignore_patterns = crate::config::load_config(project_root)
+        .map(|config| config.ignore.patterns)
+        .unwrap_or_else(|_| crate::config::MtuiConfig::default().ignore.patterns);
+    let Ok(files) = crate::fs::discovery::discover_files(
+        project_root,
+        &folder,
+        &ignore_patterns,
+        crate::fs::discovery::DEFAULT_MAX_FILE_BYTES,
+    ) else {
+        return Vec::new();
+    };
     files
+        .filter(|path| is_code_like_file(path))
+        .take(limit.max(1))
+        .collect()
 }
 
 fn fallback_file_result(
@@ -623,15 +687,76 @@ fn fingerprint_of(content: &str) -> String {
     )
 }
 
-fn file_is_stale(project_root: &Path, file: &FileSummary) -> bool {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CachedFileState {
+    Current,
+    Changed,
+    Missing,
+    UnknownFingerprint,
+}
+
+fn freshness_cutoff(cache: &SummaryCache) -> u64 {
+    cache.source_snapshot_at.unwrap_or(cache.built_at)
+}
+
+fn cached_file_state(
+    project_root: &Path,
+    file: &FileSummary,
+    built_at: u64,
+    force_hash: bool,
+) -> CachedFileState {
     let Some(expected) = &file.fingerprint else {
-        return true;
+        return CachedFileState::UnknownFingerprint;
     };
     let path = project_root.join(file.path.replace('/', std::path::MAIN_SEPARATOR_STR));
-    let Ok(content) = std::fs::read_to_string(path) else {
-        return true;
+    let Ok(metadata) = std::fs::metadata(&path) else {
+        return CachedFileState::Missing;
     };
-    fingerprint_of(&content) != *expected
+    if !metadata.is_file() {
+        return CachedFileState::Missing;
+    }
+
+    let cache_is_newer = built_at > 0
+        && metadata
+            .modified()
+            .ok()
+            .and_then(|modified| modified.duration_since(UNIX_EPOCH).ok())
+            .map(|modified| modified.as_millis() <= u128::from(built_at))
+            .unwrap_or(false);
+    if cache_is_newer && !force_hash {
+        return CachedFileState::Current;
+    }
+
+    let Ok(content) = std::fs::read_to_string(path) else {
+        return CachedFileState::Missing;
+    };
+    if fingerprint_of(&content) == *expected {
+        CachedFileState::Current
+    } else {
+        CachedFileState::Changed
+    }
+}
+
+fn file_is_stale(
+    project_root: &Path,
+    file: &FileSummary,
+    built_at: u64,
+    marker_changed: &std::collections::HashSet<String>,
+) -> bool {
+    let full_rebuild_required = marker_changed.contains(FULL_REBUILD_MARKER_SENTINEL);
+    let state = cached_file_state(
+        project_root,
+        file,
+        built_at,
+        full_rebuild_required || marker_changed.contains(&file.path),
+    );
+    full_rebuild_required || state != CachedFileState::Current
+}
+
+fn cached_file_exists(project_root: &Path, file: &FileSummary) -> bool {
+    project_root
+        .join(file.path.replace('/', std::path::MAIN_SEPARATOR_STR))
+        .is_file()
 }
 
 fn freshness_sample(mut paths: Vec<String>) -> Vec<String> {
@@ -644,6 +769,7 @@ fn fallback_freshness_summary() -> FreshnessSummary {
     FreshnessSummary {
         fresh: false,
         stale_marker: false,
+        full_rebuild_required: false,
         marker_changed_count: 0,
         changed_count: 0,
         missing_count: 0,
@@ -656,41 +782,48 @@ fn fallback_freshness_summary() -> FreshnessSummary {
 }
 
 fn freshness_summary(project_root: &Path, cache: &SummaryCache) -> FreshnessSummary {
-    let marker_changed = stale_marker_paths(project_root);
-    let stale_marker = !marker_changed.is_empty() || cache_has_stale_marker(project_root);
+    let marker = stale_marker_state(project_root);
+    let stale_marker = marker.full_rebuild_required || !marker.paths.is_empty();
+    let mut marker_changed_set = marker
+        .paths
+        .iter()
+        .cloned()
+        .collect::<std::collections::HashSet<_>>();
+    if marker.full_rebuild_required {
+        marker_changed_set.insert(FULL_REBUILD_MARKER_SENTINEL.to_string());
+    }
     let mut changed = Vec::new();
     let mut missing = Vec::new();
     let mut unknown = Vec::new();
     for file in &cache.files {
-        let Some(expected) = &file.fingerprint else {
-            unknown.push(file.path.clone());
-            continue;
-        };
-        let path = project_root.join(file.path.replace('/', std::path::MAIN_SEPARATOR_STR));
-        match std::fs::read_to_string(path) {
-            Ok(content) => {
-                if fingerprint_of(&content) != *expected {
-                    changed.push(file.path.clone());
-                }
-            }
-            Err(_) => missing.push(file.path.clone()),
+        match cached_file_state(
+            project_root,
+            file,
+            freshness_cutoff(cache),
+            marker.full_rebuild_required || marker_changed_set.contains(&file.path),
+        ) {
+            CachedFileState::Current => {}
+            CachedFileState::Changed => changed.push(file.path.clone()),
+            CachedFileState::Missing => missing.push(file.path.clone()),
+            CachedFileState::UnknownFingerprint => unknown.push(file.path.clone()),
         }
     }
     let changed_count = changed.len();
     let missing_count = missing.len();
     let unknown_fingerprint_count = unknown.len();
-    let marker_changed_count = marker_changed.len();
+    let marker_changed_count = marker.paths.len();
     FreshnessSummary {
         fresh: !stale_marker
             && changed_count == 0
             && missing_count == 0
             && unknown_fingerprint_count == 0,
         stale_marker,
+        full_rebuild_required: marker.full_rebuild_required,
         marker_changed_count,
         changed_count,
         missing_count,
         unknown_fingerprint_count,
-        sample_marker_changed: freshness_sample(marker_changed),
+        sample_marker_changed: freshness_sample(marker.paths),
         sample_changed: freshness_sample(changed),
         sample_missing: freshness_sample(missing),
         sample_unknown: freshness_sample(unknown),
@@ -707,11 +840,17 @@ pub fn query_file(
         Ok(cache) => cache,
         Err(_) => return fallback_file_result(project_root, file_path, detailed, None),
     };
+    let marker_changed = stale_marker_set(project_root);
     let file = cache.files.iter().find(|item| item.path == target);
     let Some(file) = file else {
         return fallback_file_result(project_root, file_path, detailed, Some(cache.built_at));
     };
-    let stale = file_is_stale(project_root, file);
+    let stale = file_is_stale(
+        project_root,
+        file,
+        freshness_cutoff(&cache),
+        &marker_changed,
+    );
     let details = if detailed {
         serde_json::to_value(file).unwrap_or(serde_json::Value::Null)
     } else {
@@ -777,16 +916,23 @@ pub fn query_folder(
         Ok(cache) => cache,
         Err(_) => return fallback_folder_result(project_root, folder_path, detailed, None),
     };
+    let marker_changed = stale_marker_set(project_root);
+    let full_rebuild_required = marker_changed.contains(FULL_REBUILD_MARKER_SENTINEL);
     if target.is_empty() || target == "." {
         return Ok(UnderstandResult {
             command: if detailed { "info" } else { "summary" }.to_string(),
             target_type: "folder".to_string(),
             target: ".".to_string(),
             built_at: cache.built_at,
-            stale: cache
-                .files
-                .iter()
-                .any(|file| file_is_stale(project_root, file)),
+            stale: full_rebuild_required
+                || cache.files.iter().any(|file| {
+                    file_is_stale(
+                        project_root,
+                        file,
+                        freshness_cutoff(&cache),
+                        &marker_changed,
+                    )
+                }),
             summary: cache
                 .overview
                 .as_ref()
@@ -832,7 +978,15 @@ pub fn query_folder(
                 Some(cache.built_at),
             );
         }
-        let stale = files.iter().any(|file| file_is_stale(project_root, file));
+        let stale = full_rebuild_required
+            || files.iter().any(|file| {
+                file_is_stale(
+                    project_root,
+                    file,
+                    freshness_cutoff(&cache),
+                    &marker_changed,
+                )
+            });
         let summaries = files
             .iter()
             .take(6)
@@ -880,7 +1034,15 @@ pub fn query_folder(
         .filter(|file| module_file_paths.contains(&file.path))
         .cloned()
         .collect::<Vec<_>>();
-    let stale = files.iter().any(|file| file_is_stale(project_root, file));
+    let stale = full_rebuild_required
+        || files.iter().any(|file| {
+            file_is_stale(
+                project_root,
+                file,
+                freshness_cutoff(&cache),
+                &marker_changed,
+            )
+        });
     let summary = if module_matches_target {
         module.summary.clone()
     } else {
@@ -958,10 +1120,11 @@ pub fn query_folder(
 pub fn map_repo(project_root: &Path, limit: usize) -> Result<MapResult, MtuiError> {
     let cache = load_cache(project_root)?;
     let freshness = freshness_summary(project_root, &cache);
+    let marker_changed = stale_marker_set(project_root);
     let mut modules = cache
         .modules
         .iter()
-        .map(|module| map_module_entry(project_root, &cache, module))
+        .map(|module| map_module_entry(project_root, &cache, module, &marker_changed))
         .collect::<Vec<_>>();
     modules.sort_by(|a, b| {
         b.file_count
@@ -1008,6 +1171,7 @@ pub fn map_folder(
         Err(_) => return fallback_map_folder(project_root, folder_path, limit, None),
     };
     let freshness = freshness_summary(project_root, &cache);
+    let marker_changed = stale_marker_set(project_root);
     let module = cache.modules.iter().find(|item| {
         item.id == target
             || item
@@ -1042,7 +1206,15 @@ pub fn map_folder(
     let mut file_entries = files
         .iter()
         .enumerate()
-        .map(|(index, file)| map_file_entry(project_root, file, index + 1))
+        .map(|(index, file)| {
+            map_file_entry(
+                project_root,
+                file,
+                index + 1,
+                freshness_cutoff(&cache),
+                &marker_changed,
+            )
+        })
         .collect::<Vec<_>>();
     let live_files = if freshness.fresh {
         Vec::new()
@@ -1079,8 +1251,23 @@ pub fn map_folder(
     };
     let mut modules = module
         .filter(|module| target.is_empty() || module.id == target)
-        .map(|module| vec![map_module_entry(project_root, &cache, module)])
-        .unwrap_or_else(|| vec![synthetic_folder_module_entry(project_root, &target, &files)]);
+        .map(|module| {
+            vec![map_module_entry(
+                project_root,
+                &cache,
+                module,
+                &marker_changed,
+            )]
+        })
+        .unwrap_or_else(|| {
+            vec![synthetic_folder_module_entry(
+                project_root,
+                &target,
+                &files,
+                freshness_cutoff(&cache),
+                &marker_changed,
+            )]
+        });
     if !live_files.is_empty() {
         for module in &mut modules {
             module.file_count = live_files.len();
@@ -1118,6 +1305,70 @@ pub fn map_folder(
     })
 }
 
+fn recommended_context_path(context: &ContextResult) -> Vec<MapIntentStep> {
+    let priority = context
+        .candidates
+        .iter()
+        .enumerate()
+        .map(|(index, candidate)| (candidate.path.as_str(), index))
+        .collect::<std::collections::HashMap<_, _>>();
+    let mut adjacency = std::collections::HashMap::<&str, Vec<&str>>::new();
+    for relation in &context.relations {
+        adjacency
+            .entry(&relation.from)
+            .or_default()
+            .push(&relation.to);
+        adjacency
+            .entry(&relation.to)
+            .or_default()
+            .push(&relation.from);
+    }
+    for neighbors in adjacency.values_mut() {
+        neighbors.sort_by_key(|path| priority.get(path).copied().unwrap_or(usize::MAX));
+        neighbors.dedup();
+    }
+
+    let mut ordered = Vec::<(&str, Option<&str>)>::new();
+    let mut visited = std::collections::HashSet::<&str>::new();
+    for anchor in context
+        .candidates
+        .iter()
+        .map(|candidate| candidate.path.as_str())
+    {
+        if !visited.insert(anchor) {
+            continue;
+        }
+        ordered.push((anchor, None));
+        let mut queue = std::collections::VecDeque::from([anchor]);
+        while let Some(current) = queue.pop_front() {
+            for neighbor in adjacency.get(current).into_iter().flatten().copied() {
+                if visited.insert(neighbor) {
+                    ordered.push((neighbor, Some(current)));
+                    queue.push_back(neighbor);
+                }
+            }
+        }
+    }
+
+    ordered
+        .into_iter()
+        .take(5)
+        .enumerate()
+        .map(|(index, (path, parent))| MapIntentStep {
+            step: match (index, parent) {
+                (0, _) => "Start at strongest intent anchor".to_string(),
+                (_, Some(parent)) => format!("Follow dependency graph from {parent}"),
+                _ => "Inspect an additional semantic anchor".to_string(),
+            },
+            files: vec![path.to_string()],
+            folders: path
+                .rsplit_once('/')
+                .map(|(folder, _)| vec![folder.to_string()])
+                .unwrap_or_default(),
+        })
+        .collect()
+}
+
 pub fn map_intent(project_root: &Path, intent: &str, limit: usize) -> Result<MapResult, MtuiError> {
     let context = query_context(project_root, intent, limit)?;
     let mut folders = context
@@ -1132,21 +1383,7 @@ pub fn map_intent(project_root: &Path, intent: &str, limit: usize) -> Result<Map
         .collect::<Vec<_>>();
     folders.sort();
     folders.dedup();
-    let recommended_path = context
-        .candidates
-        .iter()
-        .take(5)
-        .enumerate()
-        .map(|(index, candidate)| MapIntentStep {
-            step: format!("Inspect candidate {}", index + 1),
-            files: vec![candidate.path.clone()],
-            folders: candidate
-                .path
-                .rsplit_once('/')
-                .map(|(folder, _)| vec![folder.to_string()])
-                .unwrap_or_default(),
-        })
-        .collect::<Vec<_>>();
+    let recommended_path = recommended_context_path(&context);
     Ok(MapResult {
         command: "map".to_string(),
         scope: "intent".to_string(),
@@ -1189,6 +1426,7 @@ fn map_module_entry(
     project_root: &Path,
     cache: &SummaryCache,
     module: &ModuleSummary,
+    marker_changed: &std::collections::HashSet<String>,
 ) -> MapModuleEntry {
     let entry_files = module.entry_files.clone().unwrap_or_default();
     let mut key_files = entry_files.iter().take(6).cloned().collect::<Vec<_>>();
@@ -1208,7 +1446,7 @@ fn map_module_entry(
         .files
         .iter()
         .filter(|file| module.files.contains(&file.path))
-        .any(|file| file_is_stale(project_root, file));
+        .any(|file| file_is_stale(project_root, file, freshness_cutoff(cache), marker_changed));
     MapModuleEntry {
         path: module.id.clone(),
         label: module.label.clone(),
@@ -1233,6 +1471,8 @@ fn synthetic_folder_module_entry(
     project_root: &Path,
     target: &str,
     files: &[FileSummary],
+    built_at: u64,
+    marker_changed: &std::collections::HashSet<String>,
 ) -> MapModuleEntry {
     let label = if target.is_empty() {
         ".".to_string()
@@ -1254,7 +1494,9 @@ fn synthetic_folder_module_entry(
     }
     let layer = dominant_layer(files);
     let summary = synthetic_folder_summary(target, files, &key_files, &layer);
-    let stale = files.iter().any(|file| file_is_stale(project_root, file));
+    let stale = files
+        .iter()
+        .any(|file| file_is_stale(project_root, file, built_at, marker_changed));
     let path = if target.is_empty() {
         ".".to_string()
     } else {
@@ -1338,7 +1580,13 @@ fn synthetic_folder_summary(
     )
 }
 
-fn map_file_entry(project_root: &Path, file: &FileSummary, priority: usize) -> MapFileEntry {
+fn map_file_entry(
+    project_root: &Path,
+    file: &FileSummary,
+    priority: usize,
+    built_at: u64,
+    marker_changed: &std::collections::HashSet<String>,
+) -> MapFileEntry {
     MapFileEntry {
         path: file.path.clone(),
         role: role_for_file(file),
@@ -1346,7 +1594,7 @@ fn map_file_entry(project_root: &Path, file: &FileSummary, priority: usize) -> M
         language: file.language.clone(),
         summary: file.summary.clone(),
         read_priority: priority,
-        stale: file_is_stale(project_root, file),
+        stale: file_is_stale(project_root, file, built_at, marker_changed),
         next_commands: vec![
             format!(
                 "mtui --json information file {}",
@@ -1447,27 +1695,102 @@ pub fn query_context(
     intent: &str,
     limit: usize,
 ) -> Result<ContextResult, MtuiError> {
-    let terms = intent_terms(intent);
+    let terms = ranking::intent_terms(intent);
     let cache = match load_cache(project_root) {
         Ok(cache) => cache,
         Err(_) => return fallback_context(project_root, intent, &terms, limit),
     };
     let freshness = freshness_summary(project_root, &cache);
-    let global_stale = !freshness.fresh;
+    let marker_changed = stale_marker_set(project_root);
     let module_by_file = module_lookup_by_file(&cache.modules);
-    let mut candidates = cache
+    let valid_files = cache
         .files
+        .iter()
+        .filter(|file| cached_file_exists(project_root, file))
+        .collect::<Vec<_>>();
+    let valid_paths = valid_files
+        .iter()
+        .map(|file| file.path.clone())
+        .collect::<std::collections::HashSet<_>>();
+    let direct_scores = valid_files
+        .iter()
+        .map(|file| {
+            let module = module_by_file
+                .get(&file.path)
+                .and_then(|module_id| cache.modules.iter().find(|module| module.id == *module_id));
+            (file.path.clone(), context_score(file, module, &terms))
+        })
+        .collect::<std::collections::BTreeMap<_, _>>();
+    let active_stages = ranking::active_flow_stages(&terms);
+    let stage_scores = valid_files
+        .iter()
+        .map(|file| {
+            let symbols = file
+                .symbols
+                .iter()
+                .map(serde_json::Value::to_string)
+                .collect::<Vec<_>>()
+                .join(" ");
+            (
+                file.path.clone(),
+                ranking::file_flow_stage_scores(&file.path, &file.summary, &symbols),
+            )
+        })
+        .collect::<std::collections::BTreeMap<_, _>>();
+    let identity_tokens = valid_files
+        .iter()
+        .map(|file| {
+            let symbols = file
+                .symbols
+                .iter()
+                .map(serde_json::Value::to_string)
+                .collect::<Vec<_>>()
+                .join(" ");
+            (
+                file.path.clone(),
+                ranking::file_identity_tokens(&file.path, &symbols),
+            )
+        })
+        .collect::<std::collections::BTreeMap<_, _>>();
+    let graph_boosts = ranking::flow_route_boosts(
+        &cache.edges,
+        &direct_scores,
+        &stage_scores,
+        &identity_tokens,
+        &active_stages,
+        &valid_paths,
+    )
+    .unwrap_or_else(|| ranking::graph_boosts(&cache.edges, &direct_scores, &valid_paths));
+    let mut candidates = valid_files
         .iter()
         .filter_map(|file| {
             let module = module_by_file
                 .get(&file.path)
                 .and_then(|module_id| cache.modules.iter().find(|module| module.id == *module_id));
-            let score = context_score(file, module, &terms);
+            let direct_score = direct_scores.get(&file.path).copied().unwrap_or(0);
+            let graph_score = graph_boosts.get(&file.path).copied().unwrap_or(0);
+            let score = direct_score.saturating_add(graph_score);
             if score == 0 {
                 return None;
             }
-            let stale = global_stale || file_is_stale(project_root, file);
-            let reason = context_reason(file, &terms);
+            let stale = marker_changed.contains(&file.path)
+                || file_is_stale(
+                    project_root,
+                    file,
+                    freshness_cutoff(&cache),
+                    &marker_changed,
+                );
+            let reason = match (direct_score > 0, graph_score > 0) {
+                (true, true) => format!(
+                    "{};graph_route(direct={direct_score},boost={graph_score})",
+                    context_reason(file, &terms)
+                ),
+                (true, false) => context_reason(file, &terms),
+                (false, true) => {
+                    format!("graph_route_from_intent_anchor(boost={graph_score})")
+                }
+                (false, false) => unreachable!("zero-score candidates are filtered"),
+            };
             Some(ContextCandidate {
                 path: file.path.clone(),
                 score,
@@ -1490,14 +1813,19 @@ pub fn query_context(
         })
         .collect::<Vec<_>>();
     if candidates.is_empty() {
-        candidates = cache
-            .files
+        candidates = valid_files
             .iter()
             .take(limit.max(1))
             .map(|file| ContextCandidate {
                 path: file.path.clone(),
                 score: 1,
-                stale: global_stale || file_is_stale(project_root, file),
+                stale: marker_changed.contains(&file.path)
+                    || file_is_stale(
+                        project_root,
+                        file,
+                        freshness_cutoff(&cache),
+                        &marker_changed,
+                    ),
                 reason: "fallback_entry".to_string(),
                 role: role_for_file(file),
                 layer: file.layer.clone(),
@@ -1514,7 +1842,23 @@ pub fn query_context(
     }
     candidates.sort_by(|a, b| b.score.cmp(&a.score).then_with(|| a.path.cmp(&b.path)));
     candidates.truncate(limit.max(1));
-    let stale = global_stale || candidates.iter().any(|candidate| candidate.stale);
+    let selected_paths = candidates
+        .iter()
+        .map(|candidate| candidate.path.as_str())
+        .collect::<std::collections::HashSet<_>>();
+    let relations = cache
+        .edges
+        .iter()
+        .filter(|edge| {
+            selected_paths.contains(edge.from.as_str()) && selected_paths.contains(edge.to.as_str())
+        })
+        .map(|edge| ContextRelation {
+            from: edge.from.clone(),
+            to: edge.to.clone(),
+        })
+        .collect::<Vec<_>>();
+    let stale =
+        freshness.full_rebuild_required || candidates.iter().any(|candidate| candidate.stale);
     Ok(ContextResult {
         command: "context".to_string(),
         intent: intent.to_string(),
@@ -1523,6 +1867,7 @@ pub fn query_context(
         freshness,
         candidate_count: candidates.len(),
         candidates,
+        relations,
     })
 }
 
@@ -1532,17 +1877,21 @@ fn fallback_context(
     terms: &[String],
     limit: usize,
 ) -> Result<ContextResult, MtuiError> {
-    let mut candidates = walkdir::WalkDir::new(project_root)
-        .into_iter()
-        .filter_map(|entry| entry.ok())
-        .filter(|entry| entry.file_type().is_file())
-        .filter_map(|entry| {
-            let path = entry.path();
-            let relative = path
-                .strip_prefix(project_root)
-                .ok()?
-                .to_string_lossy()
-                .replace('\\', "/");
+    let ignore_patterns = crate::config::load_config(project_root)
+        .map(|config| config.ignore.patterns)
+        .unwrap_or_else(|_| crate::config::MtuiConfig::default().ignore.patterns);
+    let files = crate::fs::discovery::discover_files(
+        project_root,
+        project_root,
+        &ignore_patterns,
+        crate::fs::discovery::DEFAULT_MAX_FILE_BYTES,
+    )
+    .map_err(|error| MtuiError::Internal {
+        message: format!("Failed to discover Understand fallback files: {error}"),
+    })?;
+    let mut candidates = files
+        .filter_map(|path| {
+            let relative = normalize_rel(&path, project_root);
             if should_skip_fallback_path(&relative) {
                 return None;
             }
@@ -1550,7 +1899,7 @@ fn fallback_context(
             if path_score == 0 {
                 return None;
             }
-            let preview = read_fallback_preview(path);
+            let preview = read_fallback_preview(&path);
             let score = path_score + fallback_preview_score(&preview, terms);
             let reason = if preview.is_empty() {
                 "fallback_path_match_no_understand_cache"
@@ -1600,6 +1949,7 @@ fn fallback_context(
         freshness: fallback_freshness_summary(),
         candidate_count: candidates.len(),
         candidates,
+        relations: Vec::new(),
     })
 }
 
@@ -1610,7 +1960,10 @@ fn should_skip_fallback_path(path: &str) -> bool {
         || path.starts_with("dist/")
         || path.starts_with("build/")
         || path.starts_with(".mtui/")
+        || path.starts_with(".tomni/")
+        || path.starts_with(".omni/")
         || path.starts_with(".aionui/")
+        || path.starts_with(".tmp/")
         || path.starts_with(".next/")
         || path.starts_with(".turbo/")
         || path.starts_with("coverage/")
@@ -1630,48 +1983,9 @@ fn should_skip_fallback_path(path: &str) -> bool {
         || path.ends_with(".exe")
 }
 
+#[cfg(test)]
 fn intent_terms(intent: &str) -> Vec<String> {
-    let mut terms = intent
-        .split(|ch: char| !ch.is_ascii_alphanumeric() && ch != '_' && ch != '-')
-        .map(|term| term.trim().to_lowercase())
-        .filter(|term| term.len() >= 3)
-        .collect::<Vec<_>>();
-    let seed = terms.clone();
-    for term in seed {
-        terms.extend(expand_intent_term(&term));
-    }
-    terms.sort();
-    terms.dedup();
-    terms
-}
-
-fn expand_intent_term(term: &str) -> Vec<String> {
-    match term {
-        "understand" => vec!["knowledge", "graph", "context", "summary", "builder", "map"],
-        "codegraph" | "graph" => vec![
-            "understand",
-            "knowledge",
-            "graph",
-            "context",
-            "map",
-            "summary",
-            "folder",
-        ],
-        "cursor" => vec!["context", "rank", "ranking", "retrieval", "graph", "search"],
-        "map" => vec!["context", "understand", "knowledge", "folder"],
-        "summary" => vec!["understand", "information", "folder", "module"],
-        "folder" => vec!["module", "directory", "group"],
-        "file" | "files" => vec!["path", "source", "symbol"],
-        "query" | "search" => vec!["context", "rank", "ranking", "intent"],
-        "mtui" => vec!["understand", "context", "map", "compass"],
-        "adaptive" | "concurrency" => vec!["summary", "builder", "performance"],
-        "fingerprint" => vec!["summary", "module", "freshness", "reuse"],
-        "stale" => vec!["freshness", "understand", "summary"],
-        _ => Vec::new(),
-    }
-    .into_iter()
-    .map(str::to_string)
-    .collect()
+    ranking::intent_terms(intent)
 }
 
 fn module_lookup_by_file(modules: &[ModuleSummary]) -> std::collections::HashMap<String, String> {
@@ -1685,40 +1999,51 @@ fn module_lookup_by_file(modules: &[ModuleSummary]) -> std::collections::HashMap
 }
 
 fn context_score(file: &FileSummary, module: Option<&ModuleSummary>, terms: &[String]) -> usize {
-    let haystack = format!(
-        "{} {} {} {} {} {} {}",
-        file.path,
+    let own_text = format!(
+        "{} {} {} {} {}",
         file.label,
         file.group,
         file.layer,
         file.summary,
-        file.tags.join(" "),
-        module
-            .map(|item| format!("{} {} {} {}", item.id, item.label, item.layer, item.summary))
-            .unwrap_or_default()
+        file.tags.join(" ")
     )
     .to_lowercase();
+    let symbol_text = file
+        .symbols
+        .iter()
+        .map(serde_json::Value::to_string)
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_lowercase();
+    let module_text = module
+        .map(|item| format!("{} {} {}", item.id, item.label, item.layer).to_lowercase())
+        .unwrap_or_default();
     let path_terms = path_search_text(&file.path);
+    let path_tokens = ranking::text_tokens(&path_terms);
+    let own_tokens = ranking::text_tokens(&own_text);
+    let symbol_tokens = ranking::text_tokens(&symbol_text);
+    let module_tokens = ranking::text_tokens(&module_text);
     let mut score = 0usize;
     let mut has_direct_match = false;
     for term in terms {
         let importance = term_importance(term);
-        let path_score = weighted_match_score(&path_terms, term, 10) * importance;
-        let haystack_score = weighted_match_score(&haystack, term, 3) * importance;
+        let path_score = token_match_score(&path_terms, &path_tokens, term, 10) * importance;
+        let symbol_score = token_match_score(&symbol_text, &symbol_tokens, term, 7) * importance;
+        let own_score = token_match_score(&own_text, &own_tokens, term, 2) * importance;
+        let module_score = token_match_score(&module_text, &module_tokens, term, 1) * importance;
         score += path_score;
-        score += haystack_score;
-        let symbol_hit = file
-            .symbols
-            .iter()
-            .any(|symbol| symbol.to_string().to_lowercase().contains(term));
-        if symbol_hit {
-            score += 5;
-        }
-        has_direct_match = has_direct_match || path_score > 0 || haystack_score > 0 || symbol_hit;
+        score += symbol_score;
+        score += own_score;
+        score += module_score;
+        has_direct_match = has_direct_match
+            || path_score > 0
+            || symbol_score > 0
+            || own_score > 0
+            || module_score > 0;
         if module
             .and_then(|item| item.entry_files.as_ref())
             .is_some_and(|entry_files| entry_files.contains(&file.path))
-            && path_terms.contains(term)
+            && path_tokens.contains(term)
         {
             score += 3;
         }
@@ -1734,6 +2059,21 @@ fn context_score(file: &FileSummary, module: Option<&ModuleSummary>, terms: &[St
         score = score.saturating_sub(40);
     }
     score
+}
+
+fn token_match_score(
+    haystack: &str,
+    tokens: &std::collections::BTreeSet<String>,
+    term: &str,
+    weight: usize,
+) -> usize {
+    if tokens.contains(term) {
+        weight * 2
+    } else if term.chars().count() >= 5 && haystack.contains(term) {
+        weight
+    } else {
+        0
+    }
 }
 
 fn path_search_text(path: &str) -> String {
@@ -1817,8 +2157,12 @@ fn fallback_preview_score(preview: &str, terms: &[String]) -> usize {
 fn term_importance(term: &str) -> usize {
     match term {
         "file" | "files" | "path" | "source" | "context" | "map" | "folder" | "module"
-        | "group" => 1,
+        | "group" | "agent" | "chat" | "message" | "conversation" | "react" | "ui" | "renderer"
+        | "view" => 1,
         "rank" | "ranking" | "query" | "search" | "summary" | "information" => 2,
+        "runtime" | "core" | "start" | "send" | "submit" | "orchestration" => 2,
+        "ipc" | "bridge" | "invoke" | "provider" | "persist" | "persistence" | "repository"
+        | "storage" | "save" | "response" | "stream" | "event" | "listener" => 4,
         _ => 3,
     }
 }
@@ -1892,17 +2236,17 @@ fn context_reason(file: &FileSummary, terms: &[String]) -> String {
         .map(|symbol| symbol.to_string().to_lowercase())
         .collect::<Vec<_>>()
         .join(" ");
+    let evidence = format!(
+        "{} {} {} {}",
+        file.path,
+        file.summary,
+        file.tags.join(" "),
+        symbol_text
+    );
+    let evidence_tokens = ranking::text_tokens(&evidence);
     let matched = terms
         .iter()
-        .filter(|term| {
-            file.path.to_lowercase().contains(term.as_str())
-                || file.summary.to_lowercase().contains(term.as_str())
-                || file
-                    .tags
-                    .iter()
-                    .any(|tag| tag.to_lowercase().contains(term.as_str()))
-                || symbol_text.contains(term.as_str())
-        })
+        .filter(|term| evidence_tokens.contains(term.as_str()))
         .cloned()
         .collect::<Vec<_>>();
     if matched.is_empty() {

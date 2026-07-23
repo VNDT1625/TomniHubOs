@@ -40,7 +40,27 @@ export const STRICT_IDE_CLAUDE_AGENT_DESCRIPTION =
  * and team coordination tools that also flow through the MTUI gateway.
  */
 const ALLOWED_TOOL_PREFIXES = ['tomny_', 'ide_', 'team_', 'db_', 'browser_'] as const;
-const ALLOWED_TOOL_NAMES = ['mtui', 'toolsearch'] as const;
+/**
+ * Safe agent-runtime primitives. These only discover available tools, inspect
+ * the exposed tool map, or begin a declared agent action; none receives a
+ * filesystem path, shell command, or write capability by itself. Keep this an
+ * exact-name allow-list so similarly named third-party tools still fail closed.
+ */
+const ALLOWED_TOOL_NAMES = [
+  'mtui',
+  'toolsearch',
+  'tool_search',
+  'tool-search',
+  'tool search',
+  'toolmap',
+  'tool_map',
+  'tool-map',
+  'tool map',
+  'startaction',
+  'start_action',
+  'start-action',
+  'start action',
+] as const;
 
 /** Common native tool names/titles that Strict IDE Mode must always block (case-insensitive after normalize). */
 const NATIVE_TOOL_MARKERS = [

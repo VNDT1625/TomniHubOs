@@ -231,11 +231,21 @@ const startSidecar = async (
   if (options.setupLog) setupLogging(paths.logPath, mode === 'rescue');
 
   const startedAt = new Date().toISOString();
+  const { createIdeWebRpc } = await import('./ideWebRpc');
+  const rendererPort = process.env.TOMNI_DEV_RENDERER_PORT?.trim() || '5174';
+  const webuiPort = process.env.TOMNI_DEV_WEBUI_PORT?.trim() || '25809';
   const host = await startIdeMcpHost({
     port,
     buildServer: buildOmniNodeIdeServer,
     serverName: SIDECAR_NAME,
     allowShutdown: true,
+    handleUiRpc: createIdeWebRpc(paths.repoRoot),
+    allowedUiOrigins: [
+      `http://127.0.0.1:${rendererPort}`,
+      `http://localhost:${rendererPort}`,
+      `http://127.0.0.1:${webuiPort}`,
+      `http://localhost:${webuiPort}`,
+    ],
     health: {
       mode,
       pid: process.pid,

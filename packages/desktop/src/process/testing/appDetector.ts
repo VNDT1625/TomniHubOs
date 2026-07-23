@@ -19,7 +19,7 @@
  *
  * Reads files directly (Main-process Node.js); the model call mirrors
  * `scenarioGenerator.ts` / `companyGenerator.ts` (provider list from
- * `GET /api/providers`, direct `POST /chat/completions`). Nothing is hardcoded;
+ * native Tomni provider catalog, direct `POST /chat/completions`). Nothing is hardcoded;
  * a clear error is thrown when no model is configured.
  *
  * Process boundary: Main-process (Node.js) module. No DOM APIs.
@@ -28,7 +28,7 @@
 import { app } from 'electron';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { httpRequest } from '@/common/adapter/httpBridge';
+import { listReadyProviders } from '@process/services/tomnyProviderBridge';
 import type { IProvider } from '@/common/config/storage';
 import { runAgentChatMessages } from '@process/services/agentChat';
 import type { AppUnderTest, DetectProgressFn, ServiceSpec } from './testingTypes';
@@ -452,7 +452,7 @@ export const createAppDetector = (): IAppDetector => {
 
     // Provider-backed completion (used unless the user picked a CLI agent).
     const providerRun = async (): Promise<string> => {
-      const providers = (await httpRequest<IProvider[]>('GET', '/api/providers').catch(() => [] as IProvider[])) || [];
+      const providers = (await listReadyProviders().catch(() => [] as IProvider[])) || [];
       const selected = pickProviderModel(providers, model);
       if (!selected) {
         throw new Error(

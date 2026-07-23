@@ -288,6 +288,7 @@ describe('message merging', () => {
     });
     expect(result.current.messages.map((message) => message.msg_id)).toEqual(['user-latest', 'assistant-latest']);
     expect(result.current.paging.initialAnchorMessageId).toBe('text-user-latest-user latest');
+    expect(result.current.paging.hasOlder).toBe(true);
   });
 
   it('loads ten older messages when history paging asks for more', async () => {

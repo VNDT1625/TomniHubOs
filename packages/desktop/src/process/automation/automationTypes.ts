@@ -42,6 +42,7 @@ export type WorkflowNodeKind =
   | 'control.tryCatch'
   | 'control.filter'
   | 'control.merge'
+  | 'control.approval'
   | 'control.stop'
   // --- App-function nodes: call an AionUi sub-app to produce an artifact ---
   | 'action.app.makeVideo'
@@ -62,6 +63,24 @@ export type WorkflowNodeKind =
   // --- Agent Company: delegate a goal/task to a multi-agent company ---
   | 'action.company';
 
+/** How the runtime should execute a workflow node. */
+export type NodeExecutionMode = 'deterministic' | 'agent' | 'hybrid';
+
+/** Which access channel a node uses to reach external systems. */
+export type NodeAccessMode = 'local' | 'api' | 'mcp' | 'browser';
+
+/** Runtime policy attached to one dynamic workflow step. */
+export type NodeExecutionPolicy = {
+  /** Deterministic runs directly, agent delegates to Agent Core, hybrid falls back to Agent Core on failure. */
+  mode?: NodeExecutionMode;
+  /** Documents the preferred access channel for security and routing decisions. */
+  access?: NodeAccessMode;
+  /** Marks a browser step that needs an authenticated website session. */
+  requiresWebsiteLogin?: boolean;
+  /** Optional token estimate used by budget-aware schedulers and run logs. */
+  estimatedTokens?: number;
+};
+
 /**
  * A single step in a workflow pipeline. `config` is an open record whose shape
  * depends on {@link WorkflowNode.kind} — see the per-kind config types below for
@@ -76,6 +95,8 @@ export type WorkflowNode = {
   name: string;
   /** Kind-specific configuration (see the `*NodeConfig` types). */
   config: Record<string, unknown>;
+  /** Dynamic runtime routing, token estimate, and external-access policy. */
+  execution?: NodeExecutionPolicy;
   /**
    * Named child pipelines for control-flow nodes (`control.*`). Each branch is
    * an ordered list of nodes the engine runs when that branch is taken — e.g.
@@ -103,6 +124,35 @@ export type NodeErrorPolicy = {
   continueOnError?: boolean;
 };
 
+/** Security defaults for a dynamic workflow. */
+export type WorkflowSecurityPolicy = {
+  /** Prefer local/API/MCP connectors before browser automation. */
+  preferTrustedConnectors?: boolean;
+  /** Controls whether a workflow may use an authenticated website session. */
+  websiteLogin?: 'forbid' | 'approval-required' | 'allow';
+};
+
+/** Token-use limits for agent-routed steps. */
+export type WorkflowTokenPolicy = {
+  /** Maximum number of Agent Core invocations in one run. */
+  maxAgentSteps?: number;
+  /** Optional estimated-token ceiling across agent-routed steps. */
+  maxEstimatedTokens?: number;
+};
+
+/** Semantic knowledge used by agents to plan, explain, and safely improve a workflow. */
+export type WorkflowKnowledge = {
+  goal?: string;
+  intent?: string;
+  constraints?: string[];
+  successCriteria?: string[];
+  failurePolicy?: 'fail-fast' | 'continue-safe' | 'request-review';
+  executorPreference?: 'local-first' | 'n8n-first' | 'auto';
+  security?: WorkflowSecurityPolicy;
+  tokenPolicy?: WorkflowTokenPolicy;
+  tags?: string[];
+};
+
 /**
  * A linear, ordered automation pipeline. `nodes` execute front-to-back, each
  * receiving the previous node's output as its `input`.
@@ -114,6 +164,8 @@ export type Workflow = {
   name: string;
   /** Optional longer description. */
   description?: string;
+  /** Agent-readable semantic metadata. Optional for backward compatibility. */
+  knowledge?: WorkflowKnowledge;
   /** Ordered pipeline of steps. */
   nodes: WorkflowNode[];
   /** Whether the workflow is active (metadata; the engine runs on demand). */
@@ -473,6 +525,52 @@ export type TiktokNodeConfig = {
   privacy?: 'PUBLIC_TO_EVERYONE' | 'MUTUAL_FOLLOW_FRIENDS' | 'SELF_ONLY';
 };
 
+/** Config for a `control.approval` node. */
+export type ApprovalNodeConfig = {
+  /** Human-readable reason the workflow must pause. Supports input templates. */
+  message: string;
+  /** Optional timeout. A timeout is treated as rejection. */
+  timeoutMs?: number;
+};
+
+/** Result returned by the approval provider. */
+export type ApprovalDecision = { approved: boolean; reason?: string };
+
+/** Request sent by the engine to the approval provider. */
+export type ApprovalRequest = {
+  runId: string;
+  nodeId: string;
+  name: string;
+  message: string;
+  input: unknown;
+  timeoutMs?: number;
+};
+
+// ---------------------------------------------------------------------------
+// Persistent run state
+// ---------------------------------------------------------------------------
+
+/** Serializable checkpoint written after each completed top-level node. */
+export type WorkflowCheckpoint = {
+  workflowId: string;
+  runId: string;
+  /** Index of the next top-level node to execute. */
+  nextNodeIndex: number;
+  /** Output that becomes the resumed node's input. */
+  output: unknown;
+  completedNodeIds: string[];
+  agentSteps: number;
+  estimatedTokens: number;
+  updatedAt: number;
+};
+
+/** Persistence adapter for resumable workflow runs. */
+export type WorkflowCheckpointStore = {
+  load(workflowId: string, runId: string): Promise<WorkflowCheckpoint | null>;
+  save(checkpoint: WorkflowCheckpoint): Promise<void>;
+  clear(workflowId: string, runId: string): Promise<void>;
+};
+
 // ---------------------------------------------------------------------------
 // Run events (streamed to the renderer over the event channel)
 // ---------------------------------------------------------------------------
@@ -483,7 +581,19 @@ export type TiktokNodeConfig = {
  */
 export type RunEvent =
   | { type: 'run-start'; runId: string; at: number }
+  | { type: 'run-resumed'; runId: string; nextNodeIndex: number; completedNodeIds: string[]; at: number }
+  | {
+      type: 'node-routed';
+      runId: string;
+      nodeId: string;
+      mode: NodeExecutionMode;
+      access: NodeAccessMode;
+      at: number;
+    }
   | { type: 'node-start'; runId: string; nodeId: string; name: string; at: number }
+  | { type: 'checkpoint-saved'; runId: string; nextNodeIndex: number; at: number }
+  | { type: 'approval-requested'; runId: string; nodeId: string; message: string; at: number }
+  | { type: 'approval-resolved'; runId: string; nodeId: string; approved: boolean; reason?: string; at: number }
   | { type: 'node-finish'; runId: string; nodeId: string; ok: boolean; output?: unknown; error?: string; at: number }
   | { type: 'run-finish'; runId: string; ok: boolean; at: number };
 

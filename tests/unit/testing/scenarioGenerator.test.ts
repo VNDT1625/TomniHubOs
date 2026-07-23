@@ -14,16 +14,10 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const httpRequest = vi.fn();
-// Partial mock: keep every real export (httpPost/httpGet/… are used at module
-// load by the transitively-imported ipcBridge) and only stub httpRequest.
-vi.mock('@/common/adapter/httpBridge', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/common/adapter/httpBridge')>();
-  return {
-    ...actual,
-    httpRequest: (...args: unknown[]) => httpRequest(...args),
-  };
-});
+const listReadyProviders = vi.fn();
+vi.mock('@process/services/tomnyProviderBridge', () => ({
+  listReadyProviders: (...args: unknown[]) => listReadyProviders(...args),
+}));
 
 import { createScenarioGenerator } from '@/process/testing/scenarioGenerator';
 
@@ -48,8 +42,8 @@ const stubModelReply = (content: string): void => {
 };
 
 beforeEach(() => {
-  httpRequest.mockReset();
-  httpRequest.mockResolvedValue([usableProvider]);
+  listReadyProviders.mockReset();
+  listReadyProviders.mockResolvedValue([usableProvider]);
 });
 
 afterEach(() => {
@@ -92,7 +86,7 @@ describe('scenarioGenerator', () => {
   });
 
   it('throws a clear error when no usable model is configured', async () => {
-    httpRequest.mockResolvedValue([]); // no providers
+    listReadyProviders.mockResolvedValue([]); // no providers
     const gen = createScenarioGenerator();
     await expect(gen.generate({ description: 'x', platform: 'web' })).rejects.toThrow(/no usable model/i);
   });

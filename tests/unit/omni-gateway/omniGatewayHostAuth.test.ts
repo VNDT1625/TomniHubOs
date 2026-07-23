@@ -8,7 +8,7 @@
  * rejected with 401 vs. accepted (any non-401 status) under each auth mode:
  *   - the LOCAL bearer is ALWAYS accepted (never broken by Web mode),
  *   - `bearer` accepts the external token only,
- *   - legacy `none` is hardened to the short-TTL external bearer,
+ *   - `none` preserves the explicit no-auth gateway contract,
  *   - `oauth` accepts a valid OAuth token only,
  *   - `mixed` accepts either,
  *   - the OAuth/discovery handler is mounted ahead of the auth gate.
@@ -165,11 +165,10 @@ describe('omniGatewayHost — multi-mode auth gate', () => {
     expect(await postMcp(port, undefined)).toBe(401);
   });
 
-  it('hardens legacy none mode so a short-TTL external token is still mandatory', async () => {
+  it('none mode preserves the explicit legacy no-auth contract', async () => {
     const { port } = await start({ mode: 'none' });
-    expect(await postMcp(port, undefined)).toBe(401);
-    expect(await postMcp(port, 'whatever')).toBe(401);
-    expect(await postMcp(port, EXTERNAL)).not.toBe(401);
+    expect(await postMcp(port, undefined)).not.toBe(401);
+    expect(await postMcp(port, 'whatever')).not.toBe(401);
   });
 
   it('oauth mode: only a valid OAuth token passes; the external bearer does NOT', async () => {

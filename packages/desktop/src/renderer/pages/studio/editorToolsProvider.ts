@@ -49,6 +49,26 @@ export const registerEditorToolsProvider = (): void => {
   channel.provider(async (req: EditorToolRunRequest): Promise<EditorToolRunResult> => {
     const { filePath, action: rawAction } = req;
 
+    const action = parseAction(rawAction);
+    if (!action) {
+      return { ok: false, reason: 'error', error: 'Invalid editor action payload.' };
+    }
+
+    // Capability inspection must never wait for a connector. It is intentionally
+    // callable when the editor is absent or createConnector() is unsupported.
+    if (action.tool === 'get_capabilities') {
+      const result = await runTool(filePath, 'word', action);
+      if (!result.capabilities) {
+        return { ok: false, reason: 'error', error: 'Capability probe returned no structured snapshot.' };
+      }
+      return {
+        ok: true,
+        observation: result.observation,
+        kind: result.capabilities.kind,
+        capabilities: result.capabilities,
+      };
+    }
+
     // Tolerant match: the agent's filePath may differ from the registry key by
     // separator/case, or point at the same basename in another dir; also fall
     // back to the single open editor. Resolve to the real registered path.
@@ -62,10 +82,6 @@ export const registerEditorToolsProvider = (): void => {
       };
     }
 
-    const action = parseAction(rawAction);
-    if (!action) {
-      return { ok: false, reason: 'error', error: 'Invalid editor action payload.' };
-    }
     if (action.tool === 'finish') {
       // 'finish' has no live-editor effect; treat as a no-op observation.
       return { ok: true, observation: action.summary || 'Done.', kind: connectorKind(resolved) };

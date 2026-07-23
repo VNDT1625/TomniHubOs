@@ -66,8 +66,8 @@ const ConversationSurfaces: React.FC<ConversationSurfacesProps> = ({ conversatio
 
   const handleToggle = useCallback(
     async (next: boolean): Promise<void> => {
-      await sup.toggle(next);
-      if (sup.error) {
+      const updated = await sup.toggle(next);
+      if (!updated) {
         Message.error(t('workspace.super.toggleError'));
         return;
       }

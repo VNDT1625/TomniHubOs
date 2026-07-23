@@ -40,10 +40,12 @@ import { usePreviewContext } from '@/renderer/pages/conversation/Preview';
 import { ideClient } from '@/renderer/pages/studio/ide/ideClient';
 import { buildPlanningGuard } from '@/renderer/pages/studio/ide/planningGuard';
 import { expandGoalCommand, isGoalOffCommand, parseGoalCommand } from '@/common/chat/slash/goalCommand';
+import { expandBuild0Command } from '@/common/chat/slash/build0Command';
 import { clearGoalMode, setGoalMode, withGoalSteeringDirective } from '@/renderer/utils/chat/goalMode';
 import { withResponseLanguageDirective } from '@/renderer/services/i18n/responseLanguage';
 import { warmupConversation } from '@/renderer/pages/conversation/utils/warmupConversation';
 import { useTeamPermission } from '@/renderer/pages/team/hooks/TeamPermissionContext';
+import { buildTeamTaskContextIntent, withTeamTaskDirective } from '@/renderer/pages/team/taskContext';
 import { allSupportedExts } from '@/renderer/services/FileService';
 import { iconColors } from '@/renderer/styles/colors';
 import { emitter, useAddEventListener } from '@/renderer/utils/emitter';
@@ -275,7 +277,7 @@ const AcpSendBox: React.FC<{
       // Goal commands (/goal, /goal-all) expand into a full autonomous instruction
       // for the agent; the bubble keeps showing the raw `/goal ...` text.
       const goalExpansion = expandGoalCommand(input);
-      const modelBase = goalExpansion ?? displayMessage;
+      const modelBase = goalExpansion ?? expandBuild0Command(input) ?? displayMessage;
       if (goalExpansion) {
         const parsedGoal = parseGoalCommand(input);
         if (parsedGoal) setGoalMode(conversation_id, parsedGoal.variant, parsedGoal.requirement);
@@ -287,7 +289,10 @@ const AcpSendBox: React.FC<{
         void checkAndUpdateTitle(conversation_id, input);
         let outgoingMessage = modelBase;
         if (workspacePath && !messageListLoading && messages.length === 0) {
-          const contextResult = await ideClient.kgContext(workspacePath, input, [], true).catch((): null => null);
+          const contextIntent = buildTeamTaskContextIntent(input, conversation_id);
+          const contextResult = await ideClient
+            .kgContext(workspacePath, contextIntent, [], true)
+            .catch((): null => null);
           const pack = contextResult?.ok ? contextResult.data : null;
           if (pack && pack.slices.length > 0) {
             outgoingMessage = `${pack.renderedContext}\n\n${modelBase}`;
@@ -322,6 +327,8 @@ const AcpSendBox: React.FC<{
         if (workspacePath) {
           outgoingMessage = await buildPlanningGuard(workspacePath, outgoingMessage);
         }
+        // A pinned Team task is a real execution contract, not only a visual label.
+        outgoingMessage = withTeamTaskDirective(outgoingMessage, conversation_id);
         // Goal Mode steering: bind every ordinary turn to the mandatory pipeline.
         outgoingMessage = withGoalSteeringDirective(outgoingMessage, conversation_id);
         // Keep the model replying in the app's active language even though the

@@ -6,6 +6,7 @@
 
 import { ipcBridge } from '@/common';
 import type { IConversationMcpStatus, IProvider, TChatConversation, TProviderWithModel } from '@/common/config/storage';
+import { isTomniAgentBackend } from '@/common/utils/buildAgentConversationParams';
 import { uuid } from '@/common/utils';
 import addChatIcon from '@/renderer/assets/icons/add-chat.svg';
 import { CronJobManager } from '@/renderer/pages/cron';
@@ -138,7 +139,15 @@ const _AddNewConversation: React.FC<{ conversation: TChatConversation }> = ({ co
   );
 };
 
-type AionrsConversation = Extract<TChatConversation, { type: 'aionrs' }>;
+type AionrsConversation = TChatConversation;
+
+/** Legacy Tomni rows used the ACP type; route them to the native Tomni chat plane. */
+export const isTomnyCompatibilityConversation = (
+  conversation: Pick<TChatConversation, 'type' | 'extra'> | undefined
+): boolean =>
+  conversation?.type === 'aionrs' ||
+  (conversation?.type === 'acp' &&
+    isTomniAgentBackend((conversation.extra as { backend?: string } | undefined)?.backend));
 
 const AionrsConversationPanel: React.FC<{
   conversation: AionrsConversation;
@@ -146,8 +155,12 @@ const AionrsConversationPanel: React.FC<{
   embedded?: boolean;
 }> = ({ conversation, sliderTitle, embedded }) => {
   const onSelectModel = useCallback(
-    async (_provider: IProvider, modelName: string) => {
-      const selected = { ..._provider, use_model: modelName } as TProviderWithModel;
+    async (_provider: IProvider, modelName: string, reasoningEffort?: TProviderWithModel['reasoning_effort']) => {
+      const selected = {
+        ..._provider,
+        use_model: modelName,
+        ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
+      } as TProviderWithModel;
       // Kill running agent on model switch — will be rebuilt with new model on next message
       await ipcBridge.conversation.stop.invoke({ conversation_id: conversation.id });
       const ok = await ipcBridge.conversation.update.invoke({ id: conversation.id, updates: { model: selected } });
@@ -158,7 +171,7 @@ const AionrsConversationPanel: React.FC<{
   );
 
   const modelSelection = useAionrsModelSelection({
-    initialModel: conversation.model,
+    initialModel: 'model' in conversation ? conversation.model : undefined,
     onSelectModel,
   });
   const workspaceEnabled = Boolean(conversation.extra?.workspace);
@@ -198,7 +211,7 @@ const AionrsConversationPanel: React.FC<{
         conversation_id={conversation.id}
         workspace={conversation.extra.workspace}
         modelSelection={modelSelection}
-        session_mode={conversation.extra?.session_mode}
+        session_mode={(conversation.extra as { session_mode?: string } | undefined)?.session_mode}
         cron_job_id={(conversation.extra as { cron_job_id?: string })?.cron_job_id}
         loadedSkills={(conversation.extra as { skills?: string[] } | undefined)?.skills}
         loadedMcpServers={(conversation.extra as { mcp_servers?: string[] } | undefined)?.mcp_servers}
@@ -229,7 +242,7 @@ const ChatConversation: React.FC<{
   const layout = useLayoutContext();
   const isMobile = Boolean(layout?.isMobile);
 
-  const isAionrsConversation = conversation?.type === 'aionrs';
+  const isAionrsConversation = isTomnyCompatibilityConversation(conversation);
 
   // Heal an already-enabled Browser-Control MCP snapshot when a chat mounts.
   // Its SSE URL is ephemeral and may be stale after an app restart; missing
@@ -379,7 +392,7 @@ const ChatConversation: React.FC<{
     return <GoogleModelSelector disabled={true} />;
   }, [conversation, isAionrsConversation, isMobile]);
 
-  if (conversation && conversation.type === 'aionrs') {
+  if (conversation && isAionrsConversation) {
     return (
       <AionrsConversationPanel
         key={conversation.id}

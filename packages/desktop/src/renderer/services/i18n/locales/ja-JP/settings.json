@@ -1,4 +1,47 @@
 {
+  "personalSecrets": {
+    "allowedHostnamesLabel": "許可するブラウザーホスト名",
+    "allowedHostnamesPlaceholder": "example.com",
+    "allowedHostnamesDescription": "正確なホスト名を1～20件追加します。スキーム、パス、ポート、ワイルドカードは使用できません。",
+    "allowedHostnamesInvalid": "スキーム、パス、ポート、ワイルドカードを含まない一意の正確なホスト名を1～20件入力してください。",
+    "allowedHostnamesTagLabel": "許可ホスト",
+    "legacyTargetsMissing": "許可ホスト未設定 — 編集するまでブロック",
+    "nameRequired": "シークレットセット名を入力してください。",
+    "variablesInvalid": "各変数には、有効で重複しない名前と値が必要です。",
+    "createdSuccess": "シークレットセットを作成しました。",
+    "replacedSuccess": "シークレットセットを置き換えました。",
+    "saveError": "シークレットセットを保存できませんでした。",
+    "removedSuccess": "シークレットセットを削除しました。",
+    "removeError": "シークレットセットを削除できませんでした。",
+    "countSummary": "{{setCount}} セット · {{variableCount}} 変数",
+    "securityTitle": "エージェントは値を見ることなくシークレットを使用できます",
+    "securityDescription": "プロンプトに渡されるのは、セット名、ハンドル、変数名だけです。Core は信頼済みホストで要求された変数だけを復号します。たとえば、ブラウザーに USERNAME や PASSWORD を直接入力します。値がチャットや MCP に返されることはありません。",
+    "keychainProtected": "OS のキーチェーンで暗号化",
+    "empty": "シークレットセットはまだありません。",
+    "createFirst": "最初のセットを作成",
+    "noNote": "メモはありません。",
+    "editAria": "シークレットセットを編集",
+    "deleteAria": "シークレットセットを削除",
+    "deleteConfirmTitle": "このシークレットセットを削除しますか？",
+    "deleteConfirmContent": "このセットを使用しているリンクも削除されます。",
+    "updatedAt": "{{date}} に更新",
+    "replaceTitle": "シークレットセットを置き換える",
+    "createTitle": "シークレットセットを作成",
+    "replaceAction": "置き換える",
+    "createAction": "作成",
+    "cancel": "キャンセル",
+    "replaceWarning": "Core は保存済みの値を返しません。このセットを置き換えるには、すべての変数値を再入力してください。",
+    "setNameLabel": "セット名",
+    "setNamePlaceholder": "例：GitHub アカウント",
+    "noteLabel": "メモ",
+    "notePlaceholder": "このセットは何に使用しますか？",
+    "variablesTitle": "セット内の変数",
+    "variablesDescription": "エージェントには変数名だけが表示され、値は表示されません。",
+    "addVariable": "変数を追加",
+    "variableNamePlaceholder": "USERNAME",
+    "variableValuePlaceholder": "シークレット値",
+    "removeVariableAria": "変数を削除"
+  },
   "title": "Settings",
   "skillsHub": {
     "title": "スキルハブ",
@@ -213,7 +256,7 @@
   "deleteInvalidKeys": "無効なキーを削除",
   "testAllKeys": "すべてのキーをテスト",
   "addModelPlaceholder": "モデルIDを選択または入力してください",
-  "customModelSupportNote": "注: 現在カスタムモデルをサポートしているのは Tomni Agentic のみです。",
+  "customModelSupportNote": "注: 現在カスタムモデルをサポートしているのは Tomny Agentic のみです。",
   "addModelHint": "モデル ID を選択または入力すると、このプロバイダーの設定に追加されます。",
   "addModelSelectedHint": "追加予定のモデル: {{model}}",
   "currentModelsLabel": "現在のモデル",
@@ -225,13 +268,57 @@
   "platformNewApi": "New API",
   "platform9router": "9Router",
   "router9": {
-    "title": "9Router 経由で配布",
-    "subtitle": "外部の CLI / IDE ツールをローカルの 9Router エンドポイントに向けます。アプリがそのツールに必要な設定を正確に生成します。",
+    "title": "Tomni モデルゲートウェイ",
+    "subtitle": "API キーまたは OAuth でプロバイダーを接続し、Claude Code、Codex、その他のアプリに個別の認証情報を発行します。",
+    "useGateway": "ゲートウェイを起動して使用",
+    "gatewayReady": "Tomni モデルゲートウェイの準備ができました",
+    "gatewayFailed": "ゲートウェイエラー: {{error}}",
+    "clientKeyUnavailable": "クライアントキーを取得できませんでした",
+    "runtimeMissing": "ゲートウェイランタイムが未準備です",
+    "oauthProviders": "プロバイダーと OAuth",
+    "usage": "使用量とトークン",
+    "autoStart": "Tomni と一緒にゲートウェイを起動",
+    "autoStartHint": "アプリ再起動後もローカルゲートウェイを自動で準備します。",
+    "usageByConsumer": "クライアント別使用量",
+    "usageBySession": "セッション別使用量",
+    "tokenSourceNote": "利用可能な場合はプロバイダー報告値を使用し、usage がない場合のみゲートウェイで推定します。",
+    "metrics": {
+      "requests": "リクエスト",
+      "input": "入力",
+      "output": "出力",
+      "cached": "キャッシュ",
+      "cost": "コスト"
+    },
+    "measurement": { "provider-reported": "プロバイダー", "gateway-estimated": "推定", "unknown": "不明" },
+    "state": {
+      "stopped": "停止",
+      "starting": "起動中",
+      "running": "実行中",
+      "failed": "失敗",
+      "external": "外部ゲートウェイ"
+    },
     "targetLabel": "対象ツール",
     "endpointLabel": "エンドポイント",
     "apiKeyLabel": "API キー（9Router ダッシュボードから）",
     "modelLabel": "モデル（任意）",
     "modelPlaceholder": "例: kr/claude-sonnet-4.5",
+    "clientAccessLabel": "CLI/アプリのアクセス",
+    "clientAccessManaged": "このクライアント専用に管理",
+    "clientAccessProtected": "保護済み",
+    "clientKeyPlaceholder": "ゲートウェイのクライアントキー",
+    "clientAccessHint": "OAuth とプロバイダー API キーは上流側にのみ保持されます。Tomni は CLI/アプリごとに個別のローカル認証情報を作成します。",
+    "reasoningLabel": "推論強度",
+    "reasoningHint": "モデルとは独立しています。対応時にゲートウェイがプロバイダー形式へ変換します。",
+    "reasoning": {
+      "auto": "自動（モデル既定）",
+      "none": "なし",
+      "minimal": "最小",
+      "low": "低",
+      "medium": "中",
+      "high": "高",
+      "xhigh": "非常に高い",
+      "max": "最大"
+    },
     "needCreds": "設定を生成するにはエンドポイントと API キーを入力してください。",
     "fieldsTitle": "接続情報",
     "envTitle": "環境変数",
@@ -241,6 +328,9 @@
     "apply": "このツールに適用",
     "applyHint": "設定ファイルをディスクに書き込みます（既存ファイルは先にバックアップされます）。",
     "applied": "設定を適用しました",
+    "useInTomniChat": "Tomniチャットで使用",
+    "manualChatHint": "選択したモデルをTomniチャット用に保存します。外部CLIは上の項目で別途設定してください。",
+    "chatSynced": "Tomniチャットのモデルを更新しました",
     "applyFailed": "適用に失敗しました：{{error}}",
     "fileWritten": "書き込み済み",
     "fileSkipped": "保持（既に存在）",
@@ -254,8 +344,8 @@
     "target": {
       "kiro": "Kiro のモデル設定で OpenAI 互換のエンドポイントとキーを設定します。",
       "antigravity": "Antigravity をローカルエンドポイントに向けて API キーを貼り付けます。",
-      "claudeCode": "Anthropic 形式の base URL とキーを ~/.claude/config.json に書き込みます。",
-      "codex": "Codex CLI 用に OPENAI_BASE_URL と OPENAI_API_KEY をエクスポートします。",
+      "claudeCode": "ゲートウェイ環境を ~/.claude/settings.json に書き込みます。",
+      "codex": "Tomni Responses プロバイダーを ~/.codex/config.toml に追加します。",
       "cursor": "Cursor のモデル設定で OpenAI base URL とキーを設定します。",
       "cline": "OpenAI Compatible を選択し、base URL とキーを貼り付けます。",
       "openclaw": "~/.openclaw/openclaw.json に 9router プロバイダーブロックを追加します。"
@@ -936,7 +1026,7 @@
   "agentManagement": {
     "localAgents": "ローカルエージェント",
     "remoteAgents": "リモートエージェント",
-    "localAgentsDescription": "Tomni Agentic は組み込みエージェントで、アプリに同梱されインストール不要です。その他のエージェントは対応する CLI をローカルにインストールすると検出されます。",
+    "localAgentsDescription": "Tomny Agentic は Tomni に同梱された組み込み AI コアで、インストール不要です。その他のエージェントは対応する CLI をローカルにインストールすると検出されます。",
     "localAgentsSetupLink": "セットアップガイド",
     "goToChat": "チャットを開始",
     "remoteAgentsDescription": "現在は OpenClaw のリモート接続のみ対応しています。その他のエージェントは開発中です。",
@@ -1003,5 +1093,137 @@
     "pendingTimeout": "承認リクエストの期限が切れました（5分）。再試行してください。",
     "pendingCancel": "キャンセル",
     "pendingTimeRemaining": "残り時間：{{time}}"
-  }
+  },
+  "personalProfile": {
+    "title": "パーソナルプロフィール",
+    "description": "AI があなたをより深く理解し、適切な質問と意思決定の調整を行い、既知の情報を繰り返し尋ねないようにします。",
+    "actions": {
+      "save": "変更を保存",
+      "addSecret": "シークレットセットを追加",
+      "add": "情報を追加",
+      "addFirst": "最初の情報を追加"
+    },
+    "tabs": {
+      "profile": "プロフィール",
+      "secrets": "シークレット ({{count}})"
+    },
+    "safety": {
+      "noSecrets": "ここにはパスワード、トークン、API キーを入力しないでください。認証情報はシークレットタブに保存してください。",
+      "selfDescribed": "心理に関する情報は、あなた自身の記述のみをパーソナライズに使用します。AI は心の健康状態を診断したり推測したりしません。"
+    },
+    "structured": {
+      "title": "あなたをより立体的に理解する",
+      "description": "長期的な背景を明確な観点ごとに整理します。役に立ち、共有してもよい情報だけを追加してください。",
+      "summary": "7 つの観点に {{count}} 件の情報",
+      "updatedAt": "更新日: {{date}}"
+    },
+    "categories": {
+      "personalInformation": {
+        "title": "個人情報",
+        "description": "名前、所在地、使用言語、アクセシビリティ上の要望など、AI に覚えてほしい基本情報です。"
+      },
+      "psychology": {
+        "title": "心理的傾向",
+        "description": "動機、学習スタイル、ストレス要因、意思決定の傾向についての自己記述です。診断には使用しません。"
+      },
+      "personality": {
+        "title": "性格",
+        "description": "仕事の進め方に影響する特性、ペース、協働スタイル、フィードバックの好みです。"
+      },
+      "interests": {
+        "title": "興味・関心",
+        "description": "あなたが関心を持つテーマ、趣味、大切にしている活動や課題です。"
+      },
+      "profession": {
+        "title": "職業",
+        "description": "役割、業界、経験、責任、専門上の強みです。"
+      },
+      "aestheticTaste": {
+        "title": "美的嗜好",
+        "description": "好みや苦手な視覚スタイル、色、情報密度、着想元、デザイン上の選択です。"
+      },
+      "pastContext": {
+        "title": "過去の背景",
+        "description": "過去のプロジェクト、重要な経験、学んだこと、以前の判断、繰り返し生じる制約です。"
+      }
+    },
+    "suggestions": {
+      "displayName": "表示名",
+      "location": "所在地",
+      "languages": "言語",
+      "motivation": "自分の動機",
+      "learningStyle": "学習スタイル",
+      "stressTriggers": "ストレス要因",
+      "coreTraits": "中心的な特性",
+      "collaborationStyle": "協働スタイル",
+      "feedbackPreference": "フィードバックの好み",
+      "favoriteTopics": "好きなテーマ",
+      "hobbies": "趣味",
+      "causes": "大切にしている課題",
+      "role": "役割",
+      "industry": "業界",
+      "experienceLevel": "経験レベル",
+      "visualStyle": "視覚スタイル",
+      "colorPreference": "色の好み",
+      "densityPreference": "情報密度",
+      "pastProjects": "過去のプロジェクト",
+      "lessonsLearned": "学んだこと",
+      "recurringConstraints": "繰り返し生じる制約"
+    },
+    "facts": {
+      "keyPlaceholder": "情報の名前",
+      "valuePlaceholder": "AI に何を伝えますか？",
+      "empty": "この項目にはまだ情報がありません。",
+      "quickAdd": "クイック追加",
+      "agentVisible": "AI が利用可能",
+      "localOnly": "この端末のみ",
+      "agentVisibleDescription": "エージェントのコンテキストに含め、AI が質問や回答を調整できるようにします。",
+      "localOnlyDescription": "この端末にのみ保存され、エージェントのコンテキストには含まれません。",
+      "confidence": "確度 {{value}}%",
+      "confirmed": "確認済み",
+      "removeAria": "この情報を削除",
+      "source": {
+        "user": "本人が入力",
+        "observed": "観察",
+        "imported": "インポート",
+        "inferred": "推測"
+      }
+    },
+    "additional": {
+      "title": "追加の背景情報",
+      "description": "特定の観点に当てはまらない既存の一般情報、好み、習慣を残します。",
+      "facts": {
+        "title": "その他の情報",
+        "description": "AI が作業や会話を通じて覚えておくべき一般情報です。"
+      },
+      "preferences": {
+        "title": "その他の好み",
+        "description": "作業、コンテンツ、体験の扱い方に関する好みです。"
+      },
+      "habits": {
+        "title": "習慣",
+        "description": "AI が先回りして尊重すべき日課や仕事のリズムです。"
+      }
+    },
+    "communication": {
+      "title": "コミュニケーションスタイル",
+      "description": "この既定値は、各会話での具体的な依頼によって上書きできます。",
+      "languageLabel": "優先言語",
+      "languagePlaceholder": "例: 日本語",
+      "toneLabel": "好みのトーン",
+      "tonePlaceholder": "例: 率直で専門的",
+      "verbosityLabel": "詳しさ",
+      "verbosity": {
+        "concise": "簡潔",
+        "balanced": "標準",
+        "detailed": "詳細"
+      }
+    },
+    "messages": {
+      "loadError": "パーソナルプロフィールを読み込めませんでした。",
+      "saveSuccess": "パーソナルプロフィールを保存しました。",
+      "saveError": "パーソナルプロフィールを保存できませんでした。"
+    }
+  },
+  "personal": "パーソナル"
 }

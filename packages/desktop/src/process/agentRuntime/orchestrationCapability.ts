@@ -25,11 +25,19 @@ export const ORCHESTRATION_CAPABILITY_PROMPT = `
 Tomny Core orchestration capability:
 You can propose creating a Team or Company, but you CANNOT create either without explicit user approval.
 
-Propose a Team only when the request has at least two genuinely independent workstreams that can run concurrently, or when implementation and independent review/testing materially improve the result. Use Team for one bounded goal with one leader and temporary collaborators.
+Temporary Team creation is a HOST PROTOCOL, not an MCP tool call. Never search for or call team_spawn, team_delegate, agent_spawn, tools_search, or another capability merely to create this Team. The host detects the proposal envelope below, shows the role table to the user, and spawns the approved Team itself.
+
+Apply this efficiency gate before proposing a Team, including when the user explicitly requests subagents:
+1. Candidate roles must have independent deliverables and no shared write target.
+2. Their primary actions or tool families must also differ materially (for example repository investigation + runtime Quick Test, implementation + independent testing/review, or browser research + code editing).
+3. If roles would use the same primary tool or evidence source with only different queries (for example two ide_research calls against one repository), DO NOT spawn subagents. Keep the work in the leader, issue the tool calls concurrently when possible, and synthesize the raw results once.
+4. Spawn only when the expected latency or independent verification gain exceeds the duplicated system prompt, tool catalog, repository context, and synthesis cost.
+
+Propose a Team only when the efficiency gate passes and the request has at least two genuinely independent workstreams that can run concurrently, or when implementation and independent review/testing materially improve the result. Use Team for one bounded goal with one leader and temporary collaborators. An explicit Team/subagent request enables this decision but does not bypass the efficiency gate.
 
 Propose a Company only when the request needs multiple durable disciplines/divisions, multiple leaders, recurring work, or agent-to-agent coordination beyond one bounded task.
 
-Do not propose orchestration for a simple question, a small one-file edit, a tightly sequential task, or when coordination overhead is likely larger than the speed gain. Keep the total token estimate within what one strong agent would reasonably spend: split a shared budget instead of multiplying it per role.
+Do not propose orchestration for a simple question, a small one-file edit, a tightly sequential task, same-tool query fan-out, or when coordination overhead is likely larger than the speed gain. Keep the total token estimate within what one strong agent would reasonably spend: split a shared budget instead of multiplying it per role.
 
 When the conditions are met, respond ONLY with this exact envelope containing valid JSON:
 <tomny_orchestration_proposal>{"kind":"team|company","name":"short name","reason":"why parallel agents help","parallelism":2,"estimatedTokens":4000,"roles":[{"id":"unique-slug","name":"Role name","responsibility":"bounded deliverable","dependsOn":[]}]}</tomny_orchestration_proposal>
@@ -48,6 +56,14 @@ const COMPLEX_TASK_SIGNALS = [
 export const shouldOfferOrchestration = (prompt: string): boolean => {
   const normalized = prompt.trim();
   if (/\b(team|company|đội|công ty)\b/iu.test(normalized)) return true;
+  // An explicit request for subagents is an orchestration request even when it
+  // is short and does not contain the words "team" or "company".  Without
+  // this fast path, a prompt such as "hãy tạo các subagent để đọc repo" skips
+  // the host proposal protocol and the model falls back to reading the repo
+  // itself with the IDE tools.
+  if (/\bsub[- ]?agents?\b/iu.test(normalized) || /\bspawn(?:ing)?\b[^\n]{0,40}\bagents?\b/iu.test(normalized)) {
+    return true;
+  }
   if (normalized.length < 80) return false;
   const signalGroups = COMPLEX_TASK_SIGNALS.reduce((count, pattern) => {
     pattern.lastIndex = 0;

@@ -26,7 +26,7 @@ export const useMcpServers = () => {
         setIsMcpServersLoading(false);
       });
 
-    void ipcBridge.extensions.getMcpServers
+    void ipcBridge.mcpService.listExtensionServers
       .invoke()
       .then((extServers) => {
         if (!extServers || extServers.length === 0) {
@@ -34,18 +34,7 @@ export const useMcpServers = () => {
           return;
         }
 
-        const converted: IMcpServer[] = extServers.map((server) => ({
-          id: String(server.id || ''),
-          name: String(server.name || ''),
-          description: server.description as string | undefined,
-          enabled: server.enabled !== false,
-          transport: server.transport as IMcpServer['transport'],
-          created_at: (server.created_at as number) || Date.now(),
-          updated_at: (server.updated_at as number) || Date.now(),
-          original_json: String(server.original_json || '{}'),
-          builtin: false,
-        }));
-        setExtensionMcpServers(converted);
+        setExtensionMcpServers(extServers);
       })
       .catch((error) => {
         console.error('[useMcpServers] Failed to load extension MCP servers:', error);
@@ -53,30 +42,32 @@ export const useMcpServers = () => {
       });
   }, []);
 
-  const saveMcpServers = useCallback((serversOrUpdater: IMcpServer[] | ((prev: IMcpServer[]) => IMcpServer[])) => {
-    return new Promise<void>((resolve, reject) => {
+  const saveMcpServers = useCallback(
+    async (serversOrUpdater: IMcpServer[] | ((prev: IMcpServer[]) => IMcpServer[])): Promise<void> => {
       setMcpServers((prevServers) => {
         const nextServers = typeof serversOrUpdater === 'function' ? serversOrUpdater(prevServers) : serversOrUpdater;
 
-        queueMicrotask(() => {
-          configService
-            .set('mcp.config', nextServers)
-            .then(() => resolve())
-            .catch((error) => {
-              console.error('[useMcpServers] Failed to persist MCP servers:', error);
-              reject(error);
-            });
-        });
-
+        // The Main-process MCP registry already persisted the mutation. Keep
+        // only the renderer cache in sync; configService.set() would call the
+        // retired /api/settings/client route and report a false failure in
+        // native-only mode.
+        configService.setLocal('mcp.config', nextServers);
         return nextServers;
       });
-    });
-  }, []);
+    },
+    []
+  );
 
   return {
     mcpServers,
     isMcpServersLoading,
-    allMcpServers: [...mcpServers, ...extensionMcpServers],
+    allMcpServers: [
+      ...mcpServers,
+      ...extensionMcpServers.filter(
+        (extensionServer) =>
+          !mcpServers.some((server) => server.name.trim().toLowerCase() === extensionServer.name.trim().toLowerCase())
+      ),
+    ],
     extensionMcpServers,
     setMcpServers,
     saveMcpServers,

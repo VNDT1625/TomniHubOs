@@ -406,6 +406,31 @@ describe('useQuickRun', () => {
     expect(result.current.phase).toBe('running');
   });
 
+  it('runs every selected desktop service together with the desktop executable', async () => {
+    planOk(
+      makePlan({
+        support: { web: false, android: false, desktop: true },
+        candidates: [{ platform: 'desktop', command: 'npm run desktop', cwd: '' }],
+        services: [
+          { id: 'api', name: 'API', kind: 'backend', command: 'npm run api', cwd: 'api' },
+          { id: 'worker', name: 'Worker', kind: 'worker', command: 'npm run worker', cwd: 'worker' },
+        ],
+      })
+    );
+    let session = 0;
+    terminalMock.create.mockImplementation(() => Promise.resolve({ ok: true, data: { id: `sess-${++session}` } }));
+    const { result } = renderHook(() => useQuickRun('/repo', FAST));
+    await waitFor(() => expect(result.current.phase).toBe('ready'));
+
+    await act(async () => result.current.run({ mode: 'custom', serviceIds: ['desktop-executable', 'api', 'worker'] }));
+
+    expect(terminalMock.write.mock.calls.map((call) => call[0].data)).toEqual([
+      'npm run desktop\r',
+      'npm run api\r',
+      'npm run worker\r',
+    ]);
+  });
+
   it('returns to Start and tears down sibling services when an owned terminal exits manually', async () => {
     planOk(
       makePlan({

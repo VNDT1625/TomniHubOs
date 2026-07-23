@@ -14,7 +14,7 @@
  * It asks the user's configured provider/model over the OpenAI-compatible
  * `/chat/completions` endpoint, mirroring `company/companyGenerator.ts` and
  * `browser/providerChat.ts`: the provider list (with a usable `api_key`) is read
- * from aioncore (`GET /api/providers`) and the request is issued directly via
+ * from the native Tomni provider catalog and the request is issued directly via
  * `fetch` (not `ClientFactory`, which expects camelCase `apiKey`). The model is
  * told the exact step grammar the web script-engine understands and must reply
  * with strict JSON, which we parse defensively.
@@ -25,7 +25,7 @@
  * Process boundary: Main-process (Node.js) module. No DOM APIs.
  */
 
-import { httpRequest } from '@/common/adapter/httpBridge';
+import { listReadyProviders } from '@process/services/tomnyProviderBridge';
 import type { IProvider } from '@/common/config/storage';
 import { runAgentChatMessages } from '@process/services/agentChat';
 import type { GenerateProgressFn, TestPlatform, TestScenario, TestStep } from './testingTypes';
@@ -241,7 +241,7 @@ export const createScenarioGenerator = (): IScenarioGenerator => {
 
     // Provider-backed completion (used unless the user picked a CLI agent).
     const providerRun = async (selectedModel: string): Promise<string> => {
-      const providers = (await httpRequest<IProvider[]>('GET', '/api/providers').catch(() => [] as IProvider[])) || [];
+      const providers = (await listReadyProviders().catch(() => [] as IProvider[])) || [];
       const selected = pickProviderModel(providers, selectedModel);
       if (!selected) {
         throw new Error(

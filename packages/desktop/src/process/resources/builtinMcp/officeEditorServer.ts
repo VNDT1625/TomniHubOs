@@ -36,6 +36,12 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { EditorToolAction, EditorToolRunResult } from '@process/editor/editorToolsBridge';
+import {
+  OBJECT_ANIMATION_EFFECTS,
+  OBJECT_ANIMATION_PURPOSES,
+  OBJECT_ANIMATION_TRIGGERS,
+  type ObjectAnimationSpec,
+} from '@/common/presentationDesign';
 import { validateOfficeApiScript } from '@/common/types/office/officeApiScript';
 
 /** Canonical MCP server name for the built-in Office-editor server. */
@@ -77,10 +83,49 @@ const formatSchema = z
   })
   .describe('Character/paragraph formatting to apply.');
 
+const objectAnimationSchema = z
+  .object({
+    slideIndex: z.number().int().min(1).describe('One-based slide index.'),
+    drawingName: z.string().min(1).max(180).optional().describe('Preferred stable drawing name from animation review.'),
+    drawingIndex: z.number().int().min(0).optional().describe('Zero-based same-session fallback drawing index.'),
+    effect: z.enum(OBJECT_ANIMATION_EFFECTS),
+    trigger: z.enum(OBJECT_ANIMATION_TRIGGERS),
+    durationMs: z.number().int().min(100).max(10_000).default(500),
+    delayMs: z.number().int().min(0).max(30_000).default(0),
+    repeatCount: z.number().int().min(1).max(10).default(1),
+    order: z.number().int().min(0).optional(),
+    purpose: z.enum(OBJECT_ANIMATION_PURPOSES),
+    rationale: z.string().trim().min(8).max(500),
+  })
+  .refine((value) => Boolean(value.drawingName) || value.drawingIndex !== undefined, {
+    message: 'Provide drawingName or drawingIndex.',
+  });
+
+/** The Zod schema validates every required field; this gives bridge actions their exact shared shape. */
+const normalizeObjectAnimationSpecs = (animations: z.output<typeof objectAnimationSchema>[]): ObjectAnimationSpec[] =>
+  animations.map((animation, index) => ({
+    slideIndex: animation.slideIndex!,
+    drawingName: animation.drawingName,
+    drawingIndex: animation.drawingIndex,
+    effect: animation.effect!,
+    trigger: animation.trigger!,
+    durationMs: animation.durationMs!,
+    delayMs: animation.delayMs!,
+    repeatCount: animation.repeatCount!,
+    order: animation.order ?? index,
+    purpose: animation.purpose!,
+    rationale: animation.rationale!,
+  }));
+
 const premiumDeckPlanSchema = z
   .object({
     title: z.string().describe('Deck title.'),
     subtitle: z.string().optional().describe('Deck subtitle or promise.'),
+
+    designStyle: z
+      .enum(['modern', 'minimal', 'editorial', 'technical', 'cinematic', 'academic'])
+      .optional()
+      .describe('Creative direction for composition, geometry and visual rhythm.'),
     theme: z
       .object({
         primary: z.string().optional().describe('Primary brand color, #RRGGBB.'),
@@ -96,20 +141,61 @@ const premiumDeckPlanSchema = z
           title: z.string().describe('Slide headline.'),
           subtitle: z.string().optional().describe('Slide supporting line.'),
           bullets: z.array(z.string()).optional().describe('Short speaker-friendly bullets.'),
-          layout: z.enum(['cover', 'section', 'content', 'split', 'image', 'chart', 'quote']).optional(),
+          layout: z
+            .enum([
+              'cover',
+              'section',
+              'content',
+              'split',
+              'image',
+              'chart',
+              'quote',
+              'agenda',
+              'comparison',
+              'timeline',
+              'process',
+              'metrics',
+              'architecture',
+              'closing',
+            ])
+            .optional(),
           imageUrl: z.string().optional().describe('Generated/user-provided image URL or data:image URI.'),
           accentColor: z.string().optional().describe('Slide accent color, #RRGGBB.'),
           chartValues: z.array(z.array(z.number())).optional().describe('0-100 values for simple visual bars.'),
+
+          chartLabels: z.array(z.string()).optional().describe('Category labels for a native chart.'),
+          items: z
+            .array(
+              z.object({
+                label: z.string(),
+                value: z.string().optional(),
+                detail: z.string().optional(),
+                group: z.string().optional(),
+              })
+            )
+            .optional()
+            .describe('Structured items for agenda, timeline, process, metrics and architecture layouts.'),
+          columns: z
+            .array(z.object({ heading: z.string(), bullets: z.array(z.string()) }))
+            .optional()
+            .describe('Two or three structured columns for comparison layouts.'),
+          source: z.string().optional().describe('Short evidence/source label rendered in the footer.'),
+          speakerNotes: z.string().optional().describe('Presenter notes stored on the slide.'),
+          transition: z.enum(['none', 'fade', 'push', 'wipe', 'split']).optional(),
         })
       )
       .min(1)
-      .max(12),
+      .max(20),
   })
-  .describe('Structured premium PPTX plan with story, theme, layouts, visuals and chart values.');
+  .describe(
+    'Structured premium PPTX plan with story, design direction, rich layouts, evidence, visuals and native charts.'
+  );
 const premiumDocPlanSchema = z
   .object({
     title: z.string().describe('Document title.'),
     subtitle: z.string().optional().describe('Executive promise or subtitle.'),
+
+    includeToc: z.boolean().optional().describe('Apply real heading styles and insert an automatic table of contents.'),
     theme: z
       .object({
         primary: z.string().optional().describe('Primary brand color, #RRGGBB.'),
@@ -140,6 +226,29 @@ const premiumDocPlanSchema = z
   })
   .describe('Structured premium DOCX plan with hierarchy, callouts, tables and visual blocks.');
 
+const deckMacroThemeSchema = z
+  .object({
+    primary: z.string().optional(),
+    secondary: z.string().optional(),
+    background: z.string().optional(),
+    text: z.string().optional(),
+    fontFamily: z.string().optional(),
+  })
+  .optional();
+
+const deckDesignStyleSchema = z
+  .enum(['modern', 'minimal', 'editorial', 'technical', 'cinematic', 'academic'])
+  .optional();
+
+const deckTransitionSchema = z.enum(['none', 'fade', 'push', 'wipe', 'split']).optional();
+
+const deckMacroItemSchema = z.object({
+  label: z.string(),
+  value: z.string().optional(),
+  detail: z.string().optional(),
+  group: z.string().optional(),
+});
+
 /**
  * Build the Office-editor {@link McpServer} bound to the injected deps.
  *
@@ -157,6 +266,22 @@ export const createOfficeEditorServer = (deps: OfficeEditorServerDeps): McpServe
     // `{ ok: false }` branch of the union; cast locally to read `error`.
     return textResult((result as Extract<EditorToolRunResult, { ok: false }>).error, true);
   };
+
+  // --- office_get_capabilities ---------------------------------------------
+  server.tool(
+    'office_get_capabilities',
+    `Inspect live Office support before using advanced tools. This probe never waits for a connector and
+fails closed when the current Document Server lacks ONLYOFFICE createConnector()/Automation API.
+It reports editor readiness plus separate automationApi, objectAnimation, slideShowControl and
+recording statuses with concrete reasons.
+
+Input:
+- filePath: absolute path of the Office document to inspect (required).`,
+    {
+      filePath: z.string().describe('Absolute path of the Office document to inspect.'),
+    },
+    ({ filePath }) => run(filePath, { tool: 'get_capabilities' })
+  );
 
   // --- office_read_document ------------------------------------------------
   server.tool(
@@ -394,6 +519,267 @@ Input:
       plan: premiumDeckPlanSchema,
     },
     ({ filePath, plan }) => run(filePath, { tool: 'create_premium_deck', plan })
+  );
+
+  // --- presentation-native slide macros -----------------------------------
+  server.tool(
+    'office_add_agenda_slide',
+    'Append a polished agenda/table-of-contents slide to the open PPTX without rebuilding existing slides.',
+    {
+      filePath: z.string(),
+      title: z.string(),
+      subtitle: z.string().optional(),
+      sections: z.array(z.string()).min(2).max(8),
+      designStyle: deckDesignStyleSchema,
+      theme: deckMacroThemeSchema,
+      source: z.string().optional(),
+      speakerNotes: z.string().optional(),
+      transition: deckTransitionSchema,
+    },
+    ({ filePath, title, subtitle, sections, designStyle, theme, source, speakerNotes, transition }) =>
+      run(filePath, {
+        tool: 'add_premium_slide',
+        plan: {
+          title,
+          subtitle,
+          designStyle,
+          theme,
+          slides: [
+            {
+              title,
+              subtitle,
+              layout: 'agenda',
+              items: sections.map((label) => ({ label })),
+              source,
+              speakerNotes,
+              transition,
+            },
+          ],
+        },
+      })
+  );
+
+  server.tool(
+    'office_add_comparison_slide',
+    'Append a presentation-native two/three-column comparison slide with clear visual hierarchy.',
+    {
+      filePath: z.string(),
+      title: z.string(),
+      subtitle: z.string().optional(),
+      columns: z
+        .array(z.object({ heading: z.string(), bullets: z.array(z.string()).min(1).max(5) }))
+        .min(2)
+        .max(3),
+      designStyle: deckDesignStyleSchema,
+      theme: deckMacroThemeSchema,
+      source: z.string().optional(),
+      speakerNotes: z.string().optional(),
+      transition: deckTransitionSchema,
+    },
+    ({ filePath, title, subtitle, columns, designStyle, theme, source, speakerNotes, transition }) =>
+      run(filePath, {
+        tool: 'add_premium_slide',
+        plan: {
+          title,
+          subtitle,
+          designStyle,
+          theme,
+          slides: [{ title, subtitle, layout: 'comparison', columns, source, speakerNotes, transition }],
+        },
+      })
+  );
+
+  server.tool(
+    'office_add_timeline_slide',
+    'Append a milestone timeline slide. Use value for date/phase and detail for supporting evidence.',
+    {
+      filePath: z.string(),
+      title: z.string(),
+      subtitle: z.string().optional(),
+      steps: z.array(deckMacroItemSchema).min(2).max(5),
+      designStyle: deckDesignStyleSchema,
+      theme: deckMacroThemeSchema,
+      source: z.string().optional(),
+      speakerNotes: z.string().optional(),
+      transition: deckTransitionSchema,
+    },
+    ({ filePath, title, subtitle, steps, designStyle, theme, source, speakerNotes, transition }) =>
+      run(filePath, {
+        tool: 'add_premium_slide',
+        plan: {
+          title,
+          subtitle,
+          designStyle,
+          theme,
+          slides: [{ title, subtitle, layout: 'timeline', items: steps, source, speakerNotes, transition }],
+        },
+      })
+  );
+
+  server.tool(
+    'office_add_process_slide',
+    'Append a numbered process/demo-flow slide with up to six concise steps.',
+    {
+      filePath: z.string(),
+      title: z.string(),
+      subtitle: z.string().optional(),
+      steps: z.array(deckMacroItemSchema).min(2).max(6),
+      designStyle: deckDesignStyleSchema,
+      theme: deckMacroThemeSchema,
+      source: z.string().optional(),
+      speakerNotes: z.string().optional(),
+      transition: deckTransitionSchema,
+    },
+    ({ filePath, title, subtitle, steps, designStyle, theme, source, speakerNotes, transition }) =>
+      run(filePath, {
+        tool: 'add_premium_slide',
+        plan: {
+          title,
+          subtitle,
+          designStyle,
+          theme,
+          slides: [{ title, subtitle, layout: 'process', items: steps, source, speakerNotes, transition }],
+        },
+      })
+  );
+
+  server.tool(
+    'office_add_metrics_slide',
+    'Append a strong metric-card slide. Each metric supports value, label and a short detail.',
+    {
+      filePath: z.string(),
+      title: z.string(),
+      subtitle: z.string().optional(),
+      metrics: z.array(deckMacroItemSchema).min(1).max(4),
+      designStyle: deckDesignStyleSchema,
+      theme: deckMacroThemeSchema,
+      source: z.string().optional(),
+      speakerNotes: z.string().optional(),
+      transition: deckTransitionSchema,
+    },
+    ({ filePath, title, subtitle, metrics, designStyle, theme, source, speakerNotes, transition }) =>
+      run(filePath, {
+        tool: 'add_premium_slide',
+        plan: {
+          title,
+          subtitle,
+          designStyle,
+          theme,
+          slides: [{ title, subtitle, layout: 'metrics', items: metrics, source, speakerNotes, transition }],
+        },
+      })
+  );
+
+  server.tool(
+    'office_add_architecture_slide',
+    'Append a layered system-architecture slide for components, trust boundaries or technology stacks.',
+    {
+      filePath: z.string(),
+      title: z.string(),
+      subtitle: z.string().optional(),
+      layers: z.array(deckMacroItemSchema).min(2).max(5),
+      designStyle: deckDesignStyleSchema,
+      theme: deckMacroThemeSchema,
+      source: z.string().optional(),
+      speakerNotes: z.string().optional(),
+      transition: deckTransitionSchema,
+    },
+    ({ filePath, title, subtitle, layers, designStyle, theme, source, speakerNotes, transition }) =>
+      run(filePath, {
+        tool: 'add_premium_slide',
+        plan: {
+          title,
+          subtitle,
+          designStyle,
+          theme,
+          slides: [{ title, subtitle, layout: 'architecture', items: layers, source, speakerNotes, transition }],
+        },
+      })
+  );
+
+  server.tool(
+    'office_add_speaker_notes',
+    'Add presenter notes to one slide without placing the notes on the visible canvas.',
+    {
+      filePath: z.string(),
+      slideIndex: z.number().int().min(1).describe('One-based slide index.'),
+      text: z.string().min(1).max(2000),
+    },
+    ({ filePath, slideIndex, text }) => run(filePath, { tool: 'add_speaker_notes', slideIndex, text })
+  );
+
+  server.tool(
+    'office_apply_slide_transitions',
+    'Apply one restrained transition consistently across the open deck.',
+    {
+      filePath: z.string(),
+      effect: z.enum(['fade', 'push', 'wipe', 'split']),
+      speed: z.enum(['slow', 'medium', 'fast']).optional(),
+    },
+    ({ filePath, effect, speed }) =>
+      run(filePath, { tool: 'apply_slide_transitions', effect, speed: speed ?? 'medium' })
+  );
+
+  server.tool(
+    'office_apply_object_animations',
+    `Apply purpose-led object animations to an open PPTX. Call office_get_capabilities and
+office_review_object_animations first: use drawingName as the stable target and drawingIndex only as a
+same-session guard. Every animation must explain its instructional purpose. This tool alters only the
+main sequence; interactive sequences are preserved. It runtime-checks ONLYOFFICE timeline APIs before
+making a change and never claims slide-show recording or playback support.`,
+    {
+      filePath: z.string(),
+      animations: z.array(objectAnimationSchema).min(1).max(256),
+      replaceExistingMainSequence: z.boolean().optional(),
+    },
+    ({ filePath, animations, replaceExistingMainSequence }) =>
+      run(filePath, {
+        tool: 'apply_object_animations',
+        animations: normalizeObjectAnimationSpecs(animations),
+        replaceExistingMainSequence: replaceExistingMainSequence === true,
+      })
+  );
+
+  server.tool(
+    'office_review_object_animations',
+    `Inspect the live presentation timeline and drawing inventory for purpose-led animation QA.
+It reports stable drawing names, temporary drawing indices, timing/density issues, and can reconcile
+the live timeline against an expected animation plan. Call it before target selection and after apply.`,
+    {
+      filePath: z.string(),
+      expectedAnimations: z.array(objectAnimationSchema).min(1).max(256).optional(),
+    },
+    ({ filePath, expectedAnimations }) =>
+      run(filePath, {
+        tool: 'review_object_animations',
+        expectedAnimations: expectedAnimations ? normalizeObjectAnimationSpecs(expectedAnimations) : undefined,
+      })
+  );
+
+  server.tool(
+    'office_structure_report',
+    'Apply real Word heading styles and optionally insert an automatic table of contents in one operation.',
+    {
+      filePath: z.string(),
+      headings: z
+        .array(z.object({ text: z.string(), level: z.number().int().min(1).max(9) }))
+        .min(1)
+        .max(40),
+      insertToc: z.boolean().optional(),
+    },
+    ({ filePath, headings, insertToc }) =>
+      run(filePath, {
+        tool: 'structure_report',
+        headings: headings.map((heading) => ({ text: String(heading.text), level: Number(heading.level) })),
+        insertToc: insertToc !== false,
+      })
+  );
+
+  server.tool(
+    'office_open_visual_review',
+    'Open the current DOCX/PPTX/XLSX in the rendered preview panel for human visual QA.',
+    { filePath: z.string() },
+    ({ filePath }) => run(filePath, { tool: 'open_visual_review' })
   );
 
   // --- office_review_premium_quality --------------------------------------

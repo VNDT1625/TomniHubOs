@@ -75,6 +75,7 @@ import {
   Terminal,
   Play,
   Link,
+  Magic,
   Right,
   TreeList,
 } from '@icon-park/react';
@@ -119,6 +120,7 @@ import { relationsFor } from './codeRelations';
 import type { RepoGraph } from './ideClient';
 import { emitEditorGoto } from '@renderer/pages/editor/editorGoto';
 import type { EditorFsOverride } from '@renderer/pages/editor/UniversalEditor';
+import ViuPanel from './Viu';
 
 const UniversalEditor = React.lazy(() => import('@renderer/pages/editor/UniversalEditor'));
 
@@ -149,6 +151,7 @@ const hashTextSha256 = async (content: string): Promise<string> => {
 
 type IdeWorkspaceProps = {
   onBack: () => void;
+  initialMode?: 'files' | 'viu';
 };
 
 /** The IDE modes selectable from the activity bar. */
@@ -165,9 +168,10 @@ type IdeMode =
   | 'spec'
   | 'lsp'
   | 'expbase'
-  | 'team';
+  | 'team'
+  | 'viu';
 
-const IdeWorkspace: React.FC<IdeWorkspaceProps> = ({ onBack }) => {
+const IdeWorkspace: React.FC<IdeWorkspaceProps> = ({ onBack, initialMode = 'files' }) => {
   const { t } = useTranslation();
   const ide = useIdeWorkspace();
   // Keep Quick Test services alive across IDE mode switches. The embedded
@@ -177,7 +181,7 @@ const IdeWorkspace: React.FC<IdeWorkspaceProps> = ({ onBack }) => {
   const changes = useRepoChanges(ide.rootPath);
   const collab = useTeamCollab(ide.rootPath);
   const cloud = useCloudWorkspace();
-  const [mode, setMode] = useState<IdeMode>('files');
+  const [mode, setMode] = useState<IdeMode>(initialMode);
   const [activityRailVisible, setActivityRailVisible] = useState(true);
   const [joinCollabOpen, setJoinCollabOpen] = useState(false);
   const [connectCloudOpen, setConnectCloudOpen] = useState(false);
@@ -528,6 +532,7 @@ const IdeWorkspace: React.FC<IdeWorkspaceProps> = ({ onBack }) => {
         setMode(m);
     return [
       { id: 'files', label: t('ide.mode.files'), hint: t('ide.palette.category.go'), run: goto('files') },
+      { id: 'viu', label: t('ide.mode.viu'), hint: t('ide.palette.category.go'), run: goto('viu') },
       {
         id: 'understand',
         label: t('ide.mode.understand'),
@@ -603,7 +608,7 @@ const IdeWorkspace: React.FC<IdeWorkspaceProps> = ({ onBack }) => {
 
   // Restoring a previously-open folder: show a spinner instead of the empty
   // call-to-action so a returning user isn't told to open a folder again.
-  if (ide.restoring && !ide.rootPath) {
+  if (ide.restoring && !ide.rootPath && mode !== 'viu') {
     return (
       <div className='size-full flex flex-col min-h-0 bg-1'>
         <Header rootName={null} onBack={onBack} statsLine={null} onPickFolder={requestPickFolder} onRescan={null} />
@@ -652,7 +657,7 @@ const IdeWorkspace: React.FC<IdeWorkspaceProps> = ({ onBack }) => {
 
   // No folder yet: an open-folder CTA plus a Join-collab fallback for peers
   // arriving without their own repo (they live entirely off the host's disk).
-  if (!ide.rootPath) {
+  if (!ide.rootPath && mode !== 'viu') {
     return (
       <div className='size-full flex flex-col min-h-0 bg-1'>
         <Header rootName={null} onBack={onBack} statsLine={null} onPickFolder={requestPickFolder} onRescan={null} />
@@ -705,17 +710,17 @@ const IdeWorkspace: React.FC<IdeWorkspaceProps> = ({ onBack }) => {
   return (
     <div className='size-full flex flex-col min-h-0 bg-1'>
       <Header
-        rootName={baseName(ide.rootPath)}
+        rootName={ide.rootPath ? baseName(ide.rootPath) : null}
         onBack={onBack}
         statsLine={statsLine}
         hasUnsaved={ide.hasUnsaved}
         changeCount={changes.changes.length}
         onReview={() => setDiffOpen(true)}
         onPickFolder={requestPickFolder}
-        onCloseFolder={requestCloseFolder}
-        onRescan={() => void ide.rescan()}
+        onCloseFolder={ide.rootPath ? requestCloseFolder : undefined}
+        onRescan={ide.rootPath ? () => void ide.rescan() : null}
         rescanning={ide.scanStatus === 'scanning'}
-        onShowActivityRail={activityRailVisible ? undefined : () => setActivityRailVisible(true)}
+        onShowActivityRail={mode === 'viu' || activityRailVisible ? undefined : () => setActivityRailVisible(true)}
       />
       {cloud.connected && cloud.session ? (
         <CloudMountedBar
@@ -732,7 +737,7 @@ const IdeWorkspace: React.FC<IdeWorkspaceProps> = ({ onBack }) => {
       <div className='flex-1 min-h-0 flex relative'>
         <nav
           className={
-            !activityRailVisible || (mode === 'quicktest' && quickTestCompact)
+            mode === 'viu' || !activityRailVisible || (mode === 'quicktest' && quickTestCompact)
               ? 'w-0 overflow-hidden shrink-0 flex flex-col items-center gap-6px py-12px border-r-0 border-b-1'
               : 'w-60px shrink-0 flex flex-col items-center gap-6px py-12px border-r border-b-1'
           }
@@ -752,6 +757,12 @@ const IdeWorkspace: React.FC<IdeWorkspaceProps> = ({ onBack }) => {
             label={t('ide.mode.files')}
             active={mode === 'files'}
             onClick={() => setMode('files')}
+          />
+          <ActivityItem
+            icon={<Magic theme='outline' size={20} />}
+            label={t('ide.mode.viu')}
+            active={mode === 'viu'}
+            onClick={() => setMode('viu')}
           />
           <ActivityItem
             icon={<TreeList theme='outline' size={20} />}
@@ -839,6 +850,23 @@ const IdeWorkspace: React.FC<IdeWorkspaceProps> = ({ onBack }) => {
           {mode === 'understand' ? (
             <div className='absolute inset-0'>
               <UnderstandPanel rootPath={ide.rootPath} />
+            </div>
+          ) : null}
+
+          {mode === 'viu' ? (
+            <div className='absolute inset-0'>
+              <ViuPanel
+                rootPath={ide.rootPath}
+                onRequestWorkspace={requestPickFolder}
+                onStartAgent={(prompt) => {
+                  const root = ide.rootPath;
+                  if (!root) return;
+                  setMode('chat');
+                  window.setTimeout(() => {
+                    emitter.emit('ide.hook.askAgent', { rootPath: root, prompt, hookName: 'Viu' });
+                  }, 0);
+                }}
+              />
             </div>
           ) : null}
 

@@ -160,5 +160,153 @@
     "toolCompleted": "{{tool}} hoàn tất",
     "toolFailed": "{{tool}} lỗi",
     "toolWorkspace": "Workspace: {{workspace}}"
+  },
+  "benchmark": {
+    "tab": "Benchmark",
+    "title": "Đánh giá tác nhân",
+    "subtitle": "Chạy cùng một bộ hai prompt trên Tomny, Claude Code và Codex, sau đó so sánh kết quả đã kiểm chứng.",
+    "liveContract": "IPC trực tiếp",
+    "suite": {
+      "title": "Định nghĩa bộ đánh giá",
+      "hint": "Giữ nguyên nhiệm vụ để mọi runner bắt đầu từ cùng một yêu cầu có thể so sánh.",
+      "selectPlaceholder": "Chọn bộ đã lưu",
+      "selectLabel": "Bộ đánh giá đã lưu",
+      "nameLabel": "Tên bộ đánh giá",
+      "namePlaceholder": "Ví dụ: Sửa và kiểm chứng luồng đăng nhập"
+    },
+    "prompts": {
+      "firstLabel": "Prompt 1 · thực hiện",
+      "firstName": "Prompt triển khai",
+      "firstPlaceholder": "Mô tả vấn đề và thay đổi mà mọi runner phải thực hiện.",
+      "secondLabel": "Prompt 2 · rà soát",
+      "secondName": "Prompt rà soát",
+      "secondPlaceholder": "Yêu cầu mọi runner kiểm tra, chạy test và hoàn thiện kết quả lần đầu."
+    },
+    "verification": {
+      "label": "Lệnh kiểm chứng",
+      "placeholder": "Ví dụ: bunx vitest run tests/unit/auth.test.ts",
+      "hint": "Lệnh này phải thất bại trước khi tác nhân làm việc và vượt qua sau khi sửa."
+    },
+    "runner": {
+      "tomny": "Tomny",
+      "claude": "Claude Code",
+      "codex": "Codex"
+    },
+    "runnerDescription": {
+      "tomny": "Tác nhân IDE tích hợp qua runtime Tomny.",
+      "claude": "Phiên Claude CLI gốc và độc lập.",
+      "codex": "Phiên Codex CLI gốc và độc lập."
+    },
+    "runners": {
+      "title": "Các runner",
+      "hint": "Mỗi runner được chọn cần một workspace độc lập riêng.",
+      "selectedCount": "Đã chọn {{count}}",
+      "available": "Sẵn sàng",
+      "unavailable": "Không sẵn sàng",
+      "notProbed": "Chưa kiểm tra",
+      "detail": "Chi tiết trạng thái runner",
+      "enabledLabel": "Bật {{runner}}",
+      "modelLabel": "Model",
+      "modelPlaceholder": "Mặc định của runner",
+      "modelAriaLabel": "Model cho {{runner}}",
+      "workspaceLabel": "Workspace",
+      "workspacePlaceholder": "Đường dẫn tuyệt đối tới workspace độc lập",
+      "workspaceAriaLabel": "Workspace cho {{runner}}"
+    },
+    "actions": {
+      "newSuite": "Bộ mới",
+      "probe": "Kiểm tra runner",
+      "retry": "Thử lại",
+      "save": "Lưu bộ đánh giá",
+      "startSelected": "Chạy mục đã chọn",
+      "refreshHistory": "Làm mới lịch sử",
+      "rerun": "Chạy lại runner này",
+      "cancelRun": "Hủy lượt chạy"
+    },
+    "history": {
+      "title": "Lịch sử chạy",
+      "hint": "Tiến độ trực tiếp và kết quả đã lưu của bộ đánh giá đang chọn.",
+      "empty": "Bộ đánh giá này chưa có lượt chạy nào.",
+      "rerunBadge": "Chạy lại",
+      "changedFiles": "{{count}} tệp đã đổi"
+    },
+    "metrics": {
+      "hint": "Số token luôn kèm nguồn đo; dữ liệu không có sẽ được giữ ở trạng thái chưa biết.",
+      "duration": "Thời gian",
+      "ttft": "TTFT",
+      "inputTokens": "Token đầu vào",
+      "outputTokens": "Token đầu ra",
+      "cachedTokens": "Token cache",
+      "totalTokens": "Tổng token",
+      "provenance": "Nguồn số liệu token"
+    },
+    "provenance": {
+      "reported": "Được runner báo cáo",
+      "estimated": "Ước tính",
+      "unavailable": "Không có dữ liệu"
+    },
+    "status": {
+      "queued": "Đang chờ",
+      "preparing": "Đang chuẩn bị",
+      "running": "Đang chạy",
+      "verifying": "Đang kiểm chứng",
+      "completed": "Hoàn tất",
+      "passed": "Đạt",
+      "failed": "Không đạt",
+      "error": "Lỗi",
+      "cancelled": "Đã hủy",
+      "interrupted": "Bị gián đoạn"
+    },
+    "messages": {
+      "probeComplete": "Đã kiểm tra xong các runner.",
+      "saved": "Đã lưu bộ đánh giá.",
+      "started": "Đã bắt đầu {{count}} runner.",
+      "rerunStarted": "Đã bắt đầu chạy lại một runner.",
+      "cancelled": "Đã gửi yêu cầu hủy."
+    },
+    "errors": {
+      "loadSuites": "Không thể tải các bộ đánh giá.",
+      "loadRuns": "Không thể tải lịch sử đánh giá.",
+      "probe": "Không thể kiểm tra các runner.",
+      "save": "Không thể lưu bộ đánh giá.",
+      "start": "Không thể khởi chạy các runner đã chọn.",
+      "rerun": "Không thể chạy lại runner này.",
+      "cancel": "Không thể hủy lượt chạy này.",
+      "cancelNotActive": "Lượt chạy này không còn hoạt động.",
+      "runnerUnavailable": "{{runner}} chưa sẵn sàng. Hãy cài đặt hoặc cấu hình rồi kiểm tra lại.",
+      "requiredFields": "Hãy nhập tên bộ đánh giá và cả hai prompt.",
+      "selectRunner": "Hãy bật ít nhất một runner.",
+      "workspaceRequired": "Hãy nhập workspace cho mọi runner đã bật."
+    },
+    "runMetrics": {
+      "modelRequests": "Lượt gọi model",
+      "toolCalls": "Lượt gọi công cụ",
+      "toolFailures": "Công cụ lỗi",
+      "quickTestCalls": "Lượt gọi Quick Test"
+    },
+    "checks": {
+      "precheck": "Kiểm tra trước",
+      "postVerification": "Kiểm chứng sau sửa",
+      "notRun": "Chưa chạy",
+      "timedOut": "Quá thời gian",
+      "expectedFailure": "Thất bại đúng dự kiến",
+      "unexpectedPass": "Đạt ngoài dự kiến",
+      "passed": "Đạt",
+      "failed": "Không đạt"
+    },
+    "runDetails": {
+      "details": "Chi tiết lượt chạy",
+      "turnsEmpty": "Chưa ghi nhận phản hồi nào.",
+      "response": "Phản hồi cuối",
+      "changedFilesTitle": "Tệp đã thay đổi",
+      "diffTitle": "Bản vá",
+      "exitCode": "Mã thoát",
+      "batchId": "Mã đợt chạy",
+      "comparisonKey": "Khóa so sánh",
+      "suiteRevision": "Phiên bản bộ test",
+      "sourceFingerprint": "Dấu vân tay mã nguồn",
+      "sessionId": "Mã phiên",
+      "errorTitle": "Lỗi lượt chạy"
+    }
   }
 }

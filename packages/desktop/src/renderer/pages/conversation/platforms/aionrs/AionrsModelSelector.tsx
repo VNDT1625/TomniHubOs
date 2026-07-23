@@ -5,6 +5,8 @@
  */
 
 import type { AionrsModelSelection } from './useAionrsModelSelection';
+
+import { ROUTER9_REASONING_EFFORTS, TOMNI_GATEWAY_PROVIDER_ID } from '@/common/router9';
 import { usePreviewContext } from '@/renderer/pages/conversation/Preview';
 import { useLayoutContext } from '@/renderer/hooks/context/LayoutContext';
 import { getModelDisplayLabel } from '@/renderer/utils/model/agentLogo';
@@ -52,7 +54,8 @@ const AionrsModelSelector: React.FC<{
     );
   }
 
-  const { providers, getAvailableModels, handleSelectModel } = selection;
+  const { providers, getAvailableModels, handleSelectModel, handleSelectReasoning } = selection;
+  const isManagedGateway = current_model?.id === TOMNI_GATEWAY_PROVIDER_ID;
 
   const label = getModelDisplayLabel({
     selected_value: current_model?.use_model,
@@ -60,6 +63,11 @@ const AionrsModelSelector: React.FC<{
     defaultModelLabel,
     fallbackLabel: t('conversation.welcome.selectModel'),
   });
+
+  const displayLabel =
+    isManagedGateway && current_model?.reasoning_effort
+      ? `${label} · ${t(`settings.router9.reasoning.${current_model.reasoning_effort}`)}`
+      : label;
 
   return (
     <Dropdown
@@ -90,6 +98,29 @@ const AionrsModelSelector: React.FC<{
               </Menu.ItemGroup>
             );
           })}
+
+          {isManagedGateway && (
+            <Menu.ItemGroup title={t('settings.router9.reasoningLabel')} key='reasoning-effort'>
+              <Menu.Item
+                data-testid='aionrs-reasoning-option-auto'
+                key='auto'
+                className={!current_model?.reasoning_effort ? '!bg-2' : ''}
+                onClick={() => void handleSelectReasoning(undefined)}
+              >
+                {t('settings.router9.reasoning.auto')}
+              </Menu.Item>
+              {ROUTER9_REASONING_EFFORTS.map((effort) => (
+                <Menu.Item
+                  key={effort}
+                  data-testid={`aionrs-reasoning-option-${effort}`}
+                  className={current_model?.reasoning_effort === effort ? '!bg-2' : ''}
+                  onClick={() => void handleSelectReasoning(effort)}
+                >
+                  {t(`settings.router9.reasoning.${effort}`)}
+                </Menu.Item>
+              ))}
+            </Menu.ItemGroup>
+          )}
         </Menu>
       }
     >
@@ -105,7 +136,7 @@ const AionrsModelSelector: React.FC<{
       >
         <span className='flex items-center gap-6px min-w-0'>
           {renderLogo()}
-          <span className={compact ? 'block truncate' : undefined}>{label}</span>
+          <span className={compact ? 'block truncate' : undefined}>{displayLabel}</span>
           <Down theme='outline' size={12} fill={iconColors.secondary} className='shrink-0' />
         </span>
       </Button>

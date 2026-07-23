@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { httpRequest } from '@/common/adapter/httpBridge';
+import { listReadyProviders } from '@process/services/tomnyProviderBridge';
 import type { IProvider } from '@/common/config/storage';
 import {
   recommendConfiguredModels,
@@ -211,6 +211,6 @@ export const fetchArtificialAnalysisBenchmark = async (
 };
 
 export const recommendConfiguredProviderModels = async (): Promise<PricingRecommendation> => {
-  const providers = (await httpRequest<IProvider[]>('GET', '/api/providers').catch((): IProvider[] => [])) || [];
+  const providers = (await listReadyProviders().catch((): IProvider[] => [])) || [];
   return recommendConfiguredModels(providers, fetchLlmPricesModelPricing, fetchArtificialAnalysisBenchmark);
 };

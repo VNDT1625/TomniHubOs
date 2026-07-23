@@ -25,10 +25,11 @@ export const buildCoreDoctorReport = (input: {
   telemetry: CoreTelemetryEvent[];
   generatedAt?: number;
   stalledAfterMs?: number;
+  additionalChecks?: CoreDoctorCheck[];
 }): CoreDoctorReport => {
   const generatedAt = input.generatedAt ?? Date.now();
   const stalledAfterMs = input.stalledAfterMs ?? 5 * 60_000;
-  const checks: CoreDoctorCheck[] = [];
+  const checks: CoreDoctorCheck[] = [...(input.additionalChecks ?? [])];
   const targetIds = new Set<string>();
   for (const target of input.targets) {
     if (targetIds.has(target.id)) {

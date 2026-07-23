@@ -15,6 +15,15 @@
 import { promises as fsp } from 'node:fs';
 import * as path from 'node:path';
 import { buildGraphFromFiles, collectRepoFiles, type CollectRepoFilesDeps } from '../repoGraph';
+import {
+  KNOWLEDGE_GRAPH_VERSION,
+  buildRunbook,
+  detectLanguage,
+  extractSymbols,
+  fingerprintOf,
+  inferLayer,
+} from '../knowledgeGraphBuilder';
+import type { KnowledgeGraph, KnowledgeNode } from '../understandTypes';
 import { grepText, buildSearchRegExp } from '../search/grepCore';
 import { findDeclarations, findReferences } from '../nav/symbolNav';
 import {
@@ -22,6 +31,7 @@ import {
   type IdeMcpService,
   type IdeSearchHit,
   type IdeSymbolHit,
+  type IdeResearchExactHit,
   type IdeReadResult,
   type IdeMtuiResult,
   type IdeDirEntry,
@@ -32,6 +42,8 @@ import {
   type ExperienceAgentService,
 } from './ideServer';
 import { createQuickTestService } from '../quickTestService';
+
+import { viuV2SessionService } from '../viu/v2SessionService';
 
 import {
   QuickTestScenarioRunner,
@@ -44,6 +56,8 @@ import { getBrowserServices } from '@process/browser/browserBridge';
 import { openNativeLogStream } from '../quickTestNativeStream';
 import { createNativeQuickTestReplayAdapter } from '@process/testing/engines/nativeQuickTestReplayAdapter';
 import { loadGraph } from '../quickTestBridgeHelpers';
+import { loadWikiForRoot } from '../wiki/wikiBuildBridge';
+import { buildWikiTestProfile } from '../wikiPlanner';
 import { getDbService } from '../db/dbWiring';
 import { getSessionMemoryStore } from '../memory/sessionMemoryStore';
 import { getRepoSecretStore } from '../memory/repoSecretStore';
@@ -66,6 +80,8 @@ const DEFAULT_SEARCH_RESULTS = 200;
 const DEFAULT_SYMBOL_RESULTS = 200;
 const DEFAULT_READ_LINES = 2000;
 
+const CODE_FILE_RE = /\.(?:c|cc|cpp|cs|go|java|js|jsx|kt|kts|mjs|cjs|php|py|rb|rs|swift|ts|tsx|vue)$/i;
+
 const SKIP_DIRS = new Set([
   'node_modules',
   '.git',
@@ -79,6 +95,7 @@ const SKIP_DIRS = new Set([
   '.mtui',
   '.aionui',
   '.turbo',
+  '.tmp',
 ]);
 
 // ---------------------------------------------------------------------------
@@ -183,6 +200,56 @@ const fsDeps = (rootPath: string): CollectRepoFilesDeps => ({
   readFile: (filePath) => fsp.readFile(filePath, 'utf-8'),
   toRel: (full) => path.relative(rootPath, full).replace(/\\/g, '/'),
 });
+
+/** Build current structural test intelligence without a model when Understand has not run or is stale. */
+const buildStructuralTestGraph = async (rootPath: string): Promise<KnowledgeGraph> => {
+  const files = await collectRepoFiles(rootPath, fsDeps(rootPath), {
+    maxFiles: DEFAULT_SCAN_FILES,
+    codeOnly: false,
+  });
+  const normalized = files.map((file) => ({ ...file, relPath: file.relPath.replace(/\\/g, '/') }));
+  const codeFiles = normalized.filter((file) => CODE_FILE_RE.test(file.relPath));
+  const structural = buildGraphFromFiles(rootPath, codeFiles);
+  const contentByPath = new Map(normalized.map((file) => [file.relPath, file.content] as const));
+  const importedBy = new Map<string, number>();
+  for (const edge of structural.edges) importedBy.set(edge.to, (importedBy.get(edge.to) ?? 0) + 1);
+  const nodes: KnowledgeNode[] = structural.nodes.map((node): KnowledgeNode => {
+    const content = contentByPath.get(node.id) ?? '';
+    const language = detectLanguage(node.id);
+    const symbols = extractSymbols(content, language);
+    const layer = inferLayer(node.id);
+    return {
+      id: node.id,
+      label: node.label,
+      group: node.group,
+      layer,
+      summary: `${node.label} is a current ${layer} file declaring ${
+        symbols
+          .slice(0, 4)
+          .map((symbol) => symbol.name)
+          .join(', ') || 'no indexed symbols'
+      }.`,
+      summarySource: 'fallback',
+      tags: [],
+      symbols,
+      language,
+      importedBy: importedBy.get(node.id) ?? 0,
+      fingerprint: fingerprintOf(content),
+    };
+  });
+  return {
+    rootPath,
+    version: KNOWLEDGE_GRAPH_VERSION,
+    builtAt: Date.now(),
+    sourceSnapshotAt: Date.now(),
+    nodes,
+    edges: structural.edges,
+    tours: [],
+    runbook: buildRunbook(contentByPath),
+    truncated: structural.truncated,
+    fileCount: structural.fileCount,
+  };
+};
 
 // ---------------------------------------------------------------------------
 // Main service implementation
@@ -345,6 +412,70 @@ export const getIdeMcpService = (): IdeMcpService => ({
       }
     }
     return hits;
+  },
+
+  // --- researchExact: one repository collection for a complete query plan --
+  researchExact: async (rootPath, options) => {
+    const trimmed = rootPath?.trim();
+    if (!trimmed) throw new Error('A folder path is required.');
+    const queries = Array.from(new Set(options.queries.map((query) => query.trim()).filter(Boolean))).slice(0, 8);
+    const symbols = Array.from(new Set(options.symbols.map((symbol) => symbol.trim()).filter(Boolean))).slice(0, 6);
+    const maxResults = Math.max(1, Math.min(options.maxResults, 500));
+    const files = await collectRepoFiles(trimmed, fsDeps(trimmed), {
+      maxFiles: DEFAULT_SCAN_FILES,
+      codeOnly: false,
+    });
+    const bucketCount = Math.max(1, queries.length + symbols.length * 2);
+    const perBucketLimit = Math.max(2, Math.ceil(maxResults / bucketCount));
+    const textBuckets = queries.map((): IdeResearchExactHit[] => []);
+    const definitionBuckets = symbols.map((): IdeResearchExactHit[] => []);
+    const referenceBuckets = symbols.map((): IdeResearchExactHit[] => []);
+
+    for (const file of files) {
+      if (
+        !options.includeTests &&
+        /(?:^|\/)(?:tests?|__tests__|fixtures?|mocks?)(?:\/|$)|\.(?:spec|test)\.[^/]+$/i.test(file.relPath)
+      ) {
+        continue;
+      }
+      const lines = file.content.split('\n');
+      for (const [queryIndex, query] of queries.entries()) {
+        const bucket = textBuckets[queryIndex];
+        if (bucket.length >= perBucketLimit) continue;
+        for (const match of grepText(file.content, query)) {
+          const text = lines[match.line - 1] ?? match.text;
+          const column = text.toLocaleLowerCase().indexOf(query.toLocaleLowerCase()) + 1;
+          bucket.push({ file: file.relPath, line: match.line, column: Math.max(1, column), text, kind: 'text' });
+          if (bucket.length >= perBucketLimit) break;
+        }
+      }
+      for (const [symbolIndex, symbol] of symbols.entries()) {
+        const definitionBucket = definitionBuckets[symbolIndex];
+        if (definitionBucket.length < perBucketLimit) {
+          for (const hit of findDeclarations(file.content, symbol)) {
+            definitionBucket.push({ file: file.relPath, ...hit, kind: 'definition' });
+            if (definitionBucket.length >= perBucketLimit) break;
+          }
+        }
+        const referenceBucket = referenceBuckets[symbolIndex];
+        if (referenceBucket.length < perBucketLimit) {
+          for (const hit of findReferences(file.content, symbol)) {
+            referenceBucket.push({ file: file.relPath, ...hit, kind: 'reference' });
+            if (referenceBucket.length >= perBucketLimit) break;
+          }
+        }
+      }
+    }
+    const seen = new Set<string>();
+    const hits = [...definitionBuckets.flat(), ...textBuckets.flat(), ...referenceBuckets.flat()]
+      .filter((hit) => {
+        const key = `${hit.kind}\u0000${hit.file}\u0000${hit.line}\u0000${hit.column ?? 0}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .slice(0, maxResults);
+    return { hits };
   },
 
   // --- findDefinition / findReferences -------------------------------------
@@ -741,6 +872,34 @@ export const getQuickTestRunner = (): QuickTestRunner => {
     },
     openNativeStream: openNativeLogStream,
     loadGraph,
+    captureScreenshot: async (rootPath: string): Promise<string | undefined> => {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { webContents } = require('electron') as typeof import('electron');
+        const focused = webContents.getFocusedWebContents();
+        if (!focused || focused.isDestroyed()) return undefined;
+        const image = await focused.capturePage();
+        if (image.isEmpty()) return undefined;
+        const evidenceDir = path.join(rootPath, '.tomni', 'quick-test', 'agent-evidence');
+        await fsp.mkdir(evidenceDir, { recursive: true });
+        const screenshotPath = path.join(evidenceDir, `quick-test-${Date.now()}.png`);
+        await fsp.writeFile(screenshotPath, image.toPNG());
+
+        const screenshots = (await fsp.readdir(evidenceDir, { withFileTypes: true }))
+          .filter((entry) => entry.isFile() && /^quick-test-\d+\.png$/.test(entry.name))
+          .map((entry) => entry.name)
+          .toSorted()
+          .reverse();
+        await Promise.all(
+          screenshots
+            .slice(20)
+            .map((name) => fsp.unlink(path.join(evidenceDir, name)).catch((): undefined => undefined))
+        );
+        return screenshotPath;
+      } catch {
+        return undefined;
+      }
+    },
   });
   return service as QuickTestRunner;
 };
@@ -842,6 +1001,8 @@ export const buildIdeServer = (): McpServer => {
   try {
     return createIdeServer({
       ide,
+
+      viu: viuV2SessionService,
       quickTest: getQuickTestRunner(),
 
       quickTestScenarios: getQuickTestScenarioAgentService(),
@@ -849,6 +1010,21 @@ export const buildIdeServer = (): McpServer => {
       memory: getSessionMemoryStore(),
       repoSecrets: getRepoSecretStore(),
       experience: experienceAgentService,
+      wikiTestIntelligence: {
+        plan: async ({ rootPath, intent, targetFiles, symbols, graphFresh }) => {
+          const [persistedGraph, wiki] = await Promise.all([loadGraph(rootPath), loadWikiForRoot(rootPath)]);
+          const usePersistedGraph = persistedGraph !== null && graphFresh;
+          const graph = persistedGraph && graphFresh ? persistedGraph : await buildStructuralTestGraph(rootPath);
+          return buildWikiTestProfile({
+            graph,
+            wiki,
+            intent,
+            targetFiles,
+            symbols,
+            graphFresh: usePersistedGraph ? graphFresh : true,
+          });
+        },
+      },
       teamEdit: getTeamEditService(),
       toolGuard: nativeToolGuard,
     });
@@ -857,6 +1033,6 @@ export const buildIdeServer = (): McpServer => {
     // every chat turn. Keep the core repo/MTUI tools available and preserve the
     // original error in logs so the failing extension can be repaired.
     console.error('[IdeMCP] Full server build failed; starting core IDE tools only:', error);
-    return createIdeServer({ ide, toolGuard: nativeToolGuard });
+    return createIdeServer({ ide, viu: viuV2SessionService, toolGuard: nativeToolGuard });
   }
 };

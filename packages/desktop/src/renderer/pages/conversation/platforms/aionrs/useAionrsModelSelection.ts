@@ -13,12 +13,17 @@ export type AionrsModelSelection = {
   providers: IProvider[];
   getAvailableModels: (provider: IProvider) => string[];
   handleSelectModel: (provider: IProvider, modelName: string) => Promise<void>;
+  handleSelectReasoning: (reasoningEffort?: TProviderWithModel['reasoning_effort']) => Promise<void>;
   getDisplayModelName: (modelName?: string) => string;
 };
 
 export type UseAionrsModelSelectionOptions = {
   initialModel: TProviderWithModel | undefined;
-  onSelectModel: (provider: IProvider, modelName: string) => Promise<boolean>;
+  onSelectModel: (
+    provider: IProvider,
+    modelName: string,
+    reasoningEffort?: TProviderWithModel['reasoning_effort']
+  ) => Promise<boolean>;
 };
 
 export const useAionrsModelSelection = ({
@@ -29,7 +34,7 @@ export const useAionrsModelSelection = ({
 
   useEffect(() => {
     setCurrentModel(initialModel);
-  }, [initialModel?.id, initialModel?.use_model]);
+  }, [initialModel?.id, initialModel?.use_model, initialModel?.reasoning_effort]);
 
   const { providers: allProviders, getAvailableModels, formatModelLabel } = useModelProviderList();
 
@@ -41,16 +46,31 @@ export const useAionrsModelSelection = ({
 
   const handleSelectModel = useCallback(
     async (provider: IProvider, modelName: string) => {
+      const reasoningEffort = provider.id === current_model?.id ? current_model.reasoning_effort : undefined;
       const selected = {
         ...(provider as unknown as TProviderWithModel),
         use_model: modelName,
+        ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
       } as TProviderWithModel;
-      const ok = await onSelectModel(provider, modelName);
-      if (ok) {
-        setCurrentModel(selected);
-      }
+      const ok = await onSelectModel(provider, modelName, reasoningEffort);
+      if (ok) setCurrentModel(selected);
     },
-    [onSelectModel]
+    [current_model?.id, current_model?.reasoning_effort, onSelectModel]
+  );
+
+  const handleSelectReasoning = useCallback(
+    async (reasoningEffort?: TProviderWithModel['reasoning_effort']) => {
+      if (!current_model?.use_model) return;
+      const provider = providers.find((item) => item.id === current_model.id);
+      if (!provider) return;
+      const ok = await onSelectModel(provider, current_model.use_model, reasoningEffort);
+      if (!ok) return;
+      setCurrentModel({
+        ...current_model,
+        ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : { reasoning_effort: undefined }),
+      });
+    },
+    [current_model, onSelectModel, providers]
   );
 
   const getDisplayModelName = useCallback(
@@ -68,6 +88,8 @@ export const useAionrsModelSelection = ({
     providers,
     getAvailableModels,
     handleSelectModel,
+
+    handleSelectReasoning,
     getDisplayModelName,
   };
 };

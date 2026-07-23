@@ -7,7 +7,7 @@
 /**
  * Embedder resolution for Realtime Knowledge.
  *
- * Prefers the user's configured embedding model (resolved from `/api/providers`,
+ * Prefers the user's configured embedding model (resolved from the native Tomni provider catalog,
  * mirroring `ide/knowledgeGraphBridge.ts`); when none is configured it falls back
  * to a deterministic LOCAL hashing embedder so semantic lookup still works
  * offline without a model. The fallback is a bag-of-words term-frequency hash —
@@ -16,7 +16,7 @@
  * Process boundary: Main-process (Node.js) module. No DOM APIs.
  */
 
-import { httpRequest } from '@/common/adapter/httpBridge';
+import { listReadyProviders } from '@process/services/tomnyProviderBridge';
 import type { IProvider } from '@/common/config/storage';
 import { hasSpecificModelCapability } from '@/common/utils/modelCapabilities';
 import type { Embedder } from './realtime/rtkVectorIndex';
@@ -62,8 +62,7 @@ const isModelEnabled = (provider: IProvider, model: string): boolean => provider
 const isUsable = (p: IProvider): boolean =>
   p.enabled !== false && Boolean(p.api_key) && Boolean(p.base_url) && Array.isArray(p.models) && p.models.length > 0;
 
-const loadProviders = (): Promise<IProvider[]> =>
-  httpRequest<IProvider[]>('GET', '/api/providers').catch(() => [] as IProvider[]);
+const loadProviders = (): Promise<IProvider[]> => listReadyProviders().catch(() => [] as IProvider[]);
 
 const firstApiKey = (apiKeys: string): string =>
   apiKeys

@@ -13,6 +13,7 @@ import { Image, Spin } from '@arco-design/web-react';
 import { Down } from '@icon-park/react';
 import MessageAcpPermission from '@renderer/pages/conversation/Messages/acp/MessageAcpPermission';
 import MessagePermission from './components/MessagePermission';
+import MessageOrchestrationProposal from './MessageOrchestrationProposal';
 import MessageAcpToolCall from '@renderer/pages/conversation/Messages/acp/MessageAcpToolCall';
 import classNames from 'classnames';
 import React, { createContext, useEffect, useMemo, useRef, useState } from 'react';
@@ -208,6 +209,8 @@ const MessageItem: React.FC<{ message: TMessage; highlighted?: boolean }> = Reac
         return <MessageAgentStatus message={message}></MessageAgentStatus>;
       case 'permission':
         return <MessagePermission message={message}></MessagePermission>;
+      case 'orchestration_proposal':
+        return <MessageOrchestrationProposal message={message} />;
       case 'acp_permission':
         return <MessageAcpPermission message={message}></MessageAcpPermission>;
       case 'acp_tool_call':

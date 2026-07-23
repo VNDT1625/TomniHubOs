@@ -1,4 +1,47 @@
 {
+  "personalSecrets": {
+    "allowedHostnamesLabel": "Allowed browser hostnames",
+    "allowedHostnamesPlaceholder": "example.com",
+    "allowedHostnamesDescription": "Add 1–20 exact hostnames. Schemes, paths, ports, and wildcards are not allowed.",
+    "allowedHostnamesInvalid": "Enter 1–20 unique exact hostnames without schemes, paths, ports, or wildcards.",
+    "allowedHostnamesTagLabel": "Allowed hosts",
+    "legacyTargetsMissing": "No allowed hosts — blocked until edited",
+    "nameRequired": "Enter a name for this secret set.",
+    "variablesInvalid": "Each variable needs a valid unique name and a value.",
+    "createdSuccess": "Secret set created.",
+    "replacedSuccess": "Secret set replaced.",
+    "saveError": "Could not save the secret set.",
+    "removedSuccess": "Secret set deleted.",
+    "removeError": "Could not delete the secret set.",
+    "countSummary": "{{setCount}} sets · {{variableCount}} variables",
+    "securityTitle": "Agents can use secrets without seeing their values",
+    "securityDescription": "Prompts receive only the set name, handle, and variable names. Core decrypts only the requested variable for a trusted host—for example, filling USERNAME or PASSWORD directly in the browser. Values are never returned to chat or MCP.",
+    "keychainProtected": "Encrypted with the operating system keychain",
+    "empty": "No secret sets yet.",
+    "createFirst": "Create your first set",
+    "noNote": "No note.",
+    "editAria": "Edit secret set",
+    "deleteAria": "Delete secret set",
+    "deleteConfirmTitle": "Delete this secret set?",
+    "deleteConfirmContent": "Any links that use this set will also be removed.",
+    "updatedAt": "Updated {{date}}",
+    "replaceTitle": "Replace secret set",
+    "createTitle": "Create secret set",
+    "replaceAction": "Replace",
+    "createAction": "Create set",
+    "cancel": "Cancel",
+    "replaceWarning": "Core never returns stored values. Re-enter every variable value to replace this set.",
+    "setNameLabel": "Set name",
+    "setNamePlaceholder": "Example: GitHub account",
+    "noteLabel": "Note",
+    "notePlaceholder": "What is this set used for?",
+    "variablesTitle": "Variables in this set",
+    "variablesDescription": "Agents can see variable names, but not their values.",
+    "addVariable": "Add variable",
+    "variableNamePlaceholder": "USERNAME",
+    "variableValuePlaceholder": "Secret value",
+    "removeVariableAria": "Remove variable"
+  },
   "title": "Settings",
   "skillsHub": {
     "title": "Skills Hub",
@@ -213,7 +256,7 @@
   "deleteInvalidKeys": "Delete Invalid Keys",
   "testAllKeys": "Test All Keys",
   "addModelPlaceholder": "Select or enter model ID",
-  "customModelSupportNote": "Note: Only Tomni Agentic currently supports custom models.",
+  "customModelSupportNote": "Note: Only Tomny Agentic currently supports custom models.",
   "addModelHint": "Pick or type a model ID and it will be appended to this provider.",
   "addModelSelectedHint": "Ready to add model: {{model}}",
   "currentModelsLabel": "Current Models",
@@ -225,13 +268,61 @@
   "platformNewApi": "New API",
   "platform9router": "9Router",
   "router9": {
-    "title": "Distribute via 9Router",
-    "subtitle": "Point an external CLI / IDE tool at your local 9Router endpoint. The app produces the exact configuration that tool needs.",
+    "title": "Tomni Model Gateway",
+    "subtitle": "Connect providers by API key or OAuth, then issue isolated credentials to Claude Code, Codex and other apps.",
+    "useGateway": "Start and use gateway",
+    "gatewayReady": "Tomni Model Gateway is ready",
+    "gatewayFailed": "Gateway failed: {{error}}",
+    "clientKeyUnavailable": "The gateway did not return a client key",
+    "runtimeMissing": "Gateway runtime is not prepared",
+    "oauthProviders": "Providers & OAuth",
+    "usage": "Usage & tokens",
+    "autoStart": "Start gateway with Tomni",
+    "autoStartHint": "Keeps the local gateway ready after restarting the app.",
+    "usageByConsumer": "Usage by consumer",
+    "usageBySession": "Usage by session",
+    "tokenSourceNote": "Token source is provider-reported when available and gateway-estimated only when the provider supplies no usage.",
+    "metrics": {
+      "requests": "Requests",
+      "input": "Input",
+      "output": "Output",
+      "cached": "Cached",
+      "cost": "Cost"
+    },
+    "measurement": {
+      "provider-reported": "Provider",
+      "gateway-estimated": "Estimated",
+      "unknown": "Unknown"
+    },
+    "state": {
+      "stopped": "Stopped",
+      "starting": "Starting",
+      "running": "Running",
+      "failed": "Failed",
+      "external": "External gateway"
+    },
     "targetLabel": "Target tool",
     "endpointLabel": "Endpoint",
     "apiKeyLabel": "API key (from the 9Router dashboard)",
     "modelLabel": "Model (optional)",
     "modelPlaceholder": "e.g. kr/claude-sonnet-4.5",
+    "clientAccessLabel": "CLI/app access",
+    "clientAccessManaged": "Managed separately for this client",
+    "clientAccessProtected": "Protected",
+    "clientKeyPlaceholder": "Gateway client key",
+    "clientAccessHint": "OAuth and provider API keys stay upstream. Tomni creates a separate local client credential for each CLI/app for isolation, revocation and usage attribution.",
+    "reasoningLabel": "Reasoning effort",
+    "reasoningHint": "Independent from the model. The gateway translates this level to the selected provider when supported.",
+    "reasoning": {
+      "auto": "Automatic (model default)",
+      "none": "None",
+      "minimal": "Minimal",
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High",
+      "xhigh": "Extra high",
+      "max": "Maximum"
+    },
     "needCreds": "Enter the endpoint and API key to generate configuration.",
     "fieldsTitle": "Connection fields",
     "envTitle": "Environment variables",
@@ -241,6 +332,9 @@
     "apply": "Apply to this tool",
     "applyHint": "Writes the config file(s) to disk (existing files are backed up first).",
     "applied": "Configuration applied",
+    "useInTomniChat": "Use in Tomni chat",
+    "manualChatHint": "Saves the selected model for Tomni chat; configure the external CLI with the fields above.",
+    "chatSynced": "Tomni chat model updated",
     "applyFailed": "Apply failed: {{error}}",
     "fileWritten": "Written",
     "fileSkipped": "Kept (already exists)",
@@ -254,8 +348,8 @@
     "target": {
       "kiro": "Set the OpenAI-compatible endpoint and key in Kiro's model settings.",
       "antigravity": "Point Antigravity at the local endpoint and paste the API key.",
-      "claudeCode": "Writes the Anthropic base URL and key to ~/.claude/config.json.",
-      "codex": "Exports OPENAI_BASE_URL and OPENAI_API_KEY for the Codex CLI.",
+      "claudeCode": "Writes the gateway environment to ~/.claude/settings.json.",
+      "codex": "Adds a Tomni Responses provider to ~/.codex/config.toml.",
       "cursor": "Set the OpenAI base URL and key under Cursor's model settings.",
       "cline": "Choose OpenAI Compatible, then paste the base URL and key.",
       "openclaw": "Adds a 9router provider block to ~/.openclaw/openclaw.json."
@@ -946,7 +1040,7 @@
   "agentManagement": {
     "localAgents": "Local Agents",
     "remoteAgents": "Remote Agents",
-    "localAgentsDescription": "Tomni Agentic is the built-in agent and ships with the app — no install needed. Other agents are detected only after their CLI is installed locally.",
+    "localAgentsDescription": "Tomny Agentic is the built-in AI core and ships with Tomni — no install needed. Other agents are detected only after their CLI is installed locally.",
     "localAgentsSetupLink": "Setup guide",
     "goToChat": "Start Chat",
     "remoteAgentsDescription": "Only remote OpenClaw connections are supported for now. Other agents are in development.",
@@ -1013,5 +1107,137 @@
     "pendingTimeout": "Approval request expired (5 minutes). Please try again.",
     "pendingCancel": "Cancel",
     "pendingTimeRemaining": "Time remaining: {{time}}"
-  }
+  },
+  "personalProfile": {
+    "title": "Personal profile",
+    "description": "Help AI understand who you are so it can ask better questions, tailor decisions, and avoid making you repeat known information.",
+    "actions": {
+      "save": "Save changes",
+      "addSecret": "Add secret set",
+      "add": "Add information",
+      "addFirst": "Add the first detail"
+    },
+    "tabs": {
+      "profile": "Profile",
+      "secrets": "Secrets ({{count}})"
+    },
+    "safety": {
+      "noSecrets": "Do not enter passwords, tokens, or API keys here. Store credentials in the Secrets tab.",
+      "selfDescribed": "Psychology information is self-described context for personalization only. AI does not diagnose or infer mental health conditions."
+    },
+    "structured": {
+      "title": "A fuller picture of you",
+      "description": "Organize long-term context into clear dimensions. Add only what is useful and comfortable to share.",
+      "summary": "{{count}} details across 7 dimensions",
+      "updatedAt": "Updated {{date}}"
+    },
+    "categories": {
+      "personalInformation": {
+        "title": "Personal information",
+        "description": "Basic details you want AI to remember, such as your name, location, languages, or accessibility needs."
+      },
+      "psychology": {
+        "title": "Psychology",
+        "description": "How you describe your motivations, learning style, stress triggers, and decision patterns — never a diagnosis."
+      },
+      "personality": {
+        "title": "Personality",
+        "description": "Traits, working pace, collaboration style, and feedback preferences that shape how you work."
+      },
+      "interests": {
+        "title": "Interests",
+        "description": "Topics, hobbies, and causes that hold your attention or matter to you."
+      },
+      "profession": {
+        "title": "Profession",
+        "description": "Your role, industry, experience, responsibilities, and professional strengths."
+      },
+      "aestheticTaste": {
+        "title": "Aesthetic taste",
+        "description": "Visual styles, colors, information density, inspirations, and design choices you prefer or dislike."
+      },
+      "pastContext": {
+        "title": "Past context",
+        "description": "Previous projects, formative experiences, lessons learned, decisions, and recurring constraints."
+      }
+    },
+    "suggestions": {
+      "displayName": "Display name",
+      "location": "Location",
+      "languages": "Languages",
+      "motivation": "What motivates me",
+      "learningStyle": "Learning style",
+      "stressTriggers": "Stress triggers",
+      "coreTraits": "Core traits",
+      "collaborationStyle": "Collaboration style",
+      "feedbackPreference": "Feedback preference",
+      "favoriteTopics": "Favorite topics",
+      "hobbies": "Hobbies",
+      "causes": "Causes I care about",
+      "role": "Role",
+      "industry": "Industry",
+      "experienceLevel": "Experience level",
+      "visualStyle": "Visual style",
+      "colorPreference": "Color preference",
+      "densityPreference": "Information density",
+      "pastProjects": "Past projects",
+      "lessonsLearned": "Lessons learned",
+      "recurringConstraints": "Recurring constraints"
+    },
+    "facts": {
+      "keyPlaceholder": "Information name",
+      "valuePlaceholder": "What should AI know?",
+      "empty": "No information has been added to this section yet.",
+      "quickAdd": "Quick add",
+      "agentVisible": "Available to AI",
+      "localOnly": "Local only",
+      "agentVisibleDescription": "Included in agent context so AI can personalize its questions and responses.",
+      "localOnlyDescription": "Saved only on this device and excluded from agent context.",
+      "confidence": "Confidence {{value}}%",
+      "confirmed": "Confirmed",
+      "removeAria": "Remove this information",
+      "source": {
+        "user": "Provided by you",
+        "observed": "Observed",
+        "imported": "Imported",
+        "inferred": "Inferred"
+      }
+    },
+    "additional": {
+      "title": "Additional context",
+      "description": "Keep existing general facts, preferences, and habits that do not fit a dimension.",
+      "facts": {
+        "title": "Other facts",
+        "description": "General information AI should remember across work and conversations."
+      },
+      "preferences": {
+        "title": "Other preferences",
+        "description": "Preferences for how work, content, or experiences should be handled."
+      },
+      "habits": {
+        "title": "Habits",
+        "description": "Routines and working rhythms AI should proactively respect."
+      }
+    },
+    "communication": {
+      "title": "Communication style",
+      "description": "These defaults can be overridden by a specific request in any conversation.",
+      "languageLabel": "Preferred language",
+      "languagePlaceholder": "For example, English",
+      "toneLabel": "Preferred tone",
+      "tonePlaceholder": "For example, direct and professional",
+      "verbosityLabel": "Level of detail",
+      "verbosity": {
+        "concise": "Concise",
+        "balanced": "Balanced",
+        "detailed": "Detailed"
+      }
+    },
+    "messages": {
+      "loadError": "Could not load your personal profile.",
+      "saveSuccess": "Personal profile saved.",
+      "saveError": "Could not save your personal profile."
+    }
+  },
+  "personal": "Personal"
 }

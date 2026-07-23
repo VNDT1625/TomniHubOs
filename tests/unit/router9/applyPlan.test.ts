@@ -6,7 +6,7 @@
 
 /**
  * Unit tests for the pure apply helpers (`common/router9/applyPlan.ts`) — home
- * expansion + JSON deep-merge + the merge-strategy resolver. No filesystem.
+ * expansion + JSON/TOML deep-merge + the merge-strategy resolver. No filesystem.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -114,5 +114,31 @@ describe('mergeConfigContent', () => {
         existingRaw: '{not json',
       })
     ).toThrow(/not valid JSON/);
+  });
+
+  it('deep-merges Codex TOML while preserving unrelated user settings', () => {
+    const out = mergeConfigContent({
+      format: 'toml',
+      mergeStrategy: 'deepMerge',
+      existingRaw: 'model_verbosity = "low"\n\n[features]\nweb_search = true\n',
+      incomingContent:
+        'model = "gpt-5.6-luna"\nmodel_provider = "tomni_gateway"\n\n' +
+        '[model_providers.tomni_gateway]\nbase_url = "http://127.0.0.1:20129/v1"\nwire_api = "responses"\n',
+    });
+    expect(out).toContain('model_verbosity = "low"');
+    expect(out).toContain('web_search = true');
+    expect(out).toContain('model_provider = "tomni_gateway"');
+    expect(out).toContain('[model_providers.tomni_gateway]');
+  });
+
+  it('throws when existing TOML is corrupt instead of replacing it', () => {
+    expect(() =>
+      mergeConfigContent({
+        format: 'toml',
+        mergeStrategy: 'deepMerge',
+        incomingContent: 'model_provider = "tomni_gateway"\n',
+        existingRaw: '[broken',
+      })
+    ).toThrow(/not valid TOML/);
   });
 });

@@ -78,12 +78,12 @@ const ACCENT_PALETTE: Record<AccentColor, { main: string; light1: string; light2
  * broad CJK/Latin fallbacks so non-Latin scripts also render correctly.
  */
 const VIET_FALLBACK =
-  "'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei'";
+  "'Segoe UI', 'Noto Sans', 'Helvetica Neue', Arial, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei'";
 const FONT_STACK: Record<FontChoice, string> = {
   default: `system-ui, -apple-system, BlinkMacSystemFont, ${VIET_FALLBACK}, sans-serif`,
-  serif: `'Lora', Georgia, 'Times New Roman', 'Noto Serif', 'Source Han Serif', serif`,
-  mono: `'JetBrains Mono', ui-monospace, 'SF Mono', Consolas, 'Liberation Mono', monospace`,
-  rounded: `'Nunito', 'Quicksand', system-ui, ${VIET_FALLBACK}, sans-serif`,
+  serif: `Georgia, 'Times New Roman', 'Noto Serif', 'Source Han Serif', serif`,
+  mono: `ui-monospace, 'SF Mono', Consolas, 'Liberation Mono', 'Noto Sans Mono', monospace`,
+  rounded: `ui-rounded, 'Segoe UI Rounded', system-ui, -apple-system, ${VIET_FALLBACK}, sans-serif`,
 };
 
 /** All accents in display order, for the picker. */
@@ -110,7 +110,11 @@ export const appearanceStyle = (a: ManagerAppearance): React.CSSProperties => {
     ['--mgr-accent-light-2' as string]: palette.light2,
     ['--mgr-density-gap' as string]: gap,
     ['--mgr-density-pad' as string]: pad,
-    fontFamily: FONT_STACK[a.font] ?? FONT_STACK.default,
+    ['--mgr-content-font' as string]: FONT_STACK[a.font] ?? FONT_STACK.default,
+    // Application chrome must stay stable and legible. The previous saved serif
+    // preference was applied to every button, metric and navigation label, which
+    // caused mixed fallback glyphs and visibly broken Vietnamese spacing.
+    fontFamily: FONT_STACK.default,
     fontSize: `${a.fontSize}px`,
     background: a.tintedBackground ? palette.tint : undefined,
   };

@@ -1,4 +1,47 @@
 {
+  "personalSecrets": {
+    "allowedHostnamesLabel": "İzin verilen tarayıcı ana bilgisayar adları",
+    "allowedHostnamesPlaceholder": "example.com",
+    "allowedHostnamesDescription": "1–20 tam ana bilgisayar adı ekleyin. Şema, yol, bağlantı noktası ve joker karakter kullanılamaz.",
+    "allowedHostnamesInvalid": "Şema, yol, bağlantı noktası veya joker karakter içermeyen 1–20 benzersiz tam ana bilgisayar adı girin.",
+    "allowedHostnamesTagLabel": "İzin verilen ana bilgisayarlar",
+    "legacyTargetsMissing": "İzin verilen ana bilgisayar yok — düzenlenene kadar engellendi",
+    "nameRequired": "Gizli bilgi seti için bir ad girin.",
+    "variablesInvalid": "Her değişkenin geçerli, benzersiz bir adı ve değeri olmalıdır.",
+    "createdSuccess": "Gizli bilgi seti oluşturuldu.",
+    "replacedSuccess": "Gizli bilgi seti değiştirildi.",
+    "saveError": "Gizli bilgi seti kaydedilemedi.",
+    "removedSuccess": "Gizli bilgi seti silindi.",
+    "removeError": "Gizli bilgi seti silinemedi.",
+    "countSummary": "{{setCount}} set · {{variableCount}} değişken",
+    "securityTitle": "Ajanlar değerleri görmeden gizli bilgileri kullanabilir",
+    "securityDescription": "İstemlere yalnızca set adı, tanıtıcı ve değişken adları gönderilir. Core, güvenilen bir ana bilgisayar için yalnızca istenen değişkenin şifresini çözer; örneğin tarayıcıya USERNAME veya PASSWORD değerini doğrudan girer. Değerler sohbete veya MCP’ye döndürülmez.",
+    "keychainProtected": "İşletim sistemi anahtar zinciriyle şifrelenir",
+    "empty": "Henüz gizli bilgi seti yok.",
+    "createFirst": "İlk seti oluştur",
+    "noNote": "Not yok.",
+    "editAria": "Gizli bilgi setini düzenle",
+    "deleteAria": "Gizli bilgi setini sil",
+    "deleteConfirmTitle": "Bu gizli bilgi seti silinsin mi?",
+    "deleteConfirmContent": "Bu seti kullanan bağlantılar da kaldırılacak.",
+    "updatedAt": "Güncellendi: {{date}}",
+    "replaceTitle": "Gizli bilgi setini değiştir",
+    "createTitle": "Gizli bilgi seti oluştur",
+    "replaceAction": "Değiştir",
+    "createAction": "Oluştur",
+    "cancel": "İptal",
+    "replaceWarning": "Core kaydedilmiş değerleri geri döndürmez. Bu seti değiştirmek için tüm değişken değerlerini yeniden girin.",
+    "setNameLabel": "Set adı",
+    "setNamePlaceholder": "Örnek: GitHub hesabı",
+    "noteLabel": "Not",
+    "notePlaceholder": "Bu set ne için kullanılıyor?",
+    "variablesTitle": "Setteki değişkenler",
+    "variablesDescription": "Ajanlar değişken adlarını görebilir, ancak değerlerini göremez.",
+    "addVariable": "Değişken ekle",
+    "variableNamePlaceholder": "USERNAME",
+    "variableValuePlaceholder": "Gizli değer",
+    "removeVariableAria": "Değişkeni kaldır"
+  },
   "title": "Ayarlar",
   "skillsHub": {
     "title": "Beceri Merkezi",
@@ -213,7 +256,7 @@
   "deleteInvalidKeys": "Geçersiz Anahtarları Sil",
   "testAllKeys": "Tüm Anahtarları Test Et",
   "addModelPlaceholder": "Model ID seçin veya girin",
-  "customModelSupportNote": "Not: Şu anda yalnızca Tomni Agentic özel modelleri destekliyor.",
+  "customModelSupportNote": "Not: Şu anda yalnızca Tomny Agentic özel modelleri destekliyor.",
   "addModelHint": "Bir model ID seçin veya yazın, bu sağlayıcıya eklenecektir.",
   "addModelSelectedHint": "Model eklemeye hazır: {{model}}",
   "currentModelsLabel": "Mevcut Modeller",
@@ -225,13 +268,51 @@
   "platformNewApi": "New API",
   "platform9router": "9Router",
   "router9": {
-    "title": "9Router üzerinden dağıt",
-    "subtitle": "Harici bir CLI / IDE aracını yerel 9Router uç noktanıza yönlendirin. Uygulama, o aracın ihtiyaç duyduğu tam yapılandırmayı üretir.",
+    "title": "Tomni Model Ağ Geçidi",
+    "subtitle": "Sağlayıcıları API anahtarı veya OAuth ile bağlayın; Claude Code, Codex ve diğer uygulamalara ayrı kimlik bilgileri verin.",
+    "useGateway": "Ağ geçidini başlat ve kullan",
+    "gatewayReady": "Tomni Model Ağ Geçidi hazır",
+    "gatewayFailed": "Ağ geçidi hatası: {{error}}",
+    "clientKeyUnavailable": "İstemci anahtarı alınamadı",
+    "runtimeMissing": "Ağ geçidi çalışma zamanı hazırlanmamış",
+    "oauthProviders": "Sağlayıcılar ve OAuth",
+    "usage": "Kullanım ve tokenlar",
+    "autoStart": "Ağ geçidini Tomni ile başlat",
+    "autoStartHint": "Uygulama yeniden açıldığında yerel ağ geçidini hazırlar.",
+    "usageByConsumer": "İstemciye göre kullanım",
+    "usageBySession": "Oturuma göre kullanım",
+    "tokenSourceNote": "Varsa sağlayıcının bildirdiği tokenlar kullanılır; yalnızca usage yoksa ağ geçidi tahmin eder.",
+    "metrics": { "requests": "İstekler", "input": "Girdi", "output": "Çıktı", "cached": "Önbellek", "cost": "Maliyet" },
+    "measurement": { "provider-reported": "Sağlayıcı", "gateway-estimated": "Tahmini", "unknown": "Bilinmiyor" },
+    "state": {
+      "stopped": "Durduruldu",
+      "starting": "Başlatılıyor",
+      "running": "Çalışıyor",
+      "failed": "Başarısız",
+      "external": "Harici ağ geçidi"
+    },
     "targetLabel": "Hedef araç",
     "endpointLabel": "Uç nokta",
     "apiKeyLabel": "API anahtarı (9Router panosundan)",
     "modelLabel": "Model (isteğe bağlı)",
     "modelPlaceholder": "ör. kr/claude-sonnet-4.5",
+    "clientAccessLabel": "CLI/uygulama erişimi",
+    "clientAccessManaged": "Bu istemci için ayrı yönetilir",
+    "clientAccessProtected": "Korumalı",
+    "clientKeyPlaceholder": "Ağ geçidi istemci anahtarı",
+    "clientAccessHint": "OAuth ve sağlayıcı API anahtarları upstream tarafında kalır. Tomni her CLI/uygulamaya ayrı yerel kimlik bilgisi oluşturur.",
+    "reasoningLabel": "Akıl yürütme düzeyi",
+    "reasoningHint": "Modelden bağımsızdır. Desteklendiğinde ağ geçidi sağlayıcı biçimine çevirir.",
+    "reasoning": {
+      "auto": "Otomatik (model varsayılanı)",
+      "none": "Yok",
+      "minimal": "En az",
+      "low": "Düşük",
+      "medium": "Orta",
+      "high": "Yüksek",
+      "xhigh": "Çok yüksek",
+      "max": "Maksimum"
+    },
     "needCreds": "Yapılandırma oluşturmak için uç nokta ve API anahtarını girin.",
     "fieldsTitle": "Bağlantı bilgileri",
     "envTitle": "Ortam değişkenleri",
@@ -241,6 +322,9 @@
     "apply": "Bu araca uygula",
     "applyHint": "Yapılandırma dosyalarını diske yazar (mevcut dosyalar önce yedeklenir).",
     "applied": "Yapılandırma uygulandı",
+    "useInTomniChat": "Tomni sohbetinde kullan",
+    "manualChatHint": "Seçilen modeli Tomni sohbeti için kaydeder; harici CLI'ı yukarıdaki alanlarla ayrıca yapılandırın.",
+    "chatSynced": "Tomni sohbet modeli güncellendi",
     "applyFailed": "Uygulama başarısız: {{error}}",
     "fileWritten": "Yazıldı",
     "fileSkipped": "Korundu (zaten var)",
@@ -254,8 +338,8 @@
     "target": {
       "kiro": "Kiro'nun model ayarlarında OpenAI uyumlu uç noktayı ve anahtarı ayarlayın.",
       "antigravity": "Antigravity'yi yerel uç noktaya yönlendirin ve API anahtarını yapıştırın.",
-      "claudeCode": "Anthropic biçimli base URL ve anahtarı ~/.claude/config.json dosyasına yazar.",
-      "codex": "Codex CLI için OPENAI_BASE_URL ve OPENAI_API_KEY değişkenlerini dışa aktarır.",
+      "claudeCode": "Ağ geçidi ortamını ~/.claude/settings.json dosyasına yazar.",
+      "codex": "Tomni Responses sağlayıcısını ~/.codex/config.toml dosyasına ekler.",
       "cursor": "Cursor'un model ayarlarında OpenAI base URL ve anahtarını ayarlayın.",
       "cline": "OpenAI Compatible seçeneğini seçin, ardından base URL ve anahtarı yapıştırın.",
       "openclaw": "~/.openclaw/openclaw.json dosyasına 9router sağlayıcı bloğu ekler."
@@ -934,7 +1018,7 @@
   "agentManagement": {
     "localAgents": "Yerel Ajanlar",
     "remoteAgents": "Uzak Ajanlar",
-    "localAgentsDescription": "Tomni Agentic yerleşik ajandır ve uygulamayla birlikte gelir, kurulum gerektirmez. Diğer ajanlar yalnızca ilgili CLI yerel olarak kurulduktan sonra algılanır.",
+    "localAgentsDescription": "Tomny Agentic, Tomni ile birlikte gelen yerleşik AI çekirdeğidir ve kurulum gerektirmez. Diğer ajanlar yalnızca ilgili CLI yerel olarak kurulduktan sonra algılanır.",
     "localAgentsSetupLink": "Kurulum kılavuzu",
     "goToChat": "Sohbete Başla",
     "remoteAgentsDescription": "Şimdilik yalnızca OpenClaw uzak bağlantısı desteklenmektedir. Diğer ajanlar geliştirilmektedir.",
@@ -1001,5 +1085,137 @@
     "pendingTimeout": "Onay isteği süresi doldu (5 dakika). Lütfen tekrar deneyin.",
     "pendingCancel": "İptal",
     "pendingTimeRemaining": "Kalan süre: {{time}}"
-  }
+  },
+  "personalProfile": {
+    "title": "Kişisel profil",
+    "description": "AI sizi daha iyi anlayarak uygun sorular sorsun, kararlarını size göre uyarlasın ve bilinen bilgileri tekrar istemesin.",
+    "actions": {
+      "save": "Değişiklikleri kaydet",
+      "addSecret": "Gizli bilgi grubu ekle",
+      "add": "Bilgi ekle",
+      "addFirst": "İlk bilgiyi ekle"
+    },
+    "tabs": {
+      "profile": "Profil",
+      "secrets": "Gizli bilgiler ({{count}})"
+    },
+    "safety": {
+      "noSecrets": "Buraya parola, belirteç veya API anahtarı girmeyin. Kimlik bilgilerini Gizli Bilgiler sekmesinde saklayın.",
+      "selfDescribed": "Psikoloji bilgileri yalnızca sizin tanımınıza dayanır ve sadece kişiselleştirme için kullanılır. AI ruh sağlığı durumlarını teşhis etmez veya çıkarımını yapmaz."
+    },
+    "structured": {
+      "title": "Sizi daha kapsamlı tanıyalım",
+      "description": "Uzun vadeli bağlamı anlaşılır boyutlar halinde düzenleyin. Yalnızca yararlı ve paylaşmaktan rahat olduğunuz bilgileri ekleyin.",
+      "summary": "7 boyutta {{count}} bilgi",
+      "updatedAt": "{{date}} tarihinde güncellendi"
+    },
+    "categories": {
+      "personalInformation": {
+        "title": "Kişisel bilgiler",
+        "description": "Ad, konum, diller veya erişilebilirlik ihtiyaçları gibi AI tarafından hatırlanmasını istediğiniz temel bilgiler."
+      },
+      "psychology": {
+        "title": "Psikolojik eğilimler",
+        "description": "Motivasyonlarınızı, öğrenme biçiminizi, stres tetikleyicilerinizi ve karar örüntülerinizi nasıl tanımladığınız; bir teşhis değildir."
+      },
+      "personality": {
+        "title": "Kişilik",
+        "description": "Çalışma biçiminizi etkileyen temel özellikler, çalışma hızı, iş birliği biçimi ve geri bildirim tercihleri."
+      },
+      "interests": {
+        "title": "İlgi alanları",
+        "description": "Dikkatinizi çeken veya sizin için önemli olan konular, hobiler ve değer verdiğiniz amaçlar."
+      },
+      "profession": {
+        "title": "Meslek",
+        "description": "Rolünüz, sektörünüz, deneyiminiz, sorumluluklarınız ve mesleki güçlü yönleriniz."
+      },
+      "aestheticTaste": {
+        "title": "Estetik zevk",
+        "description": "Sevdiğiniz veya sevmediğiniz görsel tarzlar, renkler, bilgi yoğunluğu, ilham kaynakları ve tasarım tercihleri."
+      },
+      "pastContext": {
+        "title": "Geçmiş bağlamı",
+        "description": "Önceki projeler, biçimlendirici deneyimler, çıkarılan dersler, geçmiş kararlar ve yinelenen kısıtlar."
+      }
+    },
+    "suggestions": {
+      "displayName": "Görünen ad",
+      "location": "Konum",
+      "languages": "Diller",
+      "motivation": "Beni motive edenler",
+      "learningStyle": "Öğrenme biçimi",
+      "stressTriggers": "Stres tetikleyicileri",
+      "coreTraits": "Temel özellikler",
+      "collaborationStyle": "İş birliği biçimi",
+      "feedbackPreference": "Geri bildirim tercihi",
+      "favoriteTopics": "Sevilen konular",
+      "hobbies": "Hobiler",
+      "causes": "Önemsediğim amaçlar",
+      "role": "Rol",
+      "industry": "Sektör",
+      "experienceLevel": "Deneyim düzeyi",
+      "visualStyle": "Görsel tarz",
+      "colorPreference": "Renk tercihi",
+      "densityPreference": "Bilgi yoğunluğu",
+      "pastProjects": "Geçmiş projeler",
+      "lessonsLearned": "Çıkarılan dersler",
+      "recurringConstraints": "Yinelenen kısıtlar"
+    },
+    "facts": {
+      "keyPlaceholder": "Bilgi adı",
+      "valuePlaceholder": "AI neyi bilmeli?",
+      "empty": "Bu bölüme henüz bilgi eklenmedi.",
+      "quickAdd": "Hızlı ekle",
+      "agentVisible": "AI kullanabilir",
+      "localOnly": "Yalnızca yerel",
+      "agentVisibleDescription": "AI soruları ve yanıtları kişiselleştirebilsin diye ajan bağlamına eklenir.",
+      "localOnlyDescription": "Yalnızca bu cihazda saklanır ve ajan bağlamına dahil edilmez.",
+      "confidence": "Güven {{value}}%",
+      "confirmed": "Onaylandı",
+      "removeAria": "Bu bilgiyi kaldır",
+      "source": {
+        "user": "Sizin tarafınızdan sağlandı",
+        "observed": "Gözlemlendi",
+        "imported": "İçe aktarıldı",
+        "inferred": "Çıkarıldı"
+      }
+    },
+    "additional": {
+      "title": "Ek bağlam",
+      "description": "Belirli bir boyuta uymayan mevcut genel bilgileri, tercihleri ve alışkanlıkları koruyun.",
+      "facts": {
+        "title": "Diğer bilgiler",
+        "description": "AI tarafından iş ve konuşmalar boyunca hatırlanması gereken genel bilgiler."
+      },
+      "preferences": {
+        "title": "Diğer tercihler",
+        "description": "İşin, içeriğin veya deneyimlerin nasıl ele alınmasını istediğinize ilişkin tercihler."
+      },
+      "habits": {
+        "title": "Alışkanlıklar",
+        "description": "AI tarafından proaktif biçimde gözetilmesi gereken rutinler ve çalışma ritimleri."
+      }
+    },
+    "communication": {
+      "title": "İletişim biçimi",
+      "description": "Bu varsayılanlar herhangi bir konuşmadaki belirli bir istekle geçersiz kılınabilir.",
+      "languageLabel": "Tercih edilen dil",
+      "languagePlaceholder": "Örneğin Türkçe",
+      "toneLabel": "Tercih edilen ton",
+      "tonePlaceholder": "Örneğin doğrudan ve profesyonel",
+      "verbosityLabel": "Ayrıntı düzeyi",
+      "verbosity": {
+        "concise": "Kısa",
+        "balanced": "Dengeli",
+        "detailed": "Ayrıntılı"
+      }
+    },
+    "messages": {
+      "loadError": "Kişisel profil yüklenemedi.",
+      "saveSuccess": "Kişisel profil kaydedildi.",
+      "saveError": "Kişisel profil kaydedilemedi."
+    }
+  },
+  "personal": "Kişisel"
 }

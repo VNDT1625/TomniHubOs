@@ -10,7 +10,7 @@
  * Builds an {@link AgentChat} that calls the user's configured provider/model
  * over the OpenAI-compatible `/chat/completions` endpoint. The call style
  * mirrors `company/companyGenerator.ts`: the provider list (with a usable
- * `api_key`) is read from aioncore (`GET /api/providers`) and the request is
+ * `api_key`) is read from the native Tomni provider catalog and the request is
  * issued directly via `fetch` (not through `ClientFactory`, which expects a
  * camelCase `apiKey` and throws outside the chat pipeline).
  *
@@ -23,7 +23,7 @@
  * Process boundary: Main-process (Node.js) module. No DOM APIs.
  */
 
-import { httpRequest } from '@/common/adapter/httpBridge';
+import { listReadyProviders } from '@process/services/tomnyProviderBridge';
 import type { IProvider } from '@/common/config/storage';
 import type { AgentChat } from './webAgentRunner';
 
@@ -77,7 +77,7 @@ const pickForModel = (providers: IProvider[], model: string): { provider: IProvi
  */
 export const createProviderChat = (): AgentChat => {
   return async ({ model, messages, signal }) => {
-    const providers = (await httpRequest<IProvider[]>('GET', '/api/providers').catch(() => [] as IProvider[])) || [];
+    const providers = (await listReadyProviders().catch(() => [] as IProvider[])) || [];
     const selected = pickForModel(providers, model);
     if (!selected) {
       throw new Error('No usable model is configured. Open Settings → Model and add a provider/model, then try again.');

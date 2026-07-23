@@ -45,6 +45,9 @@
  * The DI style mirrors `mediaPipeline.ts` and `browserViewManager.ts`.
  */
 
+import { Buffer } from 'node:buffer';
+import sharp from 'sharp';
+import { redactSecretText } from '@process/agentRuntime/agentMesh/security';
 import type { BrowserTabId } from './browserViewManager';
 import type { IMediaPipeline, MediaSource, MediaSummary, TranscribeOptions, TranscriptResult } from './mediaPipeline';
 import type { Lease, LeaseRequest, TaskKind } from '../resource/leaseTypes';
@@ -94,6 +97,14 @@ export type PageDriver = {
    * `code` is a string that runs *in the page* (where `document` exists).
    */
   executeJavaScript(code: string): Promise<unknown>;
+  /** Evaluate in an isolated renderer world when Electron exposes it. */
+  executeJavaScriptInIsolatedWorld?(
+    worldId: number,
+    scripts: Array<{ code: string }>,
+    userGesture?: boolean
+  ): Promise<unknown>;
+  /** Current top-level URL, used for an exact-origin race check. */
+  getURL?(): string;
   /** Capture the current page as an image for the vision layer. */
   capturePage(): Promise<CapturedImage>;
 };
@@ -142,6 +153,49 @@ export type CaptureResult = {
   width: number;
   /** Captured image height in device pixels. */
   height: number;
+  /** Opaque metadata explaining which known secret fields were protected. */
+  secretContext?: SecretRedactionSummary;
+};
+
+/** Agent-safe metadata for a registered secret field. Never contains a value. */
+export type SecretRedactionReference = {
+  name: string;
+  reference?: string;
+  status: 'redacted';
+};
+
+/** Summary attached to protected screenshots. */
+export type SecretRedactionSummary = {
+  redactedRegions: number;
+  sensitiveMode: boolean;
+  detected: SecretRedactionReference[];
+};
+
+/** Exact tab/origin selector registration retained only for a bounded TTL. */
+export type SecretSelectorRegistration = {
+  tabId: BrowserTabId;
+  hostname: string;
+  selector: string;
+  name: string;
+  reference?: string;
+  ttlMs?: number;
+};
+
+type SecretSelectorRule = Omit<SecretSelectorRegistration, 'tabId' | 'hostname' | 'ttlMs'> & {
+  expiresAt: number;
+};
+
+export type SecretRedactionSnapshot = {
+  selectors: SecretSelectorRule[];
+  sensitiveMode: boolean;
+};
+
+/** Main-process registry used by secret sinks and page perception. */
+export type BrowserSecretRedactionRegistry = {
+  registerSelector(request: SecretSelectorRegistration): void;
+  enableSensitiveMode(request: { tabId: BrowserTabId; hostname: string; ttlMs?: number }): void;
+  snapshot(tabId: BrowserTabId, hostname: string): SecretRedactionSnapshot;
+  clearTab(tabId: BrowserTabId): void;
 };
 
 /**
@@ -225,6 +279,17 @@ export type IPagePerception = {
   capture(tabId: BrowserTabId): Promise<CaptureResult>;
 
   /**
+   * Protect an image produced by another trusted browser capture engine. The
+   * callback runs between two DOM scans so navigation or layout races fail
+   * closed before any pixels are returned to an agent.
+   */
+  protectCapture(
+    tabId: BrowserTabId,
+    mode: 'viewport' | 'fullPage',
+    capture: () => Promise<Uint8Array>
+  ): Promise<CaptureResult>;
+
+  /**
    * **Layer (c) — heavy, audio/video.** Delegate media perception to the injected
    * {@link IMediaPipeline}. The pipeline owns its own ResourceCoordinator leases
    * (criterion 1.9), so this method does not acquire one itself.
@@ -248,7 +313,7 @@ export type PagePerceptionDeps = {
    */
   getWebContents: (tabId: BrowserTabId) => PageDriver | undefined;
   /** The media pipeline backing the audio/video layer. */
-  mediaPipeline: IMediaPipeline;
+  mediaPipeline?: IMediaPipeline;
   /** Lease gate for the screenshot/vision layer (criterion 1.9). */
   coordinator: LeaseCoordinator;
   /** Estimated RAM cost (MB) charged while a screenshot capture runs. */
@@ -257,6 +322,8 @@ export type PagePerceptionDeps = {
   captureLeaseKind?: TaskKind;
   /** Max recursion depth for {@link IPagePerception.readAccessibilityTree}. */
   accessibilityMaxDepth?: number;
+  /** Exact tab/origin secret selector registry. Defaults to the process singleton. */
+  redactionRegistry?: BrowserSecretRedactionRegistry;
 };
 
 /** Default estimated RAM cost (MB) for one screenshot capture (medium weight). */
@@ -267,6 +334,179 @@ const DEFAULT_CAPTURE_LEASE_KIND: TaskKind = 'browser';
 
 /** Default maximum depth walked when building the accessibility tree. */
 const DEFAULT_ACCESSIBILITY_MAX_DEPTH = 24;
+
+const REDACTION_WORLD_ID = 1002;
+const DEFAULT_SECRET_RULE_TTL_MS = 24 * 60 * 60 * 1000;
+const DEFAULT_SENSITIVE_MODE_TTL_MS = 24 * 60 * 60 * 1000;
+const MAX_SECRET_RULE_TTL_MS = 24 * 60 * 60 * 1000;
+const MAX_REDACTION_SELECTORS_PER_ORIGIN = 64;
+const MAX_REDACTION_ORIGINS = 128;
+const REDACTED_TEXT = '[REDACTED]';
+
+type RegistryEntry = {
+  tabId: BrowserTabId;
+  hostname: string;
+  selectors: Map<string, SecretSelectorRule>;
+  sensitiveUntil: number;
+  touchedAt: number;
+};
+
+const normalizeExactHostname = (value: string): string => {
+  const hostname = value.trim().toLowerCase();
+  if (
+    hostname.length === 0 ||
+    hostname.length > 253 ||
+    hostname.includes('://') ||
+    hostname.includes('/') ||
+    hostname.includes(':') ||
+    hostname.includes('*') ||
+    !/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)(?:\.(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?))*$/.test(hostname)
+  ) {
+    throw new Error('Secret redaction requires one exact hostname.');
+  }
+  return hostname;
+};
+
+const boundedTtl = (ttlMs: number | undefined, fallback: number): number =>
+  Math.min(MAX_SECRET_RULE_TTL_MS, Math.max(1_000, Math.floor(ttlMs ?? fallback)));
+
+/** Create a bounded, in-memory selector registry. It never stores plaintext. */
+export const createBrowserSecretRedactionRegistry = (now: () => number = Date.now): BrowserSecretRedactionRegistry => {
+  const entries = new Map<string, RegistryEntry>();
+  const keyOf = (tabId: BrowserTabId, hostname: string): string => `${tabId}\n${hostname}`;
+
+  const prune = (): void => {
+    const current = now();
+    for (const [key, entry] of entries) {
+      for (const [selector, rule] of entry.selectors) {
+        if (rule.expiresAt <= current) entry.selectors.delete(selector);
+      }
+      if (entry.selectors.size === 0 && entry.sensitiveUntil <= current) entries.delete(key);
+    }
+    if (entries.size <= MAX_REDACTION_ORIGINS) return;
+    const oldest = [...entries.entries()].toSorted((left, right) => left[1].touchedAt - right[1].touchedAt);
+    for (const [key] of oldest.slice(0, entries.size - MAX_REDACTION_ORIGINS)) entries.delete(key);
+  };
+
+  const getOrCreate = (tabId: BrowserTabId, hostname: string): RegistryEntry => {
+    prune();
+    const key = keyOf(tabId, hostname);
+    const existing = entries.get(key);
+    if (existing) {
+      existing.touchedAt = now();
+      return existing;
+    }
+    const created: RegistryEntry = {
+      tabId,
+      hostname,
+      selectors: new Map(),
+      sensitiveUntil: 0,
+      touchedAt: now(),
+    };
+    entries.set(key, created);
+    return created;
+  };
+
+  return {
+    registerSelector: (request) => {
+      const hostname = normalizeExactHostname(request.hostname);
+      const selector = request.selector.trim();
+      const name = request.name.trim();
+      if (!selector || selector.length > 2_048) throw new Error('Secret redaction selector is invalid.');
+      if (!/^[A-Za-z_][A-Za-z0-9_.-]{0,127}$/.test(name)) throw new Error('Secret redaction name is invalid.');
+      if (request.reference !== undefined && request.reference.length > 512) {
+        throw new Error('Secret redaction reference is invalid.');
+      }
+      const entry = getOrCreate(request.tabId, hostname);
+      if (!entry.selectors.has(selector) && entry.selectors.size >= MAX_REDACTION_SELECTORS_PER_ORIGIN) {
+        const first = entry.selectors.keys().next().value;
+        if (typeof first === 'string') entry.selectors.delete(first);
+      }
+      entry.selectors.set(selector, {
+        selector,
+        name,
+        ...(request.reference ? { reference: request.reference } : {}),
+        expiresAt: now() + boundedTtl(request.ttlMs, DEFAULT_SECRET_RULE_TTL_MS),
+      });
+      prune();
+    },
+    enableSensitiveMode: (request) => {
+      const hostname = normalizeExactHostname(request.hostname);
+      const entry = getOrCreate(request.tabId, hostname);
+      entry.sensitiveUntil = Math.max(
+        entry.sensitiveUntil,
+        now() + boundedTtl(request.ttlMs, DEFAULT_SENSITIVE_MODE_TTL_MS)
+      );
+      prune();
+    },
+    snapshot: (tabId, rawHostname) => {
+      const hostname = normalizeExactHostname(rawHostname);
+      prune();
+      const entry = entries.get(keyOf(tabId, hostname));
+      if (!entry) return { selectors: [], sensitiveMode: false };
+      entry.touchedAt = now();
+      return {
+        selectors: [...entry.selectors.values()].map((rule) => ({ ...rule })),
+        sensitiveMode: entry.sensitiveUntil > now(),
+      };
+    },
+    clearTab: (tabId) => {
+      for (const [key, entry] of entries) {
+        if (entry.tabId === tabId) entries.delete(key);
+      }
+    },
+  };
+};
+
+const sharedSecretRedactionRegistry = createBrowserSecretRedactionRegistry();
+
+/** Shared Main-process registry used by browser secret capture/fill sinks. */
+export const getBrowserSecretRedactionRegistry = (): BrowserSecretRedactionRegistry => sharedSecretRedactionRegistry;
+
+const isAlreadyMasked = (value: string): boolean =>
+  /^(?:\*{3,}|[•●xX]{3,}|\[?redacted(?::[^\]]+)?\]?|<redacted>)$/i.test(value.trim());
+
+const SECRET_KEY_NAME =
+  /(?:password|passphrase|secret|api[_ .-]?key|access[_ .-]?token|refresh[_ .-]?token|private[_ .-]?key|client[_ .-]?secret|authorization|credential)/i;
+
+/** Final Main-process text scrubber applied after DOM extraction. */
+export const redactAgentVisibleText = (input: string, sensitiveMode = false): string => {
+  let output = input.replace(
+    /-----BEGIN [^-\r\n]*PRIVATE KEY-----[\s\S]*?-----END [^-\r\n]*PRIVATE KEY-----/gi,
+    REDACTED_TEXT
+  );
+
+  output = output
+    .split(/(\r?\n)/)
+    .map((line) => {
+      if (/^\r?\n$/.test(line)) return line;
+      const assignment = line.match(/^(\s*(?:export\s+)?["']?([A-Za-z_][A-Za-z0-9_.-]{0,127})["']?\s*[:=]\s*)(.*)$/);
+      if (!assignment || !SECRET_KEY_NAME.test(assignment[2] ?? '')) return line;
+      const value = (assignment[3] ?? '').trim().replace(/^(["'])(.*)\1$/, '$2');
+      return !value || isAlreadyMasked(value) ? line : `${assignment[1]}${REDACTED_TEXT}`;
+    })
+    .join('');
+
+  output = output.replace(
+    /((?:client[_ .-]?secret|api[_ .-]?key|access[_ .-]?token|refresh[_ .-]?token|password|passphrase|authorization)\s*[:=]\s*)(["']?)([^\s,"';&]+)\2/gi,
+    (match, prefix: string, _quote: string, value: string) =>
+      isAlreadyMasked(value) ? match : `${prefix}${REDACTED_TEXT}`
+  );
+  output = output.replace(/\b(?:Bearer\s+)[A-Za-z0-9._~+/-]{12,}=*/gi, `Bearer ${REDACTED_TEXT}`);
+  output = output.replace(
+    /\b(?:sk-(?:proj-)?[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|AIza[0-9A-Za-z_-]{20,}|GOCSPX-[0-9A-Za-z_-]{12,}|AKIA[0-9A-Z]{16})\b/g,
+    REDACTED_TEXT
+  );
+  output = output.replace(/\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g, REDACTED_TEXT);
+
+  if (sensitiveMode) {
+    output = output.replace(
+      /\b(?=[A-Za-z0-9+/_=-]{24,}\b)(?=[^\s]*[A-Za-z])(?=[^\s]*\d)[A-Za-z0-9+/_=-]+\b/g,
+      (value) => (isAlreadyMasked(value) ? value : REDACTED_TEXT)
+    );
+  }
+  return redactSecretText(output).text;
+};
 
 // ---------------------------------------------------------------------------
 // In-page snippets (run in the page via executeJavaScript — NOT in Node)
@@ -280,14 +520,158 @@ const DEFAULT_ACCESSIBILITY_MAX_DEPTH = 24;
  * @param selector Optional CSS selector; when omitted, reads `<body>`.
  * @returns A self-invoking expression string for `executeJavaScript`.
  */
-const buildReadTextScript = (selector?: string): string => {
+type PageRedactionContext = {
+  expectedHostname?: string;
+  snapshot: SecretRedactionSnapshot;
+};
+
+type PageRedactionRect = { x: number; y: number; width: number; height: number };
+
+type PageRedactionScan = {
+  hostname: string;
+  viewportWidth: number;
+  viewportHeight: number;
+  documentWidth: number;
+  documentHeight: number;
+  rects: PageRedactionRect[];
+  matchedSelectors: string[];
+  detectedNames: string[];
+};
+
+const redactionPrelude = (context: PageRedactionContext, screenshotMode?: 'viewport' | 'fullPage'): string => `
+  const __aionExpectedHostname = ${JSON.stringify(context.expectedHostname ?? '')};
+  const __aionRegisteredSelectors = ${JSON.stringify(context.snapshot.selectors.map((rule) => rule.selector))};
+  const __aionSensitiveMode = ${JSON.stringify(context.snapshot.sensitiveMode)};
+  const __aionScreenshotMode = ${JSON.stringify(screenshotMode ?? '')};
+  const __aionHostname = String(location.hostname || '').toLowerCase();
+  if (__aionExpectedHostname && __aionHostname !== __aionExpectedHostname) {
+    return { __aionRedactionError: 'origin-changed' };
+  }
+  const __aionSecretLabel = /(?:password|passphrase|secret|api[_ .-]?key|access[_ .-]?token|refresh[_ .-]?token|private[_ .-]?key|client[_ .-]?secret|authorization|credential)/i;
+  const __aionKnownToken = /(?:-----BEGIN [^-\\n]*PRIVATE KEY-----|\\bsk-(?:proj-)?[A-Za-z0-9_-]{16,}|\\bgh[pousr]_[A-Za-z0-9_]{20,}|\\bgithub_pat_[A-Za-z0-9_]{20,}|\\bAIza[0-9A-Za-z_-]{20,}|\\bGOCSPX-[0-9A-Za-z_-]{12,}|\\bAKIA[0-9A-Z]{16}|\\beyJ[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,})/i;
+  const __aionAlreadyMasked = (value) => /^(?:\\*{3,}|[•●xX]{3,}|\\[?redacted(?::[^\\]]+)?\\]?|<redacted>)$/i.test(String(value || '').trim());
+  const __aionOwnText = (element) => Array.from(element.childNodes || [])
+    .filter((node) => node.nodeType === 3)
+    .map((node) => String(node.textContent || '').trim())
+    .join(' ')
+    .trim();
+  const __aionAttributeText = (element) => [
+    'type', 'name', 'id', 'placeholder', 'aria-label', 'title', 'autocomplete',
+    'data-aion-secret', 'data-secret', 'data-testid'
+  ].map((name) => String(element.getAttribute && element.getAttribute(name) || '')).join(' ');
+  const __aionDetectedName = (element) => {
+    const ownText = __aionOwnText(element);
+    const assignment = ownText.match(/(?:^|\\s)([A-Za-z_][A-Za-z0-9_.-]{1,127})\\s*[:=]/);
+    const semantic = [
+      element.getAttribute && element.getAttribute('name'),
+      element.id,
+      element.getAttribute && element.getAttribute('aria-label'),
+      element.getAttribute && element.getAttribute('autocomplete'),
+    ].filter(Boolean).join(' ');
+    const label = semantic.match(__aionSecretLabel);
+    const raw = assignment && assignment[1] || label && label[0] || 'DETECTED_SECRET';
+    const normalized = String(raw).trim().replace(/[^A-Za-z0-9_.-]+/g, '_').slice(0, 128);
+    return /^[A-Za-z_][A-Za-z0-9_.-]{0,127}$/.test(normalized) ? normalized : 'DETECTED_SECRET';
+  };
+  const __aionFindById = (root, id) => {
+    if (!id) return null;
+    for (const element of Array.from(root.querySelectorAll('[id]'))) {
+      if (element.id === id) return element;
+    }
+    return null;
+  };
+  const __aionAddLabelTarget = (root, label, targets) => {
+    const htmlFor = String(label.getAttribute && label.getAttribute('for') || '');
+    const control = htmlFor ? __aionFindById(root, htmlFor) : label.querySelector && label.querySelector('input, textarea, select');
+    if (control) targets.add(control);
+    const sibling = label.nextElementSibling;
+    if (sibling && String(sibling.textContent || '').trim().length <= 4096) targets.add(sibling);
+    const parent = label.parentElement;
+    if (parent) {
+      for (const candidate of Array.from(parent.querySelectorAll('input, textarea, select, code, pre, [data-value]'))) {
+        if (candidate !== label) targets.add(candidate);
+      }
+    }
+  };
+  const __aionCollectTargets = (root) => {
+    const targets = new Set();
+    const matchedSelectors = [];
+    let invalidSelector = false;
+    for (const selector of __aionRegisteredSelectors) {
+      try {
+        const matches = [];
+        if (root.matches && root.matches(selector)) matches.push(root);
+        matches.push(...Array.from(root.querySelectorAll(selector)));
+        if (matches.length > 0) matchedSelectors.push(selector);
+        for (const match of matches) targets.add(match);
+      } catch {
+        invalidSelector = true;
+      }
+    }
+    const genericSelector = [
+      'input[type="password"]',
+      'input[autocomplete="current-password"]',
+      'input[autocomplete="new-password"]',
+      'input[autocomplete="one-time-code"]',
+      '[data-aion-secret]',
+      '[data-secret-redact]'
+    ].join(',');
+    for (const element of Array.from(root.querySelectorAll(genericSelector))) targets.add(element);
+    for (const element of Array.from(root.querySelectorAll('*'))) {
+      const attributes = __aionAttributeText(element);
+      const ownText = __aionOwnText(element);
+      const tag = String(element.tagName || '').toUpperCase();
+      if (__aionSecretLabel.test(attributes)) {
+        if (tag === 'LABEL') __aionAddLabelTarget(root, element, targets);
+        else targets.add(element);
+      }
+      if (__aionSecretLabel.test(ownText) && ownText.length <= 160) {
+        if (/[:=]/.test(ownText) || __aionKnownToken.test(ownText)) targets.add(element);
+        __aionAddLabelTarget(root, element, targets);
+      }
+      if ((tag === 'CODE' || tag === 'PRE' || tag === 'SAMP') && __aionKnownToken.test(String(element.textContent || ''))) {
+        targets.add(element);
+      }
+    }
+    if (__aionSensitiveMode && __aionScreenshotMode) {
+      for (const element of Array.from(root.querySelectorAll('iframe, frame, canvas, video, object, embed'))) {
+        targets.add(element);
+      }
+    }
+    return { targets, matchedSelectors, invalidSelector };
+  };
+`;
+
+const buildReadTextScript = (selector: string | undefined, context: PageRedactionContext): string => {
   const selectorLiteral = selector === undefined ? 'null' : JSON.stringify(selector);
   return `(() => {
+  ${redactionPrelude(context)}
   const selector = ${selectorLiteral};
-  const el = selector ? document.querySelector(selector) : document.body;
-  if (!el) return '';
-  const text = el.innerText !== undefined && el.innerText !== null ? el.innerText : el.textContent;
-  return text ? String(text).trim() : '';
+  let source;
+  try {
+    source = selector ? document.querySelector(selector) : document.body;
+  } catch {
+    return { __aionRedactionError: 'invalid-read-selector' };
+  }
+  if (!source) return { text: '', matchedSelectors: [] };
+  const root = source.cloneNode(true);
+  const collected = __aionCollectTargets(root);
+  if (collected.invalidSelector) return { __aionRedactionError: 'invalid-secret-selector' };
+  for (const element of collected.targets) {
+    const current = element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement
+      ? element.value
+      : String(element.textContent || '').trim();
+    if (__aionAlreadyMasked(current)) continue;
+    if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement || element instanceof HTMLSelectElement) {
+      element.value = '${REDACTED_TEXT}';
+      element.setAttribute('value', '${REDACTED_TEXT}');
+      element.setAttribute('aria-valuetext', '${REDACTED_TEXT}');
+    } else {
+      element.textContent = '${REDACTED_TEXT}';
+    }
+  }
+  const text = root.innerText != null ? root.innerText : root.textContent;
+  return { text: text ? String(text).trim() : '', matchedSelectors: collected.matchedSelectors };
 })()`;
 };
 
@@ -299,7 +683,8 @@ const buildReadTextScript = (selector?: string): string => {
  * @param maxDepth Maximum recursion depth.
  * @returns A self-invoking expression string for `executeJavaScript`.
  */
-const buildAccessibilityScript = (maxDepth: number): string => `(() => {
+const buildAccessibilityScript = (maxDepth: number, context: PageRedactionContext): string => `(() => {
+  ${redactionPrelude(context)}
   const MAX_DEPTH = ${maxDepth};
   const SKIP = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEMPLATE', 'HEAD', 'META', 'LINK']);
   const isHidden = (el) => {
@@ -307,7 +692,18 @@ const buildAccessibilityScript = (maxDepth: number): string => `(() => {
     if (style.display === 'none' || style.visibility === 'hidden') return true;
     return el.getAttribute('aria-hidden') === 'true';
   };
+  const collected = __aionCollectTargets(document.documentElement);
+  if (collected.invalidSelector) return { __aionRedactionError: 'invalid-secret-selector' };
   const nameOf = (el) => {
+    if (collected.targets.has(el)) {
+      const current = [
+        el.getAttribute('aria-label'),
+        el.getAttribute('alt'),
+        el.getAttribute('title'),
+        String(el.textContent || '').trim(),
+      ].filter(Boolean).join(' ');
+      if (current && !__aionAlreadyMasked(current)) return '${REDACTED_TEXT}';
+    }
     const aria = el.getAttribute('aria-label');
     if (aria) return aria.trim();
     const alt = el.getAttribute('alt');
@@ -323,6 +719,7 @@ const buildAccessibilityScript = (maxDepth: number): string => `(() => {
   };
   const valueOf = (el) => {
     if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement) {
+      if (collected.targets.has(el) && !__aionAlreadyMasked(el.value)) return '${REDACTED_TEXT}';
       return el.value || undefined;
     }
     return undefined;
@@ -346,6 +743,271 @@ const buildAccessibilityScript = (maxDepth: number): string => `(() => {
   const root = document.body || document.documentElement;
   return build(root, 0);
 })()`;
+
+const buildScreenshotScanScript = (context: PageRedactionContext, mode: 'viewport' | 'fullPage'): string => `(() => {
+  ${redactionPrelude(context, mode)}
+  const root = document.documentElement;
+  if (!root) return { __aionRedactionError: 'missing-document' };
+  const collected = __aionCollectTargets(root);
+  if (collected.invalidSelector) return { __aionRedactionError: 'invalid-secret-selector' };
+  const viewportWidth = Math.max(0, Number(window.innerWidth) || 0);
+  const viewportHeight = Math.max(0, Number(window.innerHeight) || 0);
+  const documentWidth = Math.max(viewportWidth, root.scrollWidth || 0, document.body && document.body.scrollWidth || 0);
+  const documentHeight = Math.max(viewportHeight, root.scrollHeight || 0, document.body && document.body.scrollHeight || 0);
+  const rects = [];
+  const detectedNames = [];
+  for (const element of collected.targets) {
+    const visualValue = element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement
+      ? element.value
+      : String(element.textContent || '').trim();
+    if (__aionAlreadyMasked(visualValue)) continue;
+    let detected = false;
+    for (const rawRect of Array.from(element.getClientRects ? element.getClientRects() : [])) {
+      if (!rawRect || rawRect.width <= 0 || rawRect.height <= 0) continue;
+      let x = rawRect.left;
+      let y = rawRect.top;
+      let width = rawRect.width;
+      let height = rawRect.height;
+      if (__aionScreenshotMode === 'fullPage') {
+        x += window.scrollX || 0;
+        y += window.scrollY || 0;
+      } else {
+        const right = Math.min(viewportWidth, rawRect.right);
+        const bottom = Math.min(viewportHeight, rawRect.bottom);
+        x = Math.max(0, x);
+        y = Math.max(0, y);
+        width = right - x;
+        height = bottom - y;
+      }
+      if (width > 0 && height > 0) {
+        rects.push({ x, y, width, height });
+        if (!detected) {
+          detectedNames.push(__aionDetectedName(element));
+          detected = true;
+        }
+      }
+      if (rects.length >= 256) break;
+    }
+    if (rects.length >= 256) break;
+  }
+  return {
+    hostname: __aionHostname,
+    viewportWidth,
+    viewportHeight,
+    documentWidth,
+    documentHeight,
+    rects,
+    matchedSelectors: collected.matchedSelectors,
+    detectedNames,
+  };
+})()`;
+
+const exactHostnameFromDriver = (driver: PageDriver): string | undefined => {
+  if (!driver.getURL) return undefined;
+  try {
+    const url = new URL(driver.getURL());
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') return undefined;
+    return normalizeExactHostname(url.hostname);
+  } catch {
+    return undefined;
+  }
+};
+
+const evaluateTrusted = async (driver: PageDriver, code: string): Promise<unknown> => {
+  if (driver.executeJavaScriptInIsolatedWorld) {
+    return driver.executeJavaScriptInIsolatedWorld(REDACTION_WORLD_ID, [{ code }]);
+  }
+  return driver.executeJavaScript(code);
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const assertSafeScriptResult = (value: unknown): Record<string, unknown> => {
+  if (!isRecord(value) || typeof value.__aionRedactionError === 'string') {
+    throw new Error('[PagePerception] Secret redaction could not be guaranteed.');
+  }
+  return value;
+};
+
+const sanitizeAccessibilityNode = (value: unknown, sensitiveMode: boolean): AccessibilityNode => {
+  if (!isRecord(value) || typeof value.role !== 'string' || !Array.isArray(value.children)) {
+    throw new Error('[PagePerception] Accessibility output was not safely structured.');
+  }
+  const node: AccessibilityNode = {
+    role: redactAgentVisibleText(value.role, sensitiveMode),
+    name: redactAgentVisibleText(typeof value.name === 'string' ? value.name : '', sensitiveMode),
+    children: value.children.map((child) => sanitizeAccessibilityNode(child, sensitiveMode)),
+  };
+  if (typeof value.value === 'string') node.value = redactAgentVisibleText(value.value, sensitiveMode);
+  return node;
+};
+
+const parseRedactionScan = (value: unknown): PageRedactionScan => {
+  const result = assertSafeScriptResult(value);
+  const rects = Array.isArray(result.rects)
+    ? result.rects.flatMap((raw): PageRedactionRect[] => {
+        if (!isRecord(raw)) return [];
+        const { x, y, width, height } = raw;
+        if (
+          typeof x !== 'number' ||
+          typeof y !== 'number' ||
+          typeof width !== 'number' ||
+          typeof height !== 'number' ||
+          !Number.isFinite(x) ||
+          !Number.isFinite(y) ||
+          !Number.isFinite(width) ||
+          !Number.isFinite(height) ||
+          width <= 0 ||
+          height <= 0
+        ) {
+          return [];
+        }
+        return [{ x, y, width, height }];
+      })
+    : [];
+  const numeric = (key: string): number => {
+    const raw = result[key];
+    if (typeof raw !== 'number' || !Number.isFinite(raw) || raw <= 0) {
+      throw new Error('[PagePerception] Secret redaction geometry was unavailable.');
+    }
+    return raw;
+  };
+  if (typeof result.hostname !== 'string') {
+    throw new Error('[PagePerception] Secret redaction origin was unavailable.');
+  }
+  return {
+    hostname: result.hostname.toLowerCase(),
+    viewportWidth: numeric('viewportWidth'),
+    viewportHeight: numeric('viewportHeight'),
+    documentWidth: numeric('documentWidth'),
+    documentHeight: numeric('documentHeight'),
+    rects: rects.slice(0, 256),
+    matchedSelectors: Array.isArray(result.matchedSelectors)
+      ? result.matchedSelectors.filter((selector): selector is string => typeof selector === 'string').slice(0, 64)
+      : [],
+    detectedNames: Array.isArray(result.detectedNames)
+      ? result.detectedNames
+          .filter((name): name is string => typeof name === 'string' && /^[A-Za-z_][A-Za-z0-9_.-]{0,127}$/u.test(name))
+          .slice(0, 64)
+      : [],
+  };
+};
+
+const scansAreCompatible = (
+  before: PageRedactionScan,
+  after: PageRedactionScan,
+  mode: 'viewport' | 'fullPage'
+): boolean => {
+  if (before.hostname !== after.hostname) return false;
+  const beforeWidth = mode === 'viewport' ? before.viewportWidth : before.documentWidth;
+  const beforeHeight = mode === 'viewport' ? before.viewportHeight : before.documentHeight;
+  const afterWidth = mode === 'viewport' ? after.viewportWidth : after.documentWidth;
+  const afterHeight = mode === 'viewport' ? after.viewportHeight : after.documentHeight;
+  return Math.abs(beforeWidth - afterWidth) <= 1 && Math.abs(beforeHeight - afterHeight) <= 1;
+};
+
+const rectsAreStable = (before: PageRedactionRect[], after: PageRedactionRect[]): boolean =>
+  before.length === after.length &&
+  before.every((rect, index) => {
+    const next = after[index];
+    return (
+      Boolean(next) &&
+      Math.abs(rect.x - next.x) <= 2 &&
+      Math.abs(rect.y - next.y) <= 2 &&
+      Math.abs(rect.width - next.width) <= 2 &&
+      Math.abs(rect.height - next.height) <= 2
+    );
+  });
+
+const protectPng = async (
+  png: Uint8Array,
+  mode: 'viewport' | 'fullPage',
+  before: PageRedactionScan,
+  after: PageRedactionScan,
+  context: PageRedactionContext
+): Promise<CaptureResult> => {
+  if (!scansAreCompatible(before, after, mode)) {
+    throw new Error('[PagePerception] Page changed while secret-safe capture was running.');
+  }
+  if (context.snapshot.sensitiveMode && !rectsAreStable(before.rects, after.rects)) {
+    throw new Error('[PagePerception] Secret regions moved while the protected capture was running.');
+  }
+  if (context.expectedHostname && before.hostname !== context.expectedHostname) {
+    throw new Error('[PagePerception] Page origin changed while secret-safe capture was running.');
+  }
+
+  const matchedSelectors = new Set([...before.matchedSelectors, ...after.matchedSelectors]);
+  const registered = context.snapshot.selectors.map((rule) => rule.selector);
+  const rects = [...before.rects, ...after.rects];
+  if (
+    context.snapshot.sensitiveMode &&
+    (rects.length === 0 || registered.some((selector) => !matchedSelectors.has(selector)))
+  ) {
+    throw new Error('[PagePerception] Sensitive page could not be safely redacted.');
+  }
+
+  const source = Buffer.from(png);
+  const metadata = await sharp(source).metadata();
+  const width = metadata.width;
+  const height = metadata.height;
+  if (!width || !height) throw new Error('[PagePerception] Captured image dimensions are unavailable.');
+
+  const coordinateWidth = mode === 'viewport' ? before.viewportWidth : before.documentWidth;
+  const coordinateHeight = mode === 'viewport' ? before.viewportHeight : before.documentHeight;
+  const scaleX = width / coordinateWidth;
+  const scaleY = height / coordinateHeight;
+  const pixelRects = rects.flatMap((rect): PageRedactionRect[] => {
+    const left = Math.max(0, Math.floor(rect.x * scaleX) - 2);
+    const top = Math.max(0, Math.floor(rect.y * scaleY) - 2);
+    const right = Math.min(width, Math.ceil((rect.x + rect.width) * scaleX) + 2);
+    const bottom = Math.min(height, Math.ceil((rect.y + rect.height) * scaleY) + 2);
+    return right > left && bottom > top ? [{ x: left, y: top, width: right - left, height: bottom - top }] : [];
+  });
+
+  let protectedPng: Uint8Array = source;
+  if (pixelRects.length > 0) {
+    const rectangles = pixelRects
+      .map((rect) => `<rect x="${rect.x}" y="${rect.y}" width="${rect.width}" height="${rect.height}" fill="#111"/>`)
+      .join('');
+    const overlay = Buffer.from(
+      `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">${rectangles}</svg>`
+    );
+    protectedPng = await sharp(source)
+      .composite([{ input: overlay, left: 0, top: 0 }])
+      .png()
+      .toBuffer();
+  }
+
+  const detected = context.snapshot.selectors
+    .filter((rule) => matchedSelectors.has(rule.selector))
+    .map(
+      (rule): SecretRedactionReference => ({
+        name: rule.name,
+        ...(rule.reference ? { reference: rule.reference } : {}),
+        status: 'redacted',
+      })
+    )
+    .filter(
+      (item, index, all) =>
+        all.findIndex((candidate) => candidate.name === item.name && candidate.reference === item.reference) === index
+    );
+  for (const name of new Set([...before.detectedNames, ...after.detectedNames])) {
+    if (!detected.some((item) => item.name === name)) detected.push({ name, status: 'redacted' });
+  }
+  const secretContext: SecretRedactionSummary = {
+    redactedRegions: pixelRects.length,
+    sensitiveMode: context.snapshot.sensitiveMode,
+    detected,
+  };
+  return {
+    dataUrl: `data:image/png;base64,${Buffer.from(protectedPng).toString('base64')}`,
+    png: protectedPng,
+    width,
+    height,
+    secretContext,
+  };
+};
 
 // ---------------------------------------------------------------------------
 // Factory
@@ -373,6 +1035,7 @@ export const createPagePerception = (deps: PagePerceptionDeps): IPagePerception 
   const captureCostMB = deps.captureCostMB ?? DEFAULT_CAPTURE_COST_MB;
   const captureLeaseKind = deps.captureLeaseKind ?? DEFAULT_CAPTURE_LEASE_KIND;
   const accessibilityMaxDepth = deps.accessibilityMaxDepth ?? DEFAULT_ACCESSIBILITY_MAX_DEPTH;
+  const redactionRegistry = deps.redactionRegistry ?? sharedSecretRedactionRegistry;
 
   /** Resolve a live {@link PageDriver} or throw a descriptive error. */
   const requireDriver = (tabId: BrowserTabId): PageDriver => {
@@ -383,18 +1046,51 @@ export const createPagePerception = (deps: PagePerceptionDeps): IPagePerception 
     return driver;
   };
 
+  const resolveRedactionContext = (tabId: BrowserTabId, driver: PageDriver): PageRedactionContext => {
+    const expectedHostname = exactHostnameFromDriver(driver);
+    return {
+      ...(expectedHostname ? { expectedHostname } : {}),
+      snapshot: expectedHostname
+        ? redactionRegistry.snapshot(tabId, expectedHostname)
+        : { selectors: [], sensitiveMode: false },
+    };
+  };
+
+  const scanPage = async (
+    driver: PageDriver,
+    context: PageRedactionContext,
+    mode: 'viewport' | 'fullPage'
+  ): Promise<PageRedactionScan> =>
+    parseRedactionScan(await evaluateTrusted(driver, buildScreenshotScanScript(context, mode)));
+
+  const protectCapture = async (
+    tabId: BrowserTabId,
+    mode: 'viewport' | 'fullPage',
+    captureImage: () => Promise<Uint8Array>
+  ): Promise<CaptureResult> => {
+    const driver = requireDriver(tabId);
+    const context = resolveRedactionContext(tabId, driver);
+    const before = await scanPage(driver, context, mode);
+    const png = await captureImage();
+    const after = await scanPage(driver, context, mode);
+    return protectPng(png, mode, before, after, context);
+  };
+
   const readText = async (tabId: BrowserTabId, selector?: string): Promise<string> => {
     // Layer (a): light DOM read — no lease required (criterion 1.4a).
     const driver = requireDriver(tabId);
-    const result = await driver.executeJavaScript(buildReadTextScript(selector));
-    return typeof result === 'string' ? result : '';
+    const context = resolveRedactionContext(tabId, driver);
+    const result = assertSafeScriptResult(await evaluateTrusted(driver, buildReadTextScript(selector, context)));
+    return redactAgentVisibleText(typeof result.text === 'string' ? result.text : '', context.snapshot.sensitiveMode);
   };
 
   const readAccessibilityTree = async (tabId: BrowserTabId): Promise<AccessibilityNode> => {
     // Layer (a): light DOM read — no lease required (criterion 1.4a).
     const driver = requireDriver(tabId);
-    const result = await driver.executeJavaScript(buildAccessibilityScript(accessibilityMaxDepth));
-    return result as AccessibilityNode;
+    const context = resolveRedactionContext(tabId, driver);
+    const result = await evaluateTrusted(driver, buildAccessibilityScript(accessibilityMaxDepth, context));
+    assertSafeScriptResult(result);
+    return sanitizeAccessibilityNode(result, context.snapshot.sensitiveMode);
   };
 
   const capture = async (tabId: BrowserTabId): Promise<CaptureResult> => {
@@ -404,12 +1100,13 @@ export const createPagePerception = (deps: PagePerceptionDeps): IPagePerception 
     const driver = requireDriver(tabId);
     const lease = await coordinator.requestLease({ kind: captureLeaseKind, estCostMB: captureCostMB });
     try {
-      const image = await driver.capturePage();
-      if (image.isEmpty()) {
-        throw new Error(`[PagePerception] Captured an empty image for tab: ${tabId}`);
-      }
-      const size = image.getSize();
-      return { dataUrl: image.toDataURL(), png: image.toPNG(), width: size.width, height: size.height };
+      return await protectCapture(tabId, 'viewport', async () => {
+        const image = await driver.capturePage();
+        if (image.isEmpty()) {
+          throw new Error(`[PagePerception] Captured an empty image for tab: ${tabId}`);
+        }
+        return image.toPNG();
+      });
     } finally {
       coordinator.releaseLease(lease.id);
     }
@@ -420,15 +1117,17 @@ export const createPagePerception = (deps: PagePerceptionDeps): IPagePerception 
     // leases (criterion 1.9), so no lease is acquired here.
     switch (request.action) {
       case 'summarize': {
+        if (!mediaPipeline) throw new Error('[PagePerception] Media pipeline is unavailable.');
         const summary = await mediaPipeline.summarizeVideo(request.source, request.options);
         return { action: 'summarize', summary };
       }
       case 'transcribe': {
+        if (!mediaPipeline) throw new Error('[PagePerception] Media pipeline is unavailable.');
         const transcript = await mediaPipeline.transcribe(request.source, request.options);
         return { action: 'transcribe', transcript };
       }
     }
   };
 
-  return { readText, readAccessibilityTree, capture, perceiveMedia };
+  return { readText, readAccessibilityTree, capture, protectCapture, perceiveMedia };
 };

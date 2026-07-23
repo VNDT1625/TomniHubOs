@@ -433,6 +433,123 @@
     "open": "open",
     "close": "close"
   },
+  "workspace": {
+    "controlCenter": "Control centre",
+    "navigation": "Manager navigation",
+    "system": "System",
+    "todayCommand": "Today's command centre",
+    "overviewTitle": "See what matters. Move the day forward.",
+    "overviewSubtitle": "A focused view of your tasks, schedule, knowledge and live Tomny Core activity.",
+    "viewAll": "View all",
+    "viewCalendar": "Open calendar",
+    "openCore": "Open Core",
+    "nav": {
+      "overview": "Overview",
+      "core": "Tomny Core"
+    },
+    "descriptions": {
+      "overview": "Priorities, progress and live system activity",
+      "tasks": "Plan, prioritise and complete work",
+      "schedule": "Coordinate fixed and flexible time blocks",
+      "daily": "Capture the day while it is fresh",
+      "learn": "Build a connected knowledge base",
+      "data": "Organise documents, sources and summaries",
+      "core": "Inspect native targets, runs and automations"
+    },
+    "metrics": {
+      "activeTasks": "Active tasks",
+      "overdue": "{{count}} overdue",
+      "eventsToday": "Events today",
+      "nextAt": "Next at {{time}}",
+      "clearDay": "No more events",
+      "notes": "Notes",
+      "knowledgeBase": "Across your knowledge base",
+      "activeRuns": "Active Core runs"
+    },
+    "focus": {
+      "title": "Focus queue",
+      "subtitle": "Overdue and high-impact work first",
+      "completion": "Overall completion",
+      "empty": "Nothing urgent — your focus queue is clear."
+    },
+    "timeline": {
+      "title": "Today's timeline",
+      "subtitle": "The next fixed and flexible blocks",
+      "empty": "Your calendar is clear today."
+    },
+    "recent": {
+      "title": "Recent knowledge",
+      "subtitle": "Notes and documents changed most recently",
+      "empty": "No recent notes yet."
+    },
+    "corePulse": {
+      "title": "Core Pulse",
+      "subtitle": "Native runtime and automation readiness",
+      "targets": "Ready targets",
+      "sessions": "Sessions",
+      "automations": "Automations",
+      "completion": "{{rate}}% completion"
+    }
+  },
+  "core": {
+    "title": "Tomny Core operations",
+    "subtitle": "A native control surface for runtime health, active work, targets and durable automations.",
+    "nativeRuntime": "Native runtime",
+    "loading": "Connecting to Tomny Core…",
+    "unavailableTitle": "Tomny Core is not responding",
+    "unavailableDescription": "Manager data is still available. Restart the desktop runtime or retry after Core finishes starting.",
+    "status": {
+      "loading": "Core starting",
+      "offline": "Core offline",
+      "healthy": "Core healthy",
+      "degraded": "Core degraded",
+      "unhealthy": "Core unhealthy"
+    },
+    "actions": {
+      "refresh": "Refresh",
+      "cancel": "Cancel run",
+      "runNow": "Run now",
+      "runSuccess": "Automation started",
+      "cancelSuccess": "Run cancelled",
+      "failed": "The Core action failed"
+    },
+    "metrics": {
+      "health": "Runtime health",
+      "checked": "{{count}} checks",
+      "targets": "Ready targets",
+      "ofTotal": "of {{total}} discovered",
+      "activeRuns": "Active runs",
+      "sessions": "{{count}} sessions",
+      "automations": "Enabled automations",
+      "scheduledTotal": "{{count}} total schedules"
+    },
+    "health": {
+      "title": "Runtime doctor",
+      "subtitle": "Health checks and execution reliability",
+      "completionRate": "Completion rate",
+      "noReport": "No diagnostic report is available yet."
+    },
+    "runs": {
+      "title": "Active runs",
+      "subtitle": "Work currently executing through the new Core",
+      "empty": "No active Core runs.",
+      "started": "Started {{time}}"
+    },
+    "automations": {
+      "title": "Durable automations",
+      "subtitle": "Native scheduled work with retry and lifecycle state",
+      "empty": "No Core automations have been created.",
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "manual": "Manual",
+      "intervalMinutes": "Every {{count}} min"
+    },
+    "targets": {
+      "title": "Runtime targets",
+      "subtitle": "Built-in, ACP, CLI and remote execution adapters",
+      "models": "{{count}} models"
+    }
+  },
   "quickAdd": {
     "placeholder": "Add a task — try \"Report tomorrow 5pm !high #work\"",
     "hint": "Tip: !high · #tag · \"tomorrow 5pm\" / \"Mon 9am\" are detected automatically.",

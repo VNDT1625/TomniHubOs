@@ -6,7 +6,7 @@
 
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { access, readFile } from 'node:fs/promises';
+import { access, copyFile, readFile, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import type { CoreAdapterDefinition, DetectedCoreTarget, ExecutableResolver } from './adapters';
@@ -176,31 +176,71 @@ export const loadCoreAdapterDefinitions = async (
   return [...definitions.values()];
 };
 
-const verifyBundledTomnyCli = async (binaryPath: string): Promise<boolean> => {
-  if (!binaryPath.split(path.sep).includes('bundled-tomny-cli')) return true;
+export type Sha256File = (filePath: string) => Promise<string>;
+
+const sha256FileWithNode: Sha256File = async (filePath) =>
+  createHash('sha256')
+    .update(await readFile(filePath))
+    .digest('hex');
+
+const verifyTomnyArtifact = async (
+  binaryPath: string,
+  manifestPath: string,
+  sha256File: Sha256File
+): Promise<boolean> => {
   try {
-    const manifest = JSON.parse(await readFile(path.join(path.dirname(binaryPath), 'manifest.json'), 'utf8')) as {
-      binarySha256?: unknown;
-    };
+    const manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as { binarySha256?: unknown };
     if (typeof manifest.binarySha256 !== 'string' || !/^[a-f0-9]{64}$/u.test(manifest.binarySha256)) return false;
-    const actual = createHash('sha256')
-      .update(await readFile(binaryPath))
-      .digest('hex');
-    return actual === manifest.binarySha256;
+    return (await sha256File(binaryPath)) === manifest.binarySha256;
   } catch {
     return false;
   }
 };
 
+const pendingTomnyBinaryPath = (binaryPath: string): string => {
+  const extension = path.extname(binaryPath);
+  return extension ? `${binaryPath.slice(0, -extension.length)}.next${extension}` : `${binaryPath}.next`;
+};
+
+/** Promote a separately verified staged CLI before target detection can reject the old artifact. */
+const promotePendingBundledTomnyCli = async (binaryPath: string, sha256File: Sha256File): Promise<void> => {
+  const directory = path.dirname(binaryPath);
+  const pendingBinary = pendingTomnyBinaryPath(binaryPath);
+  const pendingManifest = path.join(directory, 'manifest.next.json');
+  if (!(await verifyTomnyArtifact(pendingBinary, pendingManifest, sha256File))) return;
+
+  try {
+    await copyFile(pendingBinary, binaryPath);
+    await copyFile(pendingManifest, path.join(directory, 'manifest.json'));
+    if (!(await verifyTomnyArtifact(binaryPath, path.join(directory, 'manifest.json'), sha256File))) return;
+    await Promise.allSettled([unlink(pendingBinary), unlink(pendingManifest)]);
+  } catch (error) {
+    // A still-running CLI may lock the executable on Windows. Detection retries on the next app start.
+    console.warn('[TomnyCore] Pending CLI promotion deferred:', error);
+  }
+};
+
+const verifyBundledTomnyCli = async (
+  binaryPath: string,
+  sha256File: Sha256File = sha256FileWithNode
+): Promise<boolean> => {
+  if (!binaryPath.split(path.sep).includes('bundled-tomny-cli')) return true;
+  await promotePendingBundledTomnyCli(binaryPath, sha256File);
+  return verifyTomnyArtifact(binaryPath, path.join(path.dirname(binaryPath), 'manifest.json'), sha256File);
+};
+
 /** Resolve the first executable without invoking aioncore or its HTTP detector. */
-export const resolveExecutableOnPath: ExecutableResolver = async (candidates) => {
+export const resolveExecutableOnPath = async (
+  candidates: string[],
+  sha256File: Sha256File = sha256FileWithNode
+): Promise<string | null> => {
   const probe = process.platform === 'win32' ? 'where.exe' : 'which';
   const resolved = await Promise.all(
     candidates.map(async (candidate) => {
       try {
         if (path.isAbsolute(candidate)) {
           await access(candidate);
-          return (await verifyBundledTomnyCli(candidate)) ? candidate : null;
+          return (await verifyBundledTomnyCli(candidate, sha256File)) ? candidate : null;
         }
         const { stdout } = await execFileAsync(probe, [candidate], { windowsHide: true, timeout: 2500 });
         const paths = stdout

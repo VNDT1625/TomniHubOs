@@ -1,67 +1,41 @@
 /**
- * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
- * SPDX-License-Identifier: Apache-2.0
+ * Chat surface host for docked feature clips and live browser/editor frames.
+ *
+ * ChatDock is the reusable mechanism. Team and Browser only register items;
+ * future surfaces can do the same without duplicating clip, panel or toggle UI.
  */
-
-/**
- * `ConversationWatchOverlay` — host for the in-chat live-browser frames.
- *
- * Rendered in each platform chat's `beforeSendBox` slot as a bounded working
- * canvas between the message list and composer. The browser stays observable
- * without replacing the conversation or feeling detached from the input.
- *
- * It owns the open/auto-open state:
- *  - it auto-opens the moment the agent opens its first browser tab (a light
- *    poll watches for that while closed);
- *  - the header "Watch" button toggles it via the `super.watch.toggle` event;
- *  - it announces its open state back via `super.watch.state` so the header
- *    button stays in sync.
- *
- * Only mounts its machinery when Super is on for this conversation. Desktop-only.
- *
- * Renderer-only module: positions native views via IPC; no Node.js APIs.
- */
-
 import { isElectronDesktop } from '@/renderer/utils/platform';
 import { emitter, useAddEventListener } from '@/renderer/utils/emitter';
 import { browserClient } from '@renderer/pages/browser/browserBridgeClient';
+import { Compass } from '@icon-park/react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { ChatDockHost, useChatDockItem, type ChatDockItem } from '../ChatDock';
 import { editorControlClient } from './editorControlClient';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useSuperMode } from '../../hooks/useSuperMode';
 import LiveBrowserWatch from './LiveBrowserWatch';
-
 import AgentMeshInlineCard from './AgentMeshInlineCard';
 
-/** Props for {@link ConversationWatchOverlay}. */
 export type ConversationWatchOverlayProps = {
-  /** The conversation this overlay belongs to. */
   conversationId?: string;
 };
 
-/** Poll interval (ms) for detecting the agent's first opened tab while closed. */
 const TAB_POLL_MS = 1500;
 
-/**
- * Invisible poller: while closed but Super is on, polls the live tab count so
- * the overlay can auto-open the moment the agent opens its first browser tab.
- */
 const TabPoller: React.FC<{ onCount: (count: number) => void }> = ({ onCount }) => {
   useEffect(() => {
     let alive = true;
     const probe = () => {
-      // Count foreground browser tabs + open editor frames. A hidden research
-      // tab must not auto-open; an editor frame should.
       const browserP = browserClient
         .listTabs()
-        .then((tabs) => (Array.isArray(tabs) ? tabs.filter((t) => t.background !== true).length : 0))
+        .then((tabs) => (Array.isArray(tabs) ? tabs.filter((tab) => tab.background !== true).length : 0))
         .catch(() => 0);
       const editorP = editorControlClient
         .listFrames()
         .then((frames) => (Array.isArray(frames) ? frames.length : 0))
         .catch(() => 0);
-      void Promise.all([browserP, editorP]).then(([b, e]) => {
-        if (alive) onCount(b + e);
+      void Promise.all([browserP, editorP]).then(([browserCount, editorCount]) => {
+        if (alive) onCount(browserCount + editorCount);
       });
     };
     probe();
@@ -74,14 +48,44 @@ const TabPoller: React.FC<{ onCount: (count: number) => void }> = ({ onCount }) 
   return null;
 };
 
-/** Owns the live-browser card state rendered immediately above the chat composer. */
+type BrowserDockItemProps = {
+  available: boolean;
+  enabled: boolean;
+  open: boolean;
+  tabCount: number;
+  onToggle: () => void;
+};
+
+/** Browser registers a toggle item; ChatDock owns the actual clip presentation. */
+const BrowserDockItem: React.FC<BrowserDockItemProps> = ({ available, enabled, open, tabCount, onToggle }) => {
+  const { t } = useTranslation();
+  const item = useMemo<ChatDockItem>(
+    () => ({
+      id: 'browser',
+      label: t('workspace.watchTitle'),
+      icon: <Compass theme='outline' size={14} />,
+      mode: 'toggle',
+      order: 30,
+      visible: available && enabled && tabCount > 0,
+      active: open,
+      badge: tabCount,
+      onActivate: onToggle,
+      testId: 'browser-watch-clip',
+    }),
+    [available, enabled, onToggle, open, t, tabCount]
+  );
+  useChatDockItem(item);
+  return null;
+};
+
 const ConversationWatchOverlay: React.FC<ConversationWatchOverlayProps> = ({ conversationId }) => {
   const sup = useSuperMode(conversationId);
   const [open, setOpen] = useState(false);
-
+  const [tabCount, setTabCount] = useState(0);
   const autoOpenedRef = useRef(false);
   const openRef = useRef(false);
   const superEnabledRef = useRef(sup.enabled);
+
   useEffect(() => {
     superEnabledRef.current = sup.enabled;
   }, [sup.enabled]);
@@ -89,16 +93,14 @@ const ConversationWatchOverlay: React.FC<ConversationWatchOverlayProps> = ({ con
     openRef.current = open;
   }, [open]);
 
-  // Broadcast open state so the header Watch button can reflect it.
   useEffect(() => {
     if (conversationId) emitter.emit('super.watch.state', conversationId, open);
   }, [conversationId, open]);
 
-  // Header button → toggle; header switch-off → explicit set.
   useAddEventListener(
     'super.watch.toggle',
     (id: string) => {
-      if (id === conversationId) setOpen((v) => !v);
+      if (id === conversationId) setOpen((value) => !value);
     },
     [conversationId]
   );
@@ -110,32 +112,41 @@ const ConversationWatchOverlay: React.FC<ConversationWatchOverlayProps> = ({ con
     [conversationId]
   );
 
-  // Close + reset when Super turns off or the conversation changes.
   useEffect(() => {
     if (!sup.enabled) {
       setOpen(false);
+      setTabCount(0);
       autoOpenedRef.current = false;
     }
   }, [sup.enabled]);
   useEffect(() => {
     setOpen(false);
+    setTabCount(0);
     autoOpenedRef.current = false;
   }, [conversationId]);
 
-  // Auto-open the first time the agent opens a tab.
   const handleTabCount = useCallback((count: number): void => {
+    setTabCount(count);
     if (superEnabledRef.current && count > 0 && !openRef.current && !autoOpenedRef.current) {
       autoOpenedRef.current = true;
       setOpen(true);
     }
     if (count === 0) autoOpenedRef.current = false;
   }, []);
+  const toggleBrowser = useCallback(() => setOpen((value) => !value), []);
 
   if (!isElectronDesktop() || !conversationId) return null;
 
   return (
-    <>
+    <ChatDockHost>
       <AgentMeshInlineCard conversationId={conversationId} />
+      <BrowserDockItem
+        available={sup.available}
+        enabled={sup.enabled}
+        open={open}
+        tabCount={tabCount}
+        onToggle={toggleBrowser}
+      />
       {sup.available ? (
         <>
           <LiveBrowserWatch
@@ -143,11 +154,10 @@ const ConversationWatchOverlay: React.FC<ConversationWatchOverlayProps> = ({ con
             onClose={() => setOpen(false)}
             onTabCountChange={handleTabCount}
           />
-          {/* While closed but Super on, watch for the agent's first tab to auto-open. */}
-          {sup.enabled && !open && <TabPoller onCount={handleTabCount} />}
+          {sup.enabled && !open ? <TabPoller onCount={handleTabCount} /> : null}
         </>
       ) : null}
-    </>
+    </ChatDockHost>
   );
 };
 

@@ -48,19 +48,20 @@ beforeEach(() => {
 });
 afterEach(() => cleanup());
 
-const renderDashboard = (onOpenFile = vi.fn(), onMakeVideo = vi.fn()) => {
+const renderDashboard = (onOpenFile = vi.fn(), onMakeVideo = vi.fn(), onOpenViu = vi.fn()) => {
   render(
     <ConfigProvider>
       <StudioDashboard
         onOpenFile={onOpenFile}
         onOpenIde={vi.fn()}
+        onOpenViu={onOpenViu}
         onJoinSession={vi.fn()}
         onAutomation={vi.fn()}
         onMakeVideo={onMakeVideo}
       />
     </ConfigProvider>
   );
-  return { onOpenFile, onMakeVideo };
+  return { onOpenFile, onMakeVideo, onOpenViu };
 };
 
 describe('StudioDashboard', () => {
@@ -80,6 +81,12 @@ describe('StudioDashboard', () => {
     const { onMakeVideo } = renderDashboard();
     fireEvent.click(screen.getByText('studio.makeVideo'));
     expect(onMakeVideo).toHaveBeenCalled();
+  });
+
+  it('opens Viu from the Studio dashboard', () => {
+    const { onOpenViu } = renderDashboard();
+    fireEvent.click(screen.getByText('ide.viu.open'));
+    expect(onOpenViu).toHaveBeenCalledOnce();
   });
 
   it('shows an opened file in the recent list and reopens it on click', async () => {

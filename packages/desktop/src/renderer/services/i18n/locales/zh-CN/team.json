@@ -56,5 +56,130 @@
       "interview": "策划一场深度访谈",
       "expert_review": "多位专家会诊同一个问题"
     }
+  },
+  "workspace": {
+    "nav": {
+      "activity": "Activity",
+      "tasks": "Tasks",
+      "communication": "Communication",
+      "caption": "Team workspace"
+    },
+    "tasks": {
+      "title": "Team tasks",
+      "subtitle": "Organize personal work, nested group objectives, and task-bound AI conversations.",
+      "newGroup": "New group",
+      "editGroup": "Edit group",
+      "newTask": "New task",
+      "editTask": "Edit task",
+      "groupsTitle": "Groups and responsibility layers",
+      "groupsEmpty": "Create a group when this workspace needs objectives beyond direct person-to-person tasks.",
+      "groupMeta": "{{members}} member(s) · {{tasks}} task(s)",
+      "confirmDeleteGroup": "Delete this group? Child groups and assigned tasks must be moved first.",
+      "confirmDeleteTask": "Delete this task and all of its child tasks?",
+      "currentUser": "You",
+      "childTask": "Child task",
+      "visibleCount": "{{count}} visible task(s)",
+      "empty": "No tasks match this view.",
+      "filters": {
+        "mine": "My tasks",
+        "group": "Group tasks",
+        "all": "All tasks"
+      },
+      "scope": {
+        "personal": "Personal",
+        "group": "Group"
+      },
+      "status": {
+        "draft": "Draft",
+        "ready": "Ready",
+        "running": "Running",
+        "blocked": "Blocked",
+        "review": "Review",
+        "needsChanges": "Needs changes",
+        "done": "Done",
+        "cancelled": "Cancelled"
+      },
+      "priority": {
+        "low": "Low",
+        "medium": "Medium",
+        "high": "High",
+        "critical": "Critical"
+      },
+      "role": {
+        "planner": "Planner",
+        "executor": "Executor",
+        "reviewer": "Reviewer",
+        "tester": "Tester",
+        "advisor": "Advisor"
+      },
+      "summary": {
+        "total": "Total tasks",
+        "running": "Running",
+        "review": "In review",
+        "bound": "AI bindings"
+      },
+      "validation": {
+        "title": "Enter a task title.",
+        "group": "Select a group for a group task.",
+        "groupName": "Enter a group name.",
+        "agent": "Select an AI agent."
+      },
+      "meta": {
+        "owner": "Owner",
+        "assignee": "Assignee",
+        "group": "Group",
+        "criteria": "Criteria"
+      },
+      "acceptanceCriteria": "Acceptance criteria",
+      "fields": {
+        "title": "Title",
+        "description": "Description",
+        "scope": "Task layer",
+        "group": "Group",
+        "parentTask": "Parent task",
+        "assignee": "Assignee",
+        "status": "Status",
+        "priority": "Priority",
+        "sharedWith": "Share with",
+        "acceptance": "Acceptance criteria",
+        "acceptancePlaceholder": "One criterion per line",
+        "context": "Repository context hints",
+        "contextPlaceholder": "Files, folders, symbols, modules, or technical domains — one per line",
+        "groupName": "Group name",
+        "parentGroup": "Parent group",
+        "members": "Members"
+      },
+      "pin": {
+        "title": "Pin task to AI chat",
+        "action": "Pin to AI",
+        "description": "The selected AI chat will display this task label and receive task-specific goals, acceptance criteria, hierarchy, and repository context hints on every turn.",
+        "agent": "AI agent",
+        "role": "Agent role",
+        "replacesPrimary": "Pinning replaces that agent's current primary task context.",
+        "success": "Task pinned to AI chat",
+        "removed": "Task unpinned from AI chat",
+        "boundAgents": "Bound AI chats"
+      }
+    },
+    "activity": {
+      "title": "Team activity",
+      "subtitle": "See what agents are doing, which tasks guide them, and how group work is progressing.",
+      "liveAgents": "Live agents",
+      "progress": "Task progress",
+      "boundTask": "Pinned task",
+      "noBoundTask": "No task pinned to this AI chat.",
+      "completedCount": "{{completed}} of {{total}} tasks complete",
+      "bindingCount": "{{count}} task-to-AI binding(s)",
+      "recentTasks": "Recent task activity",
+      "empty": "Task activity will appear here after the first task is created.",
+      "unassigned": "No AI chat assigned",
+      "agentStatus": {
+        "pending": "Pending",
+        "idle": "Idle",
+        "active": "Active",
+        "completed": "Completed",
+        "failed": "Failed"
+      }
+    }
   }
 }

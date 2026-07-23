@@ -158,6 +158,45 @@ describe('RemoteCoreAdapter', () => {
     expect(permissionBodies).toEqual([{ approved: true }]);
   });
 
+  it('uses a fresh provider session id for each run and sends only the current prompt', async () => {
+    const runBodies: Array<Record<string, unknown>> = [];
+    const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.endsWith('/v1/handshake')) return json(handshake);
+      if (url.endsWith('/v1/runs') && init?.method === 'POST') {
+        runBodies.push(JSON.parse(String(init.body)) as Record<string, unknown>);
+        const runId = `run-stateless-${runBodies.length}`;
+        return json({ runId, streamUrl: 'wss://gateway.test/stream', streamTicket: 'ticket' });
+      }
+      return json({ error: 'unexpected' }, { status: 404 });
+    });
+    const sockets = [new FakeSocket(), new FakeSocket()];
+    const socketFactory = vi.fn(() => {
+      const index = socketFactory.mock.calls.length - 1;
+      const socket = sockets[index];
+      queueMicrotask(() => {
+        socket.emit('open');
+        socket.frame({
+          type: 'hello',
+          protocolVersion: 1,
+          runId: `run-stateless-${index + 1}`,
+          sequence: 0,
+        });
+        socket.frame({ type: 'completed', sequence: 1 });
+      });
+      return socket;
+    });
+    const adapter = new RemoteCoreAdapter(resolver, credentials, { fetchImpl, socketFactory });
+
+    await adapter.run(makeInput({ prompt: 'SECRET_PRIOR_PROMPT' }));
+    await adapter.run(makeInput({ prompt: 'CURRENT_PROMPT_ONLY' }));
+
+    expect(runBodies.map((body) => body.prompt)).toEqual(['SECRET_PRIOR_PROMPT', 'CURRENT_PROMPT_ONLY']);
+    expect(runBodies[0].sessionId).not.toBe('session-1');
+    expect(runBodies[1].sessionId).not.toBe('session-1');
+    expect(runBodies[1].sessionId).not.toBe(runBodies[0].sessionId);
+    expect(JSON.stringify(runBodies[1])).not.toContain('SECRET_PRIOR_PROMPT');
+  });
+
   it('resumes from the last contiguous sequence after a transport disconnect', async () => {
     let resumeAfter: unknown;
     const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {

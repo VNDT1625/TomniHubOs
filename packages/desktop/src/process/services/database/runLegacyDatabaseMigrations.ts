@@ -19,6 +19,13 @@ import {
 const DEFAULT_USER_ID = 'system_default_user';
 const DEFAULT_PASSWORD_PLACEHOLDER = '';
 
+/**
+ * The Rust backend writes to aionui-backend.db. Before that backend existed,
+ * Electron owned aionui.db. These names are compatibility identifiers and must
+ * not be renamed as part of product branding.
+ */
+export const LEGACY_DATABASE_FILENAMES = ['aionui-backend.db', 'aionui.db'] as const;
+
 export type LegacyDatabaseMigrationResult = {
   dbPath: string;
   fromVersion: number | null;
@@ -27,8 +34,22 @@ export type LegacyDatabaseMigrationResult = {
   skipped: boolean;
 };
 
+/**
+ * Discover history catalogs in priority order. The direct data directory is
+ * the production layout. The nested aionui directory covers older launchers
+ * that passed the Electron userData root instead of getDataPath().
+ */
+export function discoverLegacyDatabasePaths(dataDir = getDataPath()): string[] {
+  const directories = [path.resolve(dataDir), path.resolve(dataDir, 'aionui')];
+  const candidates = LEGACY_DATABASE_FILENAMES.flatMap((filename) =>
+    directories.map((directory) => path.join(directory, filename))
+  );
+  return [...new Set(candidates)].filter((candidate) => existsSync(candidate));
+}
+
+/** Resolve the authoritative catalog, falling back to the Electron filename. */
 export function resolveLegacyDatabasePath(dataDir = getDataPath()): string {
-  return path.join(dataDir, 'aionui.db');
+  return discoverLegacyDatabasePaths(dataDir)[0] ?? path.join(dataDir, 'aionui.db');
 }
 
 function ensureSystemUser(db: ISqliteDriver): void {
@@ -40,9 +61,9 @@ function ensureSystemUser(db: ISqliteDriver): void {
 }
 
 /**
- * Upgrade legacy Electron-managed SQLite catalogs to the v26 baseline before
- * the backend starts. The driver is opened only for the duration of this
- * one-shot migration pass and is always closed before returning.
+ * Upgrade an existing compatible SQLite catalog to the v26 baseline before
+ * a backend that needs that baseline starts. The chosen path is never copied
+ * over another database and the driver is always closed.
  */
 export async function runLegacyDatabaseMigrations(
   dbPath = resolveLegacyDatabasePath()

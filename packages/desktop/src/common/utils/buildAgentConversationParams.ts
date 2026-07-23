@@ -39,10 +39,14 @@ export function resolveAgentBackendKey(agent: { agent_type: string; agent_source
   return agent.backend || agent.agent_type;
 }
 
+/** Built-in Tomni identifiers retained for old conversations and configurations. */
+export const isTomniAgentBackend = (backend: string | undefined): boolean =>
+  backend === 'aionrs' || backend === 'tomny' || backend === 'tomni';
+
 export function getConversationTypeForBackend(backend: string): ICreateConversationParams['type'] {
+  if (isTomniAgentBackend(backend)) return 'aionrs';
+
   switch (backend) {
-    case 'aionrs':
-      return 'aionrs';
     case 'openclaw-gateway':
     case 'openclaw':
       return 'openclaw-gateway';

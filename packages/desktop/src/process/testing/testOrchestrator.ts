@@ -36,6 +36,9 @@ export type LeaseCoordinator = {
 /** Persists a generated report; returns the written path. */
 export type ReportWriter = (sessionId: string, report: BuiltReport) => Promise<string>;
 
+/** Copies a user-selected image into a session-owned report artifact directory. */
+export type ReportImageImporter = (sessionId: string, sourcePath: string) => Promise<string>;
+
 /** Options for {@link createTestOrchestrator}. */
 export type TestOrchestratorDeps = {
   /** Allocates isolated virtual displays (never the real desktop). */
@@ -52,6 +55,8 @@ export type TestOrchestratorDeps = {
   coordinator: LeaseCoordinator;
   /** Persists the markdown report; returns its path. */
   writeReport: ReportWriter;
+  /** Imports an external image so a report can safely reference a durable artifact. */
+  importReportImage?: ReportImageImporter;
   /**
    * Optional launcher that boots the web app under test (e.g. `npm run dev`)
    * before a scenario with `scenario.app` runs, and stops it afterwards. When
@@ -82,6 +87,8 @@ export type ITestOrchestrator = {
   getSession(id: string): TestSession | undefined;
   /** All sessions, oldest first. */
   listSessions(): TestSession[];
+  /** Attach an image artifact to one finished step and regenerate the report. */
+  addReportImage?(sessionId: string, stepId: string, sourcePath: string): Promise<TestSession>;
 };
 
 /** Map a platform to the heavy-task lease kind it consumes (criterion 2.7). */
@@ -207,5 +214,29 @@ export const createTestOrchestrator = (deps: TestOrchestratorDeps): ITestOrchest
 
   const listSessions: ITestOrchestrator['listSessions'] = () => [...sessions.values()].map((s) => ({ ...s }));
 
-  return { run, getSession, listSessions };
+  const addReportImage: NonNullable<ITestOrchestrator['addReportImage']> = async (sessionId, stepId, sourcePath) => {
+    const session = sessions.get(sessionId);
+    if (!session) throw new Error(`No test session with id: ${sessionId}`);
+    if (session.status === 'queued' || session.status === 'running') {
+      throw new Error('Images can only be added after the test session has finished.');
+    }
+    if (!deps.importReportImage) throw new Error('Report image importing is unavailable in this runtime.');
+
+    const resultIndex = session.results.findIndex((result) => result.step.id === stepId);
+    if (resultIndex < 0) throw new Error(`No test step with id: ${stepId}`);
+
+    const importedPath = await deps.importReportImage(session.id, sourcePath);
+    const results = session.results.map((result, index) =>
+      index === resultIndex && !result.screenshots.includes(importedPath)
+        ? { ...result, screenshots: [...result.screenshots, importedPath] }
+        : result
+    );
+    transition(session, { results });
+
+    const reportPath = await deps.writeReport(session.id, buildReport(session));
+    transition(session, { reportPath });
+    return { ...session };
+  };
+
+  return { run, getSession, listSessions, addReportImage };
 };

@@ -29,6 +29,8 @@
  * Renderer-only. No Node.js APIs.
  */
 
+import type { EditorToolCapabilities, EditorToolDocKind } from '@process/editor/editorToolsBridge';
+
 /** The subset of the ONLYOFFICE connector object we use. */
 export type OnlyOfficeConnector = {
   /** Run an Office JS API command inside the editor; callback gets the return. */
@@ -45,13 +47,34 @@ export type OfficeDocKind = 'word' | 'cell' | 'slide';
 /** A live connector handle plus the document kind it edits. */
 type ConnectorEntry = { connector: OnlyOfficeConnector; kind: OfficeDocKind };
 
+/** Capability state registered even when `createConnector()` is unavailable. */
+type CapabilityEntry = {
+  kind: EditorToolDocKind | null;
+  editorReady: boolean;
+  automationApi: EditorToolCapabilities['automationApi'];
+};
+
 const registry = new Map<string, ConnectorEntry>();
+const capabilityRegistry = new Map<string, CapabilityEntry>();
 const waiters = new Map<string, Array<(entry: ConnectorEntry) => void>>();
 
+/** Register a live-editor capability state, including a fail-closed no-connector state. */
+export const registerOfficeCapabilityState = (
+  filePath: string,
+  kind: EditorToolDocKind | null,
+  automationApi: EditorToolCapabilities['automationApi']
+): void => {
+  capabilityRegistry.set(filePath, { kind, editorReady: true, automationApi });
+};
 /** Register a live connector for `filePath` (called by the editor when ready). */
+
 export const registerConnector = (filePath: string, connector: OnlyOfficeConnector, kind: OfficeDocKind): void => {
   const entry = { connector, kind };
   registry.set(filePath, entry);
+  registerOfficeCapabilityState(filePath, kind, {
+    supported: true,
+    reason: 'A live ONLYOFFICE Automation API connector is registered.',
+  });
   const pending = waiters.get(filePath);
   if (pending) {
     waiters.delete(filePath);
@@ -62,6 +85,7 @@ export const registerConnector = (filePath: string, connector: OnlyOfficeConnect
 /** Remove a connector (called by the editor on unmount). */
 export const unregisterConnector = (filePath: string): void => {
   registry.delete(filePath);
+  capabilityRegistry.delete(filePath);
 };
 
 /** Whether a live connector exists for `filePath`. */
@@ -73,19 +97,74 @@ export const connectorKind = (filePath: string): OfficeDocKind | null => registr
 /** Normalise a path for tolerant matching: forward slashes, no trailing slash, lower-case. */
 const normalizePath = (p: string): string => p.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
 
+/** Resolve an entry key with the same tolerant path rules as the connector registry. */
+const resolveRegistryPath = <T>(entries: Map<string, T>, filePath: string): string | null => {
+  if (entries.has(filePath)) return filePath;
+  const keys = [...entries.keys()];
+  if (keys.length === 0) return null;
+
+  const target = normalizePath(filePath);
+  const exact = keys.find((key) => normalizePath(key) === target);
+  if (exact) return exact;
+
+  const base = target.slice(target.lastIndexOf('/') + 1);
+  if (base.length > 0) {
+    const byBase = keys.filter((key) => {
+      const normalizedKey = normalizePath(key);
+      return normalizedKey === base || normalizedKey.endsWith('/' + base);
+    });
+    if (byBase.length === 1) return byBase[0];
+  }
+
+  return keys.length === 1 ? keys[0] : null;
+};
+
 /**
- * Resolve the REGISTERED connector path that best matches `filePath`, tolerating
- * the mismatches that break a naive `registry.has()` check:
- *  1. exact key match;
- *  2. separator/case-insensitive match (Windows `\` vs `/`, drive-letter case);
- *  3. basename match (the agent passed a different directory but the same file),
- *     only when it is unambiguous;
- *  4. single-open-editor fallback (only one Office doc is open, so any path the
- *     agent passes must mean that one) — mirrors how the browser-control server
- *     falls back to the single open tab.
+ * Return a synchronous, fail-closed capability snapshot.
  *
- * Returns the registered key to use with the tool functions, or null when no
- * live connector can be matched.
+ * This never waits for a connector. An open editor whose Document Server lacks
+ * `createConnector()` therefore reports a concrete unsupported state instead
+ * of hanging or pretending an operation completed.
+ */
+export const getOfficeCapabilities = (filePath: string): EditorToolCapabilities => {
+  const resolved = resolveRegistryPath(capabilityRegistry, filePath);
+  const entry = resolved ? capabilityRegistry.get(resolved) : undefined;
+  const automationApi =
+    entry?.automationApi ??
+    ({
+      supported: false,
+      reason: 'No ready Office editor capability state is registered for this file.',
+    } satisfies EditorToolCapabilities['automationApi']);
+  const kind = entry?.kind ?? null;
+
+  return {
+    filePath,
+    kind,
+    editorReady: entry?.editorReady ?? false,
+    automationApi,
+    objectAnimation: {
+      supported: kind === 'slide' && automationApi.supported,
+      reason:
+        kind !== 'slide'
+          ? 'Object animation is available only for presentation documents.'
+          : automationApi.supported
+            ? 'Typed object-animation apply/review tools are registered. Each operation runtime-checks the ONLYOFFICE timeline APIs before mutating the deck.'
+            : 'Object animation requires the unavailable ONLYOFFICE Automation API connector.',
+    },
+    slideShowControl: {
+      supported: false,
+      reason: 'No end-to-end slide-show playback control adapter is registered in the app.',
+    },
+    recording: {
+      supported: false,
+      reason: 'No Office slide-show recording and agent playback-review pipeline is registered in the app.',
+    },
+  };
+};
+
+/**
+ * Resolve the registered connector path with exact, normalized, unambiguous
+ * basename, then single-open-editor fallback matching.
  */
 export const resolveConnectorPath = (filePath: string): string | null => {
   if (registry.has(filePath)) return filePath;

@@ -87,6 +87,31 @@
     "duration": "클립 길이",
     "supportsEndFrame": "이 모델은 시작 + 종료 프레임 보간을 지원합니다"
   },
+  "editor": {
+    "storyboard": "스토리보드",
+    "timeline": "타임라인",
+    "noPreview": "재생 헤드를 비디오 클립 위로 이동해 미리 봅니다.",
+    "inspector": "클립 검사기",
+    "selectClip": "타임라인에서 클립을 선택하세요.",
+    "trackLabel": "트랙",
+    "start": "시작(초)",
+    "duration": "길이(초)",
+    "volume": "볼륨",
+    "split": "분할",
+    "delete": "삭제",
+    "play": "재생",
+    "pause": "일시 정지",
+    "undo": "실행 취소",
+    "redo": "다시 실행",
+    "zoom": "확대/축소",
+    "save": "타임라인 저장",
+    "snapping": "스냅",
+    "ripple": "리플 편집",
+    "transitionIn": "시작 전환",
+    "transitionOut": "종료 전환",
+    "transition": { "cut": "컷", "fade": "페이드", "dissolve": "디졸브" },
+    "track": { "video": "비디오", "voice": "음성", "music": "음악", "sfx": "효과음", "subtitle": "자막" }
+  },
   "export": {
     "success": "동영상 내보내기 완료: {{path}}"
   }

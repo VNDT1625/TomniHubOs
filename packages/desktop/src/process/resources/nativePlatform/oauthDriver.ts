@@ -1,4 +1,4 @@
-﻿import { randomBytes } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import { createServer } from 'node:http';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -154,7 +154,7 @@ const callbackListener = async (): Promise<{
 export class NativeMcpOAuthService {
   constructor(
     private readonly vault: McpOAuthVault,
-    private readonly open = (url: string): Promise<void> => shell.openExternal(url).then(() => undefined),
+    private readonly open = (url: string): Promise<void> => shell.openExternal(url).then((): void => undefined),
     private readonly timeoutMs = 180_000
   ) {}
   async status(serverUrl: string): Promise<{ authenticated: boolean }> {

@@ -35,9 +35,9 @@ import {
 } from './onlyOfficeClient';
 import {
   registerConnector,
+  registerOfficeCapabilityState,
   unregisterConnector,
   type OnlyOfficeConnector,
-  type OfficeDocKind,
 } from './onlyOfficeConnector';
 
 /** Minimal typing for the global `DocsAPI` the Document Server's api.js installs. */
@@ -106,6 +106,53 @@ const loadDocsApi = (documentServerUrl: string): Promise<DocsApiGlobal> =>
   });
 
 let editorSeq = 0;
+
+/** Register either a live Automation connector or an explicit unsupported state. */
+const registerAutomationCapability = (
+  filePath: string,
+  documentType: 'word' | 'cell' | 'slide' | 'pdf',
+  instance: DocEditorInstance | null
+): void => {
+  if (documentType === 'pdf') {
+    registerOfficeCapabilityState(filePath, null, {
+      supported: false,
+      reason: 'The ONLYOFFICE PDF editor does not expose the document Automation API used by agent tools.',
+    });
+    return;
+  }
+
+  if (typeof instance?.createConnector !== 'function') {
+    registerOfficeCapabilityState(filePath, documentType, {
+      supported: false,
+      reason: 'This Document Server build does not expose createConnector().',
+    });
+    return;
+  }
+
+  try {
+    const connector = instance.createConnector();
+    if (connector) {
+      registerConnector(filePath, connector, documentType);
+      console.log('[OnlyOfficeEditor] AI connector registered — agent tools enabled.', {
+        filePath,
+        documentType,
+      });
+      return;
+    }
+
+    registerOfficeCapabilityState(filePath, documentType, {
+      supported: false,
+      reason: 'createConnector() returned no connector for the ready Office editor.',
+    });
+  } catch (cause) {
+    const message = cause instanceof Error ? cause.message : String(cause);
+    registerOfficeCapabilityState(filePath, documentType, {
+      supported: false,
+      reason: `createConnector() failed: ${message}`,
+    });
+    console.error('[OnlyOfficeEditor] createConnector() threw — AI agent tools unavailable.', cause);
+  }
+};
 
 /** Props for {@link OnlyOfficeEditor}. */
 export type OnlyOfficeEditorProps = {
@@ -198,6 +245,9 @@ const OnlyOfficeEditor: React.FC<OnlyOfficeEditorProps> = ({ filePath, joinData,
             customization: { autosave: true, forcesave: true, compactToolbar: false },
           },
           events: {
+            onDocumentReady: () => {
+              registerAutomationCapability(filePath, joinData.documentType, editorRef.current);
+            },
             onError: (event: { data?: unknown }) => {
               if (alive) fail(describeEditorError(event?.data));
             },
@@ -268,31 +318,7 @@ const OnlyOfficeEditor: React.FC<OnlyOfficeEditorProps> = ({ filePath, joinData,
         },
         events: {
           onDocumentReady: () => {
-            // Open an Automation API connector so the Studio AI agent can drive
-            // this live editor with fast, local tool calls (read/replace/insert).
-            // The PDF editor has no document-text Automation API, so skip it.
-            if (documentType === 'pdf') return;
-            try {
-              const instance = editorRef.current;
-              const connector = instance?.createConnector?.();
-              if (connector) {
-                registerConnector(filePath, connector as OnlyOfficeConnector, documentType as OfficeDocKind);
-                console.log('[OnlyOfficeEditor] AI connector registered — agent tools enabled.', {
-                  filePath,
-                  documentType,
-                });
-              } else {
-                // No connector: the running Document Server build does not expose
-                // the Automation API (`createConnector`). The agent's live tools
-                // won't work; the panel falls back to chat mode.
-                console.warn(
-                  '[OnlyOfficeEditor] createConnector() returned nothing — this Document Server build does not expose the Automation API, so AI agent tools are unavailable (chat-only).',
-                  { filePath, documentType, hasCreateConnector: typeof instance?.createConnector }
-                );
-              }
-            } catch (cause) {
-              console.error('[OnlyOfficeEditor] createConnector() threw — AI agent tools unavailable.', cause);
-            }
+            registerAutomationCapability(filePath, documentType, editorRef.current);
           },
           onError: (event: { data?: unknown }) => {
             if (alive) fail(describeEditorError(event?.data));

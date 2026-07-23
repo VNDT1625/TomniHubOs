@@ -22,6 +22,12 @@
  */
 export type RouterProtocol = 'openai' | 'anthropic' | 'gemini';
 
+/** Stable identity for the gateway provider managed internally by Tomni. */
+export const TOMNI_GATEWAY_PROVIDER_ID = 'tomni-model-gateway';
+
+/** Dedicated gateway client used by Tomni itself (never shared with external CLIs). */
+export const TOMNI_GATEWAY_APP_CLIENT_NAME = 'Tomni · App';
+
 /**
  * How a target consumes its configuration. Drives what kind of plan AionUi can
  * produce automatically vs. what must be shown as manual instructions.
@@ -31,6 +37,11 @@ export type ConnectorMechanism =
   | 'configFile' // write/merge a JSON (or JSON-like) config file on disk
   | 'manual'; // GUI-only: render copy-paste fields for the user
 
+export const ROUTER9_REASONING_EFFORTS = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
+
+/** Request-level reasoning intensity understood and translated by the managed gateway. */
+export type Router9ReasoningEffort = (typeof ROUTER9_REASONING_EFFORTS)[number];
+
 /** Connection coordinates for a running 9Router instance. */
 export type Router9Endpoint = {
   /** Full OpenAI-compatible base, e.g. `http://127.0.0.1:20128/v1`. */
@@ -39,6 +50,9 @@ export type Router9Endpoint = {
   apiKey: string;
   /** Model id (or combo name) to default the target to, e.g. `kr/claude-sonnet-4.5`. */
   model?: string;
+
+  /** Optional request-level reasoning intensity; omitted means the target/model default. */
+  reasoningEffort?: Router9ReasoningEffort;
 };
 
 /**
@@ -82,6 +96,11 @@ export type ConnectorTarget = {
   mechanism: ConnectorMechanism;
   /** i18n key for a short description of how the connection works. */
   descriptionKey: string;
+  /**
+   * Agent key used by Tomni's main chat preference store. Omitted for tools
+   * that are external-only and do not have a matching chat surface.
+   */
+  agentPreferenceKey?: string;
   /**
    * Whether the target needs the `/v1` suffix on the base URL. Anthropic-style
    * tools often want the bare origin; OpenAI-style tools want `/v1`.

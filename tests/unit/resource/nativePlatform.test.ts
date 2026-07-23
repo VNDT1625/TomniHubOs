@@ -1,9 +1,9 @@
-﻿import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import JSZip from 'jszip';
 import { afterEach, describe, expect, it } from 'vitest';
-import { NativeZipService } from '@process/resources/nativePlatform/fileOperations';
+import { resolveWatchEventPath, NativeZipService } from '@process/resources/nativePlatform/fileOperations';
 import { NativeMcpConfigScanner } from '@process/resources/nativePlatform/mcpDrivers';
 import { NativeSkillCatalog } from '@process/resources/nativePlatform/skillCatalog';
 import { NativeSnapshotService } from '@process/resources/nativePlatform/snapshotService';
@@ -42,6 +42,18 @@ describe('native ZIP service', () => {
       service.create({ path: path.join(root, 'bad.zip'), files: [{ name: '../secret.txt', content: 'x' }] })
     ).rejects.toThrow('Unsafe archive entry');
     expect(service.cancel('missing')).toBe(false);
+  });
+});
+
+describe('native file watch service', () => {
+  it('reports the watched file path instead of treating the file as a directory', () => {
+    const file = path.resolve('workspace', 'note.txt');
+    expect(resolveWatchEventPath(file, false, 'note.txt')).toBe(file);
+  });
+
+  it('resolves child paths for watched directories', () => {
+    const directory = path.resolve('workspace');
+    expect(resolveWatchEventPath(directory, true, 'note.txt')).toBe(path.join(directory, 'note.txt'));
   });
 });
 
@@ -87,6 +99,25 @@ describe('native skill catalog', () => {
     const root = await tempDir();
     const catalog = new NativeSkillCatalog(path.join(root, 'user'), [], path.join(root, 'out'));
     await expect(catalog.scan(path.join(root, 'missing'))).resolves.toEqual([]);
+  });
+  it('reads skill instructions and blocks resources outside the skill directory', async () => {
+    const root = await tempDir();
+    const builtin = path.join(root, 'builtin');
+    const skill = path.join(builtin, 'writer');
+    await mkdir(skill, { recursive: true });
+    await writeFile(
+      path.join(skill, 'SKILL.md'),
+      '---\nname: writer\ndescription: Writes reports\n---\nFollow the workflow.'
+    );
+    await writeFile(path.join(root, 'secret.txt'), 'hidden');
+    const catalog = new NativeSkillCatalog(path.join(root, 'user'), [builtin], path.join(root, 'out'));
+
+    await expect(catalog.read('writer')).resolves.toMatchObject({
+      name: 'writer',
+      resource: 'SKILL.md',
+      content: expect.stringContaining('Follow the workflow'),
+    });
+    await expect(catalog.read('writer', '../../secret.txt')).rejects.toThrow('escapes the skill directory');
   });
 });
 

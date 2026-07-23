@@ -69,6 +69,8 @@ const DIRECT_WRITE_PATTERNS: RegExp[] = [
 const IGNORED_POLICY_PATHS = [
   '.git/',
   '.mtui/',
+  '.tomny/sessions/',
+  '.tomni/understand/',
   '.omni/understand/',
   '.aionui/understand/',
   'node_modules/',
@@ -177,22 +179,30 @@ export const detectMtuiViolations = (
 
 export const MTUI_POLICY_OPERATION_LIMIT = 10_000;
 
-export const checkMtuiPolicy = async (rootPath: string, changedPaths: readonly string[]): Promise<MtuiPolicyCheck> => {
-  const status = await runMtuiInRoot(
+/** Workspaces baselined at the start of this Electron-main process. */
+const initializedPolicyRoots = new Set<string>();
+
+const initializePolicySession = async (rootPath: string): Promise<void> => {
+  if (initializedPolicyRoots.has(rootPath)) return;
+  const result = await runMtuiInRoot(
     [
       '--json',
       'policy',
-      'status',
-      '--limit',
-      String(MTUI_POLICY_OPERATION_LIMIT),
-      '--violation-limit',
-      '25',
-      '--auto-session',
+      'session-start',
       '--owner',
       'app',
       '--note',
-      'Auto baseline for pre-existing dirty files at chat send.',
+      'Baseline user-owned changes before the first agent send in this app session.',
     ],
+    rootPath
+  ).catch((): null => null);
+  if (result?.ok) initializedPolicyRoots.add(rootPath);
+};
+
+export const checkMtuiPolicy = async (rootPath: string, changedPaths: readonly string[]): Promise<MtuiPolicyCheck> => {
+  await initializePolicySession(rootPath);
+  const status = await runMtuiInRoot(
+    ['--json', 'policy', 'status', '--limit', String(MTUI_POLICY_OPERATION_LIMIT), '--violation-limit', '25'],
     rootPath
   ).catch((): null => null);
   if (status?.ok) {
@@ -203,17 +213,23 @@ export const checkMtuiPolicy = async (rootPath: string, changedPaths: readonly s
             typeof item === 'object' &&
             item !== null &&
             typeof (item as MtuiPolicyViolation).path === 'string' &&
-            typeof (item as MtuiPolicyViolation).reason === 'string'
+            typeof (item as MtuiPolicyViolation).reason === 'string' &&
+            !isIgnoredPolicyPath((item as MtuiPolicyViolation).path)
         )
       : [];
+    const onlyIgnoredViolations =
+      response.violations_truncated !== true &&
+      Array.isArray(response.violations) &&
+      response.violations.length > 0 &&
+      violations.length === 0;
     return {
       strict: response.strict !== false,
-      clean: response.clean === true,
+      clean: response.clean === true || onlyIgnoredViolations,
       changedCount: response.changed_count ?? changedPaths.length,
       baselineCount: response.baseline_count ?? 0,
       sessionBaselineCount: response.session_baseline_count ?? 0,
       autoSessionCreated: response.auto_session_created === true,
-      violationCount: response.violation_count ?? violations.length,
+      violationCount: onlyIgnoredViolations ? 0 : (response.violation_count ?? violations.length),
       violationsTruncated: response.violations_truncated === true,
       violations,
     };

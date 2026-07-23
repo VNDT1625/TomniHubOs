@@ -145,9 +145,9 @@ describe('spec lifecycle bridge helpers', () => {
 
   it('updates backend task status and records verification', async () => {
     const initial = await initSpecDirectory(rootPath, 'Update Task');
-    await mkdir(join(rootPath, '.omni', 'understand'), { recursive: true });
+    await mkdir(join(rootPath, '.tomni', 'understand'), { recursive: true });
     await writeFile(
-      join(rootPath, '.omni', 'understand', 'stale.json'),
+      join(rootPath, '.tomni', 'understand', 'stale.json'),
       JSON.stringify({ paths: ['src/a.ts', 'src/b.ts', 'src/a.ts'] }),
       'utf-8'
     );

@@ -207,6 +207,18 @@ describe('startOmniTunnel — failure paths', () => {
     expect(result).toEqual({ ok: false, reason: 'start-failed', detail: 'spawn EACCES' });
   });
 
+  it('retries a transient quick-tunnel startup failure before reporting an error', async () => {
+    mockIsAvailable.mockResolvedValue(true);
+    mockStartTunnel
+      .mockResolvedValueOnce({ ok: false, reason: 'start-failed', detail: 'Cloudflare error 1101' })
+      .mockResolvedValueOnce({ ok: true, url: 'https://retry.trycloudflare.com' });
+
+    const result = await startOmniTunnel(47821, { maxAttempts: 3, retryDelayMs: 0 });
+
+    expect(result).toEqual({ ok: true, url: 'https://retry.trycloudflare.com' });
+    expect(mockStartTunnel).toHaveBeenCalledTimes(2);
+  });
+
   it('passes through a timeout tunnel result', async () => {
     mockIsAvailable.mockResolvedValue(true);
     mockStartTunnel.mockResolvedValue({ ok: false, reason: 'timeout' });

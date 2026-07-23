@@ -32,7 +32,7 @@ type StaleMarker = {
 const readStaleMarker = async (rootPath: string): Promise<StaleMarker | null> => {
   try {
     let text: string | null = null;
-    for (const metaDir of ['.omni', '.aionui']) {
+    for (const metaDir of ['.tomni', '.omni', '.aionui']) {
       try {
         text = await fs.readFile(path.join(rootPath, metaDir, 'understand', 'stale.json'), 'utf-8');
         break;

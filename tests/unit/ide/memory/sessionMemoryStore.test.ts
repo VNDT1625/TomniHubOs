@@ -5,7 +5,7 @@
  */
 
 /**
- * Unit tests for process/ide/memory/sessionMemoryStore — the EPHEMERAL, per-IDE
+ * Unit tests for process/ide/memory/sessionMemoryStore — the per-IDE
  * session super-memory. Every collaborator is injected (summariser, clock, token
  * estimator) so the forced-compaction policy is fully deterministic: no model,
  * no real time, no disk. Covers:
@@ -17,6 +17,9 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import {
   createSessionMemoryStore,
   heuristicSummarizer,
@@ -87,16 +90,15 @@ describe('createSessionMemoryStore — forced compaction', () => {
     const third = await store.remember('s1', { text: 'three' }); // 12 > 10 → compact
 
     expect(third.compacted).toBe(true);
-    expect(fn).toHaveBeenCalledTimes(1);
-    // Only the oldest beyond keepRecent (=2) is folded → just "one".
+    expect(fn).toHaveBeenCalled();
+    // Least-salient notes are folded first; keepRecent remains a preference.
     expect(calls[0].map((i) => i.text)).toEqual(['one']);
 
     const snap = store.snapshot('s1');
     const summaries = snap.items.filter((i) => i.kind === 'summary');
-    expect(summaries).toHaveLength(1);
-    expect(summaries[0].text).toBe('SUMMARY(1)');
-    // The two most-recent notes are kept verbatim.
-    expect(snap.items.filter((i) => i.kind !== 'summary').map((i) => i.text)).toEqual(['two', 'three']);
+    expect(summaries.length).toBeGreaterThan(0);
+    expect(summaries[0].text).toMatch(/^SUMMARY\(/);
+    expect(snap.tokensUsed).toBeLessThanOrEqual(10);
   });
 
   it('never folds pinned notes', async () => {
@@ -144,7 +146,7 @@ describe('createSessionMemoryStore — secrets (session-only)', () => {
   });
 });
 
-describe('createSessionMemoryStore — ephemeral lifecycle', () => {
+describe('createSessionMemoryStore — lifecycle', () => {
   it('clearSession wipes notes + secrets (close the tab → memory gone)', async () => {
     const store = createSessionMemoryStore({ summarizer: async () => 'x' });
     await store.remember('s1', { text: 'note' });
@@ -167,6 +169,42 @@ describe('createSessionMemoryStore — ephemeral lifecycle', () => {
     expect(store.forget('s1', item.id)).toBe(true);
     expect(store.forget('s1', item.id)).toBe(false);
     expect(store.recall('s1').recent).toEqual([]);
+  });
+});
+
+describe('createSessionMemoryStore — durable Save lifecycle', () => {
+  it('restores the same session after restart, isolates other sessions, and never persists secrets', async () => {
+    const directory = mkdtempSync(path.join(os.tmpdir(), 'tomny-session-save-'));
+    const persistencePath = path.join(directory, 'memory.json');
+    try {
+      const first = createSessionMemoryStore({ summarizer: async () => 'x', persistencePath });
+      await first.remember('workspace-a/session-a', { text: 'Pinned architecture decision', pinned: true });
+      await first.remember('workspace-a/session-a', { text: 'Recent implementation fact' });
+      first.setSecret('workspace-a/session-a', 'TOKEN', 'must-never-reach-disk');
+
+      const restarted = createSessionMemoryStore({ summarizer: async () => 'x', persistencePath });
+      expect(restarted.recall('workspace-a/session-a').pinned.map((item) => item.text)).toEqual([
+        'Pinned architecture decision',
+      ]);
+      expect(restarted.recall('workspace-a/session-a').recent.map((item) => item.text)).toContain(
+        'Recent implementation fact'
+      );
+      expect(restarted.getSecret('workspace-a/session-a', 'TOKEN')).toBeUndefined();
+      expect(restarted.recall('workspace-b/session-b')).toMatchObject({ pinned: [], summaries: [], recent: [] });
+
+      const recent = restarted.recall('workspace-a/session-a').recent[0];
+      expect(restarted.forget('workspace-a/session-a', recent.id)).toBe(true);
+      const afterRemoval = createSessionMemoryStore({ summarizer: async () => 'x', persistencePath });
+      expect(afterRemoval.snapshot('workspace-a/session-a').items.map((item) => item.text)).not.toContain(
+        'Recent implementation fact'
+      );
+
+      afterRemoval.clearSession('workspace-a/session-a');
+      const afterClose = createSessionMemoryStore({ summarizer: async () => 'x', persistencePath });
+      expect(afterClose.listSessions()).not.toContain('workspace-a/session-a');
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 });
 
@@ -229,20 +267,67 @@ describe('createSessionMemoryStore — meta-summary keeps long sessions bounded'
     expect(summaries.length).toBeLessThanOrEqual(4);
     expect(snap.tokensUsed).toBeLessThanOrEqual(40);
   });
+
+  it('treats keepRecent as a preference and compacts unpinned Save to its budget', async () => {
+    const store = createSessionMemoryStore({
+      summarizer: async () => 'S',
+      policy: { tokenBudget: 30, keepRecent: 12, maxNoteTokens: 1000 },
+      estimateTokens: (text) => (text === 'S' ? 1 : 10),
+    });
+    await Promise.all(
+      Array.from({ length: 12 }, (_, index) =>
+        store.remember('s1', { text: `distinct unpinned note ${index} unique${index}` })
+      )
+    );
+
+    expect(store.snapshot('s1').tokensUsed).toBeLessThanOrEqual(30);
+  });
 });
 
 describe('createSessionMemoryStore — pinned cap (avoids budget lock)', () => {
-  it('auto-unpins the oldest pinned notes beyond the cap', async () => {
+  it('rejects writes beyond the cap without silently unpinning any item', async () => {
     const store = createSessionMemoryStore({
       summarizer: async () => 'x',
       policy: { maxPinned: 3, tokenBudget: 100000 },
     });
-    for (let i = 0; i < 5; i++)
-      await store.remember('s1', { text: `critical pinned fact number ${i} uniq${i}`, pinned: true });
+    await Promise.all(
+      Array.from({ length: 3 }, (_, index) =>
+        store.remember('s1', { text: `critical pinned fact number ${index} uniq${index}`, pinned: true })
+      )
+    );
+    await expect(store.remember('s1', { text: 'critical pinned fact number 4 uniq4', pinned: true })).rejects.toThrow(
+      'Too many pinned Save items'
+    );
 
     const snap = store.snapshot('s1');
     expect(snap.items.filter((i) => i.pinned)).toHaveLength(3);
-    expect(snap.items).toHaveLength(5); // unpinned ones are still present, just foldable now
+    expect(snap.items).toHaveLength(3);
+  });
+
+  it('rejects an oversized pinned item instead of truncating it', async () => {
+    const store = createSessionMemoryStore({
+      summarizer: async () => 'x',
+      policy: { maxNoteTokens: 2 },
+      estimateTokens: (text) => text.length,
+    });
+    await expect(store.remember('s1', { text: 'verbatim-pinned', pinned: true })).rejects.toThrow(
+      'Pinned Save item is too large'
+    );
+    expect(store.snapshot('s1').items).toEqual([]);
+  });
+
+  it('rejects aggregate pinned content beyond the Save budget', async () => {
+    const store = createSessionMemoryStore({
+      summarizer: async () => 'x',
+      policy: { tokenBudget: 10, maxNoteTokens: 10 },
+      estimateTokens: () => 5,
+    });
+    await store.remember('s1', { text: 'pin one', pinned: true });
+    await store.remember('s1', { text: 'pin two', pinned: true });
+    await expect(store.remember('s1', { text: 'pin three', pinned: true })).rejects.toThrow(
+      'Pinned Save items exceed the 10-token Save budget'
+    );
+    expect(store.snapshot('s1').items.map((item) => item.text)).toEqual(['pin one', 'pin two']);
   });
 });
 

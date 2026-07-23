@@ -21,14 +21,15 @@
  * orchestrator instance, so an agent-run session shows up in the Testing page
  * and vice-versa (single source of truth).
  *
- * Security: the server binds to `127.0.0.1` only (loopback), so it is not
- * reachable off-host. It carries no auth because it never leaves the local
- * machine and exposes only the local testing capability.
+ * Security: the server binds to `127.0.0.1` only and requires a runtime-only
+ * bearer token for both the SSE stream and JSON-RPC POSTs. The token is exposed
+ * only through the live host contract and is never written to the MCP catalog.
  *
  * Process boundary: Main-process (Node.js) module — no DOM APIs.
  */
 
 import * as http from 'node:http';
+import { randomUUID, timingSafeEqual } from 'node:crypto';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { createTestingServer } from '../resources/builtinMcp/testingServer';
@@ -47,12 +48,20 @@ export type TestingMcpHost = {
   url: string;
   /** The port the loopback server listens on. */
   port: number;
+  /** Runtime-only request headers. Values must never be persisted. */
+  headers: Array<{ name: string; value: string }>;
   /** Stop the host and close all connections. */
   close: () => Promise<void>;
 };
 
 /** Module-level singleton so repeated bootstraps reuse one host. */
 let host: TestingMcpHost | undefined;
+
+const secureEqual = (left: string, right: string): boolean => {
+  const leftBytes = Buffer.from(left);
+  const rightBytes = Buffer.from(right);
+  return leftBytes.length === rightBytes.length && timingSafeEqual(leftBytes, rightBytes);
+};
 
 /**
  * Start (once) the in-process Testing MCP host bound to the shared orchestrator.
@@ -65,23 +74,33 @@ let host: TestingMcpHost | undefined;
  * @param orchestrator The shared test orchestrator both planes drive.
  * @returns The running host (url + port + close), reused on subsequent calls.
  */
-export const startTestingMcpHost = async (orchestrator: ITestOrchestrator): Promise<TestingMcpHost> => {
-  if (host) return host;
+const createTestingMcpHost = async (orchestrator: ITestOrchestrator): Promise<TestingMcpHost> => {
+  const authorization = `Bearer ${randomUUID()}`;
 
   /** Active transports keyed by their session id, for routing POSTed messages. */
   const transports = new Map<string, SSEServerTransport>();
 
   const server = http.createServer((req, res) => {
-    void handle(req, res);
+    void handle(req, res).catch(() => {
+      console.error('[TestingMCP] Request handling failed.');
+      if (!res.headersSent) res.writeHead(500).end('Internal server error.');
+      else res.destroy();
+    });
   });
 
   const handle = async (req: http.IncomingMessage, res: http.ServerResponse): Promise<void> => {
+    if (!secureEqual(req.headers.authorization ?? '', authorization)) {
+      res.writeHead(401, { 'WWW-Authenticate': 'Bearer' }).end('Unauthorized.');
+      return;
+    }
+
     const url = new URL(req.url ?? '/', 'http://127.0.0.1');
 
     // GET /sse → open a new SSE stream + MCP server for this client.
     if (req.method === 'GET' && url.pathname === SSE_PATH) {
       const transport = new SSEServerTransport(MESSAGE_PATH, res);
       transports.set(transport.sessionId, transport);
+      // oxlint-disable-next-line unicorn/prefer-add-event-listener -- MCP SDK transport exposes onclose only.
       transport.onclose = () => {
         transports.delete(transport.sessionId);
       };
@@ -123,6 +142,7 @@ export const startTestingMcpHost = async (orchestrator: ITestOrchestrator): Prom
   host = {
     url: `http://127.0.0.1:${port}${SSE_PATH}`,
     port,
+    headers: [{ name: 'Authorization', value: authorization }],
     close: () =>
       new Promise<void>((resolve) => {
         for (const transport of transports.values()) void transport.close();
@@ -134,11 +154,25 @@ export const startTestingMcpHost = async (orchestrator: ITestOrchestrator): Prom
   return host;
 };
 
+let hostStartup: Promise<TestingMcpHost> | undefined;
+
+/** Deduplicate concurrent startup from native bootstrap and lazy Core capability resolution. */
+export const startTestingMcpHost = async (orchestrator: ITestOrchestrator): Promise<TestingMcpHost> => {
+  if (host) return host;
+  const startup = (hostStartup ??= createTestingMcpHost(orchestrator));
+  try {
+    return await startup;
+  } finally {
+    if (hostStartup === startup) hostStartup = undefined;
+  }
+};
+
 /** Return the running host, if started. */
 export const getTestingMcpHost = (): TestingMcpHost | undefined => host;
 
 /** Stop the host (deterministic teardown). */
 export const stopTestingMcpHost = async (): Promise<void> => {
+  await hostStartup?.catch((): void => undefined);
   if (!host) return;
   await host.close();
   host = undefined;

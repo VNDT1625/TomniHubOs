@@ -22,8 +22,12 @@ const AionrsTeamChat: React.FC<{
   agent_name?: string;
 }> = ({ conversation, emptySlot, agent_name }) => {
   const onSelectModel = useCallback(
-    async (_provider: IProvider, modelName: string) => {
-      const selected = { ..._provider, use_model: modelName } as TProviderWithModel;
+    async (_provider: IProvider, modelName: string, reasoningEffort?: TProviderWithModel['reasoning_effort']) => {
+      const selected = {
+        ..._provider,
+        use_model: modelName,
+        ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
+      } as TProviderWithModel;
       const ok = await ipcBridge.conversation.update.invoke({ id: conversation.id, updates: { model: selected } });
       if (ok) void saveAionrsDefaultModel(_provider.id, modelName);
       return Boolean(ok);

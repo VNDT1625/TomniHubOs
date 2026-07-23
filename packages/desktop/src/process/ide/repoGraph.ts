@@ -12,9 +12,9 @@
  *
  * {@link buildGraphFromFiles} is a PURE function: given a set of files (relative
  * path + content) it parses import/require/dynamic-import specifiers with
- * regex, resolves RELATIVE specifiers against the importer's directory, and
- * emits a deduplicated node/edge graph. Bare/package specifiers (e.g. `react`,
- * `@scope/x`) are ignored — only intra-repo edges are graphed. To keep the
+ * regex, resolves relative specifiers and the workspace's TypeScript aliases,
+ * and emits a deduplicated node/edge graph. Bare/package specifiers (e.g.
+ * `react`, `@scope/x`) are ignored — only intra-repo edges are graphed. To keep the
  * function portable and trivially testable it does NOT touch `node:path`;
  * instead it relies on the small string-based posix helpers below.
  *
@@ -63,6 +63,7 @@ const RESOLVE_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'] as con
 
 /** Directory names skipped while walking a repository. */
 const IGNORED_DIRS = new Set([
+  '.tomni',
   '\x2eomni',
   '.aionui',
   '.cache',
@@ -70,6 +71,7 @@ const IGNORED_DIRS = new Set([
   '.mtui',
   '.next',
   '.turbo',
+  '.tmp',
   '.vite',
   'build',
   'coverage',
@@ -86,15 +88,6 @@ const fsPathBasename = (input: string): string => {
   const normalized = input.replace(/\\/g, '/').replace(/\/+$/, '');
   const slash = normalized.lastIndexOf('/');
   return slash >= 0 ? normalized.slice(slash + 1) : normalized;
-};
-
-const stripRelPrefix = (relPath: string, prefix: string): string => {
-  const normalized = relPath.replace(/\\/g, '/').replace(/^\.\//, '');
-  const cleanPrefix = prefix.replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/+$/, '');
-  if (cleanPrefix.length === 0 || normalized === cleanPrefix) {
-    return normalized;
-  }
-  return normalized.startsWith(`${cleanPrefix}/`) ? normalized.slice(cleanPrefix.length + 1) : normalized;
 };
 
 const resolveDuplicateNestedRoot = async (rootPath: string, deps: CollectRepoFilesDeps): Promise<string> => {
@@ -201,6 +194,41 @@ const isCodeFile = (relPath: string): boolean => CODE_EXTENSIONS.some((ext) => r
 const isRelativeSpecifier = (specifier: string): boolean =>
   specifier.startsWith('./') || specifier.startsWith('../') || specifier === '.' || specifier === '..';
 
+type LocalAlias = {
+  prefix: string;
+  /** Possible bases when scanning the monorepo root or a nested source root. */
+  bases: string[];
+};
+
+/** Keep in sync with the workspace aliases in the root tsconfig. */
+const LOCAL_ALIASES: LocalAlias[] = [
+  {
+    prefix: '@process/',
+    bases: ['packages/desktop/src/process', 'src/process', 'process', ''],
+  },
+  {
+    prefix: '@renderer/',
+    bases: ['packages/desktop/src/renderer', 'src/renderer', 'renderer', ''],
+  },
+  {
+    prefix: '@worker/',
+    bases: ['packages/desktop/src/process/worker', 'src/process/worker', 'process/worker', 'worker', ''],
+  },
+  {
+    prefix: '@/',
+    bases: ['packages/desktop/src', 'src', ''],
+  },
+];
+
+const localAliasOf = (specifier: string): { alias: LocalAlias; remainder: string } | null => {
+  const alias = LOCAL_ALIASES.find((candidate) => specifier.startsWith(candidate.prefix));
+  if (!alias) {
+    return null;
+  }
+  const remainder = specifier.slice(alias.prefix.length).replace(/^\/+/, '');
+  return remainder.length > 0 ? { alias, remainder } : null;
+};
+
 /**
  * Reduce a bare import specifier to its package name, keeping the scope:
  * `@scope/pkg/sub` → `@scope/pkg`, `lodash/merge` → `lodash`, `node:fs` → null
@@ -208,7 +236,7 @@ const isRelativeSpecifier = (specifier: string): boolean =>
  * for relative specifiers and built-ins.
  */
 export const packageNameOf = (specifier: string): string | null => {
-  if (isRelativeSpecifier(specifier) || specifier.length === 0) {
+  if (isRelativeSpecifier(specifier) || localAliasOf(specifier) !== null || specifier.length === 0) {
     return null;
   }
   if (specifier.startsWith('node:')) {
@@ -327,6 +355,48 @@ const resolveRelative = (fromRel: string, specifier: string, known: Set<string>)
   return null;
 };
 
+/** Collect every known file that can satisfy a target stem. */
+const resolveTargetCandidates = (target: string, known: Set<string>): Set<string> => {
+  const resolved = new Set<string>();
+  if (known.has(target)) {
+    resolved.add(target);
+  }
+  for (const ext of RESOLVE_EXTENSIONS) {
+    const candidate = `${target}${ext}`;
+    if (known.has(candidate)) {
+      resolved.add(candidate);
+    }
+  }
+  for (const ext of RESOLVE_EXTENSIONS) {
+    const candidate = joinPosix(target, `index${ext}`);
+    if (known.has(candidate)) {
+      resolved.add(candidate);
+    }
+  }
+  return resolved;
+};
+
+/**
+ * Resolve a configured local alias only when exactly one known file satisfies
+ * it. A graph may be built from the monorepo root or a nested source folder, so
+ * each alias has a small set of equivalent bases. Refusing ambiguous matches is
+ * safer than inventing a dependency edge to the wrong package.
+ */
+const resolveLocalAlias = (specifier: string, known: Set<string>): string | null => {
+  const parsed = localAliasOf(specifier);
+  if (!parsed) {
+    return null;
+  }
+  const matches = new Set<string>();
+  for (const base of parsed.alias.bases) {
+    const target = joinPosix(base, parsed.remainder);
+    for (const candidate of resolveTargetCandidates(target, known)) {
+      matches.add(candidate);
+    }
+  }
+  return matches.size === 1 ? (matches.values().next().value ?? null) : null;
+};
+
 /**
  * Build a lightweight intra-repo import graph from a set of files.
  *
@@ -366,10 +436,9 @@ export const buildGraphFromFiles = (
       continue;
     }
     for (const specifier of extractSpecifiers(file.content)) {
-      if (!isRelativeSpecifier(specifier)) {
-        continue;
-      }
-      const resolved = resolveRelative(file.relPath, specifier, knownIds);
+      const resolved = isRelativeSpecifier(specifier)
+        ? resolveRelative(file.relPath, specifier, knownIds)
+        : resolveLocalAlias(specifier, knownIds);
       if (resolved === null || resolved === file.relPath) {
         continue;
       }
@@ -413,6 +482,98 @@ export type CollectRepoFilesOptions = {
   maxReadBytes?: number;
 };
 
+type GitIgnoreRule = {
+  negated: boolean;
+  directoryOnly: boolean;
+  regex: RegExp;
+};
+
+const escapeRegExp = (value: string): string => value.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+
+const gitIgnoreGlobSource = (pattern: string): string => {
+  let source = '';
+  for (let index = 0; index < pattern.length; index++) {
+    const char = pattern[index];
+    if (char === '*') {
+      if (pattern[index + 1] === '*') {
+        index++;
+        if (pattern[index + 1] === '/') {
+          index++;
+          source += '(?:.*/)?';
+        } else {
+          source += '.*';
+        }
+      } else {
+        source += '[^/]*';
+      }
+      continue;
+    }
+    if (char === '?') {
+      source += '[^/]';
+      continue;
+    }
+    if (char === '[') {
+      const end = pattern.indexOf(']', index + 1);
+      if (end > index + 1) {
+        const body = pattern.slice(index + 1, end);
+        source += `[${body.startsWith('!') ? `^${body.slice(1)}` : body}]`;
+        index = end;
+        continue;
+      }
+    }
+    source += escapeRegExp(char);
+  }
+  return source;
+};
+
+const parseGitIgnoreRules = (content: string, baseRel: string): GitIgnoreRule[] => {
+  const basePrefix = baseRel.length > 0 ? `${escapeRegExp(baseRel)}/` : '';
+  const rules: GitIgnoreRule[] = [];
+  for (const rawLine of content.split(/\r?\n/)) {
+    let line = rawLine.trim();
+    if (line.length === 0 || line.startsWith('#')) {
+      continue;
+    }
+    let negated = false;
+    if (line.startsWith('!')) {
+      negated = true;
+      line = line.slice(1);
+    } else if (line.startsWith('\\!') || line.startsWith('\\#')) {
+      line = line.slice(1);
+    }
+    if (line.length === 0) {
+      continue;
+    }
+    const directoryOnly = line.endsWith('/');
+    const anchored = line.startsWith('/');
+    line = line.replace(/^\//, '').replace(/\/$/, '');
+    if (line.length === 0) {
+      continue;
+    }
+    const hasSlash = line.includes('/');
+    const glob = gitIgnoreGlobSource(line);
+    const source = hasSlash || anchored ? `^${basePrefix}${glob}(?:$|/)` : `^(?:${basePrefix}(?:.*/)?)${glob}(?:$|/)`;
+    rules.push({ negated, directoryOnly, regex: new RegExp(source) });
+  }
+  return rules;
+};
+
+const isGitIgnored = (relPath: string, isDir: boolean, rules: GitIgnoreRule[]): boolean => {
+  const normalized = relPath.replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/$/, '');
+  let ignored = false;
+  for (const rule of rules) {
+    const match = rule.regex.exec(normalized);
+    if (!match) {
+      continue;
+    }
+    if (rule.directoryOnly && !isDir && match[0].replace(/\/$/, '') === normalized) {
+      continue;
+    }
+    ignored = !rule.negated;
+  }
+  return ignored;
+};
+
 const clipReadContent = (content: string, maxReadBytes?: number): string => {
   if (maxReadBytes === undefined || maxReadBytes <= 0 || !Number.isFinite(maxReadBytes)) {
     return content;
@@ -422,7 +583,11 @@ const clipReadContent = (content: string, maxReadBytes?: number): string => {
 
 const isGeneratedWikiExport = (relPath: string): boolean => {
   const normalized = relPath.replace(/\\/g, '/').replace(/^\.\//, '').toLowerCase();
-  return normalized.startsWith('.omni/wiki/') || normalized.startsWith('.aionui/wiki/');
+  return (
+    normalized.startsWith('.tomni/wiki/') ||
+    normalized.startsWith('.omni/wiki/') ||
+    normalized.startsWith('.aionui/wiki/')
+  );
 };
 
 /**
@@ -441,24 +606,30 @@ export const collectRepoFiles = async (
   const maxFiles = opts?.maxFiles ?? Number.POSITIVE_INFINITY;
   const codeOnly = opts?.codeOnly ?? true;
   const effectiveRoot = await resolveDuplicateNestedRoot(rootPath, deps);
-  const relRootPrefix = effectiveRoot === rootPath ? '' : deps.toRel(effectiveRoot);
 
   const collected: Array<{ relPath: string; content: string }> = [];
-  const queue: string[] = [effectiveRoot];
+  const queue: Array<{ dir: string; relDir: string; rules: GitIgnoreRule[] }> = [
+    { dir: effectiveRoot, relDir: '', rules: [] },
+  ];
 
   while (queue.length > 0 && collected.length < maxFiles) {
     const dirs = queue.splice(0, WALK_DIR_BATCH_SIZE);
     // eslint-disable-next-line no-await-in-loop -- each BFS batch discovers the next directories to list.
     const listed = await Promise.all(
-      dirs.map(async (dir) =>
-        (await deps.listDir(dir).catch(() => [] as Array<{ name: string; fullPath: string; isDir: boolean }>)).toSorted(
-          (a, b) => a.name.localeCompare(b.name)
-        )
-      )
+      dirs.map(async (queuedDir) => {
+        const entries = (
+          await deps.listDir(queuedDir.dir).catch(() => [] as Array<{ name: string; fullPath: string; isDir: boolean }>)
+        ).toSorted((a, b) => a.name.localeCompare(b.name));
+        const ignoreFile = entries.find((entry) => !entry.isDir && entry.name === '.gitignore');
+        const localRules = ignoreFile
+          ? parseGitIgnoreRules(await deps.readFile(ignoreFile.fullPath).catch(() => ''), queuedDir.relDir)
+          : [];
+        return { queuedDir, entries, rules: [...queuedDir.rules, ...localRules] };
+      })
     );
 
     const fileReads: Array<{ relPath: string; fullPath: string; read: boolean }> = [];
-    for (const entries of listed) {
+    for (const { queuedDir, entries, rules } of listed) {
       if (collected.length + fileReads.length >= maxFiles) {
         break;
       }
@@ -466,15 +637,15 @@ export const collectRepoFiles = async (
         if (collected.length + fileReads.length >= maxFiles) {
           break;
         }
+        const relPath = joinPosix(queuedDir.relDir, entry.name);
         if (entry.isDir) {
-          if (!IGNORED_DIRS.has(entry.name.toLowerCase())) {
-            queue.push(entry.fullPath);
+          if (!IGNORED_DIRS.has(entry.name.toLowerCase()) && !isGitIgnored(relPath, true, rules)) {
+            queue.push({ dir: entry.fullPath, relDir: relPath, rules });
           }
           continue;
         }
 
-        const relPath = stripRelPrefix(deps.toRel(entry.fullPath), relRootPrefix);
-        if (isGeneratedWikiExport(relPath)) {
+        if (isGeneratedWikiExport(relPath) || isGitIgnored(relPath, false, rules)) {
           continue;
         }
         const code = isCodeFile(relPath);

@@ -86,6 +86,7 @@ const NODE_KINDS: readonly WorkflowNodeKind[] = [
   'action.set',
   'action.code',
   'action.filesystem',
+  'action.n8n',
   'control.if',
   'control.switch',
   'control.loop',
@@ -93,6 +94,7 @@ const NODE_KINDS: readonly WorkflowNodeKind[] = [
   'control.tryCatch',
   'control.filter',
   'control.merge',
+  'control.approval',
   'control.stop',
   'action.app.makeVideo',
   'action.app.editor',
@@ -121,6 +123,20 @@ const normaliseNode = (v: unknown): WorkflowNode | null => {
     name: typeof v.name === 'string' ? v.name : v.kind,
     config: isObject(v.config) ? v.config : {},
   };
+  if (isObject(v.execution)) {
+    const mode = v.execution.mode;
+    const access = v.execution.access;
+    node.execution = {
+      mode:
+        mode === 'deterministic' || mode === 'agent' || mode === 'hybrid'
+          ? mode
+          : undefined,
+      access: access === 'local' || access === 'api' || access === 'mcp' || access === 'browser' ? access : undefined,
+      requiresWebsiteLogin:
+        typeof v.execution.requiresWebsiteLogin === 'boolean' ? v.execution.requiresWebsiteLogin : undefined,
+      estimatedTokens: typeof v.execution.estimatedTokens === 'number' ? v.execution.estimatedTokens : undefined,
+    };
+  }
   // Preserve control-flow child pipelines (each branch is a node list).
   if (isObject(v.branches)) {
     const branches: Record<string, WorkflowNode[]> = {};
@@ -142,6 +158,50 @@ const normaliseNode = (v: unknown): WorkflowNode | null => {
   return node;
 };
 
+const stringList = (value: unknown): string[] | undefined =>
+  Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : undefined;
+
+const normaliseKnowledge = (value: unknown): Workflow['knowledge'] => {
+  if (!isObject(value)) return undefined;
+  const failurePolicy = value.failurePolicy;
+  const executorPreference = value.executorPreference;
+  const security = isObject(value.security) ? value.security : undefined;
+  const tokenPolicy = isObject(value.tokenPolicy) ? value.tokenPolicy : undefined;
+  const websiteLogin = security?.websiteLogin;
+  return {
+    goal: typeof value.goal === 'string' ? value.goal : undefined,
+    intent: typeof value.intent === 'string' ? value.intent : undefined,
+    constraints: stringList(value.constraints),
+    successCriteria: stringList(value.successCriteria),
+    failurePolicy:
+      failurePolicy === 'fail-fast' || failurePolicy === 'continue-safe' || failurePolicy === 'request-review'
+        ? failurePolicy
+        : undefined,
+    executorPreference:
+      executorPreference === 'local-first' || executorPreference === 'n8n-first' || executorPreference === 'auto'
+        ? executorPreference
+        : undefined,
+    security: security
+      ? {
+          preferTrustedConnectors:
+            typeof security.preferTrustedConnectors === 'boolean' ? security.preferTrustedConnectors : undefined,
+          websiteLogin:
+            websiteLogin === 'forbid' || websiteLogin === 'approval-required' || websiteLogin === 'allow'
+              ? websiteLogin
+              : undefined,
+        }
+      : undefined,
+    tokenPolicy: tokenPolicy
+      ? {
+          maxAgentSteps: typeof tokenPolicy.maxAgentSteps === 'number' ? tokenPolicy.maxAgentSteps : undefined,
+          maxEstimatedTokens:
+            typeof tokenPolicy.maxEstimatedTokens === 'number' ? tokenPolicy.maxEstimatedTokens : undefined,
+        }
+      : undefined,
+    tags: stringList(value.tags),
+  };
+};
+
 /** Coerce an unknown record into a valid {@link Workflow}, or `null` to drop it. */
 const normaliseWorkflow = (v: unknown, now: number): Workflow | null => {
   if (!isObject(v) || typeof v.name !== 'string') return null;
@@ -150,6 +210,7 @@ const normaliseWorkflow = (v: unknown, now: number): Workflow | null => {
     id: typeof v.id === 'string' && v.id.length > 0 ? v.id : randomUUID(),
     name: v.name,
     description: typeof v.description === 'string' ? v.description : undefined,
+    knowledge: normaliseKnowledge(v.knowledge),
     nodes,
     enabled: v.enabled !== false,
     createdAt: num(v.createdAt) ?? now,
@@ -262,6 +323,7 @@ export const createAutomationStore = (options?: AutomationStoreOptions): IAutoma
         id: existing?.id ?? (workflow.id && workflow.id.length > 0 ? workflow.id : newId()),
         name: workflow.name,
         description: workflow.description,
+        knowledge: workflow.knowledge ?? existing?.knowledge,
         nodes: workflow.nodes ?? existing?.nodes ?? [],
         enabled: workflow.enabled ?? existing?.enabled ?? true,
         createdAt: existing?.createdAt ?? workflow.createdAt ?? ts,

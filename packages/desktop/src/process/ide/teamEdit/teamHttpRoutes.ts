@@ -14,24 +14,24 @@
  * Contract (see `docs/design/team-collab-session.md`):
  *   GET  /team/info                          → { ok, hasSession, repoName? }
  *   POST /team/join      {password,name}     → { ok, peerToken, participant, repoName } | 401
- *   GET  /team/snapshot?token=…              → { ok, snapshot }
- *   GET  /team/tree?token=…&dir=<rel>        → { ok, entries }
- *   GET  /team/file?token=…&relPath=<rel>    → { ok, content, contentHash? }
+ *   GET  /team/snapshot + Authorization      → { ok, snapshot }
+ *   GET  /team/tree?dir=<rel> + Authorization → { ok, entries }
+ *   GET  /team/file?relPath=<rel> + Authorization → { ok, content, contentHash? }
  *   POST /team/claim     {token,relPath,intent?} → { ok, claim }
  *   POST /team/release   {token,relPath}     → { ok }
  *   POST /team/write     {token,relPath,data}→ { ok, result }
  *   POST /team/edit      {token,relPath,oldText,newText} → { ok, result }
- *   GET  /team/understand?token=…            → { ok, graph|null }
- *   GET  /team/wiki?token=…                  → { ok, wiki|null }
- *   GET  /team/db?token=…                    → { ok, connections }
+ *   GET  /team/understand + Authorization    → { ok, graph|null }
+ *   GET  /team/wiki + Authorization          → { ok, wiki|null }
+ *   GET  /team/db + Authorization            → { ok, connections }
  *   POST /team/db-query  {token,id,sql}      → { ok, result }
- *   GET  /team/queue?token=…                 → { ok, status }
+ *   GET  /team/queue + Authorization         → { ok, status }
  *   POST /team/leave     {token}             → { ok }
  *
- * The `peerToken` doubles as the team-edit coordinator `agentId`, so presence +
- * leases are unified between the host UI and every remote peer. The password
+ * Public participant IDs remain separate from secret peer tokens. The password
  * gate reuses {@link passwordMatches} (constant-time SHA-256) exactly like the
- * single-doc `/collab/*` surface.
+ * single-doc `/collab/*` surface. Authenticated GETs use bearer headers so tokens
+ * cannot leak through URLs, browser history, or reverse-proxy access logs.
  *
  * Security: peer tokens carry server-side write/database capabilities selected
  * by the host, expire when idle, and are protected by bounded bodies, peer caps,
@@ -43,6 +43,8 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { randomUUID } from 'node:crypto';
+import type { CreateViuPreviewFeedbackInput } from '@/common/viu';
 import {
   admitTeamPeer,
   getPrimaryTeamSession,
@@ -194,6 +196,14 @@ const authPeer = (token: string | undefined): { session: TeamSession; root: stri
   return { session, root: session.repoRoot, peer };
 };
 
+/** Accept only an RFC 6750-style bearer credential for authenticated GET routes. */
+const bearerToken = (req: IncomingMessage): string | undefined => {
+  const authorization = req.headers.authorization;
+  if (!authorization) return undefined;
+  const match = /^Bearer\s+([^\s]+)$/i.exec(authorization.trim());
+  return match?.[1];
+};
+
 /** Require a capability already bound to the authenticated peer token. */
 const requireCapability = (
   res: ServerResponse,
@@ -255,11 +265,11 @@ export const handleTeamRequest = async (
     }
     failedJoins.clear(rateKey);
     const peer = admitTeamPeer(session, payload.name ?? '');
-    host.joinPeer(session.repoRoot, peer.token, peer.name);
+    host.joinPeer(session.repoRoot, peer.id, peer.name);
     sendJson(res, 200, {
       ok: true,
       peerToken: peer.token,
-      participant: { agentId: peer.token, label: peer.name, color: peer.color },
+      participant: { agentId: peer.id, label: peer.name, color: peer.color },
       repoName: session.repoName,
       peerCapabilities: peer.capabilities,
     });
@@ -267,13 +277,76 @@ export const handleTeamRequest = async (
   }
 
   // Everything below needs an authenticated peer token.
-  const token = (q.get('token') ?? undefined) || undefined;
+  const token = bearerToken(req);
 
   // GET /team/snapshot
   if (req.method === 'GET' && sub === 'snapshot') {
     const auth = authPeer(token);
     if (!auth) return unauthorized(res);
     sendJson(res, 200, { ok: true, snapshot: host.snapshot(auth.root) });
+    return true;
+  }
+
+  // GET /team/previews — list immutable packages only when the Preview workspace is opened.
+  if (req.method === 'GET' && sub === 'previews') {
+    const auth = authPeer(token);
+    if (!auth) return unauthorized(res);
+    sendJson(res, 200, { ok: true, packages: host.listPreviews(auth.root) });
+    return true;
+  }
+
+  // GET /team/preview?packageId= — open the exact package shared by the host.
+  if (req.method === 'GET' && sub === 'preview') {
+    const auth = authPeer(token);
+    if (!auth) return unauthorized(res);
+    try {
+      sendJson(res, 200, { ok: true, package: host.getPreview(auth.root, q.get('packageId') ?? '') });
+    } catch (error) {
+      sendJson(res, 404, { ok: false, error: errMsg(error) });
+    }
+    return true;
+  }
+
+  // GET /team/preview-feedback?packageId= — list feedback for one immutable snapshot.
+  if (req.method === 'GET' && sub === 'preview-feedback') {
+    const auth = authPeer(token);
+    if (!auth) return unauthorized(res);
+    try {
+      sendJson(res, 200, { ok: true, feedback: host.listPreviewFeedback(auth.root, q.get('packageId') ?? '') });
+    } catch (error) {
+      sendJson(res, 404, { ok: false, error: errMsg(error) });
+    }
+    return true;
+  }
+
+  // POST /team/preview-feedback — viewers may comment; identity comes from the authenticated token.
+  if (req.method === 'POST' && sub === 'preview-feedback') {
+    const payload = await readJson<{
+      token?: string;
+      packageId?: string;
+      kind?: CreateViuPreviewFeedbackInput['kind'];
+      body?: string;
+      screenId?: string;
+      nodeId?: string;
+    }>(req);
+    if (!payload) return payloadTooLarge(res);
+    const auth = authPeer(payload.token);
+    if (!auth) return unauthorized(res);
+    try {
+      const event = host.appendPreviewFeedback(auth.root, payload.packageId ?? '', {
+        feedbackId: randomUUID(),
+        authorId: auth.peer.id,
+        authorKind: 'user',
+        createdAt: Date.now(),
+        kind: payload.kind ?? 'comment',
+        body: payload.body ?? '',
+        screenId: payload.screenId,
+        nodeId: payload.nodeId,
+      });
+      sendJson(res, 200, { ok: true, event });
+    } catch (error) {
+      sendJson(res, 400, { ok: false, error: errMsg(error) });
+    }
     return true;
   }
 
@@ -310,7 +383,7 @@ export const handleTeamRequest = async (
     const auth = authPeer(payload.token);
     if (!auth) return unauthorized(res);
     if (!requireCapability(res, auth, 'write')) return true;
-    const claim = host.claim(auth.root, payload.token!, payload.relPath ?? '', payload.intent);
+    const claim = host.claim(auth.root, auth.peer.id, payload.relPath ?? '', payload.intent);
     sendJson(res, 200, { ok: true, claim });
     return true;
   }
@@ -322,7 +395,7 @@ export const handleTeamRequest = async (
     const auth = authPeer(payload.token);
     if (!auth) return unauthorized(res);
     if (!requireCapability(res, auth, 'write')) return true;
-    const released = host.release(auth.root, payload.token!, payload.relPath ?? '');
+    const released = host.release(auth.root, auth.peer.id, payload.relPath ?? '');
     sendJson(res, 200, { ok: true, released });
     return true;
   }
@@ -335,7 +408,7 @@ export const handleTeamRequest = async (
     if (!auth) return unauthorized(res);
     if (!requireCapability(res, auth, 'write')) return true;
     try {
-      const result = await host.write(auth.root, payload.token!, payload.relPath ?? '', payload.data ?? '');
+      const result = await host.write(auth.root, auth.peer.id, payload.relPath ?? '', payload.data ?? '');
       sendJson(res, 200, { ok: true, result });
     } catch (error) {
       sendJson(res, 400, { ok: false, error: errMsg(error) });
@@ -353,7 +426,7 @@ export const handleTeamRequest = async (
     try {
       const result = await host.edit(
         auth.root,
-        payload.token!,
+        auth.peer.id,
         payload.relPath ?? '',
         payload.oldText ?? '',
         payload.newText ?? ''
@@ -419,10 +492,10 @@ export const handleTeamRequest = async (
     const payload = await readJson<{ token?: string }>(req);
     if (!payload) return payloadTooLarge(res);
     const session = getPrimaryTeamSession();
-    if (session && payload.token) {
-      host.leavePeer(session.repoRoot, payload.token);
-      removeTeamPeer(session.shareId, payload.token);
-    }
+    const auth = authPeer(payload.token);
+    if (!session || !auth || !payload.token) return unauthorized(res);
+    host.leavePeer(auth.root, auth.peer.id);
+    removeTeamPeer(session.shareId, payload.token);
     sendJson(res, 200, { ok: true });
     return true;
   }

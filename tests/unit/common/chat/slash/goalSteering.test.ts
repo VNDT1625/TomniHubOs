@@ -21,6 +21,8 @@ describe('buildGoalSteering', () => {
     const steering = buildGoalSteering('goal');
     expect(steering).toContain('[GOAL MODE');
     expect(steering).toContain('QUY TRÌNH BẮT BUỘC 100%');
+    expect(steering).toContain('cùng tool chỉ khác query thì leader gọi tool song song');
+    expect(steering).toContain('hành động/tool-family chính');
   });
 
   it('uses the stricter 101% framing for goal-all', () => {

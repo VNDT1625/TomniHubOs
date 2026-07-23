@@ -13,4 +13,6 @@ export * from './codexAppServerAdapter';
 export * from './coreAdapter';
 
 export * from './remote';
+
+export * from './sidecar';
 export * from './tomnyCoreAdapter';

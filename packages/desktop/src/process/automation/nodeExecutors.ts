@@ -20,7 +20,7 @@
  * Process boundary: Main-process (Node.js) module. No DOM APIs.
  */
 
-import { httpRequest } from '@/common/adapter/httpBridge';
+import { listReadyProviders } from '@process/services/tomnyProviderBridge';
 import type { IProvider } from '@/common/config/storage';
 import type {
   AiNodeConfig,
@@ -76,6 +76,7 @@ export type ControlNodeKind =
   | 'control.tryCatch'
   | 'control.filter'
   | 'control.merge'
+  | 'control.approval'
   | 'control.stop';
 
 /** Leaf node kinds — every kind except the engine-interpreted control nodes. */
@@ -386,7 +387,7 @@ const pickForModel = (providers: IProvider[], model: string): { provider: IProvi
  */
 export const createProviderChat = (): ((model: string, prompt: string, signal?: AbortSignal) => Promise<string>) => {
   return async (model, prompt, signal) => {
-    const providers = (await httpRequest<IProvider[]>('GET', '/api/providers').catch(() => [] as IProvider[])) || [];
+    const providers = (await listReadyProviders().catch(() => [] as IProvider[])) || [];
     const selected = pickForModel(providers, model);
     if (!selected) {
       throw new Error('No usable model is configured. Open Settings → Model and add a provider/model, then try again.');

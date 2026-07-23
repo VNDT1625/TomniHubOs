@@ -55,6 +55,8 @@ export type QuickTestRunRequest = {
   target?: string;
   /** Observation window in ms (clamped to {@link MAX_DURATION_MS}). */
   durationMs?: number;
+  /** Capture one final web screenshot as durable runtime evidence (default true). */
+  captureScreenshot?: boolean;
 };
 
 /** Result of a one-shot Quick Test run. */
@@ -63,6 +65,8 @@ export type QuickTestRunResult = {
   trace: RuntimeTrace;
   /** Context pack mapping the trace to suspected code files (null when no graph). */
   contextPack: ContextPack | null;
+  /** Final web screenshot path when capture was requested and available. */
+  screenshotPath?: string;
 };
 
 /** Injected collaborators for {@link createQuickTestService}. */
@@ -73,6 +77,8 @@ export type QuickTestServiceDeps = {
   openNativeStream: NativeStreamOpener;
   /** Load the persisted KG for a repo root (for trace→context mapping). */
   loadGraph: typeof loadGraph;
+  /** Persist one screenshot from the active web surface. Failure is non-fatal. */
+  captureScreenshot?: (rootPath: string) => Promise<string | undefined>;
   /** Clock. Defaults to `Date.now`. */
   now?: () => number;
   /** Sleep primitive. Defaults to a real `setTimeout` promise. */
@@ -131,13 +137,20 @@ export const createQuickTestService = (deps: QuickTestServiceDeps): QuickTestSer
       if (tracer.hasError()) break;
     }
 
+    if (platform === 'web') {
+      await (tracer as ReturnType<typeof createQuickTestTracer>).finalizeCoverage();
+    }
     const trace = tracer.stop();
+    const screenshotPath =
+      platform === 'web' && req.captureScreenshot !== false && deps.captureScreenshot
+        ? await deps.captureScreenshot(rootPath).catch((): undefined => undefined)
+        : undefined;
     let contextPack: ContextPack | null = null;
     if (trace.rootPath) {
       const graph = await deps.loadGraph(trace.rootPath).catch((): null => null);
       if (graph) contextPack = buildTraceContext(trace, graph);
     }
-    return { trace, contextPack };
+    return { trace, contextPack, ...(screenshotPath ? { screenshotPath } : {}) };
   };
 
   return { runSession };

@@ -413,6 +413,123 @@
     "open": "열기",
     "close": "닫기"
   },
+  "workspace": {
+    "controlCenter": "제어 센터",
+    "navigation": "관리자 탐색",
+    "system": "시스템",
+    "todayCommand": "오늘의 제어 센터",
+    "overviewTitle": "중요한 일을 보고 오늘을 앞으로 움직이세요.",
+    "overviewSubtitle": "작업, 일정, 지식 및 Tomny Core 실시간 활동을 한곳에서 확인합니다.",
+    "viewAll": "모두 보기",
+    "viewCalendar": "캘린더 열기",
+    "openCore": "Core 열기",
+    "nav": {
+      "overview": "개요",
+      "core": "Tomny Core"
+    },
+    "descriptions": {
+      "overview": "우선순위, 진행률 및 실시간 시스템 활동",
+      "tasks": "작업을 계획하고 우선순위를 정해 완료",
+      "schedule": "고정 및 유연한 시간 블록 조정",
+      "daily": "오늘을 빠르게 기록",
+      "learn": "연결된 지식 기반 구축",
+      "data": "문서, 출처 및 요약 정리",
+      "core": "네이티브 대상, 실행 및 자동화 검사"
+    },
+    "metrics": {
+      "activeTasks": "활성 작업",
+      "overdue": "기한 초과 {{count}}개",
+      "eventsToday": "오늘의 일정",
+      "nextAt": "다음 일정 {{time}}",
+      "clearDay": "남은 일정 없음",
+      "notes": "노트",
+      "knowledgeBase": "전체 지식 기반",
+      "activeRuns": "활성 Core 실행"
+    },
+    "focus": {
+      "title": "집중 대기열",
+      "subtitle": "기한 초과 및 영향도 높은 작업 우선",
+      "completion": "전체 완료율",
+      "empty": "긴급한 작업이 없습니다."
+    },
+    "timeline": {
+      "title": "오늘의 타임라인",
+      "subtitle": "다음 고정 및 유연한 시간 블록",
+      "empty": "오늘 캘린더가 비어 있습니다."
+    },
+    "recent": {
+      "title": "최근 지식",
+      "subtitle": "최근 변경된 노트와 문서",
+      "empty": "최근 노트가 없습니다."
+    },
+    "corePulse": {
+      "title": "Core Pulse",
+      "subtitle": "네이티브 런타임 및 자동화 준비 상태",
+      "targets": "준비된 대상",
+      "sessions": "세션",
+      "automations": "자동화",
+      "completion": "완료율 {{rate}}%"
+    }
+  },
+  "core": {
+    "title": "Tomny Core 운영",
+    "subtitle": "런타임 상태, 활성 작업, 대상 및 지속형 자동화를 위한 네이티브 제어 화면입니다.",
+    "nativeRuntime": "네이티브 런타임",
+    "loading": "Tomny Core 연결 중…",
+    "unavailableTitle": "Tomny Core가 응답하지 않습니다",
+    "unavailableDescription": "관리자 데이터는 계속 사용할 수 있습니다. 데스크톱 런타임을 재시작하거나 Core 시작 후 다시 시도하세요.",
+    "status": {
+      "loading": "Core 시작 중",
+      "offline": "Core 오프라인",
+      "healthy": "Core 정상",
+      "degraded": "Core 성능 저하",
+      "unhealthy": "Core 비정상"
+    },
+    "actions": {
+      "refresh": "새로고침",
+      "cancel": "실행 취소",
+      "runNow": "지금 실행",
+      "runSuccess": "자동화가 시작됨",
+      "cancelSuccess": "실행이 취소됨",
+      "failed": "Core 작업 실패"
+    },
+    "metrics": {
+      "health": "런타임 상태",
+      "checked": "검사 {{count}}개",
+      "targets": "준비된 대상",
+      "ofTotal": "발견된 {{total}}개 중",
+      "activeRuns": "활성 실행",
+      "sessions": "세션 {{count}}개",
+      "automations": "활성 자동화",
+      "scheduledTotal": "전체 일정 {{count}}개"
+    },
+    "health": {
+      "title": "런타임 진단",
+      "subtitle": "상태 검사 및 실행 신뢰성",
+      "completionRate": "완료율",
+      "noReport": "아직 진단 보고서가 없습니다."
+    },
+    "runs": {
+      "title": "활성 실행",
+      "subtitle": "새 Core에서 현재 실행 중인 작업",
+      "empty": "활성 Core 실행이 없습니다.",
+      "started": "{{time}} 시작"
+    },
+    "automations": {
+      "title": "지속형 자동화",
+      "subtitle": "재시도와 수명주기 상태를 갖는 네이티브 예약 작업",
+      "empty": "생성된 Core 자동화가 없습니다.",
+      "enabled": "사용",
+      "disabled": "사용 안 함",
+      "manual": "수동",
+      "intervalMinutes": "{{count}}분마다"
+    },
+    "targets": {
+      "title": "런타임 대상",
+      "subtitle": "내장, ACP, CLI 및 원격 실행 어댑터",
+      "models": "모델 {{count}}개"
+    }
+  },
   "quickAdd": {
     "placeholder": "작업 추가 — \"보고서 내일 5pm !high #work\"",
     "hint": "팁: !high · #태그 · \"내일 5pm\" / \"월 9am\" 을 자동 인식합니다.",

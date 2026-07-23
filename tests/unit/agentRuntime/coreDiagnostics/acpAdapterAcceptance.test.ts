@@ -1,4 +1,4 @@
-﻿/**
+/**
  * @license
  * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
@@ -84,6 +84,7 @@ describe('declared ACP target acceptance', () => {
         callId: 'fixture-tool-1',
         text: 'Read fixture file',
         phase: 'requested',
+        input: { path: 'fixture.txt' },
       },
       {
         type: 'tool-call',
@@ -102,6 +103,28 @@ describe('declared ACP target acceptance', () => {
         outcome: 'success',
       },
     ]);
+  });
+
+  it('uses a fresh provider session for every run so earlier prompts never reach the next turn', async () => {
+    const adapter = createAdapter();
+    const target = fixtureTarget(acpDefinitions[0], 'history');
+    const firstEvents: CoreAdapterEvent[] = [];
+    const secondEvents: CoreAdapterEvent[] = [];
+
+    await adapter.run({ ...runInput(target, firstEvents), prompt: 'SECRET_PRIOR_PROMPT' });
+    await adapter.run({ ...runInput(target, secondEvents), prompt: 'CURRENT_PROMPT_ONLY' });
+
+    const firstText = firstEvents
+      .filter((event) => event.type === 'delta')
+      .map((event) => event.text)
+      .join('');
+    const secondText = secondEvents
+      .filter((event) => event.type === 'delta')
+      .map((event) => event.text)
+      .join('');
+    expect(firstText).toContain('fake-session-1: SECRET_PRIOR_PROMPT');
+    expect(secondText).toContain('fake-session-2: CURRENT_PROMPT_ONLY');
+    expect(secondText).not.toContain('SECRET_PRIOR_PROMPT');
   });
 
   it('cancels a pending ACP prompt when the caller aborts', async () => {

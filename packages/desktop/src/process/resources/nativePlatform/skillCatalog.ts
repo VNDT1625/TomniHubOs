@@ -1,4 +1,4 @@
-﻿import { cp, lstat, mkdir, readFile, readdir, readlink, rm, symlink, writeFile } from 'node:fs/promises';
+﻿import { cp, lstat, mkdir, readFile, readdir, readlink, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 export type SkillSummary = {
@@ -10,6 +10,14 @@ export type SkillSummary = {
   source: 'builtin' | 'custom' | 'extension';
 };
 export type DetectedSkill = { name: string; description: string; path: string };
+export type SkillResource = {
+  name: string;
+  description: string;
+  resource: string;
+  content: string;
+};
+
+const MAX_SKILL_RESOURCE_BYTES = 128 * 1024;
 
 const parseMetadata = (content: string, fallback: string): { name: string; description: string } => {
   const frontmatter = content.match(/^---\s*\r?\n([\s\S]*?)\r?\n---/);
@@ -85,6 +93,32 @@ export class NativeSkillCatalog {
       await readFile(path.join(path.resolve(skillPath), 'SKILL.md'), 'utf8'),
       path.basename(skillPath)
     );
+  }
+  async read(name: string, resource = 'SKILL.md'): Promise<SkillResource> {
+    const skill = (await this.list()).find((candidate) => candidate.name.toLowerCase() === name.trim().toLowerCase());
+    if (!skill) throw new Error(`Unknown skill: ${name}`);
+    const root = await realpath(skill.location);
+    const requested = path.resolve(root, resource.trim() || 'SKILL.md');
+    let target: string;
+    try {
+      target = await realpath(requested);
+    } catch {
+      throw new Error(`Skill resource does not exist: ${resource}`);
+    }
+    if (target !== root && !target.startsWith(`${root}${path.sep}`)) {
+      throw new Error('Skill resource escapes the skill directory.');
+    }
+    const metadata = await lstat(target);
+    if (!metadata.isFile()) throw new Error('Skill resource must be a file.');
+    if (metadata.size > MAX_SKILL_RESOURCE_BYTES) {
+      throw new Error(`Skill resource exceeds ${MAX_SKILL_RESOURCE_BYTES} bytes.`);
+    }
+    return {
+      name: skill.name,
+      description: skill.description,
+      resource: path.relative(root, target).replaceAll(path.sep, '/') || 'SKILL.md',
+      content: await readFile(target, 'utf8'),
+    };
   }
   scan(folderPath: string): Promise<DetectedSkill[]> {
     return scanRoot(folderPath);

@@ -191,7 +191,7 @@ fn test_create_file() {
     assert_eq!(std::fs::read_to_string(&file_path).unwrap(), "hello");
     assert!(dir
         .path()
-        .join(".aionui")
+        .join(".tomni")
         .join("understand")
         .join("stale.json")
         .exists());
@@ -203,14 +203,29 @@ fn test_understand_stale_marker_accumulates_changed_paths() {
     let first = dir.path().join("first.txt");
     let second = dir.path().join("nested").join("second.txt");
     std::fs::create_dir_all(second.parent().unwrap()).unwrap();
+    let legacy_dir = dir.path().join(".aionui").join("understand");
+    std::fs::create_dir_all(&legacy_dir).unwrap();
+    std::fs::write(
+        legacy_dir.join("summary.json"),
+        serde_json::json!({
+            "builtAt": 42,
+            "overview": null,
+            "runbook": null,
+            "modules": [],
+            "files": [],
+        })
+        .to_string(),
+    )
+    .unwrap();
 
     let config = mtui::config::MtuiConfig::default();
     mtui::ops::create_file(dir.path(), &first, b"first", false, &config, false).unwrap();
     mtui::ops::create_file(dir.path(), &second, b"second", false, &config, false).unwrap();
+    mtui::ops::create_file(dir.path(), &first, b"first updated", true, &config, false).unwrap();
 
     let marker_path = dir
         .path()
-        .join(".aionui")
+        .join(".tomni")
         .join("understand")
         .join("stale.json");
     let marker =
@@ -222,6 +237,8 @@ fn test_understand_stale_marker_accumulates_changed_paths() {
     assert!(paths
         .iter()
         .any(|path| path.as_str() == Some("nested/second.txt")));
+    assert!(legacy_dir.join("summary.json").is_file());
+    assert!(!legacy_dir.join("stale.json").exists());
 }
 
 #[test]
@@ -279,7 +296,7 @@ fn test_delete_file_records_backup_and_can_undo() {
     assert!(result.backup.is_some());
     assert!(dir
         .path()
-        .join(".aionui")
+        .join(".tomni")
         .join("understand")
         .join("stale.json")
         .exists());
@@ -381,6 +398,11 @@ diff --git a/patch_test.txt b/patch_test.txt
                 .unwrap_or("")
                 .ends_with("patch_test.txt")
     }));
+    let marker = serde_json::from_str::<serde_json::Value>(
+        &std::fs::read_to_string(dir.path().join(".tomni/understand/stale.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(marker["paths"], serde_json::json!(["patch_test.txt"]));
 }
 
 #[test]
@@ -985,11 +1007,14 @@ fn test_undo_restores_file() {
         .unwrap()
         .unwrap();
 
+    std::fs::remove_file(dir.path().join(".tomni/understand/stale.json")).unwrap();
+
     let undo_result = mtui::undo::undo_operation(dir.path(), &op_record).unwrap();
     assert!(undo_result.restored);
 
     let restored_content = std::fs::read_to_string(&file_path).unwrap();
     assert_eq!(restored_content, "original content\n");
+    assert!(dir.path().join(".tomni/understand/stale.json").is_file());
 }
 
 #[test]

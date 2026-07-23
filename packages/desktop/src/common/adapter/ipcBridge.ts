@@ -22,18 +22,12 @@ import type {
   TChatConversation,
   TProviderWithModel,
 } from '../config/storage';
-import type {
-  Assistant,
-  CreateAssistantRequest,
-  ImportAssistantsRequest,
-  ImportAssistantsResult,
-  SetAssistantStateRequest,
-  UpdateAssistantRequest,
-} from '../types/agent/assistantTypes';
+import { assistantChannels } from '../types/agent/assistantChannels';
+import { agentChannels } from '../types/agent/agentChannels';
+import { sessionChannels } from '../types/agent/sessionChannels';
 import type { PreviewHistoryTarget, PreviewSnapshotInfo } from '../types/office/preview';
 import type { PricingRecommendation } from '../pricing/modelPricingAdvisor';
-import type { AcpModelInfo } from '../types/platform/acpTypes';
-import type { ProviderHealthCheckRequest, ProviderHealthCheckResponse } from '../types/provider/providerApi';
+
 import { providerChannels } from '../types/provider/providerChannels';
 import type { SpeechToTextRequest, SpeechToTextResult } from '../types/provider/speech';
 import type {
@@ -44,8 +38,12 @@ import type {
   ITeamCreatedEvent,
   ITeamListChangedEvent,
   ITeamTeammateMessageEvent,
+  ITeamWorkspaceChangedEvent,
   TTeam,
   TeamAgent,
+  TeamTaskBindingRole,
+  TeamTaskInput,
+  TeamWorkspaceGroupInput,
 } from '../types/team/teamTypes';
 import type {
   AutoUpdateStatus,
@@ -59,6 +57,7 @@ import type { ApplicablePreset, ResourceBudget, ResourceMode, ResourceState } fr
 import type { OmniGatewayProgressEvent } from '@process/omni-gateway/omniGatewayProgress';
 import type { OmniAuthMode, OmniOAuthClientSummary, OmniToolPermissions } from '@process/omni-gateway/auth/authTypes';
 import type { RemoteAccessMode } from '@/common/config/remotePublicUrl';
+import type { PersonalContext, SecretDescriptor } from '@process/agentRuntime/contextTypes';
 
 import type { CompanyConfig } from '@process/company/companyConfig';
 import type { CompanyStructure } from '@process/company/companyOrchestrator';
@@ -103,37 +102,24 @@ import type { IAddTeamAgentParams, ICreateTeamParams } from './teamMapper';
 import { absoluteToRelativePath, fromBackendWorkspaceList } from './workspaceMapper';
 
 // ---------------------------------------------------------------------------
-// Shell — routed to POST /api/shell/*
+// Shell — Electron Main owns native OS integration; no legacy HTTP dependency.
 // ---------------------------------------------------------------------------
 
 export const shell = {
-  openFile: httpPost<void, string>('/api/shell/open-file', (file_path) => ({ file_path })),
-  showItemInFolder: httpPost<void, string>('/api/shell/show-item-in-folder', (file_path) => ({ file_path })),
-  openExternal: httpPost<void, string>('/api/shell/open-external', (url) => ({ url })),
-  checkToolInstalled: httpPost<boolean, { tool: string }>('/api/shell/check-tool-installed'),
-  openFolderWith: httpPost<void, { folder_path: string; tool: 'vscode' | 'terminal' | 'explorer' }>(
-    '/api/shell/open-folder-with'
+  openFile: bridge.buildProvider<void, string>('shell.open-file'),
+  showItemInFolder: bridge.buildProvider<void, string>('shell.show-item-in-folder'),
+  openExternal: bridge.buildProvider<void, string>('shell.open-external'),
+  checkToolInstalled: bridge.buildProvider<boolean, { tool: string }>('shell.check-tool-installed'),
+  openFolderWith: bridge.buildProvider<void, { folder_path: string; tool: 'vscode' | 'terminal' | 'explorer' }>(
+    'shell.open-folder-with'
   ),
 };
 
 // ---------------------------------------------------------------------------
-// Assistants — routed to /api/assistants/*
+// Assistants — native Tomni catalog
 // ---------------------------------------------------------------------------
 
-export const assistants = {
-  list: httpGet<Assistant[], void>('/api/assistants'),
-  create: httpPost<Assistant, CreateAssistantRequest>('/api/assistants'),
-  update: httpPut<Assistant, UpdateAssistantRequest>((p) => `/api/assistants/${p.id}`),
-  delete: httpDelete<void, { id: string }>((p) => `/api/assistants/${p.id}`),
-  setState: httpPatch<Assistant, SetAssistantStateRequest>(
-    (p) => `/api/assistants/${p.id}/state`,
-    (p) => {
-      const { id: _id, ...body } = p;
-      return body;
-    }
-  ),
-  import: httpPost<ImportAssistantsResult, ImportAssistantsRequest>('/api/assistants/import'),
-};
+export const assistants = assistantChannels;
 
 // ---------------------------------------------------------------------------
 // Conversation — REST + WS
@@ -159,6 +145,14 @@ export type AionrsContextSnapshot = {
   system: string;
   messages: AionrsContextMessage[];
   tools: AionrsContextTool[];
+  core_context: {
+    agent: string;
+    personal: string;
+    control_tools: AionrsContextTool[];
+    history: Array<{ role: 'user' | 'assistant'; text: string; timestamp: number }>;
+    /** Exact Save block injected into the effective prompt. */
+    saved_memory?: string;
+  };
   max_tokens: number;
   thinking: unknown;
   reasoning_effort?: string;
@@ -171,11 +165,22 @@ export type AionrsContextSnapshot = {
   session_experience: Record<string, unknown>;
   token_estimate: {
     system: number;
+    /** Effective summarized/recent conversation payload sent to the model. */
+    prompt_messages?: number;
+    /** Full persisted UI/search archive; excluded from total. */
+    archived_messages?: number;
+    /** Exact estimated contribution of the rendered Save block. */
+    saved_memory?: number;
+    /** Active user-managed context branches. */
+    context_branches?: number;
     messages: number;
     tools: number;
+    core: number;
     total: number;
   };
 };
+
+export type AionrsContextResult = { ok: true; data: AionrsContextSnapshot } | { ok: false; error: string };
 
 export const conversation = {
   create: bridge.buildProvider<TChatConversation, ICreateConversationParams>('conversation.native.create'),
@@ -199,20 +204,24 @@ export const conversation = {
   ),
   reset: bridge.buildProvider<void, IResetConversationParams>('conversation.native.reset'),
   warmup: bridge.buildProvider<void, { conversation_id: string }>('conversation.native.warmup'),
-  getAionrsContext: httpGet<AionrsContextSnapshot, { conversation_id: string }>(
-    (p) => `/api/conversations/${p.conversation_id}/aionrs-context`
+  getAionrsContext: bridge.buildProvider<AionrsContextResult, { conversation_id: string }>(
+    'conversation.native.context.get'
   ),
-  updateAionrsContext: httpPut<
-    AionrsContextSnapshot,
+  updateAionrsContext: bridge.buildProvider<
+    AionrsContextResult,
     { conversation_id: string; custom_context: string; context_branches: AionrsContextBranch[] }
-  >(
-    (p) => `/api/conversations/${p.conversation_id}/aionrs-context`,
-    (p) => ({ custom_context: p.custom_context, context_branches: p.context_branches })
-  ),
+  >('conversation.native.context.update'),
 
   stop: bridge.buildProvider<void, { conversation_id: string }>('conversation.native.cancel'),
   activeCount: bridge.buildProvider<{ count: number }, void>('conversation.native.active-count'),
   sendMessage: bridge.buildProvider<ISendMessageResult, ISendMessageParams>('conversation.native.send'),
+  resolveNativePermission: bridge.buildProvider<
+    boolean,
+    { permission_id: string; approved: boolean; lifetime?: 'allow-once' | 'session' | 'persistent' }
+  >('conversation.native.resolve-permission'),
+  resolveNativeOrchestrationProposal: bridge.buildProvider<boolean, { proposal_id: string; approved: boolean }>(
+    'conversation.native.resolve-orchestration-proposal'
+  ),
   getSlashCommands: httpGet<Array<{ command: string; description: string }>, { conversation_id: string }>(
     (p) => `/api/conversations/${p.conversation_id}/slash-commands`
   ),
@@ -385,18 +394,11 @@ export const application = {
   restart: bridge.buildProvider<void, void>('restart-app'),
   openDevTools: bridge.buildProvider<boolean, void>('open-dev-tools'),
   isDevToolsOpened: bridge.buildProvider<boolean, void>('is-dev-tools-opened'),
-  systemInfo: withResponseMap(
-    httpGet<{ cache_dir: string; work_dir: string; log_dir: string; platform: string; arch: string }, void>(
-      '/api/system/info'
-    ),
-    (raw) => ({
-      cacheDir: raw.cache_dir,
-      workDir: raw.work_dir,
-      logDir: raw.log_dir,
-      platform: raw.platform,
-      arch: raw.arch,
-    })
-  ),
+  systemInfo: bridge.buildProvider<
+    { cacheDir: string; workDir: string; logDir: string; platform: string; arch: string },
+    void
+  >('app.system-info'),
+
   getPath: bridge.buildProvider<string, { name: 'desktop' | 'home' | 'downloads' }>('app.get-path'),
   // Electron-local: copies cache dir + persists to ProcessEnv, paired with restart.
   // The backend reads AIONUI_*_DIR env vars on boot, so it does not own this config.
@@ -452,13 +454,14 @@ export const autoUpdate = {
 };
 
 // ---------------------------------------------------------------------------
-// Star Office — routed to backend
+// Star Office — native loopback monitor detection
 // ---------------------------------------------------------------------------
 
 export const starOffice = {
-  detectUrl: httpPost<{ url: string | null }, { preferredUrl?: string; force?: boolean; timeoutMs?: number }>(
-    '/api/star-office/detect'
-  ),
+  detectUrl: bridge.buildProvider<
+    { url: string | null },
+    { preferredUrl?: string; force?: boolean; timeoutMs?: number }
+  >('star-office.detect'),
 };
 
 // ---------------------------------------------------------------------------
@@ -581,7 +584,7 @@ export const fs = {
 // ---------------------------------------------------------------------------
 
 export const speechToText = {
-  transcribe: httpPost<SpeechToTextResult, SpeechToTextRequest>('/api/stt'),
+  transcribe: bridge.buildProvider<SpeechToTextResult, SpeechToTextRequest>('speech.transcribe'),
 };
 
 // ---------------------------------------------------------------------------
@@ -699,89 +702,36 @@ export const bedrock = {
 export const mode = providerChannels;
 
 // ---------------------------------------------------------------------------
-// ACP Conversation — routed to /api/agents/* + conversation routes
+// Personal Context — native Core profile plus opaque multi-variable secret sets
+// ---------------------------------------------------------------------------
+
+export type PersonalSecretVariableInput = { name: string; value: string };
+export type PersonalSecretSetSaveRequest = {
+  handle?: string;
+  name: string;
+  note?: string;
+  /** One to twenty exact browser hostnames; values are normalized and validated in Main. */
+  targets: string[];
+  variables: PersonalSecretVariableInput[];
+};
+
+export const personal = {
+  get: bridge.buildProvider<PersonalContext, void>('personal-context.get'),
+  save: bridge.buildProvider<PersonalContext, { profile: PersonalContext }>('personal-context.save'),
+  listSecrets: bridge.buildProvider<SecretDescriptor[], void>('personal-secrets.list'),
+  saveSecretSet: bridge.buildProvider<SecretDescriptor, PersonalSecretSetSaveRequest>('personal-secrets.save'),
+  removeSecretSet: bridge.buildProvider<boolean, { handle: string }>('personal-secrets.remove'),
+};
+
+// ---------------------------------------------------------------------------
+// ACP Conversation — native Tomni agent catalog and durable session contract
 // ---------------------------------------------------------------------------
 
 export const acpConversation = {
   sendMessage: conversation.sendMessage,
   responseStream: conversation.responseStream,
-  getAvailableAgents: httpGet<AgentMetadata[], void>('/api/agents'),
-  refreshCustomAgents: httpPost<void, void>('/api/agents/refresh'),
-  testCustomAgent: httpPost<
-    { step: 'success' } | { step: 'fail_cli'; error: string } | { step: 'fail_acp'; error: string },
-    { command: string; acp_args?: string[]; env?: Record<string, string> }
-  >('/api/agents/custom/try-connect'),
-  createCustomAgent: httpPost<
-    AgentMetadata,
-    {
-      name: string;
-      command: string;
-      icon?: string;
-      args?: string[];
-      env?: Array<{ name: string; value: string; description?: string }>;
-      advanced?: {
-        yolo_id?: string;
-        native_skills_dirs?: string[];
-        behavior_policy?: { supports_side_question?: boolean };
-        description?: string;
-      };
-    }
-  >('/api/agents/custom'),
-  updateCustomAgent: httpPut<
-    AgentMetadata,
-    {
-      id: string;
-      name: string;
-      command: string;
-      icon?: string;
-      args?: string[];
-      env?: Array<{ name: string; value: string; description?: string }>;
-      advanced?: {
-        yolo_id?: string;
-        native_skills_dirs?: string[];
-        behavior_policy?: { supports_side_question?: boolean };
-        description?: string;
-      };
-    }
-  >(
-    (p) => `/api/agents/custom/${p.id}`,
-    (p) => {
-      const { id: _id, ...rest } = p;
-      return rest;
-    }
-  ),
-  deleteCustomAgent: httpDelete<{ deleted: boolean }, { id: string }>((p) => `/api/agents/custom/${p.id}`),
-  setAgentEnabled: httpPatch<AgentMetadata, { id: string; enabled: boolean }>(
-    (p) => `/api/agents/${p.id}/enabled`,
-    (p) => ({ enabled: p.enabled })
-  ),
-  checkAgentHealth: httpPost<{ available: boolean; latency?: number; error?: string }, { backend: string }>(
-    '/api/agents/health-check'
-  ),
-  checkProviderHealth: httpPost<ProviderHealthCheckResponse, ProviderHealthCheckRequest>(
-    '/api/agents/provider-health-check'
-  ),
-  setMode: httpPut<void, { conversation_id: string; mode: string }>(
-    (p) => `/api/conversations/${p.conversation_id}/mode`,
-    (p) => ({ mode: p.mode })
-  ),
-  // 404 is the expected pre-warmup response from `/api/conversations/:id/mode`
-  // and `/api/conversations/:id/model` — the agent has not attached yet, so
-  // we have nothing to read. AcpModeSelector / AcpModelSelector both fall back
-  // to handshake metadata in that case. Silence the bridge log so this
-  // ordinary state doesn't pollute Sentry breadcrumbs (ELECTRON-1BT).
-  getMode: httpGet<{ mode: string; initialized: boolean }, { conversation_id: string }>(
-    (p) => `/api/conversations/${p.conversation_id}/mode`,
-    { silentStatuses: [404] }
-  ),
-  getModel: httpGet<{ model_info: AcpModelInfo | null }, { conversation_id: string }>(
-    (p) => `/api/conversations/${p.conversation_id}/model`,
-    { silentStatuses: [404] }
-  ),
-  setModel: httpPut<void, { conversation_id: string; model_id: string }>(
-    (p) => `/api/conversations/${p.conversation_id}/model`,
-    (p) => ({ model_id: p.model_id })
-  ),
+  ...agentChannels,
+  ...sessionChannels,
 };
 
 // ---------------------------------------------------------------------------
@@ -792,6 +742,7 @@ export const acpConversation = {
 
 export const mcpService = {
   listServers: bridge.buildProvider<IMcpServer[], void>('mcp-registry.list'),
+  listExtensionServers: bridge.buildProvider<IMcpServer[], void>('mcp-registry.extension-list'),
   createServer: bridge.buildProvider<
     IMcpServer,
     Pick<IMcpServer, 'name' | 'description' | 'transport' | 'original_json' | 'builtin'>
@@ -852,32 +803,7 @@ export const mcpService = {
 export const openclawConversation = {
   sendMessage: conversation.sendMessage,
   responseStream: conversation.responseStream,
-  getRuntime: httpGet<
-    {
-      conversation_id: string;
-      runtime: {
-        workspace?: string;
-        backend?: string;
-        agent_name?: string;
-        cli_path?: string;
-        model?: string;
-        session_key?: string | null;
-        is_connected?: boolean;
-        has_active_session?: boolean;
-        identity_hash?: string | null;
-      };
-      expected?: {
-        expected_workspace?: string;
-        expected_backend?: string;
-        expected_agent_name?: string;
-        expected_cli_path?: string;
-        expected_model?: string;
-        expected_identity_hash?: string | null;
-        switched_at?: number;
-      };
-    },
-    { conversation_id: string }
-  >((p) => `/api/conversations/${p.conversation_id}/openclaw/runtime`),
+  getRuntime: sessionChannels.getOpenClawRuntime,
 };
 
 // ---------------------------------------------------------------------------
@@ -943,25 +869,20 @@ export const database = {
 };
 
 // ---------------------------------------------------------------------------
-// Preview History — routed to /api/preview-history/*
+// Preview History — Tomni native atomic snapshot store
 // ---------------------------------------------------------------------------
 
-function mapPreviewTarget(target: PreviewHistoryTarget): Record<string, unknown> {
-  return { ...target, content_type: target.contentType, contentType: undefined };
-}
-
 export const previewHistory = {
-  list: httpPost<PreviewSnapshotInfo[], { target: PreviewHistoryTarget }>('/api/preview-history/list', (p) => ({
-    target: mapPreviewTarget(p.target),
-  })),
-  save: httpPost<PreviewSnapshotInfo, { target: PreviewHistoryTarget; content: string }>(
-    '/api/preview-history/save',
-    (p) => ({ target: mapPreviewTarget(p.target), content: p.content })
+  list: bridge.buildProvider<PreviewSnapshotInfo[], { target: PreviewHistoryTarget }>('preview-history.list'),
+
+  save: bridge.buildProvider<PreviewSnapshotInfo, { target: PreviewHistoryTarget; content: string }>(
+    'preview-history.save'
   ),
-  getContent: httpPost<
+
+  getContent: bridge.buildProvider<
     { snapshot: PreviewSnapshotInfo; content: string } | null,
     { target: PreviewHistoryTarget; snapshot_id: string }
-  >('/api/preview-history/get-content', (p) => ({ target: mapPreviewTarget(p.target), snapshot_id: p.snapshot_id })),
+  >('preview-history.get-content'),
 };
 
 // Preview panel
@@ -1527,6 +1448,8 @@ export interface ICreateConversationParams {
     ide_memory_id?: string;
     /** Whether the Studio IDE planning workflow is enabled. */
     ide_planning_enabled?: boolean;
+    /** Explicitly enables the Super ToolMap for this conversation. */
+    super_mode?: boolean;
   };
 }
 
@@ -1734,7 +1657,7 @@ export const extensions = {
   getAssistants: httpGet<Record<string, unknown>[], void>('/api/extensions/assistants'),
   getAgents: httpGet<Record<string, unknown>[], void>('/api/extensions/agents'),
   getAcpAdapters: httpGet<Record<string, unknown>[], void>('/api/extensions/acp-adapters'),
-  getMcpServers: httpGet<Record<string, unknown>[], void>('/api/extensions/mcp-servers'),
+
   getSkills: httpGet<Array<{ name: string; description: string; location: string }>, void>('/api/extensions/skills'),
   getSettingsTabs: httpGet<IExtensionSettingsTab[], void>('/api/extensions/settings-tabs'),
   getWebuiContributions: httpGet<IExtensionWebuiContribution[], void>('/api/extensions/webui'),
@@ -1853,12 +1776,36 @@ export const channel = {
   userAuthorized: wsMappedEmitter<IChannelUser>('channel.user-authorized', (raw) => toChannelUser(raw as RawUser)),
 };
 
+// Telegram Bot — Tomni-native main-process service.
+export const telegramChannel = {
+  getPluginStatus: bridge.buildProvider<IChannelPluginStatus[], void>('telegram.native.status'),
+  enablePlugin: bridge.buildProvider<void, { plugin_id: string; config: Record<string, unknown> }>(
+    'telegram.native.enable'
+  ),
+  disablePlugin: bridge.buildProvider<void, { plugin_id: string }>('telegram.native.disable'),
+  testPlugin: bridge.buildProvider<
+    { success: boolean; bot_username?: string; error?: string },
+    { plugin_id: string; token: string }
+  >('telegram.native.test'),
+  getPendingPairings: bridge.buildProvider<IChannelPairingRequest[], void>('telegram.native.pairings'),
+  approvePairing: bridge.buildProvider<void, { code: string }>('telegram.native.pairing.approve'),
+  rejectPairing: bridge.buildProvider<void, { code: string }>('telegram.native.pairing.reject'),
+  getAuthorizedUsers: bridge.buildProvider<IChannelUser[], void>('telegram.native.users'),
+  revokeUser: bridge.buildProvider<void, { user_id: string }>('telegram.native.user.revoke'),
+  getActiveSessions: bridge.buildProvider<IChannelSession[], void>('telegram.native.sessions'),
+  syncChannelSettings: bridge.buildProvider<void, { platform: string }>('telegram.native.settings.sync'),
+  pairingRequested: bridge.buildEmitter<IChannelPairingRequest>('telegram.native.pairing-requested'),
+  pluginStatusChanged: bridge.buildEmitter<{ plugin_id: string; status: IChannelPluginStatus }>(
+    'telegram.native.status-changed'
+  ),
+  userAuthorized: bridge.buildEmitter<IChannelUser>('telegram.native.user-authorized'),
+};
+
 // ---------------------------------------------------------------------------
 // Agent Hub API — routed to /api/hub/*
 // ---------------------------------------------------------------------------
 
 import type { HubExtensionStatus, IHubAgentItem } from '@/common/types/agent/hub';
-import type { AgentMetadata } from '@/renderer/utils/model/agentTypes';
 
 export const hub = {
   getExtensionList: httpGet<IHubAgentItem[], void>('/api/hub/extensions'),
@@ -1887,6 +1834,15 @@ export const team = {
   ensureSession: bridge.buildProvider<void, { team_id: string }>('team.ensure-session'),
   renameAgent: bridge.buildProvider<void, { team_id: string; slot_id: string; new_name: string }>('team.rename-agent'),
   renameTeam: bridge.buildProvider<void, { id: string; name: string }>('team.rename'),
+  saveGroup: bridge.buildProvider<TTeam, { team_id: string; group: TeamWorkspaceGroupInput }>('team.group.save'),
+  removeGroup: bridge.buildProvider<TTeam, { team_id: string; group_id: string }>('team.group.remove'),
+  saveTask: bridge.buildProvider<TTeam, { team_id: string; task: TeamTaskInput }>('team.task.save'),
+  removeTask: bridge.buildProvider<TTeam, { team_id: string; task_id: string }>('team.task.remove'),
+  bindTask: bridge.buildProvider<
+    TTeam,
+    { team_id: string; task_id: string; slot_id: string; role: TeamTaskBindingRole; is_primary?: boolean }
+  >('team.task.bind'),
+  unbindTask: bridge.buildProvider<TTeam, { team_id: string; slot_id: string; task_id?: string }>('team.task.unbind'),
   setSessionMode: bridge.buildProvider<void, { team_id: string; session_mode: string }>('team.set-session-mode'),
   agentStatusChanged: bridge.buildEmitter<ITeamAgentStatusEvent>('team.agent.status'),
   agentSpawned: bridge.buildEmitter<ITeamAgentSpawnedEvent>('team.agent.spawned'),
@@ -1895,6 +1851,7 @@ export const team = {
   listChanged: bridge.buildEmitter<ITeamListChangedEvent>('team.list-changed'),
   created: bridge.buildEmitter<ITeamCreatedEvent>('team.created'),
   teammateMessage: bridge.buildEmitter<ITeamTeammateMessageEvent>('team.teammate.message'),
+  workspaceChanged: bridge.buildEmitter<ITeamWorkspaceChangedEvent>('team.workspace.changed'),
 };
 
 // ---------------------------------------------------------------------------

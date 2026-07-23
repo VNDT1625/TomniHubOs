@@ -17,6 +17,7 @@ import {
   Info,
   Lightning,
   LinkCloud,
+  PersonalCollection,
   Puzzle,
   Refresh,
   Robot,
@@ -35,6 +36,7 @@ import { getSiderTooltipProps } from '@/renderer/utils/ui/siderTooltip';
 /** Builtin settings tab IDs in display order (must match router paths). */
 export const BUILTIN_TAB_IDS = [
   'agent',
+  'personal',
   'model',
   'assistants',
   'capabilities',
@@ -111,6 +113,12 @@ const SettingsSider: React.FC<{ collapsed?: boolean; tooltipEnabled?: boolean }>
         label: t('settings.agents', { defaultValue: 'Agents' }),
         icon: <Speed />,
         path: 'agent',
+      },
+      personal: {
+        id: 'personal',
+        label: t('settings.personal'),
+        icon: <PersonalCollection />,
+        path: 'personal',
       },
       capabilities: {
         id: 'capabilities',

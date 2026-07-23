@@ -27,6 +27,7 @@ const CAPABILITIES: readonly AutomationCapability[] = [
   { kind: 'control.loop', purpose: 'Repeat a branch', configHint: '{ mode, times?, itemsPath? } + body branch' },
   { kind: 'control.parallel', purpose: 'Run branches concurrently', configHint: '{} + branch:*' },
   { kind: 'control.tryCatch', purpose: 'Recover from branch failure', configHint: '{} + try/catch branches' },
+  { kind: 'control.approval', purpose: 'Pause for a human decision before a sensitive action', configHint: '{ message, timeoutMs? }' },
   { kind: 'control.stop', purpose: 'Stop the run', configHint: '{ message? }' },
 ];
 

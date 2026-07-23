@@ -59,6 +59,7 @@ import { registerIdeLangBridge } from '@process/ide/lang/ideLangBridge';
 import { registerIdeLspBridge } from '@process/ide/lang/ideLspBridge';
 import { registerIdeCompletionBridge } from '@process/ide/lang/ideCompletionBridge';
 import { registerIdeMemoryBridge } from '@process/ide/memory/ideMemoryBridge';
+import { registerViuBridge } from '@process/ide/viu/viuBridge';
 
 import { registerKnowledgeGraphBridge } from '@process/ide/knowledgeGraphBridge';
 
@@ -98,19 +99,22 @@ import { registerProviderBridge } from '@process/services/tomnyProviderBridge';
 import { registerMcpRegistryBridge } from '@process/resources/mcpRegistry';
 import { registerFileGatewayBridge } from '@process/resources/nativeFileGatewayBridge';
 import { registerAssistantResourceBridge } from '@process/resources/nativeAssistantResourceBridge';
+import { registerSpeechTranscriptionBridge } from '@process/services/contentExtract/speechTranscription';
+
+import { registerAgentCatalogBridge } from '@process/resources/agentCatalogBridge';
 
 import {
   registerNativeCapabilityBridge,
   registerNativeFileOperationBridge,
+  registerNativePreviewHistoryBridge,
   registerNativeSnapshotBridge,
 } from '@process/resources/nativePlatform';
 
 import { registerExperimentalCoreBridge } from '@process/experimentalCore/experimentalCoreBridge';
 import { registerAgentMeshBridge } from '@process/agentRuntime/agentMesh/ipc';
-import { AgentMeshService } from '@process/agentRuntime/agentMesh/service';
+import { getSharedAgentMeshService } from '@process/agentRuntime/agentMesh/mcp/meshService';
 
 import { JsonTeamStore, registerTeamBridge } from '@process/team';
-import { JsonlDurableEventStore } from '@process/services/agentChat/durability';
 import path from 'node:path';
 import { app } from 'electron';
 import { getApplicationMainWindow } from './applicationBridge';
@@ -142,21 +146,30 @@ export function initAllBridges(_deps: BridgeDependencies = {}): void {
 
   try {
     registerAssistantResourceBridge();
+    registerSpeechTranscriptionBridge();
     console.log('[Bridge] Assistant resource bridge registered.');
   } catch (error) {
     console.error('[Bridge] Failed to register assistant resource bridge:', error);
   }
 
   try {
+    registerAgentCatalogBridge();
+    console.log('[Bridge] Tomni assistant and agent catalogs registered.');
+  } catch (error) {
+    console.error('[Bridge] Failed to register Tomni assistant and agent catalogs:', error);
+  }
+
+  try {
     registerNativeFileOperationBridge();
     registerNativeSnapshotBridge();
+    registerNativePreviewHistoryBridge();
     registerNativeCapabilityBridge();
     console.log('[Bridge] Native filesystem, snapshot, MCP and skill drivers registered.');
   } catch (error) {
     console.error('[Bridge] Failed to register native platform drivers:', error);
   }
 
-  // Tomni Agentic native bridges (Task 15.1 wiring). Each registration is isolated
+  // Tomni native bridges (Task 15.1 wiring). Each registration is isolated
   // so a failure in one cannot silently prevent the others from registering
   // (which would leave a renderer page hanging on an unanswered invoke).
   try {
@@ -440,6 +453,7 @@ export function initAllBridges(_deps: BridgeDependencies = {}): void {
     register('IDE LSP bridge', registerIdeLspBridge);
     register('IDE inline-completion bridge', registerIdeCompletionBridge);
     register('IDE session-memory bridge', registerIdeMemoryBridge);
+    register('IDE Viu bridge', () => registerViuBridge({ getWindow: getApplicationMainWindow }));
     register('IDE knowledge-graph bridge', registerKnowledgeGraphBridge);
     register('IDE command bridge', registerIdeCommandBridge);
     register('IDE spec-lifecycle bridge', registerSpecLifecycleBridge);
@@ -676,7 +690,7 @@ export function initAllBridges(_deps: BridgeDependencies = {}): void {
   }
 
   try {
-    // Music Studio (Tomni Agentic music). Persistence + offline render/export for
+    // Music Studio (Tomni music). Persistence + offline render/export for
     // the music-core engine. Safe to register unconditionally: it only exposes
     // music.* channels the gated /music page calls. Without this the Music
     // Studio page's save/render would have no provider.
@@ -718,12 +732,7 @@ export function initAllBridges(_deps: BridgeDependencies = {}): void {
     console.error('[Bridge] Failed to register Tomny provider bridge:', error);
   }
 
-  const meshService = new AgentMeshService({
-    eventStoreFactory: (sessionId) =>
-      new JsonlDurableEventStore(
-        path.join(app.getPath('userData'), 'tomny-core', 'agent-mesh', `${encodeURIComponent(sessionId)}.jsonl`)
-      ),
-  });
+  const meshService = getSharedAgentMeshService();
 
   try {
     registerExperimentalCoreBridge(meshService);

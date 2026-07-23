@@ -59,8 +59,10 @@ describe('automationMcpServer', () => {
       'automation_create_workflow',
       'automation_delete_workflow',
       'automation_enable_workflow',
+      'automation_get_capabilities',
       'automation_get_workflow',
       'automation_list_workflows',
+      'automation_plan_workflow',
       'automation_run_workflow',
     ]);
   });

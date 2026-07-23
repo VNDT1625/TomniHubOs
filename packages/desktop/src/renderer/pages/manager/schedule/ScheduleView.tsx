@@ -22,9 +22,10 @@ import EventEditor from './EventEditor';
 import ImportFromImage from './ImportFromImage';
 import OptimizePanel from './OptimizePanel';
 import ManagerSettingsModal from './ManagerSettingsModal';
+import styles from '../manager.module.css';
 
 const ScheduleView: React.FC<{ store: UseManagerStore }> = ({ store }) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [view, setView] = useState<'day' | 'week'>('week');
   const [anchor, setAnchor] = useState<number>(() => Date.now());
   const [editing, setEditing] = useState<CalendarEvent | 'new' | null>(null);
@@ -96,17 +97,19 @@ const ScheduleView: React.FC<{ store: UseManagerStore }> = ({ store }) => {
   };
 
   const rangeLabel = useMemo(() => {
-    if (view === 'day')
-      return new Date(days[0]).toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' });
+    const locale = i18n.resolvedLanguage || i18n.language;
+    if (view === 'day') {
+      return new Intl.DateTimeFormat(locale, { weekday: 'long', month: 'long', day: 'numeric' }).format(days[0]);
+    }
     const start = startOfWeek(anchor);
     const end = start + 6 * DAY_MS;
-    const fmt = (ts: number) => new Date(ts).toLocaleDateString([], { month: 'short', day: 'numeric' });
-    return `${fmt(start)} – ${fmt(end)}`;
-  }, [view, days, anchor]);
+    const formatter = new Intl.DateTimeFormat(locale, { month: 'short', day: 'numeric' });
+    return `${formatter.format(start)} – ${formatter.format(end)}`;
+  }, [view, days, anchor, i18n.resolvedLanguage, i18n.language]);
 
   return (
-    <div className='h-full overflow-y-auto px-24px pb-32px'>
-      <div className='max-w-980px mx-auto flex flex-col gap-14px pt-4px'>
+    <div className='h-full overflow-y-auto px-18px pb-32px'>
+      <div className='max-w-1280px mx-auto flex flex-col gap-14px pt-4px'>
         {/* Toolbar */}
         <div className='flex items-center gap-8px flex-wrap'>
           <Radio.Group type='button' value={view} onChange={setView}>
@@ -156,7 +159,26 @@ const ScheduleView: React.FC<{ store: UseManagerStore }> = ({ store }) => {
         )}
 
         {visibleEvents.length === 0 && (
-          <div className='text-center text-13px text-t-tertiary py-32px'>{t('manager.schedule.empty')}</div>
+          <div className={styles.scheduleEmptyState}>
+            <Calendar theme='outline' size='24' />
+            <div>
+              <strong>{t('manager.schedule.empty')}</strong>
+              <span>{t('manager.schedule.optimizeHint')}</span>
+            </div>
+            <div className={styles.scheduleEmptyActions}>
+              <Button size='small' icon={<Upload theme='outline' size='14' />} onClick={() => setImporting(true)}>
+                {t('manager.schedule.importBtn')}
+              </Button>
+              <Button
+                type='primary'
+                size='small'
+                icon={<Plus theme='outline' size='14' />}
+                onClick={() => setEditing('new')}
+              >
+                {t('manager.schedule.create')}
+              </Button>
+            </div>
+          </div>
         )}
 
         <DayWeekGrid view={view} days={days} events={store.data.events} onEventClick={(event) => setEditing(event)} />

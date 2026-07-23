@@ -164,19 +164,93 @@ describe('surface registry discovery', () => {
 });
 
 describe('surface resolution and fallback', () => {
+  it('registers workflow, orchestration and testing as Core capabilities', () => {
+    for (const manifest of createBuiltinSurfaceManifests()) {
+      expect(manifest.capabilities).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: 'core.skill-workflow',
+            serverName: 'aionui-tool-selector',
+            toolPatterns: expect.arrayContaining(['tools_search', 'skills_*']),
+          }),
+          expect.objectContaining({
+            id: 'core.agent-orchestrator',
+            serverName: 'aionui-agent-orchestrator',
+            toolPatterns: expect.arrayContaining(['agent_spawn', 'agent_resume', 'agent_close']),
+          }),
+          expect.objectContaining({ id: 'core.testing', serverName: 'aionui-testing', toolPatterns: ['test_*'] }),
+        ])
+      );
+    }
+  });
+
+  it('declares Secret Context as a built-in capability on every surface', () => {
+    const manifests = createBuiltinSurfaceManifests();
+    const secretSurfaces = manifests.filter((manifest) =>
+      manifest.capabilities.some((capability) => capability.id === 'core.secret-context')
+    );
+
+    expect(secretSurfaces.map((manifest) => manifest.id)).toEqual(manifests.map((manifest) => manifest.id));
+  });
+
+  it('restores recovered Secret Context handles to the trusted IDE surface after restart', () => {
+    const ide = createBuiltinSurfaceManifests().find((manifest) => manifest.id === 'ide');
+
+    expect(ide?.context).toMatchObject({
+      includeOpaqueSecretHandles: true,
+      allowedSecretCapabilities: ['core.secret-context'],
+    });
+  });
+
+  it('omits Secret Context from the resolved ToolMap when opaque handles are disabled', () => {
+    const registry = createSurfaceRegistry({ manifests: createBuiltinSurfaceManifests(), defaultSurfaceId: 'chat' });
+    const music = registry.resolve({
+      ...fullRequest,
+      surfaceId: 'music',
+      grantedPermissionScopes: [...fullRequest.grantedPermissionScopes, 'music.read', 'music.write'],
+      explicitlyGrantedCapabilityIds: ['surface.music'],
+      availableCapabilityIds: ['core.secret-context', 'surface.music'],
+    });
+    const browser = registry.resolve({
+      ...fullRequest,
+      surfaceId: 'browser',
+      availableCapabilityIds: ['core.secret-context', 'surface.browser'],
+    });
+
+    expect(music.ok).toBe(true);
+    expect(browser.ok).toBe(true);
+    if (music.ok && browser.ok) {
+      expect(music.value.capabilities.map((capability) => capability.id)).not.toContain('core.secret-context');
+      expect(browser.value.capabilities.map((capability) => capability.id)).toContain('core.secret-context');
+    }
+  });
+
+  it('uses the built-in Secret Firewall capability id in every opaque-handle allowlist', () => {
+    const opaqueSurfaces = createBuiltinSurfaceManifests().filter(
+      (manifest) => manifest.context.includeOpaqueSecretHandles
+    );
+
+    expect(opaqueSurfaces.length).toBeGreaterThan(0);
+    expect(
+      opaqueSurfaces.every((manifest) => manifest.context.allowedSecretCapabilities?.includes('core.secret-context'))
+    ).toBe(true);
+  });
+
   it('resolves the IDE harness only with matching permission, scopes, availability and approval', () => {
     const registry = createSurfaceRegistry({ manifests: createBuiltinSurfaceManifests(), defaultSurfaceId: 'chat' });
 
     const result = registry.resolve({
       ...fullRequest,
       surfaceId: 'ide',
-      availableCapabilityIds: ['surface.ide'],
+      availableCapabilityIds: ['core.agent-orchestrator', 'core.testing', 'surface.ide'],
     });
 
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value.manifest.id).toBe('ide');
-      expect(result.value.capabilities[0]?.serverName).toBe('aionui-ide');
+      const ideCapability = result.value.capabilities.find((capability) => capability.id === 'surface.ide');
+      expect(ideCapability?.serverName).toBe('aionui-ide');
+      expect(ideCapability?.toolPatterns).toEqual(expect.arrayContaining(['ide_*', 'tomny_*', 'terminal_*', 'git_*']));
     }
   });
 
@@ -194,6 +268,64 @@ describe('surface resolution and fallback', () => {
     if (result.ok) {
       expect(result.value.manifest.id).toBe('chat');
       expect(result.value.fallbackTrail).toEqual(['browser', 'chat']);
+    }
+  });
+
+  it('resolves Deliverables with the required orchestrator and all three production surfaces', () => {
+    const registry = createSurfaceRegistry({ manifests: createBuiltinSurfaceManifests(), defaultSurfaceId: 'chat' });
+
+    const result = registry.resolve({
+      ...fullRequest,
+      surfaceId: 'deliverables',
+      availableCapabilityIds: ['core.agent-orchestrator', 'surface.ide', 'surface.browser', 'surface.office'],
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.manifest.id).toBe('deliverables');
+      expect(result.value.capabilities.map((capability) => capability.id)).toEqual(
+        expect.arrayContaining(['core.agent-orchestrator', 'surface.ide', 'surface.browser', 'surface.office'])
+      );
+      expect(result.value.capabilities.find((capability) => capability.id === 'core.agent-orchestrator')).toMatchObject(
+        {
+          optional: false,
+          toolPatterns: expect.arrayContaining(['agent_research_plan', 'agent_research_spawn']),
+        }
+      );
+    }
+  });
+
+  it.each([
+    {
+      label: 'the browser grant is absent',
+      explicitlyGrantedCapabilityIds: ['surface.ide', 'surface.office'],
+      grantedPermissionScopes: fullRequest.grantedPermissionScopes,
+      expectedSurfaceId: 'office',
+      expectedTrail: ['deliverables', 'office'],
+    },
+    {
+      label: 'an Office scope is absent',
+      explicitlyGrantedCapabilityIds: fullRequest.explicitlyGrantedCapabilityIds,
+      grantedPermissionScopes: fullRequest.grantedPermissionScopes.filter((scope) => scope !== 'office.write'),
+      expectedSurfaceId: 'ide',
+      expectedTrail: ['deliverables', 'office', 'ide'],
+    },
+  ])('falls back without exposing unavailable Deliverables capabilities when $label', (scenario) => {
+    const registry = createSurfaceRegistry({ manifests: createBuiltinSurfaceManifests(), defaultSurfaceId: 'chat' });
+
+    const result = registry.resolve({
+      ...fullRequest,
+      surfaceId: 'deliverables',
+      availableCapabilityIds: ['core.agent-orchestrator', 'surface.ide', 'surface.browser', 'surface.office'],
+      explicitlyGrantedCapabilityIds: scenario.explicitlyGrantedCapabilityIds,
+      grantedPermissionScopes: scenario.grantedPermissionScopes,
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.manifest.id).toBe(scenario.expectedSurfaceId);
+      expect(result.value.fallbackTrail).toEqual(scenario.expectedTrail);
+      expect(result.value.capabilities.map((capability) => capability.id)).not.toContain('surface.browser');
     }
   });
 

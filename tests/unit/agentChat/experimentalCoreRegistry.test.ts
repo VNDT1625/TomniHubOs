@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createHash, generateKeyPairSync, sign } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -71,6 +71,29 @@ describe('direct core adapter registry', () => {
     await expect(resolveExecutableOnPath([binaryPath])).resolves.toBe(binaryPath);
     await writeFile(binaryPath, 'tampered-binary');
     await expect(resolveExecutableOnPath([binaryPath])).resolves.toBeNull();
+  });
+
+  it('promotes a trusted staged Tomny binary before detection and keeps it available on restart', async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'bundled-tomny-cli-'));
+    tempDirectories.push(directory);
+    const runtimeDir = path.join(directory, 'bundled-tomny-cli', 'test-runtime');
+    const { mkdir } = await import('node:fs/promises');
+    await mkdir(runtimeDir, { recursive: true });
+    const binaryPath = path.join(runtimeDir, 'tomny.exe');
+    const manifestPath = path.join(runtimeDir, 'manifest.json');
+    const pendingBinaryPath = path.join(runtimeDir, 'tomny.next.exe');
+    const pendingManifestPath = path.join(runtimeDir, 'manifest.next.json');
+    const activeSha256 = createHash('sha256').update('active-binary').digest('hex');
+    const pendingSha256 = createHash('sha256').update('pending-binary').digest('hex');
+    await writeFile(binaryPath, 'active-binary');
+    await writeFile(manifestPath, JSON.stringify({ binarySha256: activeSha256 }));
+    await writeFile(pendingBinaryPath, 'pending-binary');
+    await writeFile(pendingManifestPath, JSON.stringify({ binarySha256: pendingSha256 }));
+
+    await expect(resolveExecutableOnPath([binaryPath])).resolves.toBe(binaryPath);
+    await expect(readFile(binaryPath, 'utf8')).resolves.toBe('pending-binary');
+    await expect(readFile(manifestPath, 'utf8')).resolves.toContain(pendingSha256);
+    await expect(resolveExecutableOnPath([binaryPath])).resolves.toBe(binaryPath);
   });
 
   it('loads versioned CLI overrides without rebuilding the core', async () => {

@@ -6,7 +6,10 @@ import type { AgentMeshService } from './service';
 export const AGENT_MESH_CHANNELS = {
   create: 'agent-mesh.create',
   sessions: 'agent-mesh.sessions',
+  overview: 'agent-mesh.overview',
   snapshot: 'agent-mesh.snapshot',
+  concurrencyGet: 'agent-mesh.concurrency-get',
+  concurrencySet: 'agent-mesh.concurrency-set',
   inspect: 'agent-mesh.inspect',
   worklog: 'agent-mesh.worklog',
   send: 'agent-mesh.send',
@@ -63,22 +66,43 @@ export const registerAgentMeshBridge = (service: AgentMeshService): void => {
       return sessionId;
     })
   );
-  bridge.buildProvider<string[], void>(AGENT_MESH_CHANNELS.sessions).provider(async () => service.listSessions());
+  bridge.buildProvider<string[], void>(AGENT_MESH_CHANNELS.sessions).provider(async () => service.discoverSessions());
+  bridge
+    .buildProvider<AgentMeshResult<ReturnType<AgentMeshService['overview']>>, SessionRequest>(
+      AGENT_MESH_CHANNELS.overview
+    )
+    .provider(safe('overview', service, ({ sessionId }) => service.overview(sessionId)));
   bridge
     .buildProvider<AgentMeshResult<ReturnType<AgentMeshService['snapshot']>>, SessionRequest>(
       AGENT_MESH_CHANNELS.snapshot
     )
     .provider(safe('snapshot', service, ({ sessionId }) => service.snapshot(sessionId)));
   bridge
+    .buildProvider<AgentMeshResult<ReturnType<AgentMeshService['getConcurrencyPolicy']>>, void>(
+      AGENT_MESH_CHANNELS.concurrencyGet
+    )
+    .provider(safe('concurrency-get', service, () => service.getConcurrencyPolicy()));
+  bridge
+    .buildProvider<
+      AgentMeshResult<ReturnType<AgentMeshService['setConfiguredMaxConcurrent']>>,
+      { maxConcurrent: number }
+    >(AGENT_MESH_CHANNELS.concurrencySet)
+    .provider(
+      safe('concurrency-set', service, ({ maxConcurrent }) => service.setConfiguredMaxConcurrent(maxConcurrent))
+    );
+  bridge
     .buildProvider<AgentMeshResult<ReturnType<AgentMeshService['inspect']>>, AgentMeshInspectRequest>(
       AGENT_MESH_CHANNELS.inspect
     )
     .provider(safe('inspect', service, ({ sessionId, agentId }) => service.inspect(sessionId, agentId)));
   bridge
-    .buildProvider<AgentMeshResult<ReturnType<AgentMeshService['getWorklog']>>, SessionRequest & { agentId?: AgentId }>(
-      AGENT_MESH_CHANNELS.worklog
-    )
-    .provider(safe('worklog', service, ({ sessionId, agentId }) => service.getWorklog(sessionId, agentId)));
+    .buildProvider<
+      AgentMeshResult<ReturnType<AgentMeshService['getWorklog']>>,
+      SessionRequest & { agentId?: AgentId; limit?: number }
+    >(AGENT_MESH_CHANNELS.worklog)
+    .provider(
+      safe('worklog', service, ({ sessionId, agentId, limit }) => service.getWorklog(sessionId, agentId, limit))
+    );
   bridge
     .buildProvider<AgentMeshResult<AgentMessage>, AgentMeshSendRequest>(AGENT_MESH_CHANNELS.send)
     .provider(safe('send', service, ({ sessionId, ...input }) => service.send(sessionId, input)));

@@ -35,6 +35,12 @@ export const toV1 = (baseUrl: string): string => {
   return `${origin}/v1`;
 };
 
+/** Encode a gateway-native thinking override in the virtual model id. */
+export const withRouter9ReasoningEffort = (model: string, effort?: Router9Endpoint['reasoningEffort']): string => {
+  const cleanModel = model.replace(/\([^()]+\)\s*$/u, '').trim();
+  return effort ? `${cleanModel}(${effort})` : cleanModel;
+};
+
 /** Resolve the base URL for a target according to its declared style. */
 export const resolveBaseUrl = (target: ConnectorTarget, baseUrl: string): string => {
   return target.baseUrlStyle === 'origin' ? toOrigin(baseUrl) : toV1(baseUrl);
@@ -43,9 +49,11 @@ export const resolveBaseUrl = (target: ConnectorTarget, baseUrl: string): string
 /** Pretty JSON with stable 2-space indentation. */
 const json = (value: unknown): string => JSON.stringify(value, null, 2);
 
+/** TOML accepts JSON's quoted-string syntax, including escaping. */
+const tomlString = (value: string): string => JSON.stringify(value);
+
 /**
- * Build env vars for env-mechanism targets. Currently only Codex CLI, which
- * reads `OPENAI_BASE_URL` (origin, no `/v1`) + `OPENAI_API_KEY`.
+ * Build env vars for env-mechanism targets.
  */
 const buildEnv = (target: ConnectorTarget, endpoint: Router9Endpoint, baseUrl: string): EnvVar[] => {
   if (target.mechanism !== 'env') return [];
@@ -67,16 +75,56 @@ const buildFiles = (target: ConnectorTarget, endpoint: Router9Endpoint, baseUrl:
   if (target.mechanism !== 'configFile') return [];
 
   if (target.id === 'claude-code') {
-    // Claude Code reads ~/.claude/config.json with Anthropic-style keys.
+    // Claude Code's documented LLM-gateway configuration lives in
+    // ~/.claude/settings.json. Values under `env` are injected into every
+    // Claude Code session. ANTHROPIC_AUTH_TOKEN is intentionally used instead
+    // of ANTHROPIC_API_KEY so the gateway key is sent as bearer auth.
+    const env: Record<string, string> = {
+      ANTHROPIC_BASE_URL: baseUrl,
+      ANTHROPIC_AUTH_TOKEN: endpoint.apiKey,
+    };
+    if (endpoint.model) env.ANTHROPIC_MODEL = endpoint.model;
+    // Claude Agent ACP does not use settings.env.ANTHROPIC_MODEL while it
+    // builds the model picker: it reads the top-level `model` and
+    // `availableModels` settings instead. Keep all three values aligned so the
+    // independently launched Claude CLI and Tomni's ACP chat surface select
+    // the same 9Router model.
+    const modelSettings = endpoint.model ? { model: endpoint.model, availableModels: [endpoint.model] } : {};
     return [
       {
-        path: '~/.claude/config.json',
+        path: '~/.claude/settings.json',
         format: 'json',
         mergeStrategy: 'deepMerge',
         content: json({
-          anthropic_api_base: baseUrl,
-          anthropic_api_key: endpoint.apiKey,
+          env,
+          ...modelSettings,
+          ...(endpoint.reasoningEffort ? { effortLevel: endpoint.reasoningEffort } : {}),
         }),
+      },
+    ];
+  }
+
+  if (target.id === 'codex') {
+    // Codex 0.145+ supports custom providers in ~/.codex/config.toml. The
+    // client key is scoped to Tomni's loopback-only gateway; keeping it in the
+    // provider block enables a real one-click setup for independently-launched
+    // Codex sessions. The applier creates a backup before merging.
+    const selectedModel = endpoint.model ? `model = ${tomlString(endpoint.model)}\n` : '';
+    const selectedEffort = endpoint.reasoningEffort
+      ? `model_reasoning_effort = ${tomlString(endpoint.reasoningEffort)}\n`
+      : '';
+    return [
+      {
+        path: '~/.codex/config.toml',
+        format: 'toml',
+        mergeStrategy: 'deepMerge',
+        content:
+          `${selectedModel}${selectedEffort}model_provider = ${tomlString('tomni_gateway')}\n\n` +
+          `[model_providers.tomni_gateway]\n` +
+          `name = "Tomni Model Gateway"\n` +
+          `base_url = ${tomlString(baseUrl)}\n` +
+          `wire_api = "responses"\n` +
+          `experimental_bearer_token = ${tomlString(endpoint.apiKey)}\n`,
       },
     ];
   }
@@ -121,6 +169,10 @@ const buildFields = (target: ConnectorTarget, endpoint: Router9Endpoint, baseUrl
   ];
   if (endpoint.model) {
     fields.push({ key: 'model', value: endpoint.model });
+  }
+
+  if (endpoint.reasoningEffort) {
+    fields.push({ key: 'reasoningEffort', value: endpoint.reasoningEffort });
   }
   return fields;
 };

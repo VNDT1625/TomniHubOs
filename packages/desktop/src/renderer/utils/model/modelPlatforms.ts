@@ -73,20 +73,6 @@ export const MODEL_PLATFORMS: PlatformConfig[] = [
     i18nKey: 'settings.platformNewApi',
   },
 
-  // 9Router 本地路由网关（OpenAI 兼容） / 9Router local routing gateway (OpenAI-compatible).
-  // Aggregates 40+ providers (OAuth + API key) behind a single local endpoint with
-  // auto-fallback and format translation. See common/router9 for the distribution layer.
-  // 9Router handles format translation internally — always use OpenAI protocol.
-  {
-    name: '9Router',
-    value: '9router',
-    logo: null,
-    platform: 'new-api',
-    base_url: 'http://127.0.0.1:20128/v1',
-    i18nKey: 'settings.platform9router',
-    skipProtocolDetection: true,
-  },
-
   // 官方 Gemini 平台
   {
     name: 'Gemini',

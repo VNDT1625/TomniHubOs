@@ -13,12 +13,21 @@ import {
 } from '../../../packages/desktop/src/process/agentRuntime/retryPolicy';
 
 import {
+  isTomnyControlPlaneTool,
   normalizeTomnyStreamEvent,
+  preflightSkillWorkflowTool,
+  preflightWorkspaceIdeTool,
+  parseTomnyContextSnapshot,
   parseTomnyModelCatalog,
   sanitizeTomnyToolDetail,
   tomnyMcpInjectionCommand,
+  tomnyMcpServerCommand,
   tomnyNativeToolDenialReason,
   tomnyProvidedToolResultCommand,
+  tomnyShouldInitializeMcpServers,
+  tomnySurfaceSystemPrompt,
+  tomnyToolRequestInput,
+  translateHostBoundTomnyTool,
   translateNativeTomnyTool,
   tomnyStrictProjectArgs,
   tomnyStrictToolsConfig,
@@ -26,10 +35,63 @@ import {
   tomnyModeForPermission,
   tomnyModelArgs,
   tomnyRuntimeKey,
+  tomnySessionActionHistoryQuery,
   waitForTomnyTurn,
 } from '../../../packages/desktop/src/process/experimentalCore/adapters/tomnyCoreAdapter';
 
 describe('Tomny JSON stream adapter', () => {
+  it('bounds session action-history queries without accepting a session id', () => {
+    expect(
+      tomnySessionActionHistoryQuery({
+        limit: 999,
+        after_sequence: 12,
+        query: ' earlier decision ',
+        sessionId: 'other',
+      })
+    ).toEqual({
+      limit: 100,
+      afterSequence: 12,
+      query: 'earlier decision',
+    });
+    expect(tomnySessionActionHistoryQuery({ limit: 0, after_sequence: -1 })).toEqual({ limit: 1 });
+  });
+  it('uses an explanatory IDE system prompt under 200 tokens', () => {
+    const prompt = tomnySurfaceSystemPrompt('ide', 'C:/workspace', {
+      mode: 'surface',
+      patterns: ['ide_*', 'tomny_*'],
+    });
+
+    expect(prompt).toContain('[TomnyExactSurfacePrompt]');
+    expect(prompt).toContain('[TomnyToolCatalog] surface');
+    expect(prompt).toContain('[TomnyToolPatterns] ide_*,tomny_*');
+    expect(prompt).toContain('Tomny on AionUi ide; project: C:/workspace');
+    expect(prompt).toContain('only for tool/external turns');
+    expect(prompt).toContain('never casual chat');
+    expect(prompt).not.toContain('Open the current user action exactly once with StartAction');
+    expect(prompt).toContain('Once open, do not nest it');
+    expect(prompt).toContain('Use ToolSearch only for another exact schema');
+    expect(prompt).toContain('ide_research once');
+    expect(prompt).toContain('flow/bug/logic/purpose');
+    expect(prompt).toContain('fresh Wiki test profile');
+    expect(prompt).toContain('Bug root-cause gate');
+    expect(prompt).toContain('ide_test_script phase=reproduce');
+    expect(prompt).toContain('identical script as post-fix');
+    expect(prompt).toContain('Use ide_quick_test only for hard/runtime-only');
+    expect(prompt).toContain('follow up only for explicit gaps');
+    expect(prompt).toContain('call loaded tools directly');
+    expect(prompt).toContain('ToolMap');
+    expect(prompt).toContain('Save is sole historical conversation context');
+    expect(prompt).toContain('action journal');
+    expect(prompt).not.toContain('older conversation details');
+    expect(prompt).not.toContain('nested action schema');
+    expect(prompt).toContain('Skip skills for ordinary repo/bug work');
+    expect(prompt).toContain('use them when named or clearly specialized');
+    expect(prompt).not.toContain('Before execution, find skills');
+    expect(prompt).toContain('Secret Context values stay hidden');
+    expect(prompt?.trim().split(/\s+/u).length).toBeLessThan(200);
+    expect(tomnySurfaceSystemPrompt('chat', 'C:/workspace')).toContain('Tomny on AionUi chat');
+  });
+
   it('never exposes typed credentials in permission details', () => {
     const detail = sanitizeTomnyToolDetail('browser_type', {
       selector: '#password',
@@ -74,9 +136,19 @@ describe('Tomny JSON stream adapter', () => {
       text: 'Tool call: Glob',
       phase: 'requested',
     });
-    expect(normalizeTomnyStreamEvent({ type: 'info', message: '[ExecCommand error] failed' })).toEqual({
+    expect(normalizeTomnyStreamEvent({ type: 'info', message: '[ExecCommand error] failed' })).toBeNull();
+    expect(
+      normalizeTomnyStreamEvent({
+        type: 'tool_result',
+        tool_name: 'ExecCommand',
+        call_id: 'call-1',
+        status: 'error',
+        output: 'failed',
+      })
+    ).toEqual({
       type: 'tool-result',
       tool: 'ExecCommand',
+      callId: 'call-1',
       outcome: 'error',
       text: 'failed',
     });
@@ -86,6 +158,151 @@ describe('Tomny JSON stream adapter', () => {
       text: 'Tomny is running Read',
       phase: 'running',
     });
+    expect(
+      normalizeTomnyStreamEvent({
+        type: 'tool_result',
+        tool_name: 'ide_map',
+        call_id: 'call-invalid-args',
+        output: 'MCP error -32602: Input validation error: Invalid arguments for tool ide_map',
+      })
+    ).toEqual({
+      type: 'tool-result',
+      tool: 'ide_map',
+      callId: 'call-invalid-args',
+      outcome: 'error',
+      text: 'MCP error -32602: Input validation error: Invalid arguments for tool ide_map',
+    });
+    expect(
+      normalizeTomnyStreamEvent({
+        type: 'tool_result',
+        tool_name: 'ide_search',
+        call_id: 'call-explicit-error',
+        is_error: true,
+        output: 'rootPath is required.',
+      })
+    ).toMatchObject({ tool: 'ide_search', callId: 'call-explicit-error', outcome: 'error' });
+  });
+
+  it('retains structured JSON arguments on Tomny tool lifecycle events', () => {
+    expect(
+      normalizeTomnyStreamEvent({
+        type: 'tool_running',
+        tool_name: 'ide_scan_repo',
+        call_id: 'scan-1',
+        raw_input: { rootPath: 'C:/repo', maxFiles: 2000 },
+      })
+    ).toMatchObject({
+      type: 'tool-call',
+      tool: 'ide_scan_repo',
+      callId: 'scan-1',
+      input: { rootPath: 'C:/repo', maxFiles: 2000 },
+    });
+    expect(
+      normalizeTomnyStreamEvent({
+        type: 'tool_result',
+        tool_name: 'ide_scan_repo',
+        call_id: 'scan-1',
+        input: { rootPath: 'C:/repo', maxFiles: 2000 },
+        output: 'Files: 2000',
+      })
+    ).toMatchObject({ type: 'tool-result', callId: 'scan-1', input: { rootPath: 'C:/repo', maxFiles: 2000 } });
+    expect(
+      normalizeTomnyStreamEvent({
+        type: 'tool_running',
+        tool_name: 'browser_type',
+        call_id: 'typing-1',
+        input: { selector: '#password', text: 'do-not-persist' },
+      })
+    ).toMatchObject({ input: { selector: '#password', text: '[REDACTED]' } });
+  });
+
+  it('exposes action-gateway and schema-loading input/output in the user worklog', () => {
+    expect(isTomnyControlPlaneTool('StartAction')).toBe(true);
+    expect(isTomnyControlPlaneTool('ToolSearch')).toBe(true);
+    expect(isTomnyControlPlaneTool('ide_read_file')).toBe(false);
+    expect(normalizeTomnyStreamEvent({ type: 'info', message: 'Token watermark override: using=27182' })).toBeNull();
+    expect(
+      normalizeTomnyStreamEvent({
+        type: 'info',
+        message: 'Tool call: StartAction',
+        call_id: 'gate-1',
+        input: { goal: 'Inspect the repo' },
+      })
+    ).toMatchObject({
+      type: 'tool-call',
+      tool: 'StartAction',
+      callId: 'gate-1',
+      input: { goal: 'Inspect the repo' },
+    });
+    expect(
+      normalizeTomnyStreamEvent({
+        type: 'tool_running',
+        tool_name: 'ToolSearch',
+        call_id: 'schema-1',
+        input: { query: 'ide map' },
+      })
+    ).toMatchObject({
+      type: 'tool-call',
+      tool: 'ToolSearch',
+      callId: 'schema-1',
+      input: { query: 'ide map' },
+    });
+    expect(
+      normalizeTomnyStreamEvent({
+        type: 'info',
+        message: '[ToolSearch success] Loaded exact schema for ide_map.',
+        call_id: 'schema-1',
+        input: { query: 'ide map' },
+      })
+    ).toMatchObject({
+      type: 'tool-result',
+      tool: 'ToolSearch',
+      callId: 'schema-1',
+      input: { query: 'ide map' },
+      text: 'Loaded exact schema for ide_map.',
+    });
+    expect(
+      normalizeTomnyStreamEvent({
+        type: 'tool_result',
+        tool_name: 'StartAction',
+        call_id: 'gate-1',
+        status: 'success',
+        input: { goal: 'Inspect the repo' },
+        output: 'Action gate opened.\nToolMap: [{"name":"ide_map"}]',
+      })
+    ).toMatchObject({
+      type: 'tool-result',
+      tool: 'StartAction',
+      callId: 'gate-1',
+      input: { goal: 'Inspect the repo' },
+      text: expect.stringContaining('ToolMap'),
+      outcome: 'success',
+    });
+  });
+
+  it('compacts a large StartAction ToolMap before the event text limit can corrupt it', () => {
+    const map = Array.from({ length: 180 }, (_, index) => ({
+      name: `ide_tool_${index}`,
+      description: `Long schema-discovery description ${'x'.repeat(120)}`,
+      ...(index === 0 ? { recommended: true } : {}),
+      ...(index === 179 ? { deferred: true } : {}),
+    }));
+    const normalized = normalizeTomnyStreamEvent({
+      type: 'tool_result',
+      tool_name: 'StartAction',
+      call_id: 'large-map',
+      status: 'success',
+      output: `Action gate opened.\nToolMap: ${JSON.stringify(map)}\nSchema cache unchanged.`,
+    });
+
+    expect(normalized).toMatchObject({ type: 'tool-result', tool: 'StartAction' });
+    if (normalized?.type !== 'tool-result') throw new Error('Expected a StartAction tool result');
+    expect(normalized.text).not.toContain('[Event text truncated]');
+    const encodedMap = /ToolMap:\s*(\[[^\r\n]*\])/u.exec(normalized.text ?? '')?.[1];
+    expect(encodedMap).toBeTruthy();
+    const compact = JSON.parse(encodedMap as string) as Array<Record<string, unknown>>;
+    expect(compact.at(-1)).toEqual({ name: 'ide_tool_179', deferred: true });
+    expect(compact[0]).toEqual({ name: 'ide_tool_0', recommended: true });
   });
 
   it('ignores lifecycle events that are handled by the process session', () => {
@@ -93,6 +310,41 @@ describe('Tomny JSON stream adapter', () => {
     expect(normalizeTomnyStreamEvent({ type: 'stream_end' })).toBeNull();
   });
 
+  it('reads StartAction plus the hidden schema cache and compacted core context', () => {
+    expect(
+      parseTomnyContextSnapshot({
+        type: 'context_snapshot',
+        system: 'Tomny system prompt',
+        tools: [
+          {
+            name: 'StartAction',
+            description: 'Core action gateway',
+            input_schema: { type: 'object', properties: { goal: { type: 'string' } } },
+            deferred: false,
+          },
+        ],
+        messages: [{ role: 'user', content: [{ type: 'text', text: 'Compacted context' }] }],
+        capability_summary: 'Available surface capabilities: project reading and search.',
+        working_memory: { goal: 'Inspect' },
+        tool_cache: [
+          {
+            name: 'ide_read',
+            description: 'Read an IDE file',
+            input_schema: { type: 'object', properties: { path: { type: 'string' } } },
+            deferred: true,
+          },
+        ],
+      })
+    ).toEqual({
+      system: 'Tomny system prompt',
+      tools: [expect.objectContaining({ name: 'StartAction', deferred: false })],
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'Compacted context' }] }],
+      capabilitySummary: 'Available surface capabilities: project reading and search.',
+      workingMemory: { goal: 'Inspect' },
+      toolCache: [expect.objectContaining({ name: 'ide_read', deferred: true })],
+    });
+    expect(parseTomnyContextSnapshot({ type: 'context_snapshot', system: '', tools: [{ name: 'broken' }] })).toBeNull();
+  });
   it('keeps provider worklog text and every emitted detail field without summarizing it', () => {
     expect(
       normalizeTomnyStreamEvent({
@@ -254,13 +506,68 @@ model = "qwen3:30b"
       name: 'tomny-tools',
       transport: 'sse',
       url: 'http://127.0.0.1:1234/sse',
+      deferred: true,
     });
   });
 
+  it('preserves stdio MCP commands and secret environment values inside the process boundary', () => {
+    expect(
+      tomnyMcpServerCommand({
+        name: 'local-tools',
+        transport: 'stdio',
+        command: 'node',
+        args: ['server.js'],
+        env: [{ name: 'TOKEN', value: 'secret' }],
+      })
+    ).toEqual({
+      type: 'add_mcp_server',
+      name: 'local-tools',
+      transport: 'stdio',
+      command: 'node',
+      args: ['server.js'],
+      env: { TOKEN: 'secret' },
+      deferred: true,
+    });
+  });
+
+  it('uses the IDE host SSE sibling but rejects other unsupported HTTP MCP transports', () => {
+    expect(
+      tomnyMcpServerCommand({ name: 'ide-tools', transport: 'sse', url: 'http://127.0.0.1:4100/sse' })
+    ).toMatchObject({ name: 'ide-tools', transport: 'sse', url: 'http://127.0.0.1:4100/sse' });
+    expect(
+      tomnyMcpServerCommand({
+        name: 'aionui-ide',
+        transport: 'streamable_http',
+        url: 'http://127.0.0.1:4100/mcp',
+      })
+    ).toMatchObject({ name: 'aionui-ide', transport: 'sse', url: 'http://127.0.0.1:4100/sse' });
+    expect(() =>
+      tomnyMcpServerCommand({ name: 'http-tools', transport: 'streamable_http', url: 'http://127.0.0.1:4100/mcp' })
+    ).toThrow('does not support HTTP MCP transport');
+  });
+
+  it('injects selected MCP servers even when ready only reports that none are configured yet', () => {
+    const mcpServers = [{ name: 'ide-tools', transport: 'sse' as const, url: 'http://127.0.0.1:4100/sse' }];
+    expect(tomnyShouldInitializeMcpServers({ type: 'ready', capabilities: { mcp: false } }, mcpServers)).toBe(true);
+    expect(tomnyShouldInitializeMcpServers({ type: 'ready', capabilities: { mcp: true } }, mcpServers)).toBe(true);
+    expect(tomnyShouldInitializeMcpServers({ type: 'ready' }, mcpServers)).toBe(true);
+    expect(tomnyShouldInitializeMcpServers({ type: 'ready', capabilities: { mcp: false } }, [])).toBe(false);
+  });
+
   it('allows safe Tomny reads but denies mutation in read-only mode', () => {
+    expect(tomnyToolAccessForPermission('read-only', 'ToolSearch', 'info')).toBe('approve');
+
+    expect(tomnyToolAccessForPermission('read-only', 'StartAction', 'info')).toBe('approve');
     expect(tomnyToolAccessForPermission('read-only', 'tomny_read', 'mcp')).toBe('approve');
+    expect(tomnyToolAccessForPermission('read-only', 'ide_research', 'mcp')).toBe('approve');
     expect(tomnyToolAccessForPermission('read-only', 'tomny_visual_analyze', 'mcp')).toBe('approve');
     expect(tomnyToolAccessForPermission('read-only', 'tomny_team_status', 'mcp')).toBe('approve');
+    expect(tomnyToolAccessForPermission('read-only', 'agent_track', 'mcp')).toBe('approve');
+    expect(tomnyToolAccessForPermission('read-only', 'agent_spawn', 'mcp')).toBe('deny');
+    expect(tomnyToolAccessForPermission('read-only', 'test_report', 'mcp')).toBe('approve');
+    expect(tomnyToolAccessForPermission('read-only', 'test_run', 'mcp')).toBe('deny');
+    expect(tomnyToolAccessForPermission('read-only', 'browser_screenshot', 'mcp')).toBe('approve');
+    expect(tomnyToolAccessForPermission('read-only', 'browser_secret_type', 'mcp')).toBe('deny');
     expect(tomnyToolAccessForPermission('read-only', 'tomny_team_edit', 'mcp')).toBe('deny');
     expect(tomnyToolAccessForPermission('read-only', 'tomny_command', 'mcp')).toBe('deny');
 
@@ -309,6 +616,142 @@ model = "qwen3:30b"
     });
   });
 
+  it('binds IDE memory calls to the active Tomny session instead of trusting model arguments', () => {
+    expect(translateHostBoundTomnyTool('ide_memory_recall', { query: 'sandbox' }, 'session-active')).toEqual({
+      name: 'ide_memory_recall',
+      arguments: { query: 'sandbox', sessionId: 'session-active' },
+    });
+    expect(
+      translateHostBoundTomnyTool('IDE_MEMORY_STATUS', { sessionId: 'session-selected-by-model' }, 'session-active')
+    ).toEqual({
+      name: 'ide_memory_status',
+      arguments: { sessionId: 'session-active' },
+    });
+    expect(translateHostBoundTomnyTool('ide_read_file', {}, 'session-active')).toBeNull();
+  });
+
+  it('preflights workspace IDE arguments before an MCP request is sent', () => {
+    expect(preflightWorkspaceIdeTool('ide_map', {}, 'C:/repo')).toEqual({
+      kind: 'execute',
+      translation: { name: 'ide_map', arguments: { rootPath: 'C:/repo' } },
+    });
+    expect(preflightWorkspaceIdeTool('ide_scan_repo', undefined, 'C:/repo')).toEqual({
+      kind: 'execute',
+      translation: { name: 'ide_scan_repo', arguments: { rootPath: 'C:/repo' } },
+    });
+    expect(preflightWorkspaceIdeTool('ide_search', { query: 'needle' }, 'C:/repo')).toEqual({
+      kind: 'execute',
+      translation: { name: 'ide_search', arguments: { query: 'needle', rootPath: 'C:/repo' } },
+    });
+    expect(preflightWorkspaceIdeTool('ide_research', { intent: 'trace message flow' }, 'C:/repo')).toEqual({
+      kind: 'execute',
+      translation: { name: 'ide_research', arguments: { intent: 'trace message flow', rootPath: 'C:/repo' } },
+    });
+    expect(
+      preflightWorkspaceIdeTool(
+        'ide_research',
+        {
+          intent: 'diagnose failed login',
+          mode: 'bug',
+          target: 'src/auth/session.ts',
+          errorText: 'token expired',
+        },
+        'C:/repo'
+      )
+    ).toEqual({
+      kind: 'execute',
+      translation: {
+        name: 'ide_research',
+        arguments: {
+          intent: 'diagnose failed login',
+          mode: 'bug',
+          target: 'src/auth/session.ts',
+          errorText: 'token expired',
+          rootPath: 'C:/repo',
+        },
+      },
+    });
+    expect(preflightWorkspaceIdeTool('ide_research', {}, 'C:/repo')).toEqual({
+      kind: 'error',
+      message: expect.stringContaining('intent is required'),
+    });
+    expect(
+      preflightWorkspaceIdeTool('ide_test_script', { script: 'assert True', phase: 'reproduce' }, 'C:/repo')
+    ).toEqual({
+      kind: 'execute',
+      translation: {
+        name: 'ide_test_script',
+        arguments: { script: 'assert True', phase: 'reproduce', rootPath: 'C:/repo' },
+      },
+    });
+    expect(preflightWorkspaceIdeTool('ide_test_script', { phase: 'reproduce' }, 'C:/repo')).toEqual({
+      kind: 'error',
+      message: expect.stringContaining('script is required'),
+    });
+    expect(preflightWorkspaceIdeTool('ide_search', {}, 'C:/repo')).toEqual({
+      kind: 'error',
+      message: expect.stringContaining('query is required'),
+    });
+    expect(preflightWorkspaceIdeTool('ide_analyze', {}, 'C:/repo')).toEqual({
+      kind: 'execute',
+      translation: { name: 'ide_analyze', arguments: { rootPath: 'C:/repo' } },
+    });
+    expect(preflightWorkspaceIdeTool('ide_compass', {}, 'C:/repo')).toEqual({
+      kind: 'error',
+      message: expect.stringContaining('filePath is required'),
+    });
+    expect(preflightWorkspaceIdeTool('team_status', {}, 'C:/repo')).toEqual({
+      kind: 'execute',
+      translation: { name: 'team_status', arguments: { rootPath: 'C:/repo' } },
+    });
+    expect(preflightWorkspaceIdeTool('ide_command', {}, 'C:/repo')).toEqual({
+      kind: 'error',
+      message: expect.stringContaining('command is required'),
+    });
+    expect(preflightWorkspaceIdeTool('ide_command', { command: 'bun test' }, 'C:/repo')).toEqual({
+      kind: 'error',
+      message: expect.stringContaining('rootPath is required'),
+    });
+    expect(
+      preflightWorkspaceIdeTool('ide_command', { rootPath: 'C:/repo', command: 'bun test' }, 'C:/repo')
+    ).toBeNull();
+    expect(preflightWorkspaceIdeTool('ide_map', { rootPath: 'D:/other' }, 'C:/repo')).toBeNull();
+    expect(preflightWorkspaceIdeTool('ide_read_file', {}, 'C:/repo')).toBeNull();
+  });
+
+  it('preserves arguments from every supported Tomny tool-request envelope', () => {
+    expect(tomnyToolRequestInput({ input: { query: 'input' }, arguments: { query: 'arguments' } })).toEqual({
+      query: 'input',
+    });
+    expect(tomnyToolRequestInput({ arguments: { name: 'fix-errors' } })).toEqual({ name: 'fix-errors' });
+    expect(tomnyToolRequestInput({ args: { rootPath: 'C:/repo' } })).toEqual({ rootPath: 'C:/repo' });
+    expect(tomnyToolRequestInput({ tool: { input: { filePath: 'a.ts' } } })).toEqual({ filePath: 'a.ts' });
+    expect(tomnyToolRequestInput({ tool: { arguments: { command: 'bun test' } } })).toEqual({
+      command: 'bun test',
+    });
+  });
+
+  it('rejects incomplete skill workflow calls before MCP dispatch', () => {
+    expect(preflightSkillWorkflowTool('skills_read', {})).toEqual({
+      kind: 'error',
+      message: expect.stringContaining('name is required'),
+    });
+    expect(preflightSkillWorkflowTool('skills_read', { name: 'fix-errors' })).toBeNull();
+    expect(preflightSkillWorkflowTool('tools_recall', {})).toEqual({
+      kind: 'error',
+      message: expect.stringContaining('query is required'),
+    });
+    expect(preflightSkillWorkflowTool('skills_select', { goal: 'debug' })).toEqual({
+      kind: 'error',
+      message: expect.stringContaining('names is required'),
+    });
+    expect(preflightSkillWorkflowTool('skills_finish', { goal: 'debug' })).toEqual({
+      kind: 'error',
+      message: expect.stringContaining('succeeded is required'),
+    });
+    expect(preflightSkillWorkflowTool('ide_map', {})).toBeNull();
+  });
+
   it('does not auto-translate sensitive or semantically incompatible native tools', () => {
     expect(translateNativeTomnyTool('Write', { file_path: 'C:/repo/a.ts', content: 'x' }, 'C:/repo')).toBeNull();
     expect(translateNativeTomnyTool('Edit', {}, 'C:/repo')).toBeNull();
@@ -354,6 +797,33 @@ model = "qwen3:30b"
     );
   });
 
+  it('rebuilds the runtime when Super changes the deferred ToolMap catalog', () => {
+    const identity = { targetId: 'tomny', workspace: 'C:/work', surface: 'ide' };
+    const regular = [{ name: 'aionui-ide', transport: 'sse' as const, url: 'http://127.0.0.1:4100/sse' }];
+    const superCatalog = [
+      { name: 'aionui-browser-control', transport: 'sse' as const, url: 'http://127.0.0.1:4200/sse' },
+      ...regular,
+    ];
+
+    expect(tomnyRuntimeKey(identity, regular)).not.toBe(tomnyRuntimeKey(identity, superCatalog));
+    expect(tomnyRuntimeKey(identity, superCatalog)).toBe(tomnyRuntimeKey(identity, [...regular, superCatalog[0]]));
+    expect(tomnyRuntimeKey(identity, regular)).not.toBe(
+      tomnyRuntimeKey(identity, [{ ...regular[0], url: 'http://127.0.0.1:4300/sse' }])
+    );
+  });
+
+  it('separates surface-only and Super alias catalogs even with the same MCP servers', () => {
+    const identity = { targetId: 'tomny', workspace: 'C:/work', surface: 'ide' };
+    const servers = [{ name: 'aionui-ide', transport: 'sse' as const, url: 'http://127.0.0.1:4100/sse' }];
+    const surfaceCatalog = { mode: 'surface' as const, patterns: ['ide_*', 'tomny_*'] };
+    const superCatalog = { mode: 'super' as const, patterns: ['*'] };
+
+    expect(tomnyRuntimeKey(identity, servers, surfaceCatalog)).not.toBe(
+      tomnyRuntimeKey(identity, servers, superCatalog)
+    );
+    expect(tomnySurfaceSystemPrompt('ide', 'C:/work', superCatalog)).toContain('[TomnyToolCatalog] super');
+  });
+
   it('deduplicates concurrent startup and evicts the least-recent idle session', async () => {
     let now = 0;
     const pool = new BoundedSessionPool({ maxSessions: 2, now: () => now });
@@ -369,6 +839,22 @@ model = "qwen3:30b"
     expect(left).toBe(right);
     expect(factory).toHaveBeenCalledOnce();
     expect(first.dispose).toHaveBeenCalledOnce();
+  });
+
+  it('automatically hibernates an idle Core process without requiring another request', async () => {
+    vi.useFakeTimers();
+    try {
+      const pool = new BoundedSessionPool({ idleTimeoutMs: 1_000 });
+      const session = { isBusy: () => false, dispose: vi.fn() };
+      await pool.getOrCreate('idle', async () => session);
+
+      await vi.advanceTimersByTimeAsync(1_000);
+
+      expect(session.dispose).toHaveBeenCalledOnce();
+      expect(pool.size).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('does not let a stale process generation invalidate its replacement', async () => {
@@ -393,6 +879,7 @@ describe('persistent agent retry policy', () => {
       new Error('HTTP 503 service unavailable'),
       new Error('500 Internal Server Error'),
       new Error('All API keys are busy'),
+      new Error('unexpected status 404 Not Found: No active credentials for provider: openai'),
       new Error('RESOURCE_EXHAUSTED: Kiro is throttling requests'),
     ]) {
       expect(classifyAgentFailure(error)).toMatchObject({ kind: 'transient', retry: true });
@@ -403,9 +890,12 @@ describe('persistent agent retry policy', () => {
     const cases = [
       ['Maximum context length exceeded', 'context'],
       ['Invalid API key', 'auth'],
+      ['HTTP 401: Your authentication token has been invalidated. Please try signing in again.', 'auth'],
       ['insufficient_quota: out of credits', 'quota'],
       ['Model is not configured', 'configuration'],
       ['Failed to start tomny: spawn EACCES', 'configuration'],
+      ['Surface ide is unavailable; using chat.', 'configuration'],
+      ['HTTP 404 Not Found', 'configuration'],
       ['Tool Read failed', 'tool'],
       ['Denied by user', 'permission'],
       ['The request was cancelled', 'cancelled'],

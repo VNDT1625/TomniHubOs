@@ -17,6 +17,7 @@ import EditModeModal from '@/renderer/pages/settings/components/EditModeModal';
 import AionScrollArea from '@/renderer/components/base/AionScrollArea';
 import { useProvidersQuery } from '@/renderer/hooks/agent/useModelProviderList';
 import Router9ConnectorPanel from '@/renderer/pages/settings/router9/Router9ConnectorPanel';
+import { TOMNI_GATEWAY_PROVIDER_ID } from '@/common/router9';
 import { useSettingsViewMode } from '../settingsViewContext';
 import { consumePendingDeepLink } from '@/renderer/hooks/system/useDeepLink';
 import '../model-provider.css';
@@ -98,8 +99,13 @@ const ModelModalContent: React.FC = () => {
   const viewMode = useSettingsViewMode();
   const isPageMode = viewMode === 'page';
   const [collapseKey, setCollapseKey] = useState<Record<string, boolean>>({});
+  const [connectionView, setConnectionView] = useState<'direct' | 'gateway'>('direct');
   const [healthCheckLoading, setHealthCheckLoading] = useState<Record<string, boolean>>({});
   const { data, mutate } = useProvidersQuery();
+  // The managed gateway is an internal routing provider, not a second direct
+  // API-key row. It remains available to all model selectors through the
+  // provider store, but is configured exclusively by Router9ConnectorPanel.
+  const directProviders = (data ?? []).filter((provider) => provider.id !== TOMNI_GATEWAY_PROVIDER_ID);
   const [message, messageContext] = Message.useMessage();
 
   /**
@@ -335,7 +341,7 @@ const ModelModalContent: React.FC = () => {
       <div className='flex-shrink-0 border-b border-[var(--color-border-2)] pb-12px mb-14px flex flex-col gap-10px'>
         <div className='flex items-center justify-between gap-8px flex-wrap'>
           <div className='text-20px font-600 text-t-primary leading-34px'>{t('settings.model')}</div>
-          <div className='flex items-center gap-8px flex-wrap'>
+          {connectionView === 'direct' && <div className='flex items-center gap-8px flex-wrap'>
             <Button
               type='outline'
               shape='round'
@@ -354,23 +360,52 @@ const ModelModalContent: React.FC = () => {
             >
               {t('settings.addModel')}
             </Button>
+          </div>}
+        </div>
+        <div className='flex items-center gap-8px'>
+          <Button
+            size='small'
+            type={connectionView === 'direct' ? 'primary' : 'outline'}
+            onClick={() => setConnectionView('direct')}
+          >
+            {t('settings.directProvidersTitle', { defaultValue: 'Direct connections' })}
+          </Button>
+          <Button
+            size='small'
+            type={connectionView === 'gateway' ? 'primary' : 'outline'}
+            onClick={() => setConnectionView('gateway')}
+          >
+            {t('settings.router9.title', { defaultValue: 'Tomni Model Gateway' })}
+          </Button>
+        </div>
+        {connectionView === 'direct' && (
+          <div
+            className='rd-8px px-12px py-8px text-12px leading-5 border border-solid'
+            style={{
+              borderColor: 'rgba(var(--primary-6),0.32)',
+              backgroundColor: 'rgba(var(--primary-6),0.08)',
+              color: 'rgb(var(--primary-6))',
+            }}
+          >
+            {t('settings.customModelSupportNote')}
           </div>
-        </div>
-        <div
-          className='rd-8px px-12px py-8px text-12px leading-5 border border-solid'
-          style={{
-            borderColor: 'rgba(var(--primary-6),0.32)',
-            backgroundColor: 'rgba(var(--primary-6),0.08)',
-            color: 'rgb(var(--primary-6))',
-          }}
-        >
-          {t('settings.customModelSupportNote')}
-        </div>
+        )}
       </div>
 
       {/* Content Area */}
-      <AionScrollArea className='flex-1 min-h-0' disableOverflow={isPageMode}>
-        {!data || data.length === 0 ? (
+      {connectionView === 'direct' ? (
+        <AionScrollArea className='flex-1 min-h-0' disableOverflow={isPageMode}>
+        <div className='mb-10px'>
+          <div className='text-14px font-600 text-t-primary'>
+            {t('settings.directProvidersTitle', { defaultValue: 'Direct provider connections' })}
+          </div>
+          <div className='text-12px text-t-secondary mt-2px'>
+            {t('settings.directProvidersDescription', {
+              defaultValue: 'Tomni connects directly with the API key and endpoint saved for each provider.',
+            })}
+          </div>
+        </div>
+        {directProviders.length === 0 ? (
           <div className='flex flex-col items-center justify-center py-40px'>
             <Info theme='outline' size='48' className='text-t-secondary mb-16px' />
             <h3 className='text-16px font-500 text-t-primary mb-8px'>{t('settings.noConfiguredModels')}</h3>
@@ -389,7 +424,7 @@ const ModelModalContent: React.FC = () => {
           </div>
         ) : (
           <div className='space-y-16px'>
-            {(data || []).map((platform: IProvider) => {
+            {directProviders.map((platform: IProvider) => {
               const key = platform.id;
               const isExpanded = collapseKey[platform.id] ?? false;
               return (
@@ -613,10 +648,12 @@ const ModelModalContent: React.FC = () => {
             })}
           </div>
         )}
-      </AionScrollArea>
-
-      {/* Distribute the configured providers to external CLI / IDE tools via 9Router */}
-      <Router9ConnectorPanel />
+        </AionScrollArea>
+      ) : (
+        <AionScrollArea className='flex-1 min-h-0' disableOverflow={isPageMode}>
+          <Router9ConnectorPanel onProviderSynced={() => void mutate()} />
+        </AionScrollArea>
+      )}
     </div>
   );
 };

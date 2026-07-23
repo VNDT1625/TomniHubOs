@@ -56,6 +56,13 @@ describe('MessageAgentStatus — FeedbackButton wiring', () => {
     expect(screen.queryByText('settings.oneClickFeedback')).not.toBeInTheDocument();
   });
 
+  it('renders a status with an absent legacy backend instead of crashing', () => {
+    const message = buildMessage('connecting');
+    message.content = { status: 'connecting' } as IMessageAgentStatus['content'];
+    render(<MessageAgentStatus message={message} />);
+    expect(screen.getByText('acp.status.connecting:acp.status.unknown')).toBeInTheDocument();
+  });
+
   it('renders FeedbackButton when agent status is error', () => {
     render(<MessageAgentStatus message={buildMessage('error')} />);
     expect(screen.getByText('settings.oneClickFeedback')).toBeInTheDocument();

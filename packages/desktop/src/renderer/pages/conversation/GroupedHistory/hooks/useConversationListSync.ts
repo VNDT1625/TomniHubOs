@@ -65,6 +65,7 @@ let generatingConversationIdsState = new Set<string>();
 let completionUnreadConversationIdsState = new Set<string>();
 let conversation_idsState = new Set<string>();
 let activeConversationIdState: string | null = null;
+let refreshRetryTimer: ReturnType<typeof setTimeout> | undefined;
 let snapshotState: ConversationListSyncSnapshot = {
   conversations: conversationsState,
   generatingConversationIds: generatingConversationIdsState,
@@ -95,6 +96,10 @@ const refreshConversations = () => {
     .then((result) => {
       const items = result?.items;
       if (items && Array.isArray(items)) {
+        if (refreshRetryTimer) {
+          clearTimeout(refreshRetryTimer);
+          refreshRetryTimer = undefined;
+        }
         const filteredData = items.filter((conv) => {
           // Legacy rows from the pre-provider-probe health check flow are hidden
           // from normal history. New health checks must not create conversations.
@@ -115,10 +120,13 @@ const refreshConversations = () => {
       emitStoreChange();
     })
     .catch((error) => {
+      // Keep the last successful snapshot while the backend is still starting.
+      // Clearing it here makes persisted conversations appear deleted after restart.
       console.error('[WorkspaceGroupedHistory] Failed to load conversations:', error);
-      conversationsState = [];
-      conversation_idsState = new Set();
-      emitStoreChange();
+      refreshRetryTimer ??= setTimeout(() => {
+        refreshRetryTimer = undefined;
+        refreshConversations();
+      }, 1000);
     });
 };
 

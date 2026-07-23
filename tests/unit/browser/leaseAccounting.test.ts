@@ -236,16 +236,33 @@ const createHarness = (failPoint: FailPoint = 'none'): Harness => {
     tts,
   });
 
+  const png = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAF/gL+Vn0cWQAAAABJRU5ErkJggg==',
+    'base64'
+  );
   const image: CapturedImage = {
-    toDataURL: () => 'data:image/png;base64,AAAA',
-    toPNG: () => new Uint8Array([1, 2, 3]),
-    getSize: () => ({ width: 800, height: 600 }),
+    toDataURL: () => `data:image/png;base64,${png.toString('base64')}`,
+    toPNG: () => png,
+    getSize: () => ({ width: 1, height: 1 }),
     isEmpty: () => false,
   };
   const driver: PageDriver = {
-    // The accessibility snippet embeds `MAX_DEPTH`; the text snippet does not.
-    executeJavaScript: async (code) =>
-      code.includes('MAX_DEPTH') ? { role: 'body', name: '', children: [] } : 'page text',
+    getURL: () => 'https://example.com/',
+    executeJavaScript: async (code) => {
+      if (code.includes('const rects = []')) {
+        return {
+          hostname: 'example.com',
+          viewportWidth: 1,
+          viewportHeight: 1,
+          documentWidth: 1,
+          documentHeight: 1,
+          rects: [],
+          matchedSelectors: [],
+        };
+      }
+      if (code.includes('MAX_DEPTH')) return { role: 'body', name: '', children: [] };
+      return { text: 'page text', matchedSelectors: [] };
+    },
     capturePage: async () => {
       failIf('capture');
       return image;

@@ -87,6 +87,31 @@
     "duration": "片段时长",
     "supportsEndFrame": "此模型支持起始帧 + 结束帧插值"
   },
+  "editor": {
+    "storyboard": "故事板",
+    "timeline": "时间线",
+    "noPreview": "将播放头移到视频片段上进行预览。",
+    "inspector": "片段检查器",
+    "selectClip": "请选择时间线上的片段。",
+    "trackLabel": "轨道",
+    "start": "开始（秒）",
+    "duration": "时长（秒）",
+    "volume": "音量",
+    "split": "拆分",
+    "delete": "删除",
+    "play": "播放",
+    "pause": "暂停",
+    "undo": "撤销",
+    "redo": "重做",
+    "zoom": "缩放",
+    "save": "保存时间线",
+    "snapping": "吸附",
+    "ripple": "波纹编辑",
+    "transitionIn": "入场转场",
+    "transitionOut": "出场转场",
+    "transition": { "cut": "切换", "fade": "淡入淡出", "dissolve": "叠化" },
+    "track": { "video": "视频", "voice": "对白", "music": "音乐", "sfx": "音效", "subtitle": "字幕" }
+  },
   "export": {
     "success": "视频已导出：{{path}}"
   }

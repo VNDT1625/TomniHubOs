@@ -26,6 +26,7 @@ import { useGuidMention } from './hooks/useGuidMention';
 import { useGuidModelSelection } from './hooks/useGuidModelSelection';
 import { useGuidSend } from './hooks/useGuidSend';
 import { useTypewriterPlaceholder } from './hooks/useTypewriterPlaceholder';
+import { isTomniAgentBackend } from '@/common/utils/buildAgentConversationParams';
 import { ensureBackendMcpCatalog } from '@/renderer/hooks/mcp/catalog';
 import { BROWSER_CONTROL_MCP_NAME } from '@/renderer/pages/conversation/hooks/useSuperMode';
 import { resolveAgentLogo } from '@/renderer/utils/model/agentLogo';
@@ -559,9 +560,8 @@ const GuidPage: React.FC = () => {
 
   // Agents that use configured model providers instead of ACP probe-based models.
   // Only aionrs now — Gemini runs as a regular ACP backend with ACP-cached models.
-  const PROVIDER_BASED_AGENTS = new Set(['aionrs']);
   const isGeminiMode =
-    PROVIDER_BASED_AGENTS.has(effectiveAgentType) &&
+    isTomniAgentBackend(effectiveAgentType) &&
     (!agentSelection.is_presetAgent || agentSelection.currentEffectiveAgentInfo.isAvailable);
 
   // Build the mention dropdown node

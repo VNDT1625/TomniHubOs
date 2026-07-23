@@ -17,6 +17,9 @@ import serveHandler from 'serve-handler';
 export type StaticServerOptions = {
   staticDir: string;
   backendPort: number;
+
+  /** Private bearer injected only on the loopback hop to a Tomni gateway. */
+  upstreamToken?: string;
   port?: number;
   allowRemote?: boolean;
 };
@@ -57,13 +60,28 @@ function getLanIP(): string | null {
   return candidates.sort((a, b) => b.score - a.score)[0]?.address ?? null;
 }
 
-function forwardToBackend(req: IncomingMessage, res: ServerResponse, backendPort: number): void {
+function forwardToBackend(
+  req: IncomingMessage,
+  res: ServerResponse,
+  backendPort: number,
+  upstreamToken?: string
+): void {
+  const {
+    origin: _origin,
+    authorization: _authorization,
+    'x-tomni-internal': _internal,
+    ...forwardedHeaders
+  } = req.headers;
   const options: http.RequestOptions = {
     hostname: '127.0.0.1',
     port: backendPort,
     path: req.url,
     method: req.method,
-    headers: { ...req.headers, host: `127.0.0.1:${backendPort}` },
+    headers: {
+      ...forwardedHeaders,
+      host: `127.0.0.1:${backendPort}`,
+      ...(upstreamToken ? { authorization: `Bearer ${upstreamToken}` } : {}),
+    },
   };
   const proxy = http.request(options, (proxyRes) => {
     res.writeHead(proxyRes.statusCode ?? 502, proxyRes.headers);
@@ -128,8 +146,17 @@ function peekWsRoute(buf: Buffer): boolean | null {
   const newlineIdx = buf.indexOf(0x0a); // \n
   if (newlineIdx < 0) return null;
   const firstLine = buf.slice(0, newlineIdx).toString('ascii');
-  return /^GET\s+\/ws(?:\?[^\s]*)?\s+HTTP\/1\.[01]\r?$/.test(firstLine);
+  return /^GET\s+\/ws(?:\/v1)?(?:\?[^\s]*)?\s+HTTP\/1\.[01]\r?$/.test(firstLine);
 }
+
+const injectGatewayAuthorization = (requestBytes: Buffer, token: string): Buffer | undefined => {
+  const headerEnd = requestBytes.indexOf('\r\n\r\n');
+  if (headerEnd < 0) return undefined;
+  const header = requestBytes.subarray(0, headerEnd).toString('latin1');
+  const lines = header.split('\r\n').filter((line, index) => index === 0 || !/^(authorization|origin):/i.test(line));
+  lines.push(`Authorization: Bearer ${token}`);
+  return Buffer.concat([Buffer.from(`${lines.join('\r\n')}\r\n\r\n`, 'latin1'), requestBytes.subarray(headerEnd + 4)]);
+};
 
 export async function startStaticServer(opts: StaticServerOptions): Promise<StaticServerHandle> {
   const port = opts.port ?? DEFAULT_PORT;
@@ -156,7 +183,7 @@ export async function startStaticServer(opts: StaticServerOptions): Promise<Stat
       // /login and /logout are aionui-auth's top-level auth endpoints: proxy them too
       // so WebUI browser clients reach the backend without a path-rewrite.
       if (req.url.startsWith('/api/') || req.url.startsWith('/api?') || req.url === '/login' || req.url === '/logout') {
-        forwardToBackend(req, res, opts.backendPort);
+        forwardToBackend(req, res, opts.backendPort, opts.upstreamToken);
         return;
       }
 
@@ -206,9 +233,12 @@ export async function startStaticServer(opts: StaticServerOptions): Promise<Stat
       peeked = Buffer.concat([peeked, chunk]);
       const decision = peekWsRoute(peeked);
       if (decision === null && peeked.length < PEEK_LIMIT_BYTES) return;
+      const gatewayRequest =
+        decision === true && opts.upstreamToken ? injectGatewayAuthorization(peeked, opts.upstreamToken) : peeked;
+      if (gatewayRequest === undefined && peeked.length < PEEK_LIMIT_BYTES) return;
       cleanup();
       const target = decision === true ? opts.backendPort : internalPort;
-      spliceToTcpEndpoint(client, target, peeked);
+      spliceToTcpEndpoint(client, target, gatewayRequest ?? peeked);
     };
     const onEarlyError = (): void => {
       cleanup();

@@ -1,11 +1,11 @@
 {
   "name": "omni-agentic",
   "version": "0.0.0",
-  "description": "Tomni Agentic desktop AI agent interface.",
+  "description": "Tomni personal agentic operating system.",
   "keywords": [],
   "license": "Apache-2.0",
   "author": {
-    "name": "Tomni Agentic",
+    "name": "Tomni",
     "email": "VNDT1625@users.noreply.github.com"
   },
   "workspaces": [
@@ -13,10 +13,16 @@
   ],
   "main": "./out/main/index.js",
   "scripts": {
-    "dev": "electron-vite dev --config packages/desktop/electron.vite.config.ts",
-    "start": "electron-vite dev --config packages/desktop/electron.vite.config.ts",
-    "start:multi": "cross-env AIONUI_MULTI_INSTANCE=1 electron-vite dev --config packages/desktop/electron.vite.config.ts",
-    "cli": "electron-vite dev --config packages/desktop/electron.vite.config.ts",
+    "dev": "bun run prepare:dev && electron-vite dev --config packages/desktop/electron.vite.config.ts",
+    "dev:services": "node scripts/dev/index.cjs start",
+    "dev:services:status": "node scripts/dev/index.cjs status",
+    "dev:services:stop": "node scripts/dev/index.cjs stop",
+    "dev:web": "cross-env TOMNI_WEB_DEV_PROXY=http://127.0.0.1:25809 TOMNI_DEV_RENDERER_PORT=5174 vite --config scripts/dev/webRenderer.config.ts --host 127.0.0.1",
+    "dev:browser": "bun run dev:services",
+    "start": "bun run prepare:dev && electron-vite dev --config packages/desktop/electron.vite.config.ts",
+    "start:fast": "electron-vite dev --config packages/desktop/electron.vite.config.ts",
+    "start:multi": "bun run prepare:dev && cross-env AIONUI_MULTI_INSTANCE=1 electron-vite dev --config packages/desktop/electron.vite.config.ts",
+    "cli": "bun run prepare:dev && electron-vite dev --config packages/desktop/electron.vite.config.ts",
     "webui": "tsx scripts/webui.ts",
     "webui:remote": "tsx scripts/webui.ts --remote",
     "webui:prod": "cross-env NODE_ENV=production tsx scripts/webui.ts",
@@ -72,10 +78,14 @@
     "test:e2e:team:comm": "playwright test --config playwright.config.ts tests/e2e/cases/teams/team-communication.e2e.ts --reporter=list",
     "prepare": "husky",
     "postinstall": "node scripts/postinstall.js",
+    "brand:generate": "node scripts/generate-tomni-brand-assets.mjs",
     "test:bun": "bun test packages/desktop/src/process/services/database/drivers/*.bun.test.ts",
     "omni:rescue:local": "node scripts/omni-mcp-sidecar.cjs rescue --local",
+    "prepare:dev": "bun run prepare:tomny && bun run prepare:runtime && bun run prepare:model-gateway",
     "prepare:tomny": "node packages/shared-scripts/src/prepare-tomny-cli-cli.js",
-    "prepare:core": "node packages/shared-scripts/src/prepare-tomny-core-cli.js"
+    "prepare:core": "node packages/shared-scripts/src/prepare-tomny-core-cli.js",
+    "prepare:runtime": "node packages/shared-scripts/src/prepare-tomny-runtime-cli.js",
+    "prepare:model-gateway": "node packages/shared-scripts/src/prepare-model-gateway.js"
   },
   "dependencies": {
     "@agentclientprotocol/claude-agent-acp": "0.33.1",
@@ -137,9 +147,7 @@
     "electron-updater": "^6.6.2",
     "eventemitter3": "^5.0.1",
     "express": "^5.1.0",
-    express-rate-limit: ^7.5.1,
-    jszip: ^3.10.1,
-    jszip: ^3.10.1,
+    "express-rate-limit": "^7.5.1",
     "fix-path": "^4.0.0",
     "grammy": "^1.39.3",
     "html-to-text": "^9.0.5",
@@ -147,6 +155,7 @@
     "i18next": "^23.7.16",
     "jsonrepair": "^3.13.0",
     "jsonwebtoken": "^9.0.2",
+    "jszip": "^3.10.1",
     "katex": "^0.16.22",
     "mammoth": "^1.11.0",
     "mermaid": "^11.13.0",
@@ -175,6 +184,7 @@
     "remark-math": "^6.0.0",
     "semver": "^7.7.2",
     "sharp": "^0.34.3",
+    "simple-git": "^3.36.0",
     "smol-toml": "^1.6.1",
     "stream-browserify": "^3.0.0",
     "streamdown": "^1.5.1",
@@ -289,7 +299,7 @@
   "patchedDependencies": {
     "7zip-bin@5.2.0": "patches/7zip-bin@5.2.0.patch"
   },
-  "productName": "Tomni Agentic",
+  "productName": "Tomni",
   "tomnyCliCommit": "cb4a10fdbaa0e4d5c5e767b96081cc21eb476a2a",
   "tomnyCliVersion": "v0.2.4",
   "tomnyCoreCommit": "36938554bc4dca870141d37fc0ac63e2038ff4c0",

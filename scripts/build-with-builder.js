@@ -33,7 +33,14 @@ function walkFiles(dir, acc = []) {
   for (const entry of entries) {
     const fullPath = path.join(dir, entry.name);
     if (entry.isDirectory()) {
-      if (entry.name === 'node_modules' || entry.name === 'out' || entry.name === '.git') continue;
+      if (
+        entry.name === 'node_modules' ||
+        entry.name === 'out' ||
+        entry.name === 'target' ||
+        entry.name === '.git' ||
+        entry.name === '.mtui'
+      )
+        continue;
       walkFiles(fullPath, acc);
     } else if (entry.isFile()) {
       acc.push(fullPath);
@@ -75,10 +82,14 @@ function computeSourceHash() {
 
     for (const relPath of files) {
       const absolutePath = path.resolve(rootDir, relPath);
-      const stat = fs.statSync(absolutePath);
-      hash.update(relPath + ':');
-      hash.update(String(stat.size));
-      hash.update(String(stat.mtimeMs));
+      try {
+        const stat = fs.statSync(absolutePath);
+        hash.update(relPath + ':');
+        hash.update(String(stat.size));
+        hash.update(String(stat.mtimeMs));
+      } catch (error) {
+        if (error?.code !== 'ENOENT') throw error;
+      }
     }
   }
 
@@ -490,6 +501,16 @@ try {
     arch: targetArch,
     version: packageJson.tomnyCoreVersion,
     commit: packageJson.tomnyCoreCommit,
+  });
+
+  // Build the workspace-owned Rust sidecar independently of the compatibility backend.
+  const { prepareTomnyRuntime } = require('../packages/shared-scripts/src/prepare-tomny-runtime.js');
+  prepareTomnyRuntime({ projectRoot, platform: process.platform, arch: targetArch });
+
+  // Prepare the pinned, standalone model gateway for the packaged architecture.
+  execSync('node packages/shared-scripts/src/prepare-model-gateway.js', {
+    stdio: 'inherit',
+    env: { ...process.env, TOMNI_MODEL_GATEWAY_ARCH: targetArch },
   });
 
   // 6. Prepare hub resources (index.json + extension zips for offline fallback)

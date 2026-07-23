@@ -1,9 +1,12 @@
 /** Native provider bridge backed by the independent Tomny provider store. */
 import { providerChannels } from '@/common/types/provider/providerChannels';
 import type { IProvider } from '@/common/config/storage';
-import { httpRequest } from '@/common/adapter/httpBridge';
+
 import { detectProviderProtocol, fetchProviderModelList } from './tomnyModelDiscovery';
 import { createProviderStore, type IProviderStore } from './tomnyProviderStore';
+import { readLegacyCatalog } from './database/legacyCatalogReader';
+import { discoverLegacyDatabasePaths } from './database/runLegacyDatabaseMigrations';
+import { ProcessConfig } from '@process/utils/initStorage';
 
 let sharedStore: IProviderStore | undefined;
 let registered = false;
@@ -14,7 +17,12 @@ const migrateLegacyProvidersOnce = (store: IProviderStore): Promise<void> => {
   migrationPromise = (async () => {
     if ((await store.list()).length > 0) return;
     try {
-      const legacyProviders = await httpRequest<IProvider[]>('GET', '/api/providers');
+      const legacyProviders = (
+        await readLegacyCatalog({
+          databasePaths: discoverLegacyDatabasePaths(),
+          readConfig: (key) => (ProcessConfig as unknown as { get(name: string): Promise<unknown> }).get(key),
+        })
+      ).providers;
       for (const provider of legacyProviders) {
         try {
           // Atomic file persistence is intentionally serialized during one-time migration.
@@ -43,6 +51,9 @@ export const getReadyProviderStore = async (): Promise<IProviderStore> => {
   await migrateLegacyProvidersOnce(store);
   return store;
 };
+
+/** Read the native provider catalog after the one-time compatibility import. */
+export const listReadyProviders = async (): Promise<IProvider[]> => (await getReadyProviderStore()).list();
 export const registerProviderBridge = (): void => {
   if (registered) return;
   registered = true;

@@ -18,6 +18,7 @@ import {
   Info,
   Lightning,
   LinkCloud,
+  PersonalCollection,
   Puzzle,
   Refresh,
   Robot,
@@ -55,6 +56,12 @@ export function getBuiltinSettingsNavItems(isDesktop: boolean, t: TranslateFn): 
       label: t('settings.agents', { defaultValue: 'Agents' }),
       icon: <Robot theme='outline' size='16' />,
       path: 'agent',
+    },
+    personal: {
+      id: 'personal',
+      label: t('settings.personal'),
+      icon: <PersonalCollection theme='outline' size='16' />,
+      path: 'personal',
     },
     capabilities: {
       id: 'capabilities',

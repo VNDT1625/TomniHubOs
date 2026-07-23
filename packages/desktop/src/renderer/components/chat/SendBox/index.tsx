@@ -13,6 +13,7 @@ import { useBtwCommand } from '@/renderer/components/chat/BtwOverlay/useBtwComma
 import { useSlashCommandController } from '@/renderer/hooks/chat/useSlashCommandController';
 import { useLayoutContext } from '@/renderer/hooks/context/LayoutContext';
 import { useConversationContextSafe } from '@/renderer/hooks/context/ConversationContext';
+import { useBuild0CommandSafe } from '@/renderer/hooks/context/Build0Context';
 import { useTeamPermission } from '@/renderer/pages/team/hooks/TeamPermissionContext';
 import { usePreviewContext } from '@/renderer/pages/conversation/Preview';
 import { warmupConversation } from '@/renderer/pages/conversation/utils/warmupConversation';
@@ -28,6 +29,7 @@ import { Button, Input, Message, Tag } from '@arco-design/web-react';
 import { ArrowUp, CloseSmall, Plus, Quote } from '@icon-park/react';
 import type { SlashCommandItem } from '@/common/chat/slash/types';
 import { GOAL_ALL_COMMAND_NAME, GOAL_COMMAND_NAME } from '@/common/chat/slash/goalCommand';
+import { BUILD0_COMMAND_NAME } from '@/common/chat/slash/build0Command';
 import { theme } from '@office-ai/platform';
 import React, { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -223,6 +225,7 @@ const SendBox: React.FC<{
   const effectiveLockMultiLine = lockMultiLine && !isMobileCompact;
   const effectiveDefaultMultiLine = defaultMultiLine && !isMobileCompact;
   const conversationContext = useConversationContextSafe();
+  const build0Command = useBuild0CommandSafe();
   const teamPermission = useTeamPermission();
   const { t, i18n } = useTranslation();
   const [isLoading, setIsLoading] = useState(false);
@@ -458,6 +461,16 @@ const SendBox: React.FC<{
         insertText: `/${GOAL_ALL_COMMAND_NAME} `,
       });
     }
+    if (build0Command && conversationContext?.workspace === build0Command.rootPath) {
+      commands.push({
+        name: BUILD0_COMMAND_NAME,
+        description: t('ide.build0.commandDescription'),
+        kind: 'builtin',
+        source: 'builtin',
+        insertText: '/' + BUILD0_COMMAND_NAME + ' ',
+        selectionBehavior: 'insert',
+      });
+    }
     if (onSlashBuiltinCommand) {
       commands.push({
         name: 'open',
@@ -489,7 +502,15 @@ const SendBox: React.FC<{
       });
     }
     return commands;
-  }, [conversationContext?.conversation_id, enableBtw, enableGoal, onSlashBuiltinCommand, t]);
+  }, [
+    build0Command,
+    conversationContext?.conversation_id,
+    conversationContext?.workspace,
+    enableBtw,
+    enableGoal,
+    onSlashBuiltinCommand,
+    t,
+  ]);
 
   const mergedSlashCommands = useMemo(() => {
     const map = new Map<string, SlashCommandItem>();
@@ -1689,6 +1710,7 @@ const SendBox: React.FC<{
               {renderedTools}
             </div>
             <div className='sendbox-actions flex items-center gap-2'>
+              <div className='flex items-center gap-2' data-chat-dock-slot />
               {renderedRightTools}
               {renderedSpeechButton}
               {sendButtonPrefix}

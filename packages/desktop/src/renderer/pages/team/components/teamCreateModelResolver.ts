@@ -61,7 +61,7 @@ async function resolveAcpDefaultModel(agent_type: string): Promise<string> {
 async function resolveGeminiDefaultModel(): Promise<string> {
   // The legacy 'gemini.defaultModel' config key has been removed after the
   // Gemini → ACP consolidation. Always fall back to the 'auto' alias.
-  // Tomni Agentic core alias: 'auto' maps to PREVIEW_GEMINI_MODEL_AUTO. See
+  // Tomny Agentic core alias: 'auto' maps to PREVIEW_GEMINI_MODEL_AUTO. See
   // src/common/utils/geminiModes.ts for the full list of aliases.
   return 'auto';
 }

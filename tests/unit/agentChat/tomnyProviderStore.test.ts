@@ -1,3 +1,4 @@
+import * as path from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('electron', () => ({
@@ -80,5 +81,58 @@ describe('Tomny provider store', () => {
     expect(updated).toMatchObject({ id: 'provider-1', name: 'Updated', models: ['model-b'], api_key: 'key' });
     await store.remove('provider-1');
     expect(await store.list()).toEqual([]);
+  });
+
+  it('treats a blank API key in a metadata update as keep-existing', async () => {
+    const store = createProviderStore({ dir: 'test-data', fs, crypto, newId: () => 'provider-1' });
+    await store.create({
+      platform: 'openai',
+      name: 'Primary',
+      base_url: 'https://example.test/v1',
+      api_key: 'keep-me',
+      models: ['model-a'],
+    });
+    const filePath = path.join('test-data', 'tomny-providers.json');
+    const before = JSON.parse(files.get(filePath) ?? '[]') as Array<{ encryptedSecrets: string }>;
+
+    await store.update('provider-1', { name: 'Renamed', api_key: '' });
+
+    const after = JSON.parse(files.get(filePath) ?? '[]') as Array<{ encryptedSecrets: string }>;
+    expect(after[0]?.encryptedSecrets).toBe(before[0]?.encryptedSecrets);
+    await expect(store.get('provider-1')).resolves.toMatchObject({ name: 'Renamed', api_key: 'keep-me' });
+  });
+
+  it('aborts an update instead of overwriting credentials when decryption fails', async () => {
+    const initialStore = createProviderStore({ dir: 'test-data', fs, crypto, newId: () => 'provider-1' });
+    await initialStore.create({
+      platform: 'openai',
+      name: 'Primary',
+      base_url: 'https://example.test/v1',
+      api_key: 'keep-me',
+      models: ['model-a'],
+    });
+    const filePath = path.join('test-data', 'tomny-providers.json');
+    const before = files.get(filePath);
+    const brokenCrypto: ProviderCrypto = {
+      isAvailable: () => true,
+      encrypt: crypto.encrypt,
+      decrypt: () => {
+        throw new Error('keychain unavailable');
+      },
+    };
+    const reopened = createProviderStore({ dir: 'test-data', fs, crypto: brokenCrypto });
+
+    await expect(reopened.update('provider-1', { name: 'Must not persist' })).rejects.toThrow(
+      'Update aborted to prevent credential loss'
+    );
+    expect(files.get(filePath)).toBe(before);
+  });
+
+  it('rejects a malformed provider catalog instead of treating it as an empty store', async () => {
+    files.set(path.join('test-data', 'tomny-providers.json'), '{not-json');
+    const store = createProviderStore({ dir: 'test-data', fs, crypto });
+
+    await expect(store.list()).rejects.toThrow('Provider catalog could not be read safely');
+    expect(files.get(path.join('test-data', 'tomny-providers.json'))).toBe('{not-json');
   });
 });

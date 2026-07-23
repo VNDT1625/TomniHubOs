@@ -707,9 +707,14 @@ export const useMessageLstCache = (key: string) => {
       latest = await fetchLatestWindow(pageSize);
     }
 
+    const anchoredMessages = sliceFromLatestUserMessage(latest.messages);
     return {
       ...latest,
-      messages: sliceFromLatestUserMessage(latest.messages),
+      messages: anchoredMessages,
+      // Anchoring intentionally hides entries that were already fetched before
+      // the latest user turn. Keep paging enabled for that in-memory prefix even
+      // when the database says the fetched window itself has no earlier page.
+      hasMore: latest.hasMore || anchoredMessages.length < latest.messages.length,
     };
   }, [fetchLatestWindow]);
 

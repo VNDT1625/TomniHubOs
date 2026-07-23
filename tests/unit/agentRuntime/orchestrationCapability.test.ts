@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseOrchestrationProposal, shouldOfferOrchestration } from '@/process/agentRuntime/orchestrationCapability';
+import {
+  ORCHESTRATION_CAPABILITY_PROMPT,
+  parseOrchestrationProposal,
+  shouldOfferOrchestration,
+} from '@/process/agentRuntime/orchestrationCapability';
 
 describe('orchestration capability', () => {
   it('does not spend orchestration context on simple requests', () => {
@@ -10,6 +14,31 @@ describe('orchestration capability', () => {
   it('exposes the capability for an explicit short Team or Company request', () => {
     expect(shouldOfferOrchestration('hãy test team và company')).toBe(true);
     expect(shouldOfferOrchestration('kiểm tra công ty')).toBe(true);
+  });
+
+  it('exposes the host proposal protocol for an explicit short subagent request', () => {
+    expect(shouldOfferOrchestration('hãy tạo các subagent để đọc repo này phần MCP')).toBe(true);
+    expect(shouldOfferOrchestration('spawn two agents to inspect the repository')).toBe(true);
+  });
+
+  it('tells the model to use the host proposal protocol instead of searching for spawn tools', () => {
+    expect(ORCHESTRATION_CAPABILITY_PROMPT).toContain('HOST PROTOCOL');
+    expect(ORCHESTRATION_CAPABILITY_PROMPT).toContain('team_spawn');
+    expect(ORCHESTRATION_CAPABILITY_PROMPT).toContain('tools_search');
+    expect(ORCHESTRATION_CAPABILITY_PROMPT).toContain('<tomny_orchestration_proposal>');
+  });
+
+  it('keeps same-tool query fan-out in the leader instead of duplicating subagents', () => {
+    expect(ORCHESTRATION_CAPABILITY_PROMPT).toContain('same primary tool or evidence source');
+    expect(ORCHESTRATION_CAPABILITY_PROMPT).toContain('two ide_research calls');
+    expect(ORCHESTRATION_CAPABILITY_PROMPT).toContain('issue the tool calls concurrently');
+    expect(ORCHESTRATION_CAPABILITY_PROMPT).toContain('does not bypass the efficiency gate');
+  });
+
+  it('allows subagents when independent work also uses materially different actions', () => {
+    expect(ORCHESTRATION_CAPABILITY_PROMPT).toContain('primary actions or tool families must also differ materially');
+    expect(ORCHESTRATION_CAPABILITY_PROMPT).toContain('repository investigation + runtime Quick Test');
+    expect(ORCHESTRATION_CAPABILITY_PROMPT).toContain('implementation + independent testing/review');
   });
 
   it('offers orchestration for work with independent disciplines', () => {

@@ -24,6 +24,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   makeVideoClient,
+  type FilmTimeline,
   type GenerateImageData,
   type GenerateVideoClipRequest,
   type GenerateVoiceRequest,
@@ -77,6 +78,7 @@ export type UseMakeVideo = {
   exportFinal: (outputPath?: string) => Promise<void>;
   setFrameStart: (sceneId: string, imagePath: string | null) => Promise<void>;
   setFrameEnd: (sceneId: string, imagePath: string | null) => Promise<void>;
+  updateTimeline: (timeline: FilmTimeline) => Promise<void>;
 };
 
 let idCounter = 0;
@@ -488,6 +490,14 @@ export const useMakeVideo = (): UseMakeVideo => {
     [active, persist]
   );
 
+  const updateTimeline = useCallback(
+    async (timeline: FilmTimeline): Promise<void> => {
+      if (!active) return;
+      await persist({ ...active, timeline, updatedAt: Date.now() });
+    },
+    [active, persist]
+  );
+
   return {
     projects,
     active,
@@ -514,6 +524,7 @@ export const useMakeVideo = (): UseMakeVideo => {
     exportFinal,
     setFrameStart,
     setFrameEnd,
+    updateTimeline,
   };
 };
 

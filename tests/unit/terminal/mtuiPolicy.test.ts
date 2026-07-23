@@ -101,6 +101,17 @@ describe('MTUI strict policy helpers', () => {
     ]);
   });
 
+  it('ignores generated Tomny session state without ignoring source files', () => {
+    const violations = detectMtuiViolations(
+      '/repo',
+      ['.tomny/sessions/sessions/session-1/state.json', 'src/a.ts'],
+      [],
+      new Set()
+    );
+
+    expect(violations).toEqual([{ path: 'src/a.ts', reason: 'Changed file has no recent MTUI write operation.' }]);
+  });
+
   it('preserves MTUI stale-confirmation JSON from non-zero CLI output', () => {
     const response = parseMtuiOutput(
       JSON.stringify({

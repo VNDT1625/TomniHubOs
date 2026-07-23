@@ -6,7 +6,7 @@
 
 import { ipcBridge } from '@/common';
 import type { IMcpServer, TProviderWithModel } from '@/common/config/storage';
-import { buildAgentConversationParams } from '@/common/utils/buildAgentConversationParams';
+import { buildAgentConversationParams, isTomniAgentBackend } from '@/common/utils/buildAgentConversationParams';
 import { toSessionMcpServer } from '@/renderer/hooks/mcp/catalog';
 import { emitter } from '@/renderer/utils/emitter';
 import { buildDisplayMessage } from '@/renderer/utils/file/messageFiles';
@@ -272,7 +272,7 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
     }
 
     // Aionrs path (direct selection or preset assistant with aionrs as main agent)
-    if (selectedAgent === 'aionrs' || (is_preset && finalEffectiveAgentType === 'aionrs')) {
+    if (isTomniAgentBackend(selectedAgent) || (is_preset && isTomniAgentBackend(finalEffectiveAgentType))) {
       if (!current_model) {
         Message.warning(t('conversation.noModelConfigured'));
         return;
@@ -300,7 +300,7 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
         });
 
         if (!conversation || !conversation.id) {
-          alert('Failed to create Tomni Agentic conversation. Please ensure the built-in agent is ready.');
+          alert('Failed to create Tomny Agentic conversation. Please ensure the built-in agent is ready.');
           return;
         }
 
@@ -319,7 +319,7 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
         await navigate(`/conversation/${conversation.id}`);
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : String(error);
-        alert(`Failed to create Tomni Agentic conversation: ${errorMessage}`);
+        alert(`Failed to create Tomny Agentic conversation: ${errorMessage}`);
         throw error;
       }
       return;

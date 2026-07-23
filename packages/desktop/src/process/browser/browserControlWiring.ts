@@ -31,12 +31,14 @@
  * Process boundary: Main-process (Node.js / Electron) module.
  */
 
-import type { BrowserWindow } from 'electron';
+import { app, type BrowserWindow } from 'electron';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { NativeFileGateway } from '@process/resources/nativeFileGateway';
 import { getResourceCoordinator } from '../resource/resourceCoordinator';
 import { getBrowserServices } from './browserBridge';
 import { createHumanLikeInput } from './humanLikeInput';
-import { createPagePerception, type IPagePerception } from './pagePerception';
+import { createPagePerception, getBrowserSecretRedactionRegistry, type IPagePerception } from './pagePerception';
 import type { IMediaPipeline, MediaSource } from './mediaPipeline';
 import type { BrowserControlDeps } from '../resources/builtinMcp/browserControlServer';
 import { startBrowserControlMcpHost, type BrowserControlMcpHost } from './browserControlMcpHost';
@@ -48,33 +50,64 @@ import {
 } from '../services/quick-test/lifecycle';
 import { getTerminalServices } from '../terminal/terminalWiring';
 import { getRepoSecretStore } from '../ide/memory/repoSecretStore';
+import type { SecretVault } from '../agentRuntime/secretVault';
 
-/**
- * Set a secret directly in a form control without ever returning its value to
- * the MCP client. The value deliberately exists only in this Main-process
- * closure and the target page's form control.
- */
-const fillBrowserSecret = async (
-  viewManager: ReturnType<typeof getBrowserServices>['viewManager'],
-  request: { tabId: string; selector: string; repository: string; secretAlias: string }
-): Promise<void> => {
-  const contents = viewManager.getWebContents(request.tabId);
-  if (!contents) throw new Error('The selected browser tab is no longer available.');
+type BrowserViewManager = ReturnType<typeof getBrowserServices>['viewManager'];
+let personalSecretVault: SecretVault | undefined;
 
-  const values = await getRepoSecretStore().resolveEnvironment(request.repository, [request.secretAlias]);
-  const secret = values[request.secretAlias.trim().toUpperCase()];
-  if (typeof secret !== 'string' || secret.length === 0) {
-    throw new Error(`Secret Context alias ${request.secretAlias.trim().toUpperCase()} has no stored value.`);
+/** Bind the Core vault without changing the independent IDE Secret Context store. */
+export const configureBrowserPersonalSecretVault = (vault: SecretVault): void => {
+  personalSecretVault = vault;
+};
+
+const SECRET_FILL_WORLD_ID = 1001;
+type BrowserPageContents = NonNullable<ReturnType<BrowserViewManager['getWebContents']>>;
+
+const getExactHostname = (contents: BrowserPageContents): string | undefined => {
+  try {
+    return new URL(contents.getURL()).hostname.toLowerCase() || undefined;
+  } catch {
+    return undefined;
   }
+};
 
-  // The serialized value is sent only to the selected page. This script never
-  // returns it, and its failures are converted to a fixed error below so an
-  // Electron exception cannot echo a value back into the model/tool result.
+/** Inject a resolved value only when the isolated renderer world still has the expected hostname. */
+export const fillResolvedBrowserSecret = async (
+  request: {
+    viewManager: BrowserViewManager;
+    tabId: string;
+    selector: string;
+    expectedTarget: string;
+    name: string;
+    reference?: string;
+  },
+  value: string,
+  failureMessage = 'Could not fill the selected browser form control with the protected value.'
+): Promise<void> => {
+  const contents = request.viewManager.getWebContents(request.tabId);
+  if (!contents) throw new Error('The selected browser tab is no longer available.');
+  const expectedTarget = request.expectedTarget.trim().toLowerCase();
+  if (!expectedTarget) throw new Error(failureMessage);
+  const redactionRegistry = getBrowserSecretRedactionRegistry();
+  redactionRegistry.registerSelector({
+    tabId: request.tabId,
+    hostname: expectedTarget,
+    selector: request.selector,
+    name: request.name,
+    ...(request.reference ? { reference: request.reference } : {}),
+  });
+  redactionRegistry.enableSensitiveMode({ tabId: request.tabId, hostname: expectedTarget });
+
+  // The hostname guard, DOM lookup, and value assignment execute atomically in
+  // one isolated world. A navigation between Main-process checks and this call
+  // therefore fails before the secret variable or page DOM is touched.
   const script = `(() => {
     try {
+      const expectedTarget = ${JSON.stringify(expectedTarget)};
+      if (location.hostname.toLowerCase() !== expectedTarget) return false;
       const element = document.querySelector(${JSON.stringify(request.selector)});
       if (!element) return false;
-      const value = ${JSON.stringify(secret)};
+      const value = ${JSON.stringify(value)};
       if (element instanceof HTMLInputElement) {
         if (element.type === 'file' || element.disabled || element.readOnly) return false;
         const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
@@ -100,14 +133,65 @@ const fillBrowserSecret = async (
       return false;
     }
   })()`;
-
   let filled = false;
   try {
-    filled = (await contents.executeJavaScript(script)) === true;
+    filled = (await contents.executeJavaScriptInIsolatedWorld(SECRET_FILL_WORLD_ID, [{ code: script }])) === true;
   } catch {
     filled = false;
   }
-  if (!filled) throw new Error('Could not fill the selected browser form control with the Secret Context alias.');
+  if (!filled) throw new Error(failureMessage);
+};
+
+/** Preserve the IDE repository Secret Context behavior with a navigation-race guard. */
+const fillBrowserSecret = async (
+  viewManager: BrowserViewManager,
+  request: { tabId: string; selector: string; repository: string; secretAlias: string }
+): Promise<void> => {
+  const contents = viewManager.getWebContents(request.tabId);
+  if (!contents) throw new Error('The selected browser tab is no longer available.');
+  const expectedTarget = getExactHostname(contents);
+  if (!expectedTarget) throw new Error('The selected browser tab has no valid target.');
+
+  const values = await getRepoSecretStore().resolveEnvironment(request.repository, [request.secretAlias]);
+  const secret = values[request.secretAlias.trim().toUpperCase()];
+  if (typeof secret !== 'string' || secret.length === 0) {
+    throw new Error(`Secret Context alias ${request.secretAlias.trim().toUpperCase()} has no stored value.`);
+  }
+  await fillResolvedBrowserSecret(
+    { viewManager, ...request, expectedTarget, name: request.secretAlias.trim().toUpperCase() },
+    secret,
+    'Could not fill the selected browser form control with the Secret Context alias.'
+  );
+};
+
+/** Resolve one Core Personal Secret field and inject it directly into the page. */
+const fillBrowserPersonalSecret = async (
+  viewManager: BrowserViewManager,
+  request: { tabId: string; selector: string; handle: string; field: string; expectedTarget?: string }
+): Promise<void> => {
+  if (!personalSecretVault) throw new Error('Core Personal Secret vault is unavailable.');
+  const contents = viewManager.getWebContents(request.tabId);
+  if (!contents) throw new Error('The selected browser tab is no longer available.');
+  const currentTarget = getExactHostname(contents);
+  const expectedTarget = request.expectedTarget?.trim().toLowerCase() || currentTarget;
+  if (!currentTarget || !expectedTarget || currentTarget !== expectedTarget) {
+    throw new Error('The selected browser target does not match the Secret Context request.');
+  }
+
+  const values = await personalSecretVault.resolve({
+    handle: request.handle,
+    surface: 'browser',
+    purpose: 'browser-fill',
+    target: expectedTarget,
+    fields: [request.field],
+  });
+  const secret = values[request.field];
+  if (typeof secret !== 'string' || secret.length === 0) throw new Error('Personal Secret variable is unavailable.');
+  await fillResolvedBrowserSecret(
+    { viewManager, ...request, expectedTarget, name: request.field, reference: request.handle },
+    secret,
+    'Could not fill the selected browser form control with the Personal Secret variable.'
+  );
 };
 
 /**
@@ -173,6 +257,14 @@ export const getBrowserControlDeps = (getWindow: () => BrowserWindow | null | un
     mediaPipeline,
     coordinator,
     fillSecret: (request) => fillBrowserSecret(viewManager, request),
+    fillPersonalSecret: (request) => fillBrowserPersonalSecret(viewManager, request),
+    persistScreenshot: async (_tabId, png) => {
+      const captureDir = join(app.getPath('userData'), 'browser-captures');
+      await mkdir(captureDir, { recursive: true });
+      const filePath = join(captureDir, `${Date.now()}-${crypto.randomUUID()}.png`);
+      await writeFile(filePath, png, { flag: 'wx' });
+      return filePath;
+    },
     quickTest: getQuickTestLifecycle(getWindow),
     // Editor capability (Super's Studio-editor plane): share ONE frame store
     // with the renderer bridge so a file the agent opens shows up as a frame.

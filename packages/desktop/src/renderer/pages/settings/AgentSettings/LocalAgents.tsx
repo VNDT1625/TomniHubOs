@@ -84,7 +84,7 @@ const LocalAgents: React.FC = () => {
     [mutateAgents]
   );
 
-  // Tomni Agentic first among detected agents
+  // Tomny Agentic first among detected agents
   const aionrsAgent = detectedAgents?.find((a) => a.agent_type === 'aionrs' || a.backend === 'aionrs');
   const otherDetected = detectedAgents?.filter((a) => a.agent_type !== 'aionrs' && a.backend !== 'aionrs') ?? [];
 

@@ -40,7 +40,7 @@ import * as path from 'node:path';
 import * as fs from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { bridge } from '@office-ai/platform';
-import { httpRequest } from '@/common/adapter/httpBridge';
+import { listReadyProviders } from '@process/services/tomnyProviderBridge';
 import type { IProvider, TProviderWithModel } from '@/common/config/storage';
 import { executeImageGeneration } from '@/common/chat/imageGenCore';
 import { runAgentChatMessages } from '@process/services/agentChat';
@@ -168,7 +168,7 @@ const classify = (error: unknown): 'no-model' | 'error' => {
 
 /** Fetch the user's configured providers (empty list on any failure). */
 const loadProviders = async (): Promise<IProvider[]> =>
-  (await httpRequest<IProvider[]>('GET', '/api/providers').catch(() => [] as IProvider[])) || [];
+  (await listReadyProviders().catch(() => [] as IProvider[])) || [];
 
 // ---------------------------------------------------------------------------
 // Script generation (provider-backed LLM)

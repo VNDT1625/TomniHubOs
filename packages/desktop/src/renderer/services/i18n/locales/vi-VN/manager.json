@@ -413,6 +413,123 @@
     "open": "mở",
     "close": "đóng"
   },
+  "workspace": {
+    "controlCenter": "Trung tâm điều hành",
+    "navigation": "Điều hướng quản lý",
+    "system": "Hệ thống",
+    "todayCommand": "Trung tâm điều hành hôm nay",
+    "overviewTitle": "Nhìn rõ việc quan trọng. Đưa ngày hôm nay tiến lên.",
+    "overviewSubtitle": "Góc nhìn tập trung về công việc, lịch trình, tri thức và hoạt động trực tiếp của Tomny Core.",
+    "viewAll": "Xem tất cả",
+    "viewCalendar": "Mở lịch",
+    "openCore": "Mở Core",
+    "nav": {
+      "overview": "Tổng quan",
+      "core": "Tomny Core"
+    },
+    "descriptions": {
+      "overview": "Ưu tiên, tiến độ và hoạt động hệ thống trực tiếp",
+      "tasks": "Lập kế hoạch, ưu tiên và hoàn thành công việc",
+      "schedule": "Sắp xếp các khung giờ cố định và linh hoạt",
+      "daily": "Ghi lại ngày hôm nay khi thông tin còn mới",
+      "learn": "Xây dựng kho tri thức có liên kết",
+      "data": "Quản lý tài liệu, nguồn và bản tóm tắt",
+      "core": "Theo dõi target, phiên chạy và tự động hóa native"
+    },
+    "metrics": {
+      "activeTasks": "Công việc đang mở",
+      "overdue": "{{count}} việc quá hạn",
+      "eventsToday": "Sự kiện hôm nay",
+      "nextAt": "Tiếp theo lúc {{time}}",
+      "clearDay": "Không còn sự kiện",
+      "notes": "Ghi chú",
+      "knowledgeBase": "Trong toàn bộ kho tri thức",
+      "activeRuns": "Core đang chạy"
+    },
+    "focus": {
+      "title": "Hàng đợi tập trung",
+      "subtitle": "Ưu tiên việc quá hạn và có tác động cao",
+      "completion": "Tiến độ tổng thể",
+      "empty": "Không có việc khẩn cấp — hàng đợi tập trung đang trống."
+    },
+    "timeline": {
+      "title": "Dòng thời gian hôm nay",
+      "subtitle": "Các khung giờ cố định và linh hoạt tiếp theo",
+      "empty": "Lịch hôm nay đang trống."
+    },
+    "recent": {
+      "title": "Tri thức gần đây",
+      "subtitle": "Ghi chú và tài liệu vừa được cập nhật",
+      "empty": "Chưa có ghi chú gần đây."
+    },
+    "corePulse": {
+      "title": "Nhịp Core",
+      "subtitle": "Mức sẵn sàng của runtime native và tự động hóa",
+      "targets": "Target sẵn sàng",
+      "sessions": "Phiên",
+      "automations": "Tự động hóa",
+      "completion": "Hoàn thành {{rate}}%"
+    }
+  },
+  "core": {
+    "title": "Điều hành Tomny Core",
+    "subtitle": "Bảng điều khiển native cho sức khỏe runtime, công việc đang chạy, target và tự động hóa bền vững.",
+    "nativeRuntime": "Runtime native",
+    "loading": "Đang kết nối Tomny Core…",
+    "unavailableTitle": "Tomny Core không phản hồi",
+    "unavailableDescription": "Dữ liệu quản lý vẫn dùng được. Hãy khởi động lại desktop runtime hoặc thử lại sau khi Core hoàn tất khởi động.",
+    "status": {
+      "loading": "Core đang khởi động",
+      "offline": "Core ngoại tuyến",
+      "healthy": "Core hoạt động tốt",
+      "degraded": "Core suy giảm",
+      "unhealthy": "Core có lỗi"
+    },
+    "actions": {
+      "refresh": "Làm mới",
+      "cancel": "Hủy phiên chạy",
+      "runNow": "Chạy ngay",
+      "runSuccess": "Đã khởi chạy tự động hóa",
+      "cancelSuccess": "Đã hủy phiên chạy",
+      "failed": "Thao tác Core thất bại"
+    },
+    "metrics": {
+      "health": "Sức khỏe runtime",
+      "checked": "{{count}} kiểm tra",
+      "targets": "Target sẵn sàng",
+      "ofTotal": "trên {{total}} target phát hiện được",
+      "activeRuns": "Phiên đang chạy",
+      "sessions": "{{count}} phiên",
+      "automations": "Tự động hóa đang bật",
+      "scheduledTotal": "Tổng cộng {{count}} lịch"
+    },
+    "health": {
+      "title": "Chẩn đoán runtime",
+      "subtitle": "Kiểm tra sức khỏe và độ tin cậy khi thực thi",
+      "completionRate": "Tỷ lệ hoàn thành",
+      "noReport": "Chưa có báo cáo chẩn đoán."
+    },
+    "runs": {
+      "title": "Phiên đang chạy",
+      "subtitle": "Công việc hiện đang được thực thi qua Core mới",
+      "empty": "Không có phiên Core nào đang chạy.",
+      "started": "Bắt đầu {{time}}"
+    },
+    "automations": {
+      "title": "Tự động hóa bền vững",
+      "subtitle": "Công việc được lập lịch native với retry và trạng thái vòng đời",
+      "empty": "Chưa tạo tự động hóa Core nào.",
+      "enabled": "Đang bật",
+      "disabled": "Đã tắt",
+      "manual": "Thủ công",
+      "intervalMinutes": "Mỗi {{count}} phút"
+    },
+    "targets": {
+      "title": "Target thực thi",
+      "subtitle": "Adapter built-in, ACP, CLI và thực thi từ xa",
+      "models": "{{count}} model"
+    }
+  },
   "quickAdd": {
     "placeholder": "Thêm nhiệm vụ — thử \"Nộp báo cáo mai 5pm !cao #work\"",
     "hint": "Mẹo: !cao · #nhãn · \"mai 5pm\" / \"thứ 2 9h\" được nhận diện tự động.",

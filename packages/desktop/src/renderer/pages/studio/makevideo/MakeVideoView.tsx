@@ -47,8 +47,9 @@ import SceneCard from './components/SceneCard';
 import NewProjectDialog from './components/NewProjectDialog';
 import VoiceConfigDialog from './components/VoiceConfigDialog';
 import VideoClipConfigDialog from './components/VideoClipConfigDialog';
+import VideoEditor from './components/VideoEditor';
 import GenerationProgress, { getGenEstimate } from '../components/GenerationProgress';
-import type { VideoProject } from './makeVideoClient';
+import type { FilmTimeline, VideoProject } from './makeVideoClient';
 
 type MakeVideoViewProps = {
   onBack: () => void;
@@ -224,6 +225,7 @@ const MakeVideoView: React.FC<MakeVideoViewProps> = ({ onBack }) => {
           onGenerateAllVideoClips={() => void mv.generateAllVideoClips(cfg.videoClipConfig)}
           onCancel={mv.cancelGeneration}
           onExportFinal={() => void mv.exportFinal()}
+          onSaveTimeline={mv.updateTimeline}
           onSetFrameEnd={(sceneId, path) => void mv.setFrameEnd(sceneId, path)}
           onOpenVoiceConfig={() => setShowVoiceCfg(true)}
           onOpenClipConfig={() => setShowClipCfg(true)}
@@ -351,6 +353,7 @@ type StoryboardProps = {
   onGenerateAllVideoClips: () => void;
   onCancel: () => void;
   onExportFinal: () => void;
+  onSaveTimeline: (timeline: FilmTimeline) => Promise<void>;
   onSetFrameEnd: (sceneId: string, path: string | null) => void;
   onOpenVoiceConfig: () => void;
   onOpenClipConfig: () => void;
@@ -382,11 +385,13 @@ const ProjectStoryboard: React.FC<StoryboardProps> = ({
   onGenerateAllVideoClips,
   onCancel,
   onExportFinal,
+  onSaveTimeline,
   onSetFrameEnd,
   onOpenVoiceConfig,
   onOpenClipConfig,
 }) => {
   const { t } = useTranslation();
+  const [workspaceMode, setWorkspaceMode] = useState<'storyboard' | 'editor'>('storyboard');
   const hasScenes = project.scenes.length > 0;
   const hasImages = project.scenes.some((s) => s.imagePath);
   const hasClips = project.scenes.some((s) => s.videoClipPath);
@@ -531,6 +536,23 @@ const ProjectStoryboard: React.FC<StoryboardProps> = ({
           {t('makeVideo.controls.genAllClips')}
         </Button>
 
+        <div className='w-1px h-20px bg-border-1 mx-4px' />
+        <Button
+          size='small'
+          type={workspaceMode === 'storyboard' ? 'primary' : 'secondary'}
+          onClick={() => setWorkspaceMode('storyboard')}
+        >
+          {t('makeVideo.editor.storyboard')}
+        </Button>
+        <Button
+          size='small'
+          type={workspaceMode === 'editor' ? 'primary' : 'secondary'}
+          disabled={!hasScenes}
+          onClick={() => setWorkspaceMode('editor')}
+        >
+          {t('makeVideo.editor.timeline')}
+        </Button>
+
         <div className='flex-1' />
 
         {/* Export */}
@@ -574,12 +596,16 @@ const ProjectStoryboard: React.FC<StoryboardProps> = ({
         </div>
       ) : null}
 
-      {/* Scene grid */}
-      <div className='flex-1 min-h-0 overflow-y-auto p-16px'>
+      {/* Storyboard / timeline workspace */}
+      <div
+        className={`flex-1 min-h-0 p-16px ${workspaceMode === 'storyboard' ? 'overflow-y-auto' : 'overflow-hidden'}`}
+      >
         {!hasScenes ? (
           <div className='h-full flex-center'>
             <Empty description={status === 'script' ? t('makeVideo.generatingScript') : t('makeVideo.noScenes')} />
           </div>
+        ) : workspaceMode === 'editor' ? (
+          <VideoEditor project={project} onSave={onSaveTimeline} />
         ) : (
           <div className='grid gap-16px' style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' }}>
             {project.scenes.map((scene) => {

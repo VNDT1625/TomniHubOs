@@ -21,6 +21,7 @@ import type { Note } from '@process/manager/managerTypes';
 import type { UseManagerStore } from '../useManagerStore';
 import NoteCard from './NoteCard';
 import NotePageEditor from './editor/NotePageEditor';
+import styles from '../manager.module.css';
 
 /** Local-day key (YYYY-MM-DD) for grouping. */
 const dayKey = (ts: number): string => {
@@ -50,9 +51,9 @@ const DailyView: React.FC<{ store: UseManagerStore }> = ({ store }) => {
   }, [store.data.notes, query]);
 
   return (
-    <div className='h-full overflow-y-auto px-24px pb-32px'>
-      <div className='max-w-820px mx-auto flex flex-col gap-14px pt-12px'>
-        <div className='flex items-center gap-8px'>
+    <div className={styles.workspaceScroll}>
+      <div className={styles.workspaceColumn}>
+        <div className={styles.workspaceToolbar}>
           <Input
             allowClear
             value={query}
@@ -68,11 +69,16 @@ const DailyView: React.FC<{ store: UseManagerStore }> = ({ store }) => {
         </div>
 
         {groups.length === 0 ? (
-          <div className='text-center text-13px text-t-tertiary py-40px'>{t('manager.notes.daily.empty')}</div>
+          <div className={styles.workspaceEmpty}>
+            <span>{t('manager.notes.daily.empty')}</span>
+            <Button size='small' type='secondary' onClick={() => setEditing('new')}>
+              {t('manager.notes.daily.create')}
+            </Button>
+          </div>
         ) : (
           groups.map(([key, notes]) => (
-            <div key={key} className='flex flex-col gap-8px'>
-              <div className='text-12px font-[600] text-t-tertiary uppercase tracking-wide'>
+            <section key={key} className={styles.dailyGroup}>
+              <div className={styles.workspaceSectionLabel}>
                 {new Date(notes[0].dayAt ?? notes[0].createdAt).toLocaleDateString([], {
                   weekday: 'long',
                   year: 'numeric',
@@ -80,12 +86,12 @@ const DailyView: React.FC<{ store: UseManagerStore }> = ({ store }) => {
                   day: 'numeric',
                 })}
               </div>
-              <div className='grid grid-cols-1 md:grid-cols-2 gap-12px'>
+              <div className={styles.workspaceCardGrid}>
                 {notes.map((note) => (
                   <NoteCard key={note.id} note={note} store={store} onEdit={() => setEditing(note)} />
                 ))}
               </div>
-            </div>
+            </section>
           ))
         )}
       </div>

@@ -7,11 +7,16 @@ import {
   CodexAppServerAdapter,
   TomnyCoreAdapter,
   type CoreAdapter,
+  type CoreCapabilityHostContext,
   type CoreMcpServer,
+  type CoreToolCatalogPolicy,
   type DetectedCoreTarget,
 } from '@process/experimentalCore/adapters';
 import { detectCoreTargets } from '@process/experimentalCore/coreRegistry';
 import { createElectronSurfaceCapabilityHosts } from '@process/experimentalCore/electronSurfaceCapabilityHosts';
+
+import { createElectronContextServices } from '@process/agentRuntime/electronContext';
+
 import type { ExperimentalPermissionMode } from '@process/experimentalCore/experimentalCoreProtocol';
 import { createBuiltinSurfaceManifests } from '@process/agentRuntime/surfaceRegistry';
 import { flattenMessagesToPrompt, type CliAgentDriver } from './cliAgentDriver';
@@ -20,6 +25,10 @@ export type DirectCliExecutionContext = {
   workspace?: string;
   surface?: string;
   permissionMode?: ExperimentalPermissionMode;
+  /** Stable Core identity for multi-turn background agents. */
+  sessionId?: string;
+  /** Prevent recursive capabilities such as a child agent spawning more children. */
+  excludedMcpServerNames?: string[];
   requestPermission?: (request: {
     tool: string;
     detail?: string;
@@ -33,7 +42,12 @@ export type DirectCliAgentDriverDeps = {
   detectTargets: () => Promise<DetectedCoreTarget[]>;
   adapters: CoreAdapter[];
   resolveWorkspace: (context?: DirectCliExecutionContext) => Promise<string>;
-  resolveMcpServers: (context?: DirectCliExecutionContext) => Promise<CoreMcpServer[]>;
+  resolveMcpServers: (
+    context: DirectCliExecutionContext | undefined,
+    workspace: string,
+    agentId: string,
+    sessionId: string
+  ) => Promise<CoreMcpServer[]>;
   createSessionId?: () => string;
 };
 
@@ -64,17 +78,37 @@ export const resolveDirectCliWorkspace = async (context?: DirectCliExecutionCont
   return workspace;
 };
 
+const excludedMcpServerNames = (context?: DirectCliExecutionContext): Set<string> =>
+  new Set(context?.excludedMcpServerNames?.map((name) => name.trim().toLowerCase()).filter(Boolean));
+
 let directCapabilityHosts: ReturnType<typeof createElectronSurfaceCapabilityHosts> | undefined;
-const resolveDirectSurfaceMcpServers = async (context?: DirectCliExecutionContext): Promise<CoreMcpServer[]> => {
+let directContextServices: ReturnType<typeof createElectronContextServices> | undefined;
+const resolveDirectSurfaceMcpServers = async (
+  context: DirectCliExecutionContext | undefined,
+  workspace: string,
+  agentId: string,
+  sessionId: string
+): Promise<CoreMcpServer[]> => {
   const surfaceId = context?.surface?.trim() || 'chat';
   const manifest = createBuiltinSurfaceManifests().find((surface) => surface.id === surfaceId);
   if (!manifest) throw new Error(`Unknown direct CLI surface ${surfaceId}.`);
+  const excluded = excludedMcpServerNames(context);
   const serverNames = manifest.capabilities
     .filter((capability) => capability.kind === 'mcp' && Boolean(capability.serverName))
-    .map((capability) => capability.serverName!);
-  if (serverNames.length === 0) return [];
-  directCapabilityHosts ??= createElectronSurfaceCapabilityHosts();
-  return directCapabilityHosts.resolve(serverNames);
+    .map((capability) => capability.serverName!)
+    .filter((serverName) => !excluded.has(serverName.toLowerCase()));
+  directContextServices ??= createElectronContextServices();
+  directCapabilityHosts ??= createElectronSurfaceCapabilityHosts(directContextServices.vault);
+  const hostContext: CoreCapabilityHostContext = Object.freeze({
+    sessionId,
+    workspace,
+    surface: surfaceId,
+    permissionMode: context?.permissionMode === 'read-only' ? 'read-only' : 'workspace-write',
+    requestPermission: context?.requestPermission
+      ? ({ tool, detail }) => context.requestPermission!({ tool, detail, agentId, workspace, surface: surfaceId })
+      : undefined,
+  });
+  return directCapabilityHosts.resolve(serverNames, [], hostContext);
 };
 
 const defaultDeps = (): DirectCliAgentDriverDeps => ({
@@ -113,7 +147,25 @@ export const createDirectCliAgentDriver = (
       const adapter = deps.adapters.find((candidate) => candidate.protocol === target.protocol);
       if (!adapter) throw new Error(`No direct Tomny Core adapter is registered for ${target.protocol}.`);
       const workspace = await deps.resolveWorkspace(context);
-      const mcpServers = await deps.resolveMcpServers(context);
+      const sessionId = context?.sessionId?.trim() || deps.createSessionId?.() || crypto.randomUUID();
+      const mcpServers = await deps.resolveMcpServers(context, workspace, agentId, sessionId);
+      const surfaceId = context?.surface?.trim() || 'chat';
+      const manifest = createBuiltinSurfaceManifests().find((surface) => surface.id === surfaceId);
+      const toolCatalog: CoreToolCatalogPolicy = {
+        mode: 'surface',
+        patterns: [
+          ...new Set([
+            'tomny_session_actions',
+            ...(manifest?.capabilities ?? [])
+              .filter(
+                (capability) =>
+                  capability.kind === 'mcp' &&
+                  !excludedMcpServerNames(context).has(capability.serverName?.toLowerCase() ?? '')
+              )
+              .flatMap((capability) => capability.toolPatterns),
+          ]),
+        ],
+      };
       const prompt = flattenMessagesToPrompt(messages);
       if (!prompt.trim()) throw new Error('CLI agent prompt is empty.');
       let answer = '';
@@ -122,7 +174,7 @@ export const createDirectCliAgentDriver = (
       signal?.addEventListener('abort', abort, { once: true });
       try {
         await adapter.run({
-          sessionId: deps.createSessionId?.() ?? crypto.randomUUID(),
+          sessionId,
           target,
           prompt,
           workspace,
@@ -130,6 +182,7 @@ export const createDirectCliAgentDriver = (
           permissionMode: context?.permissionMode ?? 'read-only',
           surface: context?.surface ?? 'chat',
           mcpServers,
+          toolCatalog,
           signal: controller.signal,
           emit: (event) => {
             if (event.type !== 'delta') return;

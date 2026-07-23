@@ -52,6 +52,80 @@ export type QuickTestBrowserProps = {
   nativeOverlayBlocked?: boolean;
 };
 
+export type QuickTestAddressBarProps = {
+  address: string;
+  onAddressChange: (value: string) => void;
+  onSubmit?: () => void;
+  onBack?: () => void;
+  onForward?: () => void;
+  onReload?: () => void;
+  navigationDisabled?: boolean;
+  inputDisabled?: boolean;
+  placeholder?: string;
+  toolbarLeading?: React.ReactNode;
+  toolbarTrailing?: React.ReactNode;
+};
+
+/** Shared second-row address/target bar used by Web, Desktop and Android. */
+export const QuickTestAddressBar: React.FC<QuickTestAddressBarProps> = ({
+  address,
+  onAddressChange,
+  onSubmit,
+  onBack,
+  onForward,
+  onReload,
+  navigationDisabled = false,
+  inputDisabled = false,
+  placeholder,
+  toolbarLeading,
+  toolbarTrailing,
+}) => {
+  const { t } = useTranslation();
+  return (
+    <div className='shrink-0 flex items-center gap-5px px-8px py-3px border-b border-b-1 bg-1'>
+      {toolbarLeading}
+      <Tooltip content={t('browser.address.back')}>
+        <Button
+          size='mini'
+          type='text'
+          disabled={navigationDisabled}
+          icon={<Left theme='outline' size={15} />}
+          onClick={onBack}
+        />
+      </Tooltip>
+      <Tooltip content={t('browser.address.forward')}>
+        <Button
+          size='mini'
+          type='text'
+          disabled={navigationDisabled}
+          icon={<Right theme='outline' size={15} />}
+          onClick={onForward}
+        />
+      </Tooltip>
+      <Tooltip content={t('browser.address.reload')}>
+        <Button
+          size='mini'
+          type='text'
+          disabled={navigationDisabled}
+          icon={<Refresh theme='outline' size={14} />}
+          onClick={onReload}
+        />
+      </Tooltip>
+      <Input
+        size='mini'
+        value={address}
+        onChange={onAddressChange}
+        onPressEnter={onSubmit}
+        allowClear={!inputDisabled}
+        disabled={inputDisabled}
+        placeholder={placeholder ?? t('browser.address.placeholder')}
+        className='flex-1'
+      />
+      {toolbarTrailing}
+    </div>
+  );
+};
+
 /** Debounce window (ms) for pushing the frame's bounds. Higher = calmer, less pulsing. */
 const BOUNDS_DEBOUNCE_MS = 120;
 
@@ -87,7 +161,6 @@ const QuickTestBrowser: React.FC<QuickTestBrowserProps> = ({
   toolbarTrailing,
   nativeOverlayBlocked = false,
 }) => {
-  const { t } = useTranslation();
   const hostRef = useRef<HTMLDivElement | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tabIdRef = useRef<string | null>(null);
@@ -324,28 +397,16 @@ const QuickTestBrowser: React.FC<QuickTestBrowserProps> = ({
 
   return (
     <div className='size-full flex flex-col min-h-0 bg-fill-1'>
-      <div className='shrink-0 flex items-center gap-5px px-8px py-3px border-b border-b-1 bg-1'>
-        {toolbarLeading}
-        <Tooltip content={t('browser.address.back')}>
-          <Button size='mini' type='text' icon={<Left theme='outline' size={15} />} onClick={goBack} />
-        </Tooltip>
-        <Tooltip content={t('browser.address.forward')}>
-          <Button size='mini' type='text' icon={<Right theme='outline' size={15} />} onClick={goForward} />
-        </Tooltip>
-        <Tooltip content={t('browser.address.reload')}>
-          <Button size='mini' type='text' icon={<Refresh theme='outline' size={14} />} onClick={reload} />
-        </Tooltip>
-        <Input
-          size='mini'
-          value={address}
-          onChange={setAddress}
-          onPressEnter={navigate}
-          allowClear
-          placeholder={t('browser.address.placeholder')}
-          className='flex-1'
-        />
-        {toolbarTrailing}
-      </div>
+      <QuickTestAddressBar
+        address={address}
+        onAddressChange={setAddress}
+        onSubmit={navigate}
+        onBack={goBack}
+        onForward={goForward}
+        onReload={reload}
+        toolbarLeading={toolbarLeading}
+        toolbarTrailing={toolbarTrailing}
+      />
       {/* The native WebContentsView paints over this region. */}
       <div ref={hostRef} className='flex-1 min-h-0 w-full bg-fill-2' aria-hidden='true' />
     </div>

@@ -258,7 +258,7 @@ export function registerIdeWikiBridge(): void {
         ok: true,
         data: await runIdeChat(req.model, buildSectionMessages(req), undefined, {
           workspace: req.rootPath,
-          permissionMode: 'read-only',
+          permissionMode: 'workspace-write',
         }),
       };
     } catch (error) {

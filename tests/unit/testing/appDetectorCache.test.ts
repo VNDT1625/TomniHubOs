@@ -18,15 +18,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'aionui-detect-cache-'));
 vi.mock('electron', () => ({ app: { getPath: () => userData } }));
 
-const httpRequest = vi.fn();
-// Partial mock: keep every real export (ipcBridge uses httpPost/httpGet at load).
-vi.mock('@/common/adapter/httpBridge', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/common/adapter/httpBridge')>();
-  return {
-    ...actual,
-    httpRequest: (...a: unknown[]) => httpRequest(...a),
-  };
-});
+const listReadyProviders = vi.fn();
+vi.mock('@process/services/tomnyProviderBridge', () => ({
+  listReadyProviders: (...args: unknown[]) => listReadyProviders(...args),
+}));
 
 import { createAppDetector } from '@/process/testing/appDetector';
 
@@ -49,8 +44,8 @@ const stubModel = (content: string): void => {
 let projectDir: string;
 
 beforeEach(() => {
-  httpRequest.mockReset();
-  httpRequest.mockResolvedValue([usableProvider]);
+  listReadyProviders.mockReset();
+  listReadyProviders.mockResolvedValue([usableProvider]);
   // A minimal but recognizable project on disk.
   projectDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sample-proj-'));
   fs.writeFileSync(path.join(projectDir, 'package.json'), JSON.stringify({ name: 'demo', scripts: { dev: 'vite' } }));

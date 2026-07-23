@@ -76,6 +76,87 @@ describe('buildGraphFromFiles', () => {
     expect(graph.edges).toHaveLength(1);
   });
 
+  it('resolves the workspace TypeScript aliases to unique source files', () => {
+    const graph = buildGraphFromFiles('/repo', [
+      {
+        relPath: 'packages/desktop/src/renderer/pages/chat/send.ts',
+        content: [
+          "import { ipcBridge } from '@/common/adapter/ipcBridge';",
+          "import { service } from '@process/services/chat/service';",
+          "import { view } from '@renderer/pages/chat/view';",
+          "const worker = import('@worker/index');",
+        ].join('\n'),
+      },
+      { relPath: 'packages/desktop/src/common/adapter/ipcBridge.ts', content: 'export const ipcBridge = {};' },
+      { relPath: 'packages/desktop/src/process/services/chat/service.ts', content: 'export const service = {};' },
+      { relPath: 'packages/desktop/src/renderer/pages/chat/view.tsx', content: 'export const view = {};' },
+      { relPath: 'packages/desktop/src/process/worker/index.ts', content: 'export default {};' },
+    ]);
+
+    expect(
+      hasEdge(
+        graph.edges,
+        'packages/desktop/src/renderer/pages/chat/send.ts',
+        'packages/desktop/src/common/adapter/ipcBridge.ts'
+      )
+    ).toBe(true);
+    expect(
+      hasEdge(
+        graph.edges,
+        'packages/desktop/src/renderer/pages/chat/send.ts',
+        'packages/desktop/src/process/services/chat/service.ts'
+      )
+    ).toBe(true);
+    expect(
+      hasEdge(
+        graph.edges,
+        'packages/desktop/src/renderer/pages/chat/send.ts',
+        'packages/desktop/src/renderer/pages/chat/view.tsx'
+      )
+    ).toBe(true);
+    expect(
+      hasEdge(
+        graph.edges,
+        'packages/desktop/src/renderer/pages/chat/send.ts',
+        'packages/desktop/src/process/worker/index.ts'
+      )
+    ).toBe(true);
+  });
+
+  it('resolves an aliased directory import to its index file', () => {
+    const graph = buildGraphFromFiles('/repo', [
+      {
+        relPath: 'packages/desktop/src/renderer/app.ts',
+        content: "import { createService } from '@process/services/chat';",
+      },
+      {
+        relPath: 'packages/desktop/src/process/services/chat/index.ts',
+        content: 'export const createService = () => undefined;',
+      },
+    ]);
+
+    expect(
+      hasEdge(
+        graph.edges,
+        'packages/desktop/src/renderer/app.ts',
+        'packages/desktop/src/process/services/chat/index.ts'
+      )
+    ).toBe(true);
+  });
+
+  it('drops an aliased edge when more than one source root can satisfy it', () => {
+    const graph = buildGraphFromFiles('/repo', [
+      {
+        relPath: 'packages/desktop/src/renderer/app.ts',
+        content: "import { value } from '@/common/value';",
+      },
+      { relPath: 'packages/desktop/src/common/value.ts', content: 'export const value = 1;' },
+      { relPath: 'src/common/value.ts', content: 'export const value = 2;' },
+    ]);
+
+    expect(graph.edges).toEqual([]);
+  });
+
   it('handles require() and dynamic import()', () => {
     const graph = buildGraphFromFiles('/repo', [
       { relPath: 'src/cjs.ts', content: "const dep = require('./dep');" },
@@ -140,6 +221,7 @@ describe('collectRepoFiles', () => {
           { name: 'src', fullPath: '/repo/src', isDir: true },
           { name: 'target', fullPath: '/repo/target', isDir: true },
           { name: '.mtui', fullPath: '/repo/.mtui', isDir: true },
+          { name: '.tmp', fullPath: '/repo/.tmp', isDir: true },
         ],
       ],
       [
@@ -160,6 +242,7 @@ describe('collectRepoFiles', () => {
         ],
       ],
       ['/repo/.mtui', [{ name: 'ignored.ts', fullPath: '/repo/.mtui/ignored.ts', isDir: false }]],
+      ['/repo/.tmp', [{ name: 'stale-copy.ts', fullPath: '/repo/.tmp/stale-copy.ts', isDir: false }]],
       ['/repo/target', [{ name: 'ignored.ts', fullPath: '/repo/target/ignored.ts', isDir: false }]],
       ['/repo/src/.turbo', [{ name: 'ignored.ts', fullPath: '/repo/src/.turbo/ignored.ts', isDir: false }]],
     ]);
@@ -171,6 +254,81 @@ describe('collectRepoFiles', () => {
     });
 
     expect(files.map((file) => file.relPath)).toEqual(['z.ts', 'src/a.ts', 'src/b.ts']);
+  });
+
+  it('honors repository gitignore rules while preserving negated files', async () => {
+    const dirs = new Map<string, Array<{ name: string; fullPath: string; isDir: boolean }>>([
+      [
+        '/repo',
+        [
+          { name: '.gitignore', fullPath: '/repo/.gitignore', isDir: false },
+          { name: 'scratch', fullPath: '/repo/scratch', isDir: true },
+          { name: 'src', fullPath: '/repo/src', isDir: true },
+        ],
+      ],
+      ['/repo/scratch', [{ name: 'draft.ts', fullPath: '/repo/scratch/draft.ts', isDir: false }]],
+      [
+        '/repo/src',
+        [
+          { name: 'drop.generated.ts', fullPath: '/repo/src/drop.generated.ts', isDir: false },
+          { name: 'index.ts', fullPath: '/repo/src/index.ts', isDir: false },
+          { name: 'keep.generated.ts', fullPath: '/repo/src/keep.generated.ts', isDir: false },
+        ],
+      ],
+    ]);
+    const content = new Map([
+      ['/repo/.gitignore', 'scratch/\n*.generated.ts\n!src/keep.generated.ts\n'],
+      ['/repo/scratch/draft.ts', 'export const draft = true;'],
+      ['/repo/src/drop.generated.ts', 'export const drop = true;'],
+      ['/repo/src/index.ts', 'export const canonical = true;'],
+      ['/repo/src/keep.generated.ts', 'export const keep = true;'],
+    ]);
+
+    const files = await collectRepoFiles('/repo', {
+      listDir: async (dir) => dirs.get(dir) ?? [],
+      readFile: async (filePath) => content.get(filePath) ?? '',
+      toRel: (full) => full.replace('/repo/', ''),
+    });
+
+    expect(files.map((file) => file.relPath)).toEqual(['src/index.ts', 'src/keep.generated.ts']);
+  });
+
+  it('applies nested gitignore rules relative to their directory', async () => {
+    const dirs = new Map<string, Array<{ name: string; fullPath: string; isDir: boolean }>>([
+      [
+        '/repo',
+        [
+          { name: '.gitignore', fullPath: '/repo/.gitignore', isDir: false },
+          { name: 'root-only.ts', fullPath: '/repo/root-only.ts', isDir: false },
+          { name: 'src', fullPath: '/repo/src', isDir: true },
+        ],
+      ],
+      [
+        '/repo/src',
+        [
+          { name: '.gitignore', fullPath: '/repo/src/.gitignore', isDir: false },
+          { name: 'local.ts', fullPath: '/repo/src/local.ts', isDir: false },
+          { name: 'root-only.ts', fullPath: '/repo/src/root-only.ts', isDir: false },
+          { name: 'safe.ts', fullPath: '/repo/src/safe.ts', isDir: false },
+        ],
+      ],
+    ]);
+    const content = new Map([
+      ['/repo/.gitignore', '/root-only.ts\n'],
+      ['/repo/src/.gitignore', 'local.ts\n'],
+      ['/repo/root-only.ts', 'export const ignoredAtRoot = true;'],
+      ['/repo/src/local.ts', 'export const ignoredLocally = true;'],
+      ['/repo/src/root-only.ts', 'export const allowedBelowRoot = true;'],
+      ['/repo/src/safe.ts', 'export const safe = true;'],
+    ]);
+
+    const files = await collectRepoFiles('/repo', {
+      listDir: async (dir) => dirs.get(dir) ?? [],
+      readFile: async (filePath) => content.get(filePath) ?? '',
+      toRel: (full) => full.replace('/repo/', ''),
+    });
+
+    expect(files.map((file) => file.relPath)).toEqual(['src/root-only.ts', 'src/safe.ts']);
   });
 
   it('unwraps a duplicated single parent folder before collecting files', async () => {

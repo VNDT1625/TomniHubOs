@@ -59,14 +59,8 @@ pub fn run(project_root: &Path) -> DoctorResult {
             .as_ref()
             .map(|latest| files_match(primary, latest))
     });
-    let cache_path = project_root
-        .join(".aionui")
-        .join("understand")
-        .join("summary.json");
-    let stale_marker_path = project_root
-        .join(".aionui")
-        .join("understand")
-        .join("stale.json");
+    let cache_path = crate::understand::storage::summary_path(project_root);
+    let stale_marker_path = crate::understand::storage::stale_marker_path(project_root);
     let understand_cache = CacheStatus {
         exists: cache_path.exists(),
         path: cache_path.to_string_lossy().to_string(),

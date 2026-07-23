@@ -12,6 +12,83 @@ export type TeammateStatus = 'pending' | 'idle' | 'active' | 'completed' | 'fail
 /** Workspace sharing strategy for the team */
 export type WorkspaceMode = 'shared' | 'isolated';
 
+/** Scope of a task inside a Team workspace. */
+export type TeamTaskScope = 'personal' | 'group';
+
+/** Lifecycle of a human/agent task. */
+export type TeamTaskStatus =
+  | 'draft'
+  | 'ready'
+  | 'running'
+  | 'blocked'
+  | 'review'
+  | 'needs_changes'
+  | 'done'
+  | 'cancelled';
+
+/** Sorting and attention priority for Team tasks. */
+export type TeamTaskPriority = 'low' | 'medium' | 'high' | 'critical';
+
+/** A responsibility target in the workspace hierarchy. */
+export type TeamTaskActor = {
+  kind: 'user' | 'agent' | 'group';
+  id: string;
+};
+
+/** Nested group used by larger Team workspaces. */
+export type TeamWorkspaceGroup = {
+  id: string;
+  name: string;
+  parent_group_id: string | null;
+  member_ids: string[];
+  created_at: number;
+  updated_at: number;
+};
+
+/** A task can be independent or a leaf under a larger group objective. */
+export type TeamTask = {
+  id: string;
+  title: string;
+  description: string;
+  scope: TeamTaskScope;
+  group_id: string | null;
+  parent_task_id: string | null;
+  creator_id: string;
+  owner: TeamTaskActor;
+  assignee: TeamTaskActor | null;
+  shared_with: TeamTaskActor[];
+  reviewer_ids: string[];
+  acceptance_criteria: string[];
+  /** File, folder, symbol, or domain hints used to select repository context for the bound agent. */
+  context_hints: string[];
+  status: TeamTaskStatus;
+  priority: TeamTaskPriority;
+  created_at: number;
+  updated_at: number;
+};
+
+/** Editable task input accepted by the Team bridge. */
+export type TeamTaskInput = Omit<TeamTask, 'id' | 'created_at' | 'updated_at'> & { id?: string };
+
+/** Editable group input accepted by the Team bridge. */
+export type TeamWorkspaceGroupInput = Omit<TeamWorkspaceGroup, 'id' | 'created_at' | 'updated_at'> & {
+  id?: string;
+};
+
+/** The role an AI conversation has for a pinned task. */
+export type TeamTaskBindingRole = 'planner' | 'executor' | 'reviewer' | 'tester' | 'advisor';
+
+/** Persistent link between a task and one Team agent conversation. */
+export type TeamTaskBinding = {
+  id: string;
+  task_id: string;
+  slot_id: string;
+  conversation_id: string;
+  role: TeamTaskBindingRole;
+  is_primary: boolean;
+  bound_at: number;
+};
+
 /** Persisted agent configuration within a team */
 export type TeamAgent = {
   slot_id: string;
@@ -39,6 +116,12 @@ export type TTeam = {
   agents: TeamAgent[];
   /** Current session permission mode (e.g. 'plan', 'auto'). Persisted so newly spawned agents inherit it. */
   session_mode?: string;
+  /** Optional for backwards compatibility with Team records created before workspace tasks existed. */
+  groups?: TeamWorkspaceGroup[];
+  /** Personal and group tasks share one tree through `parent_task_id`. */
+  tasks?: TeamTask[];
+  /** AI conversations pinned to task-specific context. */
+  task_bindings?: TeamTaskBinding[];
   created_at: number;
   updated_at: number;
 };
@@ -75,6 +158,15 @@ export type ITeamAgentRenamedEvent = {
 export type ITeamListChangedEvent = {
   team_id: string;
   action: 'created' | 'removed' | 'agent_added' | 'agent_removed';
+};
+
+/** IPC event pushed whenever group/task/binding workspace data changes. */
+export type ITeamWorkspaceChangedEvent = {
+  team_id: string;
+  action: 'group_saved' | 'group_removed' | 'task_saved' | 'task_removed' | 'task_bound' | 'task_unbound';
+  group_id?: string;
+  task_id?: string;
+  slot_id?: string;
 };
 
 /** IPC event pushed when a new team is created (backend `team.created` WS event) */

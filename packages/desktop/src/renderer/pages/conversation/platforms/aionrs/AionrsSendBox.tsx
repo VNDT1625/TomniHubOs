@@ -5,6 +5,8 @@
  */
 
 import { ipcBridge } from '@/common';
+
+import { ROUTER9_REASONING_EFFORTS, TOMNI_GATEWAY_PROVIDER_ID } from '@/common/router9';
 import { parseError } from '@/common/utils';
 import type { IConversationMcpStatus } from '@/common/config/storage';
 import AgentModeSelector from '@/renderer/components/agent/AgentModeSelector';
@@ -44,6 +46,7 @@ import {
   parseGoalCommand,
   parseGoalVerifyCommand,
 } from '@/common/chat/slash/goalCommand';
+import { expandBuild0Command } from '@/common/chat/slash/build0Command';
 import {
   clearGoalMode,
   getGoalMode,
@@ -56,6 +59,7 @@ import { runWorkspaceVerification } from '@/renderer/utils/chat/runWorkspaceVeri
 import { DEFAULT_GOAL_WATCHDOG_CONFIG } from '@/common/chat/slash/goalWatchdog';
 import { useGoalRunner } from '@/renderer/hooks/chat/useGoalRunner';
 import { useTeamPermission } from '@/renderer/pages/team/hooks/TeamPermissionContext';
+import { withTeamTaskDirective } from '@/renderer/pages/team/taskContext';
 import { allSupportedExts } from '@/renderer/services/FileService';
 import { withResponseLanguageDirective } from '@/renderer/services/i18n/responseLanguage';
 import { iconColors } from '@/renderer/styles/colors';
@@ -259,16 +263,19 @@ const AionrsSendBox: React.FC<{
             setGoalModeActive(true);
           }
         }
-        const baseModelMessage = goalExpansion
-          ? buildDisplayMessage(goalExpansion, files, workspacePath)
+        const commandExpansion = goalExpansion ?? expandBuild0Command(input);
+        const baseModelMessage = commandExpansion
+          ? buildDisplayMessage(commandExpansion, files, workspacePath)
           : displayMessage;
         const guardedMessage = await buildPlanningGuard(workspacePath, baseModelMessage);
         // Goal Mode steering: bind every ordinary turn to the mandatory pipeline.
         const steeredMessage = withGoalSteeringDirective(guardedMessage, conversation_id);
+        // Keep the pinned Team task contract out of the visible user bubble.
+        const taskBoundMessage = withTeamTaskDirective(steeredMessage, conversation_id);
         // Keep the UI-language directive out of the visible user bubble while
         // still sending it to AionRS. Tool output and codebases are commonly
         // English, so the agent cannot reliably infer the user's language.
-        const modelInput = withResponseLanguageDirective(steeredMessage, conversation_id);
+        const modelInput = withResponseLanguageDirective(taskBoundMessage, conversation_id);
 
         setWaitingResponse(true);
         void checkAndUpdateTitle(conversation_id, input);
@@ -357,14 +364,15 @@ const AionrsSendBox: React.FC<{
       if (!storedMessage) return;
 
       sessionStorage.setItem(processedKey, '1');
-      sessionStorage.removeItem(storageKey);
 
       try {
         const { input, files: initialFiles } = JSON.parse(storedMessage);
         await executeCommand({ input, files: initialFiles || [] });
+        sessionStorage.removeItem(storageKey);
       } catch (error) {
         console.error('[AionrsSendBox] Failed to send initial message:', error);
         sessionStorage.removeItem(processedKey);
+        sessionStorage.removeItem(storageKey);
       }
     };
 
@@ -526,6 +534,19 @@ const AionrsSendBox: React.FC<{
       modeOptions.find((opt) => opt.active)?.label ?? t('agentMode.default', { defaultValue: 'Default' });
     const currentModelLabel = modelSelection.current_model?.use_model || t('conversation.welcome.selectModel');
 
+    const reasoningOptions: MobileActionSheetOption[] = [
+      {
+        key: 'auto',
+        label: t('settings.router9.reasoning.auto'),
+        active: !modelSelection.current_model?.reasoning_effort,
+      },
+      ...ROUTER9_REASONING_EFFORTS.map((effort) => ({
+        key: effort,
+        label: t(`settings.router9.reasoning.${effort}`),
+        active: modelSelection.current_model?.reasoning_effort === effort,
+      })),
+    ];
+
     const entries: MobileActionSheetEntry[] = [
       {
         key: 'model',
@@ -552,6 +573,21 @@ const AionrsSendBox: React.FC<{
       },
       ...attachEntries,
     ];
+
+    if (modelSelection.current_model?.id === TOMNI_GATEWAY_PROVIDER_ID) {
+      entries.splice(1, 0, {
+        key: 'reasoning',
+        icon: <Brain theme='outline' size='16' />,
+        label: t('settings.router9.reasoningLabel'),
+        meta: t(`settings.router9.reasoning.${modelSelection.current_model.reasoning_effort ?? 'auto'}`),
+        submenu: {
+          title: t('settings.router9.reasoningLabel'),
+          options: reasoningOptions,
+          onSelect: (key) =>
+            void modelSelection.handleSelectReasoning(ROUTER9_REASONING_EFFORTS.find((effort) => effort === key)),
+        },
+      });
+    }
 
     if (loadedSkills.length > 0) {
       const skillOptions: MobileActionSheetOption[] = loadedSkills.map((name) => ({
@@ -794,7 +830,7 @@ const AionrsSendBox: React.FC<{
         placeholder={
           current_model?.use_model
             ? t('acp.sendbox.placeholder', {
-                backend: agent_name || 'Tomni Agentic',
+                backend: agent_name || 'Tomny Agentic',
                 defaultValue: `Send message to {{backend}}...`,
               })
             : t('conversation.chat.noModelSelected')

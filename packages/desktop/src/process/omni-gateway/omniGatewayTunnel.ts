@@ -45,6 +45,10 @@ export type StartOmniTunnelOptions = {
    * as we hit it. Never throws — wrap your sink in try/catch if needed.
    */
   onProgress?: (phase: OmniGatewayProgressPhase, message?: string) => void;
+  /** Retry transient Cloudflare quick-tunnel startup failures. */
+  maxAttempts?: number;
+  /** Base delay between retries; injectable so tests do not sleep. */
+  retryDelayMs?: number;
 };
 
 /**
@@ -85,20 +89,27 @@ export const startOmniTunnel = async (
     }
   }
 
-  // 2) Spawn the quick tunnel pointing at our loopback origin. Cloudflare's
-  //    edge can hold us for 5–25 s between spawn and URL assignment, so we
-  //    emit spawning-tunnel before starting the process, then switch to
-  //    waiting-tunnel-url while Cloudflare assigns the public URL.
-  emit('spawning-tunnel');
-  emit('waiting-tunnel-url');
-  const result: TunnelResult = await startTunnel(OMNI_GATEWAY_TUNNEL_KEY, `http://127.0.0.1:${port}`);
-  if (result.ok) return { ok: true, url: result.url };
-  const reason = 'reason' in result ? result.reason : 'start-failed';
-  const detail = 'detail' in result ? result.detail : undefined;
-  if (reason === 'not-installed') {
-    return { ok: false, reason: 'cloudflared-missing', detail };
+  // 2) Spawn the quick tunnel pointing at our loopback origin. Quick Tunnel
+  //    allocation occasionally returns a transient Cloudflare 5xx and exits;
+  //    retry only that immediate startup failure, never installation errors.
+  const maxAttempts = Math.max(1, Math.min(5, Math.trunc(opts.maxAttempts ?? 3)));
+  const retryDelayMs = Math.max(0, Math.min(10_000, Math.trunc(opts.retryDelayMs ?? 1_000)));
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    emit('spawning-tunnel', attempt > 1 ? `Retrying secure Web access (${attempt}/${maxAttempts})…` : undefined);
+    emit('waiting-tunnel-url');
+    // eslint-disable-next-line no-await-in-loop
+    const result: TunnelResult = await startTunnel(OMNI_GATEWAY_TUNNEL_KEY, `http://127.0.0.1:${port}`);
+    if (!('reason' in result)) return { ok: true, url: result.url };
+    if (result.reason === 'not-installed') {
+      return { ok: false, reason: 'cloudflared-missing', detail: result.detail };
+    }
+    if (result.reason !== 'start-failed' || attempt === maxAttempts) {
+      return { ok: false, reason: result.reason, detail: result.detail };
+    }
+    // eslint-disable-next-line no-await-in-loop
+    await new Promise<void>((resolve) => setTimeout(resolve, retryDelayMs * attempt));
   }
-  return { ok: false, reason, detail };
+  return { ok: false, reason: 'start-failed' };
 };
 
 /** Stop the gateway's Cloudflare Quick Tunnel (no-op when none running). */

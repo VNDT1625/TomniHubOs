@@ -1,0 +1,663 @@
+/**
+ * @license
+ * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import { Message, Spin } from '@arco-design/web-react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { ipcBridge } from '@/common';
+import type { ViuProjectState, ViuTransaction } from '@/common/viu';
+
+import { useLayoutContext } from '@renderer/hooks/context/LayoutContext';
+
+import { copyText } from '@renderer/utils/ui/clipboard';
+import { createViuLocalTestReference, teamEditClient } from '../teamEdit/teamEditClient';
+import ViuNextCanvas from './next/ViuNextCanvas';
+import type { ViuNextLabels } from './next/types';
+import { viuClient, type ViuLocalAssetRef } from './viuClient';
+
+type ViuPanelProps = {
+  rootPath: string | null;
+  onRequestWorkspace: () => void;
+  onStartAgent: (prompt: string) => void;
+};
+
+const ASSET_MIME_BY_EXTENSION: Readonly<Record<string, string>> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  webp: 'image/webp',
+  avif: 'image/avif',
+  gif: 'image/gif',
+  ktx2: 'image/ktx2',
+  hdr: 'image/vnd.radiance',
+  mp4: 'video/mp4',
+  webm: 'video/webm',
+  mov: 'video/quicktime',
+  glb: 'model/gltf-binary',
+  gltf: 'model/gltf+json',
+};
+
+const transactionFromResult = (project: ViuProjectState, commands: ViuTransaction['commands']): ViuTransaction => ({
+  transactionId: `viu-ui-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`,
+  documentId: project.projectId,
+  baseRevision: Math.max(0, project.revision - 1),
+  actor: { id: 'viu-editor-user', kind: 'user' },
+  origin: 'canvas',
+  commands,
+  mode: 'commit',
+  summary: 'VIU canvas edit',
+});
+
+const ViuPanel: React.FC<ViuPanelProps> = ({ rootPath, onStartAgent }) => {
+  const { t } = useTranslation();
+  const layoutContext = useLayoutContext();
+  const workspaceKey = rootPath ? `repo:${rootPath}` : 'standalone:default';
+  const [project, setProject] = useState<ViuProjectState | null>(null);
+  const [localAssets, setLocalAssets] = useState<ViuLocalAssetRef[]>([]);
+
+  const [teamPreviewBusy, setTeamPreviewBusy] = useState(false);
+  const [teamPreviewReference, setTeamPreviewReference] = useState<string>();
+  const commitQueue = useRef<Promise<void>>(Promise.resolve());
+
+  const initialSiderCollapsed = useRef(layoutContext?.siderCollapsed ?? null);
+
+  useEffect(() => {
+    const setSiderCollapsed = layoutContext?.setSiderCollapsed;
+    if (!setSiderCollapsed || initialSiderCollapsed.current !== false) return;
+    setSiderCollapsed(true);
+    return () => setSiderCollapsed(false);
+  }, [layoutContext?.setSiderCollapsed]);
+
+  const labels = useMemo<ViuNextLabels>(
+    () => ({
+      productName: t('ide.viu.next.productName'),
+      modes: {
+        design: t('ide.viu.next.modes.design'),
+        prototype: t('ide.viu.next.modes.prototype'),
+        present: t('ide.viu.next.modes.present'),
+      },
+      sidebar: {
+        pages: t('ide.viu.next.sidebar.pages'),
+        layers: t('ide.viu.next.sidebar.layers'),
+        assets: t('ide.viu.next.sidebar.assets'),
+        components: t('ide.viu.next.sidebar.components'),
+      },
+      add: {
+        frame: t('ide.viu.next.add.frame'),
+        text: t('ide.viu.next.add.text'),
+        button: t('ide.viu.next.add.button'),
+        shape: t('ide.viu.next.add.shape'),
+        pen: t('ide.viu.next.add.pen'),
+      },
+      canvas: {
+        zoomIn: t('ide.viu.next.canvas.zoomIn'),
+        zoomOut: t('ide.viu.next.canvas.zoomOut'),
+        fit: t('ide.viu.next.canvas.fit'),
+        panHint: t('ide.viu.next.canvas.panHint'),
+      },
+      vectorEdit: {
+        enter: t('ide.viu.next.vectorEdit.enter'),
+        exit: t('ide.viu.next.vectorEdit.exit'),
+        openPath: t('ide.viu.next.vectorEdit.openPath'),
+        closePath: t('ide.viu.next.vectorEdit.closePath'),
+        union: t('ide.viu.next.vectorEdit.union'),
+        subtract: t('ide.viu.next.vectorEdit.subtract'),
+        intersect: t('ide.viu.next.vectorEdit.intersect'),
+        exclude: t('ide.viu.next.vectorEdit.exclude'),
+        clipMask: t('ide.viu.next.vectorEdit.clipMask'),
+        alphaMask: t('ide.viu.next.vectorEdit.alphaMask'),
+        releaseMask: t('ide.viu.next.vectorEdit.releaseMask'),
+        reorderMask: t('ide.viu.next.vectorEdit.reorderMask'),
+      },
+
+      teamPreview: {
+        publish: t('ide.viu.next.teamPreview.publish'),
+        publishing: t('ide.viu.next.teamPreview.publishing'),
+        published: t('ide.viu.next.teamPreview.published'),
+        copyReference: t('ide.viu.next.teamPreview.copyReference'),
+        unavailable: t('ide.viu.next.teamPreview.unavailable'),
+        success: t('ide.viu.next.teamPreview.success'),
+        error: t('ide.viu.next.teamPreview.error'),
+        referenceCopied: t('ide.viu.next.teamPreview.referenceCopied'),
+        purpose: t('ide.viu.next.teamPreview.purpose'),
+      },
+
+      present: {
+        back: t('ide.viu.next.present.back'),
+        closeOverlay: t('ide.viu.next.present.closeOverlay'),
+        empty: t('ide.viu.next.present.empty'),
+        route: t('ide.viu.next.present.route'),
+        exit: t('ide.viu.next.present.exit'),
+      },
+      authoring: {
+        title: t('ide.viu.next.authoring.title'),
+        selectionCount: (count) => t('ide.viu.next.authoring.selectionCount', { count }),
+        mixed: t('ide.viu.next.authoring.mixed'),
+        text: {
+          section: t('ide.viu.next.authoring.text.section'),
+          content: t('ide.viu.next.authoring.text.content'),
+          placeholder: t('ide.viu.next.authoring.text.placeholder'),
+        },
+        typography: {
+          section: t('ide.viu.next.authoring.typography.section'),
+          fontFamily: t('ide.viu.next.authoring.typography.fontFamily'),
+          loadSystemFonts: t('ide.viu.next.authoring.typography.loadSystemFonts'),
+          loadingSystemFonts: t('ide.viu.next.authoring.typography.loadingSystemFonts'),
+          systemFontsCount: (count) => t('ide.viu.next.authoring.typography.systemFontsCount', { count }),
+          fontAccessDenied: t('ide.viu.next.authoring.typography.fontAccessDenied'),
+          fontUnsupported: t('ide.viu.next.authoring.typography.fontUnsupported'),
+          fontSize: t('ide.viu.next.authoring.typography.fontSize'),
+          fontWeight: t('ide.viu.next.authoring.typography.fontWeight'),
+          fontStyle: t('ide.viu.next.authoring.typography.fontStyle'),
+          styleNormal: t('ide.viu.next.authoring.typography.styleNormal'),
+          styleItalic: t('ide.viu.next.authoring.typography.styleItalic'),
+          styleOblique: t('ide.viu.next.authoring.typography.styleOblique'),
+          lineHeight: t('ide.viu.next.authoring.typography.lineHeight'),
+          letterSpacing: t('ide.viu.next.authoring.typography.letterSpacing'),
+          decoration: t('ide.viu.next.authoring.typography.decoration'),
+          underline: t('ide.viu.next.authoring.typography.underline'),
+          strikethrough: t('ide.viu.next.authoring.typography.strikethrough'),
+          letterCase: t('ide.viu.next.authoring.typography.letterCase'),
+          caseOriginal: t('ide.viu.next.authoring.typography.caseOriginal'),
+          caseUppercase: t('ide.viu.next.authoring.typography.caseUppercase'),
+          caseLowercase: t('ide.viu.next.authoring.typography.caseLowercase'),
+          caseCapitalize: t('ide.viu.next.authoring.typography.caseCapitalize'),
+          horizontalAlignment: t('ide.viu.next.authoring.typography.horizontalAlignment'),
+          verticalAlignment: t('ide.viu.next.authoring.typography.verticalAlignment'),
+          alignLeft: t('ide.viu.next.authoring.typography.alignLeft'),
+          alignCenter: t('ide.viu.next.authoring.typography.alignCenter'),
+          alignRight: t('ide.viu.next.authoring.typography.alignRight'),
+          alignJustify: t('ide.viu.next.authoring.typography.alignJustify'),
+          alignTop: t('ide.viu.next.authoring.typography.alignTop'),
+          alignMiddle: t('ide.viu.next.authoring.typography.alignMiddle'),
+          alignBottom: t('ide.viu.next.authoring.typography.alignBottom'),
+        },
+        vector: {
+          section: t('ide.viu.next.authoring.vector.section'),
+          pathData: t('ide.viu.next.authoring.vector.pathData'),
+          invalidPath: t('ide.viu.next.authoring.vector.invalidPath'),
+          closed: t('ide.viu.next.authoring.vector.closed'),
+          fillRule: t('ide.viu.next.authoring.vector.fillRule'),
+          nonzero: t('ide.viu.next.authoring.vector.nonzero'),
+          evenodd: t('ide.viu.next.authoring.vector.evenodd'),
+          strokeCap: t('ide.viu.next.authoring.vector.strokeCap'),
+          strokeJoin: t('ide.viu.next.authoring.vector.strokeJoin'),
+          miterLimit: t('ide.viu.next.authoring.vector.miterLimit'),
+          butt: t('ide.viu.next.authoring.vector.butt'),
+          round: t('ide.viu.next.authoring.vector.round'),
+          square: t('ide.viu.next.authoring.vector.square'),
+          miter: t('ide.viu.next.authoring.vector.miter'),
+          bevel: t('ide.viu.next.authoring.vector.bevel'),
+          anchors: t('ide.viu.next.authoring.vector.anchors'),
+          addAnchor: t('ide.viu.next.authoring.vector.addAnchor'),
+          removeAnchor: t('ide.viu.next.authoring.vector.removeAnchor'),
+          removeHandle: t('ide.viu.next.authoring.vector.removeHandle'),
+          pointType: t('ide.viu.next.authoring.vector.pointType'),
+          corner: t('ide.viu.next.authoring.vector.corner'),
+          smooth: t('ide.viu.next.authoring.vector.smooth'),
+          symmetric: t('ide.viu.next.authoring.vector.symmetric'),
+          handleIn: t('ide.viu.next.authoring.vector.handleIn'),
+          handleOut: t('ide.viu.next.authoring.vector.handleOut'),
+          x: t('ide.viu.next.authoring.vector.x'),
+          y: t('ide.viu.next.authoring.vector.y'),
+        },
+        component: {
+          section: t('ide.viu.next.authoring.components.section'),
+          createComponent: t('ide.viu.next.authoring.components.createComponent'),
+          createInstance: t('ide.viu.next.authoring.components.createInstance'),
+          combineVariants: t('ide.viu.next.authoring.components.combineVariants'),
+          mainComponent: t('ide.viu.next.authoring.components.mainComponent'),
+          instance: t('ide.viu.next.authoring.components.instance'),
+          variant: t('ide.viu.next.authoring.components.variant'),
+          stateAxis: t('ide.viu.next.authoring.components.stateAxis'),
+          properties: t('ide.viu.next.authoring.components.properties'),
+          resetOverrides: t('ide.viu.next.authoring.components.resetOverrides'),
+          detachInstance: t('ide.viu.next.authoring.components.detachInstance'),
+          emptyProperties: t('ide.viu.next.authoring.components.emptyProperties'),
+          missingComponent: t('ide.viu.next.authoring.components.missingComponent'),
+          componentSet: t('ide.viu.next.authoring.components.componentSet'),
+          defaultVariant: t('ide.viu.next.authoring.components.defaultVariant'),
+        },
+        prototype: {
+          section: t('ide.viu.next.authoring.prototype.section'),
+          bindings: t('ide.viu.next.authoring.prototype.bindings'),
+          addInteraction: t('ide.viu.next.authoring.prototype.addInteraction'),
+          noSelection: t('ide.viu.next.authoring.prototype.noSelection'),
+          noFlow: t('ide.viu.next.authoring.prototype.noFlow'),
+          trigger: t('ide.viu.next.authoring.prototype.trigger'),
+          click: t('ide.viu.next.authoring.prototype.click'),
+          hover: t('ide.viu.next.authoring.prototype.hover'),
+          focus: t('ide.viu.next.authoring.prototype.focus'),
+          submit: t('ide.viu.next.authoring.prototype.submit'),
+          scroll: t('ide.viu.next.authoring.prototype.scroll'),
+          load: t('ide.viu.next.authoring.prototype.load'),
+          action: t('ide.viu.next.authoring.prototype.action'),
+          navigate: t('ide.viu.next.authoring.prototype.navigate'),
+          openOverlay: t('ide.viu.next.authoring.prototype.openOverlay'),
+          scrollTo: t('ide.viu.next.authoring.prototype.scrollTo'),
+          closeOverlay: t('ide.viu.next.authoring.prototype.closeOverlay'),
+          back: t('ide.viu.next.authoring.prototype.back'),
+          setVariable: t('ide.viu.next.authoring.prototype.setVariable'),
+          toggleVariable: t('ide.viu.next.authoring.prototype.toggleVariable'),
+          playTimeline: t('ide.viu.next.authoring.prototype.playTimeline'),
+          pauseTimeline: t('ide.viu.next.authoring.prototype.pauseTimeline'),
+          seekTimeline: t('ide.viu.next.authoring.prototype.seekTimeline'),
+          value: t('ide.viu.next.authoring.prototype.value'),
+          condition: t('ide.viu.next.authoring.prototype.condition'),
+          conditionNone: t('ide.viu.next.authoring.prototype.conditionNone'),
+          conditionTruthy: t('ide.viu.next.authoring.prototype.conditionTruthy'),
+          conditionFalsy: t('ide.viu.next.authoring.prototype.conditionFalsy'),
+          conditionEq: t('ide.viu.next.authoring.prototype.conditionEq'),
+          conditionNeq: t('ide.viu.next.authoring.prototype.conditionNeq'),
+          conditionGt: t('ide.viu.next.authoring.prototype.conditionGt'),
+          conditionGte: t('ide.viu.next.authoring.prototype.conditionGte'),
+          conditionLt: t('ide.viu.next.authoring.prototype.conditionLt'),
+          conditionLte: t('ide.viu.next.authoring.prototype.conditionLte'),
+          addAction: t('ide.viu.next.authoring.prototype.addAction'),
+          moveUp: t('ide.viu.next.authoring.prototype.moveUp'),
+          moveDown: t('ide.viu.next.authoring.prototype.moveDown'),
+          timeline: t('ide.viu.next.authoring.prototype.timeline'),
+          keyframes: t('ide.viu.next.authoring.prototype.keyframes'),
+          position: t('ide.viu.next.authoring.prototype.position'),
+          destination: t('ide.viu.next.authoring.prototype.destination'),
+          transition: t('ide.viu.next.authoring.prototype.transition'),
+          presetNone: t('ide.viu.next.authoring.prototype.presetNone'),
+          presetFade: t('ide.viu.next.authoring.prototype.presetFade'),
+          presetRise: t('ide.viu.next.authoring.prototype.presetRise'),
+          presetScale: t('ide.viu.next.authoring.prototype.presetScale'),
+          presetSlideLeft: t('ide.viu.next.authoring.prototype.presetSlideLeft'),
+          presetSlideRight: t('ide.viu.next.authoring.prototype.presetSlideRight'),
+          presetBlur: t('ide.viu.next.authoring.prototype.presetBlur'),
+          presetReveal: t('ide.viu.next.authoring.prototype.presetReveal'),
+          presetSmartAnimate: t('ide.viu.next.authoring.prototype.presetSmartAnimate'),
+          duration: t('ide.viu.next.authoring.prototype.duration'),
+          easing: t('ide.viu.next.authoring.prototype.easing'),
+          easingLinear: t('ide.viu.next.authoring.prototype.easingLinear'),
+          easingEase: t('ide.viu.next.authoring.prototype.easingEase'),
+          easingIn: t('ide.viu.next.authoring.prototype.easingIn'),
+          easingOut: t('ide.viu.next.authoring.prototype.easingOut'),
+          easingInOut: t('ide.viu.next.authoring.prototype.easingInOut'),
+          easingSpring: t('ide.viu.next.authoring.prototype.easingSpring'),
+          createTimeline: t('ide.viu.next.authoring.prototype.createTimeline'),
+          addTrack: t('ide.viu.next.authoring.prototype.addTrack'),
+          addKeyframe: t('ide.viu.next.authoring.prototype.addKeyframe'),
+          loop: t('ide.viu.next.authoring.prototype.loop'),
+          property: t('ide.viu.next.authoring.prototype.property'),
+          start: t('ide.viu.next.authoring.prototype.start'),
+          end: t('ide.viu.next.authoring.prototype.end'),
+          pin: t('ide.viu.next.authoring.prototype.pin'),
+          parallax: t('ide.viu.next.authoring.prototype.parallax'),
+          scrollBinding: t('ide.viu.next.authoring.prototype.scrollBinding'),
+          addScrollBinding: t('ide.viu.next.authoring.prototype.addScrollBinding'),
+          noTimeline: t('ide.viu.next.authoring.prototype.noTimeline'),
+          x: t('ide.viu.next.authoring.prototype.x'),
+          y: t('ide.viu.next.authoring.prototype.y'),
+          opacity: t('ide.viu.next.authoring.prototype.opacity'),
+          scale: t('ide.viu.next.authoring.prototype.scale'),
+          rotate: t('ide.viu.next.authoring.prototype.rotate'),
+          blur: t('ide.viu.next.authoring.prototype.blur'),
+          remove: t('ide.viu.next.authoring.prototype.remove'),
+          disconnectedScreens: (count) => t('ide.viu.next.authoring.prototype.disconnectedScreens', { count }),
+        },
+        image: {
+          section: t('ide.viu.next.authoring.image.section'),
+          fit: t('ide.viu.next.authoring.image.fit'),
+          fitCover: t('ide.viu.next.authoring.image.fitCover'),
+          fitContain: t('ide.viu.next.authoring.image.fitContain'),
+          fitFill: t('ide.viu.next.authoring.image.fitFill'),
+          fitNone: t('ide.viu.next.authoring.image.fitNone'),
+          fitScaleDown: t('ide.viu.next.authoring.image.fitScaleDown'),
+          crop: t('ide.viu.next.authoring.image.crop'),
+          focalPoint: t('ide.viu.next.authoring.image.focalPoint'),
+          rotation: t('ide.viu.next.authoring.layout.rotation'),
+          flipHorizontal: t('ide.viu.next.authoring.image.flipHorizontal'),
+          flipVertical: t('ide.viu.next.authoring.image.flipVertical'),
+          reset: t('ide.viu.next.authoring.image.reset'),
+        },
+        stroke: {
+          section: t('ide.viu.next.authoring.stroke.section'),
+          add: t('ide.viu.next.authoring.stroke.add'),
+          remove: t('ide.viu.next.authoring.appearance.remove'),
+          visible: t('ide.viu.next.authoring.appearance.visible'),
+          color: t('ide.viu.next.authoring.appearance.borderColor'),
+          width: t('ide.viu.next.authoring.appearance.borderWidth'),
+          alignment: t('ide.viu.next.authoring.layout.strokeAlignment'),
+          inside: t('ide.viu.next.authoring.layout.strokeInside'),
+          center: t('ide.viu.next.authoring.layout.strokeCenter'),
+          outside: t('ide.viu.next.authoring.layout.strokeOutside'),
+          cap: t('ide.viu.next.authoring.vector.strokeCap'),
+          butt: t('ide.viu.next.authoring.vector.butt'),
+          round: t('ide.viu.next.authoring.vector.round'),
+          square: t('ide.viu.next.authoring.vector.square'),
+          join: t('ide.viu.next.authoring.vector.strokeJoin'),
+          miter: t('ide.viu.next.authoring.vector.miter'),
+          bevel: t('ide.viu.next.authoring.vector.bevel'),
+          miterLimit: t('ide.viu.next.authoring.vector.miterLimit'),
+          dashPattern: t('ide.viu.next.authoring.stroke.dashPattern'),
+          dashOffset: t('ide.viu.next.authoring.stroke.dashOffset'),
+        },
+        quality: {
+          section: t('ide.viu.next.authoring.quality.section'),
+          issueCount: (count) => t('ide.viu.next.authoring.quality.issueCount', { count }),
+          noIssues: t('ide.viu.next.authoring.quality.noIssues'),
+          error: t('ide.viu.next.authoring.quality.error'),
+          warning: t('ide.viu.next.authoring.quality.warning'),
+          issue: (code, entityId) =>
+            t('ide.viu.next.authoring.quality.issue', {
+              code,
+              entityId: entityId ?? t('ide.viu.next.authoring.quality.project'),
+            }),
+        },
+        layout: {
+          section: t('ide.viu.next.authoring.layout.section'),
+          mode: t('ide.viu.next.authoring.layout.mode'),
+          none: t('ide.viu.next.authoring.layout.none'),
+          horizontal: t('ide.viu.next.authoring.layout.horizontal'),
+          vertical: t('ide.viu.next.authoring.layout.vertical'),
+          grid: t('ide.viu.next.authoring.layout.grid'),
+          gap: t('ide.viu.next.authoring.layout.gap'),
+          padding: t('ide.viu.next.authoring.layout.padding'),
+          top: t('ide.viu.next.authoring.layout.top'),
+          right: t('ide.viu.next.authoring.layout.right'),
+          bottom: t('ide.viu.next.authoring.layout.bottom'),
+          left: t('ide.viu.next.authoring.layout.left'),
+          alignment: t('ide.viu.next.authoring.layout.alignment'),
+          distribution: t('ide.viu.next.authoring.layout.distribution'),
+          start: t('ide.viu.next.authoring.layout.start'),
+          center: t('ide.viu.next.authoring.layout.center'),
+          end: t('ide.viu.next.authoring.layout.end'),
+          stretch: t('ide.viu.next.authoring.layout.stretch'),
+          spaceBetween: t('ide.viu.next.authoring.layout.spaceBetween'),
+          wrap: t('ide.viu.next.authoring.layout.wrap'),
+          columns: t('ide.viu.next.authoring.layout.columns'),
+          childSizing: t('ide.viu.next.authoring.layout.childSizing'),
+          position: t('ide.viu.next.authoring.layout.position'),
+          flow: t('ide.viu.next.authoring.layout.flow'),
+          absolute: t('ide.viu.next.authoring.layout.absolute'),
+          width: t('ide.viu.next.authoring.layout.width'),
+          height: t('ide.viu.next.authoring.layout.height'),
+          fixed: t('ide.viu.next.authoring.layout.fixed'),
+          fill: t('ide.viu.next.authoring.layout.fill'),
+          hug: t('ide.viu.next.authoring.layout.hug'),
+          minWidth: t('ide.viu.next.authoring.layout.minWidth'),
+          maxWidth: t('ide.viu.next.authoring.layout.maxWidth'),
+          minHeight: t('ide.viu.next.authoring.layout.minHeight'),
+          maxHeight: t('ide.viu.next.authoring.layout.maxHeight'),
+          constraints: t('ide.viu.next.authoring.layout.constraints'),
+          designSystem: t('ide.viu.next.authoring.layout.designSystem'),
+          activeMode: t('ide.viu.next.authoring.layout.activeMode'),
+          responsive: t('ide.viu.next.authoring.layout.responsive'),
+          breakpoint: t('ide.viu.next.authoring.layout.breakpoint'),
+          base: t('ide.viu.next.authoring.layout.base'),
+          computed: t('ide.viu.next.authoring.layout.computed'),
+          backgroundToken: t('ide.viu.next.authoring.layout.backgroundToken'),
+          gapToken: t('ide.viu.next.authoring.layout.gapToken'),
+          noVariable: t('ide.viu.next.authoring.layout.noVariable'),
+          rotation: t('ide.viu.next.authoring.layout.rotation'),
+          cornerRadii: t('ide.viu.next.authoring.layout.cornerRadii'),
+          strokeAlignment: t('ide.viu.next.authoring.layout.strokeAlignment'),
+          strokeInside: t('ide.viu.next.authoring.layout.strokeInside'),
+          strokeCenter: t('ide.viu.next.authoring.layout.strokeCenter'),
+          strokeOutside: t('ide.viu.next.authoring.layout.strokeOutside'),
+          snapping: t('ide.viu.next.authoring.layout.snapping'),
+          guideCount: (count) => t('ide.viu.next.authoring.layout.guideCount', { count }),
+          pixelGrid: t('ide.viu.next.authoring.layout.pixelGrid'),
+          snapThreshold: t('ide.viu.next.authoring.layout.snapThreshold'),
+          snapToGuides: t('ide.viu.next.authoring.layout.snapToGuides'),
+          snapToObjects: t('ide.viu.next.authoring.layout.snapToObjects'),
+          addHorizontalGuide: t('ide.viu.next.authoring.layout.addHorizontalGuide'),
+          addVerticalGuide: t('ide.viu.next.authoring.layout.addVerticalGuide'),
+          removeGuide: t('ide.viu.next.authoring.layout.removeGuide'),
+          responsiveVisible: t('ide.viu.next.authoring.layout.responsiveVisible'),
+        },
+        appearance: {
+          section: t('ide.viu.next.authoring.appearance.section'),
+          fillStack: t('ide.viu.next.authoring.appearance.fillStack'),
+          effectStack: t('ide.viu.next.authoring.appearance.effectStack'),
+          addFill: t('ide.viu.next.authoring.appearance.addFill'),
+          addEffect: t('ide.viu.next.authoring.appearance.addEffect'),
+          moveUp: t('ide.viu.next.authoring.appearance.moveUp'),
+          moveDown: t('ide.viu.next.authoring.appearance.moveDown'),
+          remove: t('ide.viu.next.authoring.appearance.remove'),
+          visible: t('ide.viu.next.authoring.appearance.visible'),
+          legacyFallback: t('ide.viu.next.authoring.appearance.legacyFallback'),
+          effectDropShadow: t('ide.viu.next.authoring.appearance.effectDropShadow'),
+          effectInnerShadow: t('ide.viu.next.authoring.appearance.effectInnerShadow'),
+          effectLayerBlur: t('ide.viu.next.authoring.appearance.effectLayerBlur'),
+          effectBackdropBlur: t('ide.viu.next.authoring.appearance.effectBackdropBlur'),
+          radialCenterX: t('ide.viu.next.authoring.appearance.radialCenterX'),
+          radialCenterY: t('ide.viu.next.authoring.appearance.radialCenterY'),
+          radialRadius: t('ide.viu.next.authoring.appearance.radialRadius'),
+          textColor: t('ide.viu.next.authoring.appearance.textColor'),
+          background: t('ide.viu.next.authoring.appearance.background'),
+          fillType: t('ide.viu.next.authoring.appearance.fillType'),
+          fillSolid: t('ide.viu.next.authoring.appearance.fillSolid'),
+          fillLinear: t('ide.viu.next.authoring.appearance.fillLinear'),
+          fillRadial: t('ide.viu.next.authoring.appearance.fillRadial'),
+          fillStart: t('ide.viu.next.authoring.appearance.fillStart'),
+          fillEnd: t('ide.viu.next.authoring.appearance.fillEnd'),
+          gradientAngle: t('ide.viu.next.authoring.appearance.gradientAngle'),
+          cssValue: t('ide.viu.next.authoring.appearance.cssValue'),
+          borderColor: t('ide.viu.next.authoring.appearance.borderColor'),
+          borderWidth: t('ide.viu.next.authoring.appearance.borderWidth'),
+          borderStyle: t('ide.viu.next.authoring.appearance.borderStyle'),
+          borderNone: t('ide.viu.next.authoring.appearance.borderNone'),
+          borderSolid: t('ide.viu.next.authoring.appearance.borderSolid'),
+          borderDashed: t('ide.viu.next.authoring.appearance.borderDashed'),
+          borderDotted: t('ide.viu.next.authoring.appearance.borderDotted'),
+          borderDouble: t('ide.viu.next.authoring.appearance.borderDouble'),
+          overflow: t('ide.viu.next.authoring.appearance.overflow'),
+          overflowVisible: t('ide.viu.next.authoring.appearance.overflowVisible'),
+          overflowHidden: t('ide.viu.next.authoring.appearance.overflowHidden'),
+          overflowScroll: t('ide.viu.next.authoring.appearance.overflowScroll'),
+          opacity: t('ide.viu.next.authoring.appearance.opacity'),
+          radius: t('ide.viu.next.authoring.appearance.radius'),
+          shadow: t('ide.viu.next.authoring.appearance.shadow'),
+          shadowPlaceholder: t('ide.viu.next.authoring.appearance.shadowPlaceholder'),
+          shadowX: t('ide.viu.next.authoring.appearance.shadowX'),
+          shadowY: t('ide.viu.next.authoring.appearance.shadowY'),
+          shadowBlur: t('ide.viu.next.authoring.appearance.shadowBlur'),
+          shadowSpread: t('ide.viu.next.authoring.appearance.shadowSpread'),
+          shadowColor: t('ide.viu.next.authoring.appearance.shadowColor'),
+          layerBlur: t('ide.viu.next.authoring.appearance.layerBlur'),
+          backdropBlur: t('ide.viu.next.authoring.appearance.backdropBlur'),
+        },
+        units: {
+          pixels: t('ide.viu.next.authoring.units.pixels'),
+          percent: t('ide.viu.next.authoring.units.percent'),
+        },
+      },
+      authoringActions: {
+        undo: t('ide.viu.next.authoring.actions.undo'),
+        redo: t('ide.viu.next.authoring.actions.redo'),
+        duplicate: t('ide.viu.next.authoring.actions.duplicate'),
+        delete: t('ide.viu.next.authoring.actions.delete'),
+        group: t('ide.viu.next.authoring.actions.group'),
+        ungroup: t('ide.viu.next.authoring.actions.ungroup'),
+        alignLeft: t('ide.viu.next.authoring.actions.alignLeft'),
+        alignCenter: t('ide.viu.next.authoring.actions.alignCenter'),
+        alignRight: t('ide.viu.next.authoring.actions.alignRight'),
+        alignTop: t('ide.viu.next.authoring.actions.alignTop'),
+        alignMiddle: t('ide.viu.next.authoring.actions.alignMiddle'),
+        alignBottom: t('ide.viu.next.authoring.actions.alignBottom'),
+        distributeHorizontal: t('ide.viu.next.authoring.actions.distributeHorizontal'),
+        distributeVertical: t('ide.viu.next.authoring.actions.distributeVertical'),
+      },
+      inspector: {
+        title: t('ide.viu.next.inspector.title'),
+        empty: t('ide.viu.next.inspector.empty'),
+        name: t('ide.viu.next.inspector.name'),
+        position: t('ide.viu.next.inspector.position'),
+        size: t('ide.viu.next.inspector.size'),
+        x: t('ide.viu.next.inspector.x'),
+        y: t('ide.viu.next.inspector.y'),
+        width: t('ide.viu.next.inspector.width'),
+        height: t('ide.viu.next.inspector.height'),
+        type: t('ide.viu.next.inspector.type'),
+        visible: t('ide.viu.next.inspector.visible'),
+        locked: t('ide.viu.next.inspector.locked'),
+      },
+      assets: {
+        title: t('ide.viu.next.assets.title'),
+        empty: t('ide.viu.next.assets.empty'),
+        linkAction: t('ide.viu.next.assets.linkAction'),
+
+        insertAction: t('ide.viu.next.assets.insertAction'),
+      },
+      componentLibrary: {
+        title: t('ide.viu.next.componentLibrary.title'),
+        searchPlaceholder: t('ide.viu.next.componentLibrary.searchPlaceholder'),
+        empty: t('ide.viu.next.componentLibrary.empty'),
+        noResults: t('ide.viu.next.componentLibrary.noResults'),
+        component: t('ide.viu.next.componentLibrary.component'),
+        componentSet: t('ide.viu.next.componentLibrary.componentSet'),
+        variants: (count) => t('ide.viu.next.componentLibrary.variants', { count }),
+        properties: (count) => t('ide.viu.next.componentLibrary.properties', { count }),
+        insert: t('ide.viu.next.componentLibrary.insert'),
+        targetScreen: (name) => t('ide.viu.next.componentLibrary.targetScreen', { name }),
+        targetUnavailable: t('ide.viu.next.componentLibrary.targetUnavailable'),
+        missingVariant: t('ide.viu.next.componentLibrary.missingVariant'),
+        insertError: t('ide.viu.next.componentLibrary.insertError'),
+      },
+      agent: {
+        title: t('ide.viu.next.agent.title'),
+        placeholder: t('ide.viu.next.agent.placeholder'),
+        send: t('ide.viu.next.agent.send'),
+      },
+    }),
+    [t]
+  );
+
+  useEffect(() => {
+    let active = true;
+
+    setTeamPreviewReference(undefined);
+    void Promise.all([viuClient.inspectV2(workspaceKey), viuClient.listAssets(workspaceKey)]).then(
+      ([projectResult, assetResult]) => {
+        if (!active) return;
+        if (projectResult.ok) setProject(projectResult.data);
+        if (assetResult.ok) setLocalAssets(assetResult.data);
+      }
+    );
+    return () => {
+      active = false;
+    };
+  }, [workspaceKey]);
+
+  const linkLocalAsset = useCallback(async (): Promise<void> => {
+    const selected = await ipcBridge.dialog.showOpen.invoke({
+      properties: ['openFile'],
+      filters: [
+        {
+          name: labels.assets.title,
+          extensions: Object.keys(ASSET_MIME_BY_EXTENSION),
+        },
+      ],
+    });
+    const path = selected?.[0];
+    if (!path) return;
+    const extension = path.split('.').pop()?.toLocaleLowerCase('en-US') ?? '';
+    const mimeType = ASSET_MIME_BY_EXTENSION[extension];
+    if (!mimeType) return;
+    const result = await viuClient.grantAsset({ workspaceKey, path, grantPath: path, mimeType });
+    if (result.ok)
+      setLocalAssets((current) => [...current.filter((asset) => asset.id !== result.data.id), result.data]);
+  }, [labels.assets.title, workspaceKey]);
+
+  const publishTeamPreview = useCallback(async (): Promise<void> => {
+    if (!rootPath || !project) {
+      Message.info(labels.teamPreview.unavailable);
+      return;
+    }
+    const startScreenId = project.screenOrder.find((screenId) => Boolean(project.screens[screenId]));
+    if (!startScreenId) {
+      Message.error(labels.teamPreview.error);
+      return;
+    }
+    const createdAt = Date.now();
+    const nonce = crypto.randomUUID();
+    setTeamPreviewBusy(true);
+    try {
+      const result = await teamEditClient.publishPreview(
+        rootPath,
+        project,
+        {
+          snapshotId: 'snapshot-' + nonce,
+          createdAt,
+          startScreenId,
+          metadata: {
+            title: project.title,
+            createdBy: 'viu-editor-user',
+            purpose: labels.teamPreview.purpose,
+            teamWorkspaceKey: rootPath,
+          },
+        },
+        { packageId: 'viu-' + nonce, createdAt, teamWorkspaceKey: rootPath }
+      );
+      if ('error' in result) {
+        Message.error(result.error);
+        return;
+      }
+      setTeamPreviewReference(createViuLocalTestReference(result.data.packageId));
+      Message.success(labels.teamPreview.success);
+    } catch {
+      Message.error(labels.teamPreview.error);
+    } finally {
+      setTeamPreviewBusy(false);
+    }
+  }, [labels.teamPreview, project, rootPath]);
+
+  const copyTeamPreviewReference = useCallback(async (): Promise<void> => {
+    if (!teamPreviewReference) return;
+    await copyText(teamPreviewReference);
+    Message.success(labels.teamPreview.referenceCopied);
+  }, [labels.teamPreview.referenceCopied, teamPreviewReference]);
+
+  if (!project) {
+    return (
+      <div className='size-full flex-center bg-bg-2'>
+        <Spin />
+      </div>
+    );
+  }
+
+  return (
+    <ViuNextCanvas
+      labels={labels}
+      project={project}
+      localAssets={localAssets}
+      className='h-full min-h-0'
+      onLinkAsset={() => void linkLocalAsset()}
+      teamPreviewReference={teamPreviewReference}
+      teamPreviewBusy={teamPreviewBusy}
+      teamPreviewDisabled={!rootPath}
+      onPublishPreview={() => void publishTeamPreview()}
+      onCopyPreviewReference={() => void copyTeamPreviewReference()}
+      onProjectChange={(nextProject, result) => {
+        setProject(nextProject);
+        const transaction = transactionFromResult(nextProject, result.normalizedCommands);
+        commitQueue.current = commitQueue.current.then(async () => {
+          const committed = await viuClient.commitV2({ workspaceKey, transaction });
+          if (!committed.ok || committed.data.accepted) return;
+          setProject(committed.data.state);
+        });
+      }}
+      onAgentRequest={
+        rootPath
+          ? (request) => {
+              onStartAgent(
+                `Continue the current VIU design. Use viu_inspect, viu_preview_transaction, viu_commit_transaction, and viu_validate. ` +
+                  `Workspace key: ${JSON.stringify(workspaceKey)}. Project id: ${JSON.stringify(project.projectId)}. ` +
+                  `Do not generate application code yet; update the VIU document only. User request: ${request}`
+              );
+            }
+          : undefined
+      }
+    />
+  );
+};
+
+export default ViuPanel;

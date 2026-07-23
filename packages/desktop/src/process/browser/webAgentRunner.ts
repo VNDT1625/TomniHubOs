@@ -14,7 +14,7 @@
  *
  *   1. Send the conversation + a tool catalog to the user's configured model
  *      (OpenAI-compatible `/chat/completions`, same call style as
- *      `companyGenerator.ts` — provider read from aioncore `GET /api/providers`).
+ *      `companyGenerator.ts` — provider read from the native Tomni catalog).
  *   2. The model replies with EITHER a tool call (navigate / read / click /
  *      type / scroll / screenshot / finish) OR a final answer.
  *   3. The runner executes the tool against the live tab (navigation via the
@@ -44,6 +44,7 @@
  */
 
 import type { BrowserTabId, IBrowserViewManager } from './browserViewManager';
+import { redactAgentVisibleText } from './pagePerception';
 import type { IHumanLikeInput, InputSink, Point } from './humanLikeInput';
 
 // ---------------------------------------------------------------------------
@@ -1281,9 +1282,11 @@ export const createWebAgentRunner = (deps: WebAgentRunnerDeps): IWebAgentRunner 
     const current = viewManager.listTabs().find((tab) => tab.id === tabId);
     const currentUrl = current?.url ?? '';
     if (currentUrl.length > 0) {
+      const safeUrl = redactAgentVisibleText(currentUrl);
+      const safeTitle = redactAgentVisibleText(current?.title ?? '');
       messages.push({
         role: 'user',
-        content: `Context — the tab is currently on: URL=${currentUrl} TITLE=${current?.title ?? ''}. When the user refers to "this page/video", act on THIS url; do not invent another.`,
+        content: `Context — the tab is currently on: URL=${safeUrl} TITLE=${safeTitle}. When the user refers to "this page/video", act on THIS url; do not invent another.`,
       });
     }
     messages.push({ role: 'user', content: instruction });
@@ -1325,7 +1328,7 @@ export const createWebAgentRunner = (deps: WebAgentRunnerDeps): IWebAgentRunner 
             signal: controller.signal,
           });
           if (summary.trim().length > 0) {
-            const answer = label ? `## ${label}\n\n${summary}` : summary;
+            const answer = redactAgentVisibleText(label ? `## ${label}\n\n${summary}` : summary);
             onEvent({ type: 'final', tabId, text: answer });
             return { answer, status: 'done', steps: 1 };
           }
@@ -1358,7 +1361,7 @@ export const createWebAgentRunner = (deps: WebAgentRunnerDeps): IWebAgentRunner 
             onEvent({ type: 'stopped', tabId });
             return { answer: '', status: 'stopped', steps };
           }
-          const message = error instanceof Error ? error.message : String(error);
+          const message = redactAgentVisibleText(error instanceof Error ? error.message : String(error));
           onEvent({ type: 'error', tabId, message });
           return { answer: '', status: 'error', steps };
         }
@@ -1366,13 +1369,15 @@ export const createWebAgentRunner = (deps: WebAgentRunnerDeps): IWebAgentRunner 
         const action = parseAction(reply);
         if (!action) {
           // The model answered in prose without a tool call — treat as the final answer.
-          onEvent({ type: 'final', tabId, text: reply.trim() });
-          return { answer: reply.trim(), status: 'done', steps };
+          const answer = redactAgentVisibleText(reply.trim());
+          onEvent({ type: 'final', tabId, text: answer });
+          return { answer, status: 'done', steps };
         }
 
         if (action.tool === 'finish') {
-          onEvent({ type: 'final', tabId, text: action.answer });
-          return { answer: action.answer, status: 'done', steps };
+          const answer = redactAgentVisibleText(action.answer);
+          onEvent({ type: 'final', tabId, text: answer });
+          return { answer, status: 'done', steps };
         }
 
         const { summary, detail } = actionSummary(action);
@@ -1385,6 +1390,7 @@ export const createWebAgentRunner = (deps: WebAgentRunnerDeps): IWebAgentRunner 
         } catch (error) {
           result = { ok: false, observation: error instanceof Error ? error.message : String(error) };
         }
+        result = { ...result, observation: redactAgentVisibleText(result.observation) };
 
         onEvent({
           type: 'observation',

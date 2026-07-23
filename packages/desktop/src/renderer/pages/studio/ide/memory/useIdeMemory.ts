@@ -5,7 +5,7 @@
  */
 
 /**
- * `useIdeMemory` — renderer hook that surfaces ONE IDE chat tab's ephemeral
+ * `useIdeMemory` — renderer hook that surfaces ONE IDE chat tab's session-scoped
  * session super-memory for the UI.
  *
  * The agent writes to the memory through the IDE MCP `ide_memory_*` tools; this

@@ -290,6 +290,16 @@ export const buildTraceContext = (trace: RuntimeTrace, graph: KnowledgeGraph): C
   // clicked" answer — the strongest fix signal for bugs that throw nothing.
   const coverageLines = renderCoverage(trace.coverage ?? [], 20);
 
+  const networkErrorLines = trace.events
+    .filter(
+      (ev): ev is Extract<RuntimeTrace['events'][number], { kind: 'network' }> =>
+        ev.kind === 'network' && (ev.status >= 400 || Boolean(ev.error))
+    )
+    .map(
+      (ev) =>
+        `- ${ev.method} ${ev.url} → ${ev.status}${ev.error ? ` (${ev.error})` : ''} · mapped API/service candidates from endpoint path`,
+    );
+
   const renderedContext = [
     '## Quick Test trace',
     `Duration: ${((trace.stoppedAt - trace.startedAt) / 1000).toFixed(1)}s · ${trace.events.length} events`,
@@ -299,6 +309,10 @@ export const buildTraceContext = (trace: RuntimeTrace, graph: KnowledgeGraph): C
     '',
     '### Error',
     errorDesc,
+    '',
+    networkErrorLines.length > 0
+      ? '### Failed network requests (API/service investigation targets)\n' + networkErrorLines.join('\n')
+      : '',
     '',
     preErrorLines.length > 0
       ? '### Code that ran during the action that broke (read these FIRST)\n' +

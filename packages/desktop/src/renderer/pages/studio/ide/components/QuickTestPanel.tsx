@@ -84,7 +84,7 @@ import type {
 } from '@process/ide/elementInspectorBridge';
 import type { LocatedElement } from '@process/ide/elementInspectorLocator';
 import { renderMultiElementBrief } from '@process/ide/elementInspectorLocator';
-import QuickTestBrowser from './QuickTestBrowser';
+import QuickTestBrowser, { QuickTestAddressBar } from './QuickTestBrowser';
 import QuickTestInsightsModal from './quick-test';
 import type { PlatformOption, QuickRunMode, QuickRunState } from './useQuickRun';
 import type { RunPlatform, RunServiceKind } from '../ideClient';
@@ -137,6 +137,10 @@ const QuickTestPanel: React.FC<QuickTestPanelProps> = ({
 
   const logRef = useRef<HTMLDivElement>(null);
   const mountedRef = useRef(true);
+  /** Serialize recording start/stop so a late start response cannot revive a stopped trace. */
+  const observationStartRef = useRef<Promise<void> | null>(null);
+  const observationStopRef = useRef<Promise<void> | null>(null);
+  const observationActiveRef = useRef(false);
 
   // Right sidebar (inspect + trace log) visibility + width.
   // User can hide it for "full browser" UX testing mode, drag to resize,
@@ -183,65 +187,89 @@ const QuickTestPanel: React.FC<QuickTestPanelProps> = ({
   }, [liveEvents]);
 
   const handleStart = useCallback(async (): Promise<void> => {
-    if (!rootPath) return;
-    setStatus('recording');
-    setLiveEvents([]);
-    setTrace(null);
-    setVerification(null);
-    setContextPack(null);
-    setErrorMsg(null);
-    const result = await ideClient
-      .qtStart(
-        rootPath,
-        platform,
-        target.trim() || undefined,
-        expectedText.trim() || undefined,
-        platform === 'web' ? (webTabId ?? undefined) : undefined
-      )
-      .catch((): null => null);
-    if (!mountedRef.current) return;
-    if (!result?.ok) {
-      setErrorMsg(!result ? t('ide.quicktest.startFailed') : (result as { ok: false; error: string }).error);
-      setStatus('error');
-      return;
+    if (!rootPath || observationStartRef.current || observationStopRef.current) return;
+    observationActiveRef.current = false;
+    const start = (async (): Promise<void> => {
+      setStatus('recording');
+      setLiveEvents([]);
+      setTrace(null);
+      setVerification(null);
+      setContextPack(null);
+      setErrorMsg(null);
+      const result = await ideClient
+        .qtStart(
+          rootPath,
+          platform,
+          target.trim() || undefined,
+          expectedText.trim() || undefined,
+          platform === 'web' ? (webTabId ?? undefined) : undefined
+        )
+        .catch((): null => null);
+      if (!mountedRef.current) return;
+      if (!result?.ok) {
+        setErrorMsg(!result ? t('ide.quicktest.startFailed') : (result as { ok: false; error: string }).error);
+        setStatus('error');
+        return;
+      }
+      if (!result.data) {
+        // No observable target available (no browser tab / no device / no exe).
+        setErrorMsg(
+          platform === 'web'
+            ? t('ide.quicktest.noBrowser')
+            : platform === 'android'
+              ? t('ide.quicktest.noDevice')
+              : t('ide.quicktest.noApp')
+        );
+        setStatus('error');
+        return;
+      }
+      observationActiveRef.current = true;
+      setStatus('recording');
+    })();
+    observationStartRef.current = start;
+    try {
+      await start;
+    } finally {
+      if (observationStartRef.current === start) observationStartRef.current = null;
     }
-    if (!result.data) {
-      // No observable target available (no browser tab / no device / no exe).
-      setErrorMsg(
-        platform === 'web'
-          ? t('ide.quicktest.noBrowser')
-          : platform === 'android'
-            ? t('ide.quicktest.noDevice')
-            : t('ide.quicktest.noApp')
-      );
-      setStatus('error');
-      return;
-    }
-    setStatus('recording');
   }, [rootPath, platform, target, expectedText, webTabId, t]);
 
   const handleStop = useCallback(async (): Promise<void> => {
-    const result = await ideClient.qtStop().catch((): null => null);
-    if (!mountedRef.current) return;
-    if (!result?.ok) {
-      setErrorMsg(!result ? t('ide.quicktest.stopFailed') : (result as { ok: false; error: string }).error);
-      setStatus('error');
-      return;
-    }
-    setTrace(result.data.trace);
-    setVerification(result.data.verification);
-    setContextPack(result.data.contextPack);
-    setStatus('done');
-    if (rootPath) {
-      void ideClient.qtAssetsArchiveRun({ rootPath, trace: result.data.trace }).then((saved) => {
-        if (saved.ok && mountedRef.current) {
-          setAssets((current) =>
-            current
-              ? { ...current, runs: [saved.data, ...current.runs.filter((run) => run.id !== saved.data.id)] }
-              : current
-          );
-        }
-      });
+    if (observationStopRef.current) return observationStopRef.current;
+    const stop = (async (): Promise<void> => {
+      // `qtStart` and `qtStop` share one Main-process tracer. Wait until start
+      // settles so Stop always targets the session it is meant to close.
+      await observationStartRef.current;
+      if (!observationActiveRef.current) return;
+      const result = await ideClient.qtStop().catch((): null => null);
+      observationActiveRef.current = false;
+      if (!mountedRef.current) return;
+      if (!result?.ok) {
+        setErrorMsg(!result ? t('ide.quicktest.stopFailed') : (result as { ok: false; error: string }).error);
+        setStatus('error');
+        return;
+      }
+      setTrace(result.data.trace);
+      setVerification(result.data.verification);
+      setContextPack(result.data.contextPack);
+      setStatus('done');
+      if (rootPath) {
+        void ideClient.qtAssetsArchiveRun({ rootPath, trace: result.data.trace }).then((saved) => {
+          if (saved.ok && mountedRef.current) {
+            setAssets((current) =>
+              current
+                ? { ...current, runs: [saved.data, ...current.runs.filter((run) => run.id !== saved.data.id)] }
+                : current
+            );
+          }
+        });
+      }
+    })();
+    observationStopRef.current = stop;
+    try {
+      await stop;
+    } finally {
+      if (observationStopRef.current === stop) observationStopRef.current = null;
     }
   }, [rootPath, t]);
 
@@ -495,17 +523,35 @@ const QuickTestPanel: React.FC<QuickTestPanelProps> = ({
 
   return (
     <div className='size-full flex flex-col min-h-0 bg-1'>
+      {/* One shared Quick-Run header for Web, Desktop and Android. The browser
+          address bar remains a browser control below this header, not a second
+          target-specific run header. */}
+      <QuickRunBar
+        run={quickRun}
+        disabled={status === 'recording'}
+        railVisible={railVisible}
+        tracePlatform={platform}
+        observing={status === 'recording'}
+        canObserve={platform === 'web' && Boolean(webTabId) && quickRun.phase === 'running'}
+        onOpenAssets={openAssets}
+        onOpenInsights={() => {
+          setInsightsVisible(true);
+          void loadAssets();
+        }}
+        onToggleRail={() => setRailVisible((v) => !v)}
+        onStartObservation={() => void handleStart()}
+        onStopObservation={() => void handleStop()}
+        onOverlayVisibleChange={setRunOverlayVisible}
+      />
       {platform === 'web' ? null : (
-        <QuickTestHeader status={status} platform={platform} target={target} onTargetChange={setTarget} />
-      )}
-      {platform === 'web' ? null : (
-        /* Quick-Run bar: pick a platform (only supported ones), press Run, and the
-            app boots mechanically (terminal + wiki run data) — no AI. */
-        <QuickRunBar
-          run={quickRun}
-          disabled={status === 'recording'}
-          railVisible={railVisible}
-          onToggleRail={() => setRailVisible((v) => !v)}
+        <QuickTestAddressBar
+          address={target}
+          onAddressChange={setTarget}
+          navigationDisabled
+          inputDisabled={status !== 'idle' && status !== 'error'}
+          placeholder={
+            platform === 'android' ? t('ide.quicktest.targetAndroidHint') : t('ide.quicktest.targetWindowsHint')
+          }
         />
       )}
       {platform === 'web' ? (
@@ -519,83 +565,63 @@ const QuickTestPanel: React.FC<QuickTestPanelProps> = ({
               onTabReady={setWebTabId}
               navigateUrl={quickRun.readyUrl}
               nativeOverlayBlocked={
-                runOverlayVisible || railVisible || timelineVisible || auditVisible || assetsVisible
-              }
-              toolbarLeading={<QuickRunInlineStart run={quickRun} />}
-              toolbarTrailing={
-                <QuickRunInlineEnd
-                  run={quickRun}
-                  disabled={status === 'recording'}
-                  observing={status === 'recording'}
-                  canObserve={Boolean(webTabId) && quickRun.phase === 'running'}
-                  railVisible={railVisible}
-                  onToggleRail={() => setRailVisible((v) => !v)}
-                  onOverlayVisibleChange={setRunOverlayVisible}
-                  onStartObservation={() => void handleStart()}
-                  onStopObservation={() => void handleStop()}
-                  onOpenAssets={openAssets}
-                  onOpenInsights={() => {
-                    setInsightsVisible(true);
-                    void loadAssets();
-                  }}
-                />
+                runOverlayVisible || railVisible || timelineVisible || auditVisible || assetsVisible || insightsVisible
               }
             />
           </div>
-
-          <Modal
-            visible={railVisible}
-            title={t('ide.quicktest.inspectTitle')}
-            onCancel={() => setRailVisible(false)}
-            autoFocus={false}
-            focusLock
-            style={{ width: 820 }}
-            footer={
-              <Button type='primary' onClick={() => setRailVisible(false)}>
-                {t('common.close')}
-              </Button>
-            }
-          >
-            <div className='max-h-65vh overflow-y-auto flex flex-col'>
-              <InspectBar
-                inspecting={inspecting}
-                picked={picks[0] ?? null}
-                shots={shots}
-                videos={videos}
-                activeVideo={activeVideo}
-                capturing={capturing}
-                videoBusy={videoBusy}
-                auditBusy={auditBusy}
-                designRequest={designRequest}
-                disabled={!webTabId}
-                onInspect={() => {
-                  setRailVisible(false);
-                  void handleInspect();
-                }}
-                onCancel={handleCancelInspect}
-                onScreenshot={(mode) => {
-                  setRailVisible(false);
-                  window.setTimeout(() => {
-                    void handleScreenshot(mode).finally(() => {
-                      if (mountedRef.current) setRailVisible(true);
-                    });
-                  }, 180);
-                }}
-                onAudit={() => void handleUiAudit()}
-                onVideoToggle={() => void handleVideoToggle()}
-                onDesignRequestChange={setDesignRequest}
-                onAsk={handleAskAboutElement}
-                onClearPick={handleClearPicks}
-                onRemoveScreenshot={handleRemoveScreenshot}
-                onRemoveVideo={handleRemoveVideo}
-              />
-              {railBody}
-            </div>
-          </Modal>
         </div>
       ) : (
         <div className='flex-1 min-h-0 overflow-y-auto'>{railBody}</div>
       )}
+      <Modal
+        visible={railVisible}
+        title={t('ide.quicktest.inspectTitle')}
+        onCancel={() => setRailVisible(false)}
+        autoFocus={false}
+        focusLock
+        style={{ width: 820 }}
+        footer={
+          <Button type='primary' onClick={() => setRailVisible(false)}>
+            {t('common.close')}
+          </Button>
+        }
+      >
+        <div className='max-h-65vh overflow-y-auto flex flex-col'>
+          <InspectBar
+            inspecting={inspecting}
+            picked={picks[0] ?? null}
+            shots={shots}
+            videos={videos}
+            activeVideo={activeVideo}
+            capturing={capturing}
+            videoBusy={videoBusy}
+            auditBusy={auditBusy}
+            designRequest={designRequest}
+            disabled={!webTabId}
+            onInspect={() => {
+              setRailVisible(false);
+              void handleInspect();
+            }}
+            onCancel={handleCancelInspect}
+            onScreenshot={(mode) => {
+              setRailVisible(false);
+              window.setTimeout(() => {
+                void handleScreenshot(mode).finally(() => {
+                  if (mountedRef.current) setRailVisible(true);
+                });
+              }, 180);
+            }}
+            onAudit={() => void handleUiAudit()}
+            onVideoToggle={() => void handleVideoToggle()}
+            onDesignRequestChange={setDesignRequest}
+            onAsk={handleAskAboutElement}
+            onClearPick={handleClearPicks}
+            onRemoveScreenshot={handleRemoveScreenshot}
+            onRemoveVideo={handleRemoveVideo}
+          />
+          {railBody}
+        </div>
+      </Modal>
       {auditReport ? (
         <UiAuditModal
           report={auditReport}
@@ -631,40 +657,6 @@ const QuickTestPanel: React.FC<QuickTestPanelProps> = ({
         onRunDiff={setRunDiff}
         onVisualDiff={setVisualDiff}
       />
-    </div>
-  );
-};
-
-/**
- * Header bar: title + recording badge, plus the native target input. The
- * Run↔Stop control + platform picker now live in {@link QuickRunBar}: one button
- * launches the app AND starts recording, and stopping it tears down + captures
- * the trace — so there is no separate Start/Stop button here anymore.
- */
-const QuickTestHeader: React.FC<{
-  status: QTStatus;
-  platform: TracePlatform;
-  target: string;
-  onTargetChange: (v: string) => void;
-}> = ({ status, platform, target, onTargetChange }) => {
-  const { t } = useTranslation();
-  const editable = status === 'idle' || status === 'error';
-  return (
-    <div className='shrink-0 flex items-center gap-10px px-16px h-32px border-b border-b-1'>
-      {/* Native targets still take a manual device/exe hint; web needs none. */}
-      {editable && platform !== 'web' ? (
-        <Input
-          size='small'
-          value={target}
-          onChange={onTargetChange}
-          allowClear
-          className='w-220px'
-          placeholder={
-            platform === 'android' ? t('ide.quicktest.targetAndroidHint') : t('ide.quicktest.targetWindowsHint')
-          }
-        />
-      ) : null}
-      <div className='flex-1' />
     </div>
   );
 };
@@ -1951,6 +1943,11 @@ const QuickRunInlineEnd: React.FC<{
   );
 };
 
+// Kept as unmounted compatibility components for the current session. The shared
+// header below is the only mounted run header for every platform.
+void QuickRunInlineStart;
+void QuickRunInlineEnd;
+
 /**
  * `QuickRunBar` — the mechanical (no-AI) Run control. Shows a platform chip per
  * supported target (web/desktop/android — independent), warns + redirects when
@@ -1961,8 +1958,29 @@ const QuickRunBar: React.FC<{
   run: QuickRunState;
   disabled: boolean;
   railVisible: boolean;
+  tracePlatform: TracePlatform;
+  observing: boolean;
+  canObserve: boolean;
+  onOpenAssets: () => void;
+  onOpenInsights: () => void;
   onToggleRail: () => void;
-}> = ({ run, disabled, railVisible, onToggleRail }) => {
+  onStartObservation: () => void;
+  onStopObservation: () => void;
+  onOverlayVisibleChange: (visible: boolean) => void;
+}> = ({
+  run,
+  disabled,
+  railVisible,
+  tracePlatform,
+  observing,
+  canObserve,
+  onOpenAssets,
+  onOpenInsights,
+  onToggleRail,
+  onStartObservation,
+  onStopObservation,
+  onOverlayVisibleChange,
+}) => {
   const { t } = useTranslation();
   const [warned, setWarned] = useState<RunPlatform | null>(null);
   const [manualOpen, setManualOpen] = useState(false);
@@ -1973,13 +1991,24 @@ const QuickRunBar: React.FC<{
   const [runMode, setRunMode] = useState<QuickRunMode>('interface');
   const [customVisible, setCustomVisible] = useState(false);
   const [customServiceIds, setCustomServiceIds] = useState<string[]>([]);
+  const [dropdownVisible, setDropdownVisible] = useState(false);
+
+  useEffect(() => {
+    onOverlayVisibleChange(dropdownVisible || customVisible);
+  }, [customVisible, dropdownVisible, onOverlayVisibleChange]);
+
+  useEffect(
+    () => () => {
+      onOverlayVisibleChange(false);
+    },
+    [onOverlayVisibleChange]
+  );
 
   // When the wiki has no run data, surface the manual form by default.
   useEffect(() => {
     if (run.phase === 'needs-input') setManualOpen(true);
   }, [run.phase]);
 
-  const selectedOption = run.options.find((o) => o.platform === run.selected);
   const supported = run.options.filter((o) => o.supported);
 
   const onPick = useCallback(
@@ -2007,6 +2036,18 @@ const QuickRunBar: React.FC<{
   );
 
   const selectableServices = run.services.filter((service) => !service.orchestrator);
+  const customServices =
+    run.selected === 'desktop' && run.recipe
+      ? [
+          ...selectableServices,
+          {
+            id: 'desktop-executable',
+            kind: 'other' as const,
+            name: t('ide.quickrun.platformDesktop'),
+            command: run.recipe.command,
+          },
+        ]
+      : selectableServices;
   const selectRunMode = useCallback((mode: QuickRunMode): void => {
     setRunMode(mode);
     if (mode === 'custom') setCustomVisible(true);
@@ -2025,7 +2066,7 @@ const QuickRunBar: React.FC<{
           <span className='text-10px text-t-tertiary'>{t('ide.quickrun.modeFullHint')}</span>
         </div>
       </Menu.Item>
-      <Menu.Item key='custom' disabled={selectableServices.length === 0}>
+      <Menu.Item key='custom' disabled={customServices.length === 0}>
         <div className='flex flex-col gap-1px py-2px'>
           <span className='text-12px font-500 text-t-primary'>{t('ide.quickrun.modeCustom')}</span>
           <span className='text-10px text-t-tertiary'>{t('ide.quickrun.modeCustomHint')}</span>
@@ -2040,8 +2081,8 @@ const QuickRunBar: React.FC<{
   const statusText = quickRunStatusText(run, t);
 
   return (
-    <div className='shrink-0 flex flex-col gap-2px px-10px py-2px border-b border-b-1 bg-fill-1'>
-      <div className='flex items-center gap-6px flex-wrap min-w-0'>
+    <div className='shrink-0 flex flex-col border-b border-b-1 bg-fill-1'>
+      <div className='flex items-center gap-5px px-8px py-3px min-w-0 bg-1'>
         <span className='flex items-center gap-6px text-11px font-600 uppercase tracking-wide text-t-tertiary'>
           <Lightning theme='outline' size={13} className='text-primary' />
           {t('ide.quickrun.title')}
@@ -2087,6 +2128,41 @@ const QuickRunBar: React.FC<{
             <span className='truncate'>{statusText}</span>
           </span>
         ) : null}
+        <Button
+          size='mini'
+          type='secondary'
+          icon={<Terminal theme='outline' size={13} />}
+          onClick={() => emitter.emit('ide.terminal.toggle')}
+        >
+          {t('ide.terminal.title')}
+        </Button>
+        <Button size='mini' type='secondary' icon={<Bug theme='outline' size={13} />} onClick={onOpenAssets}>
+          {t('ide.quicktest.testLibrary')}
+        </Button>
+        <Button size='mini' type='secondary' icon={<Robot theme='outline' size={13} />} onClick={onOpenInsights}>
+          {t('ide.quicktest.insightsTitle')}
+        </Button>
+        {observing ? (
+          <Button
+            size='mini'
+            status='danger'
+            type='primary'
+            icon={<Record theme='outline' size={12} />}
+            onClick={onStopObservation}
+          >
+            {t('ide.quicktest.stopObservation')}
+          </Button>
+        ) : (
+          <Button
+            size='mini'
+            type='secondary'
+            icon={<Record theme='outline' size={12} />}
+            disabled={!canObserve}
+            onClick={onStartObservation}
+          >
+            {t('ide.quicktest.startObservation')}
+          </Button>
+        )}
         <Tooltip content={t('ide.quickrun.manualToggle')}>
           <Button
             size='small'
@@ -2096,11 +2172,27 @@ const QuickRunBar: React.FC<{
             className={manualOpen ? '!text-primary' : '!text-t-secondary'}
           />
         </Tooltip>
-        <Tooltip content={t(railVisible ? 'ide.quicktest.hideIdeSidebars' : 'ide.quicktest.showIdeSidebars')}>
+        <Tooltip
+          content={
+            tracePlatform === 'web'
+              ? t(railVisible ? 'ide.quicktest.hideIdeSidebars' : 'ide.quicktest.showIdeSidebars')
+              : t('ide.quicktest.inspectTitle')
+          }
+        >
           <Button
             size='small'
             type='text'
-            icon={railVisible ? <Right theme='outline' size={14} /> : <Left theme='outline' size={14} />}
+            icon={
+              tracePlatform === 'web' ? (
+                railVisible ? (
+                  <Right theme='outline' size={14} />
+                ) : (
+                  <Left theme='outline' size={14} />
+                )
+              ) : (
+                <Bug theme='outline' size={14} />
+              )
+            }
             onClick={onToggleRail}
             className='!text-t-secondary'
           />
@@ -2119,7 +2211,7 @@ const QuickRunBar: React.FC<{
           >
             {t('ide.quickrun.stop')}
           </Button>
-        ) : run.selected === 'web' ? (
+        ) : (
           <Button.Group>
             <Button
               size='mini'
@@ -2134,7 +2226,13 @@ const QuickRunBar: React.FC<{
             >
               {t(RUN_MODE_KEYS[runMode])}
             </Button>
-            <Dropdown droplist={runMenu} trigger='click' position='br'>
+            <Dropdown
+              droplist={runMenu}
+              trigger='click'
+              position='br'
+              popupVisible={dropdownVisible}
+              onVisibleChange={setDropdownVisible}
+            >
               <Button
                 size='mini'
                 type='primary'
@@ -2144,16 +2242,6 @@ const QuickRunBar: React.FC<{
               />
             </Dropdown>
           </Button.Group>
-        ) : (
-          <Button
-            size='mini'
-            type='primary'
-            icon={<Play theme='outline' size={11} />}
-            disabled={disabled || run.phase === 'loading'}
-            onClick={() => void run.run()}
-          >
-            {selectedOption?.saved ? t('ide.quickrun.runSaved') : t('ide.quickrun.run')}
-          </Button>
         )}
       </div>
 
@@ -2206,14 +2294,14 @@ const QuickRunBar: React.FC<{
         <div className='flex flex-col gap-10px'>
           <p className='m-0 text-12px leading-relaxed text-t-secondary'>{t('ide.quickrun.customHint')}</p>
           <Checkbox
-            checked={customServiceIds.length > 0 && customServiceIds.length === selectableServices.length}
-            indeterminate={customServiceIds.length > 0 && customServiceIds.length < selectableServices.length}
-            onChange={(checked) => setCustomServiceIds(checked ? selectableServices.map((service) => service.id) : [])}
+            checked={customServiceIds.length > 0 && customServiceIds.length === customServices.length}
+            indeterminate={customServiceIds.length > 0 && customServiceIds.length < customServices.length}
+            onChange={(checked) => setCustomServiceIds(checked ? customServices.map((service) => service.id) : [])}
           >
             {t('ide.quickrun.selectAll')}
           </Checkbox>
           <div className='max-h-320px overflow-y-auto flex flex-col gap-6px'>
-            {selectableServices.map((service) => (
+            {customServices.map((service) => (
               <Checkbox
                 key={service.id}
                 checked={customServiceIds.includes(service.id)}

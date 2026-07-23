@@ -288,7 +288,7 @@ describe('useUnderstand', () => {
     expect(kgWatchStopMock).not.toHaveBeenCalled();
   });
 
-  it('tracks live changes without starting or attaching to semantic builds', () => {
+  it('tracks live changes and reloads the published graph without semantic builds', async () => {
     kgStatusMock.mockResolvedValue(
       ok({
         running: true,
@@ -306,10 +306,64 @@ describe('useUnderstand', () => {
       kgChangedListenerRef.current?.({ rootPath: ROOT, changed: ['src/a.ts'], removed: [] });
     });
 
+    await waitFor(() => expect(kgGetMock).toHaveBeenCalledWith(ROOT));
+
     expect(result.current.status).toBe('idle');
     expect(result.current.changedFiles).toEqual(['src/a.ts']);
     expect(kgStatusMock).not.toHaveBeenCalled();
     expect(onKgEventMock).not.toHaveBeenCalled();
     expect(kgBuildMock).not.toHaveBeenCalled();
+  });
+
+  it('updates Live UI from the graph revision published before the change event', async () => {
+    const updated = buildGraph({ builtAt: 1700000000999, fileCount: 2 });
+    kgGetMock.mockResolvedValue(ok<KnowledgeGraph | null>(updated));
+    const { result } = renderHook(() => useUnderstand(ROOT));
+
+    act(() => {
+      result.current.setLive(true, null);
+    });
+    act(() => {
+      kgChangedListenerRef.current?.({ rootPath: ROOT, changed: ['src/new.ts'], removed: [] });
+    });
+
+    await waitFor(() => expect(result.current.graph).toEqual(updated));
+    expect(result.current.status).toBe('ready');
+    expect(result.current.changedFiles).toEqual(['src/new.ts']);
+  });
+
+  it('serializes Live graph reads and coalesces an in-flight change burst', async () => {
+    const firstGraph = buildGraph({ builtAt: 1 });
+    const latestGraph = buildGraph({ builtAt: 2, fileCount: 3 });
+    let resolveFirst!: (value: UnderstandResult<KnowledgeGraph | null>) => void;
+    kgGetMock.mockReset();
+    kgGetMock
+      .mockImplementationOnce(
+        () =>
+          new Promise<UnderstandResult<KnowledgeGraph | null>>((resolve) => {
+            resolveFirst = resolve;
+          })
+      )
+      .mockResolvedValueOnce(ok<KnowledgeGraph | null>(latestGraph));
+    const { result } = renderHook(() => useUnderstand(ROOT));
+
+    act(() => {
+      result.current.setLive(true, null);
+    });
+    act(() => {
+      kgChangedListenerRef.current?.({ rootPath: ROOT, changed: ['src/a.ts'], removed: [] });
+    });
+    await waitFor(() => expect(kgGetMock).toHaveBeenCalledTimes(1));
+    act(() => {
+      kgChangedListenerRef.current?.({ rootPath: ROOT, changed: ['src/b.ts'], removed: [] });
+    });
+    expect(kgGetMock).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveFirst(ok<KnowledgeGraph | null>(firstGraph));
+    });
+    await waitFor(() => expect(kgGetMock).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(result.current.graph).toEqual(latestGraph));
+    expect(result.current.changedFiles).toEqual(['src/b.ts']);
   });
 });

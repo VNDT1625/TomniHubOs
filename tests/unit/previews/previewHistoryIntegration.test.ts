@@ -1,52 +1,51 @@
-/**
- * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
- * SPDX-License-Identifier: Apache-2.0
- *
- * N4c V12: preview-history integration smoke test.
- * Uses mockHttpBridge helper to demonstrate stubbing /api/preview-history routes.
- */
+import { NativePreviewHistoryService } from '@process/resources/nativePlatform/previewHistoryService';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { afterEach, describe, expect, it } from 'vitest';
 
-import { describe, it, expect } from 'vitest';
-import { createMockHttpBridge } from '../_helpers/mockHttpBridge';
+const directories: string[] = [];
+const target = { contentType: 'markdown' as const, workspace: 'C:/workspace', file_path: 'README.md' };
 
-describe('previewHistory integration (mockHttpBridge demo)', () => {
-  it('registers GET /api/preview-history/list and returns stub data', async () => {
-    const mock = createMockHttpBridge({ unmatched: 'warn' });
-    mock.onGet('/api/preview-history/list', () => ({
-      items: [{ id: 1, file_path: '/tmp/a.md' }],
-    }));
+const createService = async (): Promise<NativePreviewHistoryService> => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'tomni-preview-history-'));
+  directories.push(directory);
+  return new NativePreviewHistoryService(directory);
+};
 
-    const { httpGet } = mock.asModule();
-    const res = await httpGet<{ items: Array<{ id: number; file_path: string }> }>(
-      '/api/preview-history/list'
-    ).invoke();
-    expect(res).toEqual({ items: [{ id: 1, file_path: '/tmp/a.md' }] });
-    expect(mock.calls).toHaveLength(1);
-    expect(mock.calls[0]?.method).toBe('GET');
+afterEach(async () => {
+  await Promise.all(directories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })));
+});
+
+describe('Tomni native preview history', () => {
+  it('persists and retrieves isolated snapshots without legacy HTTP', async () => {
+    const service = await createService();
+    const first = await service.save(target, '# one');
+    await service.save({ ...target, file_path: 'OTHER.md' }, '# other');
+
+    expect(await service.list(target)).toEqual([first]);
+    expect(await service.getContent(target, first.id)).toEqual({ snapshot: first, content: '# one' });
+    expect(await service.getContent({ ...target, file_path: 'OTHER.md' }, first.id)).toBeNull();
   });
 
-  it('registers POST /api/preview-history/save and echoes body', async () => {
-    const mock = createMockHttpBridge();
-    mock.onPost<{ content: string }, { id: number }>('/api/preview-history/save', (ctx) => ({
-      id: 42,
-      echoed: ctx.body?.content ?? null,
-    }));
-    const { httpPost } = mock.asModule();
-    const res = await httpPost<{ content: string }, { id: number }>('/api/preview-history/save').invoke({
-      content: 'hello',
-    });
-    expect(res).toBeTruthy();
-    expect(mock.calls[0]?.body).toEqual({ content: 'hello' });
-    expect(mock.calls[0]?.method).toBe('POST');
+  it('serializes concurrent writes and survives a service restart', async () => {
+    const service = await createService();
+    const rootDir = (service as unknown as { rootDir: string }).rootDir;
+    await Promise.all(Array.from({ length: 8 }, (_, index) => service.save(target, 'snapshot ' + index)));
+
+    const restarted = new NativePreviewHistoryService(rootDir);
+    const snapshots = await restarted.list(target);
+    expect(snapshots).toHaveLength(8);
+    await expect(restarted.getContent(target, snapshots[0].id)).resolves.toEqual(
+      expect.objectContaining({ content: expect.stringMatching(/^snapshot /u) })
+    );
   });
 
-  it('reset() clears prior routes and call history', () => {
-    const mock = createMockHttpBridge();
-    mock.onGet('/api/preview-history/list', () => ({ items: [] }));
-    expect(mock.routeCount).toBe(1);
-    mock.reset();
-    expect(mock.routeCount).toBe(0);
-    expect(mock.calls).toHaveLength(0);
+  it('rejects invalid ids and keeps the bridge free of legacy preview routes', async () => {
+    const service = await createService();
+    await expect(service.getContent(target, '../escape')).resolves.toBeNull();
+    const source = await readFile(path.join(process.cwd(), 'packages/desktop/src/common/adapter/ipcBridge.ts'), 'utf8');
+    expect(source).not.toContain('/api/preview-history/');
+    expect(source).toContain('preview-history.get-content');
   });
 });

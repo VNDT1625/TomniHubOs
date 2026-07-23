@@ -24,6 +24,7 @@ export type CoreSessionCheckpoint = {
   targetId: string;
   workspace: string;
   modelKey?: string;
+  sessionMode?: string;
   companyId?: string;
   surface?: string;
   agentId?: string;
@@ -32,11 +33,17 @@ export type CoreSessionCheckpoint = {
   capabilityGrants?: string[];
   availableCapabilities?: string[];
   modelCapabilities?: string[];
+  conversationContext?: string;
+  superMode?: boolean;
   permissionMode: ExperimentalPermissionMode;
   status: CoreSessionStatus;
   createdAt: number;
   updatedAt: number;
   messages: CoreSessionMessage[];
+  /** Bounded digest used in model prompts; original messages remain searchable above. */
+  conversationSummary?: string;
+  /** Number of leading messages represented by conversationSummary. */
+  summarizedMessageCount?: number;
   transitions?: CoreSessionTransition[];
   lastError?: string;
 };
@@ -64,6 +71,23 @@ export const redactCheckpointText = (text: string): string =>
   SECRET_REDACTORS.reduce((value, redactor) => value.replace(redactor.pattern, redactor.replacement), text);
 
 const clone = (checkpoint: CoreSessionCheckpoint): CoreSessionCheckpoint => structuredClone(checkpoint);
+
+const normalizeLoadedCheckpoint = (value: CoreSessionCheckpoint): CoreSessionCheckpoint => {
+  const checkpoint = clone(value);
+  checkpoint.messages = Array.isArray(checkpoint.messages) ? checkpoint.messages : [];
+  const count = checkpoint.summarizedMessageCount;
+  const hasValidSummary =
+    typeof checkpoint.conversationSummary === 'string' &&
+    checkpoint.conversationSummary.trim().length > 0 &&
+    Number.isSafeInteger(count) &&
+    (count ?? 0) > 0 &&
+    (count ?? 0) <= checkpoint.messages.length;
+  if (!hasValidSummary) {
+    checkpoint.conversationSummary = undefined;
+    checkpoint.summarizedMessageCount = undefined;
+  }
+  return checkpoint;
+};
 
 export class MemoryCoreSessionStore implements CoreSessionStore {
   protected readonly checkpoints = new Map<string, CoreSessionCheckpoint>();
@@ -132,7 +156,8 @@ export class JsonCoreSessionStore extends MemoryCoreSessionStore {
       if (Array.isArray(parsed)) {
         for (const checkpoint of parsed) {
           if (checkpoint && typeof checkpoint === 'object' && typeof (checkpoint as { id?: unknown }).id === 'string') {
-            this.checkpoints.set((checkpoint as CoreSessionCheckpoint).id, checkpoint as CoreSessionCheckpoint);
+            const normalized = normalizeLoadedCheckpoint(checkpoint as CoreSessionCheckpoint);
+            this.checkpoints.set(normalized.id, normalized);
           }
         }
       }
@@ -149,6 +174,10 @@ export class JsonCoreSessionStore extends MemoryCoreSessionStore {
       ...message,
       text: redactCheckpointText(message.text),
     }));
+    if (safeCheckpoint.conversationSummary)
+      safeCheckpoint.conversationSummary = redactCheckpointText(safeCheckpoint.conversationSummary);
+    if (safeCheckpoint.conversationContext)
+      safeCheckpoint.conversationContext = redactCheckpointText(safeCheckpoint.conversationContext);
     if (safeCheckpoint.lastError) safeCheckpoint.lastError = redactCheckpointText(safeCheckpoint.lastError);
     await super.save(safeCheckpoint);
     await this.flush();
@@ -159,6 +188,8 @@ export class JsonCoreSessionStore extends MemoryCoreSessionStore {
     const safeCheckpoints = checkpoints.map((checkpoint) => {
       const safe = clone(checkpoint);
       safe.messages = safe.messages.map((message) => ({ ...message, text: redactCheckpointText(message.text) }));
+      if (safe.conversationSummary) safe.conversationSummary = redactCheckpointText(safe.conversationSummary);
+      if (safe.conversationContext) safe.conversationContext = redactCheckpointText(safe.conversationContext);
       if (safe.lastError) safe.lastError = redactCheckpointText(safe.lastError);
       return safe;
     });

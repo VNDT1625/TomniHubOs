@@ -23,7 +23,10 @@
 import { bridge } from '@office-ai/platform';
 import type {
   PeerClaimRequest,
+  PeerAppendPreviewFeedbackRequest,
+  PeerCtx,
   PeerFileRequest,
+  PeerPreviewRequest,
   PeerReleaseRequest,
   PeerTreeRequest,
   PeerWriteRequest,
@@ -37,6 +40,7 @@ import type {
 import type { RemoteTeamSnapshot } from '@process/ide/teamEdit/teamRemoteClient';
 import type { TeamFileRead, TeamTreeEntry } from '@process/ide/teamEdit/teamSessionHost';
 import type { GuardedWriteResult } from '@process/ide/teamEdit/teamEditService';
+import type { ViuPreviewFeedbackEvent, ViuTeamPreviewPackage } from '@/common/viu';
 
 /** Team-collab channel names (mirror of the bridge consts). */
 const TEAM_COLLAB_CHANNELS = {
@@ -48,6 +52,10 @@ const TEAM_COLLAB_CHANNELS = {
   remoteSnapshot: 'ide.team-collab-remote-snapshot',
   remoteTree: 'ide.team-collab-remote-tree',
   remoteFile: 'ide.team-collab-remote-file',
+  remotePreviews: 'ide.team-collab-remote-previews',
+  remotePreview: 'ide.team-collab-remote-preview',
+  remotePreviewFeedback: 'ide.team-collab-remote-preview-feedback',
+  remoteAppendPreviewFeedback: 'ide.team-collab-remote-append-preview-feedback',
   remoteClaim: 'ide.team-collab-remote-claim',
   remoteRelease: 'ide.team-collab-remote-release',
   remoteWrite: 'ide.team-collab-remote-write',
@@ -70,6 +78,19 @@ const channels = {
   ),
   remoteTree: bridge.buildProvider<TeamCollabResult<TeamTreeEntry[]>, PeerTreeRequest>(TEAM_COLLAB_CHANNELS.remoteTree),
   remoteFile: bridge.buildProvider<TeamCollabResult<TeamFileRead>, PeerFileRequest>(TEAM_COLLAB_CHANNELS.remoteFile),
+  remotePreviews: bridge.buildProvider<TeamCollabResult<readonly ViuTeamPreviewPackage[]>, PeerCtx>(
+    TEAM_COLLAB_CHANNELS.remotePreviews
+  ),
+  remotePreview: bridge.buildProvider<TeamCollabResult<ViuTeamPreviewPackage>, PeerPreviewRequest>(
+    TEAM_COLLAB_CHANNELS.remotePreview
+  ),
+  remotePreviewFeedback: bridge.buildProvider<TeamCollabResult<readonly ViuPreviewFeedbackEvent[]>, PeerPreviewRequest>(
+    TEAM_COLLAB_CHANNELS.remotePreviewFeedback
+  ),
+  remoteAppendPreviewFeedback: bridge.buildProvider<
+    TeamCollabResult<ViuPreviewFeedbackEvent>,
+    PeerAppendPreviewFeedbackRequest
+  >(TEAM_COLLAB_CHANNELS.remoteAppendPreviewFeedback),
   remoteClaim: bridge.buildProvider<TeamCollabResult<{ claim: unknown }>, PeerClaimRequest>(
     TEAM_COLLAB_CHANNELS.remoteClaim
   ),
@@ -148,6 +169,40 @@ export const teamCollabClient = {
   /** PEER: read one file from the host. */
   remoteFile: (baseUrl: string, token: string, relPath: string): Promise<TeamCollabResult<TeamFileRead>> =>
     withTimeout(TEAM_COLLAB_CHANNELS.remoteFile, () => channels.remoteFile.invoke({ baseUrl, token, relPath }), 20000),
+  /** PEER: list immutable VIU preview packages published by the host. */
+  remotePreviews: (baseUrl: string, token: string): Promise<TeamCollabResult<readonly ViuTeamPreviewPackage[]>> =>
+    withTimeout(TEAM_COLLAB_CHANNELS.remotePreviews, () => channels.remotePreviews.invoke({ baseUrl, token }), 15000),
+  /** PEER: open one exact immutable VIU preview package. */
+  remotePreview: (
+    baseUrl: string,
+    token: string,
+    packageId: string
+  ): Promise<TeamCollabResult<ViuTeamPreviewPackage>> =>
+    withTimeout(
+      TEAM_COLLAB_CHANNELS.remotePreview,
+      () => channels.remotePreview.invoke({ baseUrl, token, packageId }),
+      15000
+    ),
+  /** PEER: load append-only feedback for a preview package. */
+  remotePreviewFeedback: (
+    baseUrl: string,
+    token: string,
+    packageId: string
+  ): Promise<TeamCollabResult<readonly ViuPreviewFeedbackEvent[]>> =>
+    withTimeout(
+      TEAM_COLLAB_CHANNELS.remotePreviewFeedback,
+      () => channels.remotePreviewFeedback.invoke({ baseUrl, token, packageId }),
+      15000
+    ),
+  /** PEER: comment as the authenticated peer; the host supplies trusted identity. */
+  remoteAppendPreviewFeedback: (
+    request: PeerAppendPreviewFeedbackRequest
+  ): Promise<TeamCollabResult<ViuPreviewFeedbackEvent>> =>
+    withTimeout(
+      TEAM_COLLAB_CHANNELS.remoteAppendPreviewFeedback,
+      () => channels.remoteAppendPreviewFeedback.invoke(request),
+      15000
+    ),
   /** PEER: claim a lease (presence-only, blocks other peers from claiming). */
   remoteClaim: (
     baseUrl: string,

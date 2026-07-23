@@ -1,4 +1,4 @@
-﻿import { bridge } from '@office-ai/platform';
+import { bridge } from '@office-ai/platform';
 import { NativeOfficeWatchService, NativeWatchService, NativeZipService, type ZipEntry } from './fileOperations';
 
 export const nativeFileOperationChannels = {
@@ -19,16 +19,26 @@ export const registerNativeFileOperationBridge = (
   officeWatch = new NativeOfficeWatchService()
 ): void => {
   nativeFileOperationChannels.createZip.provider((input) => zip.create(input));
-  nativeFileOperationChannels.cancelZip.provider(({ request_id }) => zip.cancel(request_id));
+  nativeFileOperationChannels.cancelZip.provider(({ request_id }) => Promise.resolve(zip.cancel(request_id)));
   nativeFileOperationChannels.watchStart.provider(({ file_path }) => {
     watch.start(file_path, (event) => nativeFileOperationChannels.fileChanged.emit(event));
+    return Promise.resolve();
   });
-  nativeFileOperationChannels.watchStop.provider(({ file_path }) => watch.stop(file_path));
-  nativeFileOperationChannels.watchStopAll.provider(() => watch.stopAll());
+  nativeFileOperationChannels.watchStop.provider(({ file_path }) => {
+    watch.stop(file_path);
+    return Promise.resolve();
+  });
+  nativeFileOperationChannels.watchStopAll.provider(() => {
+    watch.stopAll();
+    return Promise.resolve();
+  });
   nativeFileOperationChannels.officeWatchStart.provider(({ workspace }) =>
     officeWatch.start(workspace, (file_path, resolvedWorkspace) =>
       nativeFileOperationChannels.officeFileAdded.emit({ file_path, workspace: resolvedWorkspace })
     )
   );
-  nativeFileOperationChannels.officeWatchStop.provider(({ workspace }) => officeWatch.stop(workspace));
+  nativeFileOperationChannels.officeWatchStop.provider(({ workspace }) => {
+    officeWatch.stop(workspace);
+    return Promise.resolve();
+  });
 };

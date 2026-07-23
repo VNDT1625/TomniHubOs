@@ -294,15 +294,6 @@ function ensureAdminUserOnce(backendPort: number): Promise<void> {
 
 function markBackendReady(backendPort: number, source: string): void {
   exposeBackendPort(backendPort);
-  void ProcessConfig.get('language')
-    .then((language) => startTelegramRemoteTunnel(backendPort, language ?? 'en-US'))
-    .then((result) => {
-      if ('url' in result) {
-        console.log('[TelegramRemote] secure Mini App tunnel ready');
-        return;
-      }
-      console.warn(`[TelegramRemote] direct control unavailable (${result.reason})`, result.detail ?? '');
-    });
   if (backendStartedOk) return;
   console.log(`[AionUi] ${source} ready (port=${backendPort})`);
   registerCronResumeBridge(backendPort);
@@ -492,7 +483,7 @@ const createWindow = ({ showOnReady = true }: { showOnReady?: boolean } = {}): v
     ipcBridge.application.devToolsStateChanged.emit({ isOpen: false });
   });
 
-  // 关闭拦截：当启用"关闭到托盘"时，隐藏窗口而非关闭
+  // 关闭拦截：当启用关闭到托盘时，隐藏窗口而非关闭
   // Close interception: hide window instead of closing when "close to tray" is enabled
   mainWindow.on('close', (event) => {
     if (mainWindow.isDestroyed()) return;
@@ -532,9 +523,9 @@ const handleAppReady = async (): Promise<void> => {
       isWebUIMode,
       isResetPasswordMode,
     });
-    console.info('[TomnyCore] Boot mode: ' + coreBootPolicy.mode);
+    console.info('[TomniCore] Boot mode: ' + coreBootPolicy.mode);
   } catch (error) {
-    console.error('[TomnyCore] Invalid core boot policy:', error);
+    console.error('[TomniCore] Invalid core boot policy:', error);
     app.exit(1);
     return;
   }
@@ -566,13 +557,23 @@ const handleAppReady = async (): Promise<void> => {
     return;
   }
 
+  // Start the remote surface from Tomni's native conversation gateway. This is
+  // intentionally independent from legacy backend readiness and __backendPort.
+  prepareTelegramRemoteSecret();
+  void ProcessConfig.get('language')
+    .then((language) => startTelegramRemoteTunnel(language ?? 'en-US'))
+    .then((result) => {
+      if (result.ok) console.log('[TelegramRemote] Tomni-native secure tunnel ready');
+      else if ('reason' in result)
+        console.warn(`[TelegramRemote] native tunnel unavailable (${result.reason})`, result.detail ?? '');
+    })
+    .catch((error) => console.warn('[TelegramRemote] native gateway failed to start', error));
+
   // Start aioncore only after initializeProcess(). initStorage may open
   // the legacy Electron SQLite catalog for a one-shot v26 migration and must
   // close it before the backend touches the same file.
-  if (coreBootPolicy.startLegacyBackend) {
-    prepareTelegramRemoteSecret();
-  } else {
-    console.info('[TomnyCore] Native TypeScript core ready; legacy HTTP backend was not started.');
+  if (!coreBootPolicy.startLegacyBackend) {
+    console.info('[TomniCore] Native TypeScript core ready; legacy HTTP backend was not started.');
   }
   const captureLegacyBackendFailure = async (error: unknown): Promise<void> => {
     if (coreBootPolicy.requireLegacyBackend) {
@@ -685,6 +686,12 @@ const handleAppReady = async (): Promise<void> => {
       const { getSystemDir } = await import('./process/utils/initStorage');
       const sysDirWebUI = getSystemDir();
       // M6: Switch to @aionui/web-host
+      const { getTomniGatewayEndpoint } = await import('./process/tomnigateway');
+      const gatewayEndpoint = await getTomniGatewayEndpoint();
+      if (!gatewayEndpoint) {
+        throw new Error('[WebUI] Cannot start: Tomni Gateway is not running');
+      }
+
       const handle = await startWebHost({
         app: {
           version: app.getVersion(),
@@ -710,16 +717,9 @@ const handleAppReady = async (): Promise<void> => {
           logDir: sysDirWebUI.logDir,
         },
         backend: {
-          kind: 'useExistingBackend',
-          port: (() => {
-            // Reuse the backend already spawned by backendManager.start() above.
-            // Spawning a second backend here would race the first on SQLite.
-            const port = (globalThis as typeof globalThis & { __backendPort?: number }).__backendPort;
-            if (!port) {
-              throw new Error('[WebUI] Cannot start: aioncore is not running (globalThis.__backendPort unset)');
-            }
-            return port;
-          })(),
+          kind: 'useExistingGateway',
+          port: gatewayEndpoint.port,
+          sessionToken: gatewayEndpoint.sessionToken,
         },
       });
       console.log(`[WebUI] Headless server started (port=${handle.port}, backendPort=${handle.backendPort})`);
@@ -907,11 +907,12 @@ installQuitCleanup({
     disposeCronResumeListener?.();
     disposeCronResumeListener = null;
   },
-  // Stop aioncore subprocess — backend shutdown kills all agent children
-  // transitively (no separate frontend workerTaskManager remains).
-  stopBackend: () => {
+  // Stop both compatibility services. Tomni Gateway owns native REST/WS; the
+  // optional legacy process is stopped only when compatibility mode launched it.
+  stopBackend: async () => {
     stopTelegramRemoteTunnel();
-    return backendManager.stop();
+    const { stopProductionTomniGateway } = await import('./process/tomnigateway');
+    await Promise.all([stopProductionTomniGateway(), backendManager.stop()]);
   },
   destroyPetWindow: async () => {
     const { destroyPetWindow } = await import('./process/pet/petManager');

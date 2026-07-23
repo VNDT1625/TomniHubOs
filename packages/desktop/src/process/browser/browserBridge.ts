@@ -70,6 +70,7 @@ import { extractReadable } from './research/readability';
 import { createYoutubeTranscript } from './research/youtubeTranscript';
 import { createContentExtractService } from '@process/services/contentExtract';
 import { createYtDlpTranscript, writeYoutubeCookieFile } from '@process/services/contentExtract';
+import { createPagePerception, redactAgentVisibleText } from './pagePerception';
 
 // ---------------------------------------------------------------------------
 // Channel names (renderer-safe contract — the Browser UI builds invokers here)
@@ -318,23 +319,18 @@ export const getBrowserServices = (getWindow: () => BrowserWindow | null | undef
     onTabUpdate: (update) => browserChannels.tabUpdated.emit(update),
   });
   const sharedMemory = createBrowserMemory();
+  const coordinator = getResourceCoordinator();
+  const safePerception = createPagePerception({
+    getWebContents: (tabId) => viewManager.getWebContents(tabId),
+    coordinator,
+  });
 
   // A light page-text reader (perception layer a — no lease) built directly on
   // the tab's WebContents, so the agent runner does not depend on the
   // not-yet-implemented media pipeline. The snippet runs *in the page*.
   const readText = async (tabId: BrowserTabId, selector?: string): Promise<string> => {
-    const contents = viewManager.getWebContents(tabId);
-    if (!contents) return '';
-    const selectorLiteral = selector === undefined ? 'null' : JSON.stringify(selector);
-    const script = `(() => {
-      const sel = ${selectorLiteral};
-      const el = sel ? document.querySelector(sel) : document.body;
-      if (!el) return '';
-      const text = el.innerText != null ? el.innerText : el.textContent;
-      return text ? String(text).trim() : '';
-    })()`;
-    const result: unknown = await contents.executeJavaScript(script);
-    return typeof result === 'string' ? result : '';
+    if (!viewManager.getWebContents(tabId)) return '';
+    return safePerception.readText(tabId, selector);
   };
 
   // A leased screenshot capture (perception layer b — medium). Acquires a
@@ -342,17 +338,8 @@ export const getBrowserServices = (getWindow: () => BrowserWindow | null | undef
   // and releases it in a finally (criterion 1.9). Returns a PNG data-URL the
   // vision step feeds to the model; empty string when the capture is empty.
   const capture = async (tabId: BrowserTabId): Promise<string> => {
-    const contents = viewManager.getWebContents(tabId);
-    if (!contents) return '';
-    const coordinator = getResourceCoordinator();
-    const lease = await coordinator.requestLease({ kind: 'browser', estCostMB: 256 });
-    try {
-      const image = await contents.capturePage();
-      if (image.isEmpty()) return '';
-      return image.toDataURL();
-    } finally {
-      coordinator.releaseLease(lease.id);
-    }
+    if (!viewManager.getWebContents(tabId)) return '';
+    return (await safePerception.capture(tabId)).dataUrl;
   };
 
   // Extract the MAIN readable article body of a tab (readability), used by the
@@ -361,7 +348,10 @@ export const getBrowserServices = (getWindow: () => BrowserWindow | null | undef
     const contents = viewManager.getWebContents(tabId);
     if (!contents) return { title: '', text: '' };
     const content = await extractReadable(contents);
-    return { title: content.title, text: content.text };
+    return {
+      title: redactAgentVisibleText(content.title),
+      text: redactAgentVisibleText(content.text),
+    };
   };
 
   // Wrap the provider-backed chat so a `cli:<agentId>` model id drives a CLI
@@ -459,7 +449,10 @@ export const getBrowserServices = (getWindow: () => BrowserWindow | null | undef
         const contents = viewManager.getWebContents(hiddenId);
         if (!contents) return { title: '', text: '' };
         const content = await extractReadable(contents);
-        return { title: content.title, text: content.text };
+        return {
+          title: redactAgentVisibleText(content.title),
+          text: redactAgentVisibleText(content.text),
+        };
       } catch {
         return { title: '', text: '' };
       } finally {

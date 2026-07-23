@@ -5,49 +5,51 @@
  */
 
 /**
- * A single calendar event chip. Fixed events get a lock icon + warning-tinted
- * border so they read as immovable (criterion 7.3); flexible events use the
- * primary tint. Colours come from semantic tokens (no hardcoded hex).
+ * A single calendar event block. Fixed events get a lock icon + warning rail;
+ * flexible events use the Manager accent. Rendered as an Arco button so keyboard
+ * and screen-reader interaction match the rest of the desktop UI.
  */
 
 import React from 'react';
+import { useTranslation } from 'react-i18next';
+import { Button } from '@arco-design/web-react';
 import { Lock, Unlock } from '@icon-park/react';
 import type { CalendarEvent } from '@process/manager/managerTypes';
 import { formatTimeRange } from './scheduleUtils';
+import styles from '../manager.module.css';
 
 const EventCard: React.FC<{ event: CalendarEvent; onClick: () => void; compact?: boolean }> = ({
   event,
   onClick,
   compact,
 }) => {
+  const { i18n } = useTranslation();
   const fixed = event.lockKind === 'fixed';
-  // Notion-style: a soft surface with a coloured left rail (accent for flexible,
-  // warning for locked) instead of a fully tinted box — calmer, more editorial.
-  const rail = fixed ? 'var(--warning)' : 'var(--mgr-accent, var(--primary))';
+  const timeRange = formatTimeRange(event.startAt, event.endAt, i18n.resolvedLanguage || i18n.language);
+  const eventStyle = {
+    ['--calendar-event-rail' as string]: fixed ? 'var(--warning)' : 'var(--mgr-accent, var(--primary))',
+  } as React.CSSProperties;
+
   return (
-    <div
+    <Button
+      type='text'
+      long
+      className={`${styles.calendarEventButton} ${fixed ? styles.calendarEventFixed : styles.calendarEventFlexible}`}
+      style={eventStyle}
       onClick={onClick}
-      className='rd-6px cursor-pointer px-8px py-6px bg-fill-1 hover:bg-fill-2 transition-colors'
-      style={{ borderLeft: `3px solid ${rail}` }}
+      aria-label={`${event.title}, ${timeRange}`}
     >
-      <div className='flex items-center gap-4px'>
+      <span className={styles.calendarEventHeading}>
         {fixed ? (
           <Lock theme='outline' size='11' className='text-warning shrink-0' />
         ) : (
-          <Unlock
-            theme='outline'
-            size='11'
-            className='shrink-0'
-            style={{ color: 'var(--mgr-accent, var(--primary))' }}
-          />
+          <Unlock theme='outline' size='11' className={styles.calendarEventAccentIcon} />
         )}
-        <span className='text-12px font-[600] text-t-primary truncate'>{event.title}</span>
-      </div>
-      {!compact && (
-        <div className='text-11px text-t-secondary mt-2px'>{formatTimeRange(event.startAt, event.endAt)}</div>
-      )}
-      {!compact && event.location && <div className='text-11px text-t-tertiary truncate'>{event.location}</div>}
-    </div>
+        <strong>{event.title}</strong>
+      </span>
+      <span className={styles.calendarEventTime}>{timeRange}</span>
+      {!compact && event.location && <span className={styles.calendarEventLocation}>{event.location}</span>}
+    </Button>
   );
 };
 

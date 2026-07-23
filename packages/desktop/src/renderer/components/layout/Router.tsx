@@ -9,6 +9,7 @@ const Guid = React.lazy(() => import('@renderer/pages/guid'));
 const Studio = React.lazy(() => import('@renderer/pages/studio'));
 const Manager = React.lazy(() => import('@renderer/pages/manager'));
 const AgentSettings = React.lazy(() => import('@renderer/pages/settings/AgentSettings'));
+const PersonalSettings = React.lazy(() => import('@renderer/pages/settings/PersonalSettings'));
 const AssistantSettings = React.lazy(() => import('@renderer/pages/settings/AssistantSettings'));
 const CapabilitiesSettings = React.lazy(() => import('@renderer/pages/settings/CapabilitiesSettings'));
 const DisplaySettings = React.lazy(() => import('@renderer/pages/settings/DisplaySettings'));
@@ -96,6 +97,7 @@ const PanelRoute: React.FC<{ layout: React.ReactElement }> = ({ layout }) => {
           <Route path='/settings/model' element={withRouteFallback(ModeSettings)} />
           <Route path='/settings/assistants' element={withRouteFallback(AssistantSettings)} />
           <Route path='/settings/agent' element={withRouteFallback(AgentSettings)} />
+          <Route path='/settings/personal' element={withRouteFallback(PersonalSettings)} />
           <Route path='/settings/capabilities' element={withRouteFallback(CapabilitiesSettings)} />
           {/* Legacy routes — redirect to the merged /settings/capabilities page */}
           <Route path='/settings/skills-hub' element={<Navigate to='/settings/capabilities?tab=skills' replace />} />

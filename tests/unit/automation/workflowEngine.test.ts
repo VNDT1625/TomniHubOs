@@ -7,7 +7,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createWorkflowEngine } from '@/process/automation/workflowEngine';
 import type { NodeExecutorMap } from '@/process/automation/nodeExecutors';
-import type { RunEvent, Workflow, WorkflowNode } from '@/process/automation/automationTypes';
+import type {
+  RunEvent,
+  Workflow,
+  WorkflowCheckpoint,
+  WorkflowNode,
+} from '@/process/automation/automationTypes';
 
 /** Build a workflow from a list of nodes. */
 const workflow = (nodes: WorkflowNode[]): Workflow => ({
@@ -92,8 +97,10 @@ describe('createWorkflowEngine', () => {
 
     expect(events.map((e) => e.type)).toEqual([
       'run-start',
+      'node-routed',
       'node-start',
       'node-finish',
+      'node-routed',
       'node-start',
       'node-finish',
       'run-finish',
@@ -218,5 +225,165 @@ describe('createWorkflowEngine', () => {
     const result = await engine.run(workflow([]));
     expect(result.ok).toBe(true);
     expect(events.map((e) => e.type)).toEqual(['run-start', 'run-finish']);
+  });
+
+  it('pauses for approval and continues when approved', async () => {
+    const events: RunEvent[] = [];
+    const requestApproval = vi.fn().mockResolvedValue({ approved: true });
+    const approval = node('approve', 'control.approval');
+    approval.config = { message: 'Publish {{input}}?' };
+    const engine = createWorkflowEngine({
+      executors: passthroughExecutors(),
+      emit: (e) => events.push(e),
+      now: () => 1,
+      newRunId: () => 'run-1',
+      requestApproval,
+    });
+
+    const result = await engine.run(workflow([approval, node('after', 'action.log')]), { input: 'report' });
+
+    expect(result.ok).toBe(true);
+    expect(requestApproval).toHaveBeenCalledWith(
+      expect.objectContaining({ runId: 'run-1', nodeId: 'approve', message: 'Publish report?', input: 'report' }),
+      undefined
+    );
+    expect(events.map((event) => event.type)).toContain('approval-requested');
+    expect(events.map((event) => event.type)).toContain('approval-resolved');
+  });
+
+  it('fails safely when approval is rejected', async () => {
+    const events: RunEvent[] = [];
+    const after = vi.fn();
+    const executors = passthroughExecutors();
+    executors['action.log'] = (_node, ctx) => {
+      after();
+      return Promise.resolve(ctx.input);
+    };
+    const engine = createWorkflowEngine({
+      executors,
+      emit: (e) => events.push(e),
+      now: () => 1,
+      newRunId: () => 'run-1',
+      requestApproval: () => Promise.resolve({ approved: false, reason: 'Not authorized' }),
+    });
+
+    const result = await engine.run(workflow([node('approve', 'control.approval'), node('after', 'action.log')]));
+
+    expect(result.ok).toBe(false);
+    expect(after).not.toHaveBeenCalled();
+    expect(events).toContainEqual(expect.objectContaining({ type: 'approval-resolved', approved: false }));
+  });
+
+  it('keeps legacy AI nodes on their existing deterministic executor unless explicitly routed', async () => {
+    const executors = passthroughExecutors();
+    const deterministic = vi.fn().mockResolvedValue('legacy-output');
+    const executeWithAgent = vi.fn().mockResolvedValue('agent-output');
+    executors['action.ai'] = deterministic;
+    const legacyNode = node('legacy-ai', 'action.ai');
+    const engine = createWorkflowEngine({ executors, executeWithAgent, emit: () => undefined });
+
+    const result = await engine.run(workflow([legacyNode]), { input: 'prompt' });
+
+    expect(result).toMatchObject({ ok: true, output: 'legacy-output' });
+    expect(deterministic).toHaveBeenCalledWith(legacyNode, { input: 'prompt' }, undefined);
+    expect(executeWithAgent).not.toHaveBeenCalled();
+  });
+
+  it('routes an agent node through Agent Core instead of the deterministic executor', async () => {
+    const events: RunEvent[] = [];
+    const executors = passthroughExecutors();
+    const deterministic = vi.fn().mockResolvedValue('deterministic');
+    const executeWithAgent = vi.fn().mockResolvedValue('agent-output');
+    executors['action.log'] = deterministic;
+    const agentNode = node('agent', 'action.log');
+    agentNode.execution = { mode: 'agent', access: 'mcp', estimatedTokens: 200 };
+    const dynamicWorkflow = workflow([agentNode]);
+    dynamicWorkflow.knowledge = { tokenPolicy: { maxAgentSteps: 1, maxEstimatedTokens: 200 } };
+    const engine = createWorkflowEngine({ executors, executeWithAgent, emit: (event) => events.push(event) });
+
+    const result = await engine.run(dynamicWorkflow, { input: 'goal' });
+
+    expect(result).toMatchObject({ ok: true, output: 'agent-output' });
+    expect(deterministic).not.toHaveBeenCalled();
+    expect(executeWithAgent).toHaveBeenCalledWith(agentNode, { input: 'goal' }, undefined);
+  });
+
+  it('uses Agent Core only when a hybrid deterministic step fails', async () => {
+    const executors = passthroughExecutors();
+    executors['action.http'] = vi.fn().mockRejectedValue(new Error('connector unavailable'));
+    const executeWithAgent = vi.fn().mockResolvedValue('recovered');
+    const hybridNode = node('hybrid', 'action.http');
+    hybridNode.execution = { mode: 'hybrid', access: 'api' };
+    const engine = createWorkflowEngine({ executors, executeWithAgent, emit: () => undefined });
+
+    const result = await engine.run(workflow([hybridNode]));
+
+    expect(result).toMatchObject({ ok: true, output: 'recovered' });
+    expect(executeWithAgent).toHaveBeenCalledOnce();
+  });
+
+  it('stops before an authenticated browser step when website login is forbidden', async () => {
+    const executors = passthroughExecutors();
+    const browser = vi.fn().mockResolvedValue('unsafe');
+    executors['action.browser'] = browser;
+    const browserNode = node('browser', 'action.browser');
+    browserNode.execution = { mode: 'deterministic', access: 'browser', requiresWebsiteLogin: true };
+    const secureWorkflow = workflow([browserNode]);
+    secureWorkflow.knowledge = { security: { preferTrustedConnectors: true, websiteLogin: 'forbid' } };
+    const engine = createWorkflowEngine({ executors, emit: () => undefined });
+
+    const result = await engine.run(secureWorkflow);
+
+    expect(result.ok).toBe(false);
+    expect(browser).not.toHaveBeenCalled();
+  });
+
+  it('fails before a second Agent Core call when the workflow token policy is exhausted', async () => {
+    const first = node('first', 'action.log');
+    first.execution = { mode: 'agent', estimatedTokens: 50 };
+    const second = node('second', 'action.log');
+    second.execution = { mode: 'agent', estimatedTokens: 50 };
+    const limitedWorkflow = workflow([first, second]);
+    limitedWorkflow.knowledge = { tokenPolicy: { maxAgentSteps: 1, maxEstimatedTokens: 100 } };
+    const executeWithAgent = vi.fn().mockResolvedValue('done');
+    const engine = createWorkflowEngine({
+      executors: passthroughExecutors(),
+      executeWithAgent,
+      emit: () => undefined,
+    });
+
+    const result = await engine.run(limitedWorkflow);
+
+    expect(result.ok).toBe(false);
+    expect(executeWithAgent).toHaveBeenCalledOnce();
+  });
+
+  it('resumes from the latest completed top-level node without repeating it', async () => {
+    const executors = passthroughExecutors();
+    const first = vi.fn().mockResolvedValue('checkpoint-output');
+    const second = vi.fn().mockRejectedValueOnce(new Error('temporary')).mockResolvedValue('complete');
+    executors['action.transform'] = first;
+    executors['action.http'] = second;
+    let saved: WorkflowCheckpoint | null = null;
+    const checkpointStore = {
+      load: vi.fn(async () => saved),
+      save: vi.fn(async (checkpoint) => {
+        saved = checkpoint;
+      }),
+      clear: vi.fn(async () => {
+        saved = null;
+      }),
+    };
+    const engine = createWorkflowEngine({ executors, checkpointStore, emit: () => undefined });
+    const resumable = workflow([node('first', 'action.transform'), node('second', 'action.http')]);
+
+    const failed = await engine.run(resumable, { runId: 'resume-run' });
+    const resumed = await engine.run(resumable, { runId: 'resume-run', resume: true });
+
+    expect(failed.ok).toBe(false);
+    expect(resumed).toMatchObject({ ok: true, output: 'complete' });
+    expect(first).toHaveBeenCalledOnce();
+    expect(second).toHaveBeenCalledTimes(2);
+    expect(checkpointStore.clear).toHaveBeenCalledWith('wf-1', 'resume-run');
   });
 });

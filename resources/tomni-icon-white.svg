@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="tomniGradient" x1="88" y1="70" x2="430" y2="452" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#C43CFF"/>
+      <stop offset="0.48" stop-color="#7B3CFF"/>
+      <stop offset="1" stop-color="#155CFF"/>
+    </linearGradient>
+  </defs>
+  <rect x="48" y="48" width="416" height="416" rx="88" stroke="#FFFFFF" stroke-width="34"/>
+  <path d="M126 126H386C402 126 416 136 423 150L431 168H81L89 150C96 136 110 126 126 126Z" fill="#FFFFFF"/>
+  <rect x="239" y="163" width="34" height="34" fill="#FFFFFF"/>
+  <circle cx="256" cy="230" r="28" fill="#FFFFFF"/>
+  <path d="M126 350V196L256 314L386 196V350" stroke="#FFFFFF" stroke-width="34" stroke-linejoin="miter" stroke-linecap="square"/>
+  <path d="M170 316L256 402L342 316" stroke="#FFFFFF" stroke-width="34" stroke-linejoin="miter" stroke-linecap="square"/>
+</svg>

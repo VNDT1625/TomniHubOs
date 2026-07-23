@@ -206,6 +206,9 @@ resources/bundled-aioncore
 resources/bundled-tomny-cli
 resources/bundled-tomny-core
 
+resources/bundled-tomny-runtime
+resources/bundled-model-gateway
+
 resources/binaries
 resources/hub
 
@@ -226,8 +229,13 @@ packages/mtui/target/
 # MTUI local state directory (runtime-generated)
 .mtui/
 
+# Local runtime and generated coverage artifacts
+.aionrs/
+.tomny-runtime/
+
 # Omni workspace metadata (local specs, understand, wiki for the project)
 .omni/
+.tomni/
 .aionui/
 .omni-sidecar/
 .tomny/

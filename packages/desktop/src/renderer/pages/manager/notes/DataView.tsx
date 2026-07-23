@@ -69,9 +69,9 @@ const DataView: React.FC<{ store: UseManagerStore }> = ({ store }) => {
   };
 
   return (
-    <div className='h-full overflow-y-auto px-24px pb-32px'>
-      <div className='max-w-880px mx-auto flex flex-col gap-14px pt-12px'>
-        <div className='flex items-center gap-8px flex-wrap'>
+    <div className={styles.workspaceScroll}>
+      <div className={styles.workspaceColumn}>
+        <div className={styles.workspaceToolbar}>
           <Input
             allowClear
             value={query}
@@ -105,13 +105,18 @@ const DataView: React.FC<{ store: UseManagerStore }> = ({ store }) => {
         </div>
 
         {dataNotes.length === 0 ? (
-          <div className='text-center text-13px text-t-tertiary py-40px'>{t('manager.notes.data.empty')}</div>
+          <div className={styles.workspaceEmpty}>
+            <span>{t('manager.notes.data.empty')}</span>
+            <Button size='small' type='secondary' onClick={() => setEditing('new')}>
+              {t('manager.notes.data.create')}
+            </Button>
+          </div>
         ) : filtered.length === 0 ? (
-          <div className='text-center text-13px text-t-tertiary py-12px'>{t('manager.notes.noResults')}</div>
+          <div className={styles.workspaceEmptyCompact}>{t('manager.notes.noResults')}</div>
         ) : (
-          <div className='grid grid-cols-1 md:grid-cols-2 gap-12px'>
+          <div className={styles.workspaceCardGrid}>
             {filtered.map((note) => (
-              <div key={note.id} className={`group ${styles.row} p-12px flex flex-col gap-6px`}>
+              <div key={note.id} className={`group ${styles.row} ${styles.dataCard}`}>
                 <div className='flex items-start justify-between gap-8px'>
                   <div className='flex items-center gap-6px min-w-0'>
                     {note.url ? (

@@ -83,6 +83,11 @@ export type InspectScreenshotResult = {
   mode: InspectScreenshotMode;
 };
 
+export type CaptureInspectScreenshotOptions = {
+  /** Persist the raw capture. Agent-facing callers must set this to false and persist only after redaction. */
+  persist?: boolean;
+};
+
 /** Saved recording of the embedded web tab. */
 export type InspectVideoResult = {
   /** Absolute path of the MP4 that the agent can inspect. */
@@ -153,10 +158,9 @@ export const resolveFullPageSize = (
 export const captureInspectScreenshot = async (
   wc: CdpWebContents,
   rootPath: string,
-  mode: InspectScreenshotMode
+  mode: InspectScreenshotMode,
+  options: CaptureInspectScreenshotOptions = {}
 ): Promise<InspectScreenshotResult | null> => {
-  trackInspectEvidenceRoot(rootPath);
-  await pruneInspectEvidence(rootPath);
   let png: Buffer;
   let dataUrl: string;
   if (mode === 'fullPage') {
@@ -216,9 +220,13 @@ export const captureInspectScreenshot = async (
     dataUrl = `data:image/png;base64,${captured.toString('base64')}`;
   }
   const dir = path.join(rootPath, '.omni', 'inspect');
-  await fsp.mkdir(dir, { recursive: true });
   const filePath = path.join(dir, `shot-${mode === 'fullPage' ? 'full-page' : 'viewport'}-${Date.now()}.png`);
-  await fsp.writeFile(filePath, png);
+  if (options.persist !== false) {
+    trackInspectEvidenceRoot(rootPath);
+    await pruneInspectEvidence(rootPath);
+    await fsp.mkdir(dir, { recursive: true });
+    await fsp.writeFile(filePath, png);
+  }
   return { filePath, dataUrl, mode };
 };
 

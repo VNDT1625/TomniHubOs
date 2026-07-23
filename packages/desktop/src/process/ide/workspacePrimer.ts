@@ -18,12 +18,12 @@
 /** Body of the "## Session memory" rules block, bound to the given sessionId. */
 export const buildIdeMemorySection = (sessionId: string): string =>
   [
-    '## Session memory (your ephemeral scratchpad)',
+    '## Session memory (your restart-resilient Save)',
     '',
     `Your session memory id is: ${sessionId}`,
     'Pass this exact id as `sessionId` to every `ide_memory_*` tool.',
     '',
-    'This memory exists ONLY while this chat tab is open and is wiped when it closes. Use it for the few',
+    'Saved notes survive app restarts for this exact chat session and are wiped when the session is closed. Use them for the few',
     'things you must remember across turns so you do NOT re-search the repo every time:',
     '- `ide_memory_remember` — jot a short fact / decision / todo (do NOT paste large file contents;',
     '  the repo map / MTUI already holds those). Pin only truly critical facts.',
@@ -44,7 +44,11 @@ export const buildIdeMemorySection = (sessionId: string): string =>
 /** Idempotently append the session-memory block to an existing rules string. */
 export const withIdeMemorySection = (sessionId: string, existingRules?: string): string => {
   const base = (existingRules ?? '').trim();
-  if (base.includes('Session memory (your ephemeral scratchpad)')) return base;
+  if (
+    base.includes('Session memory (your restart-resilient Save)') ||
+    base.includes('Session memory (your ephemeral scratchpad)')
+  )
+    return base;
   const block = buildIdeMemorySection(sessionId);
   return base.length > 0 ? `${base}\n\n${block}` : block;
 };
@@ -57,8 +61,21 @@ export type BuildWorkspacePrimerInput = {
   rules: readonly string[];
   /** Whether Planning Mode is on for this workspace. */
   planningEnabled: boolean;
-  /** Ephemeral session-memory id to bind to this primer. */
+  /** Session-scoped Save id to bind to this primer. */
   sessionMemoryId: string;
+  /** Safe repository Secret Context metadata. Values must never be supplied here. */
+  repoSecrets?: readonly {
+    alias: string;
+    description: string;
+    status: 'set' | 'needs_value';
+  }[];
+  /** Safe Combo metadata, including key aliases but never values. */
+  repoSecretCombos?: readonly {
+    comboId: string;
+    comboLabel: string;
+    description: string;
+    keys: readonly { alias: string; status: 'set' | 'needs_value' }[];
+  }[];
 };
 
 /**
@@ -77,6 +94,8 @@ export const buildWorkspacePrimer = ({
   rules,
   planningEnabled,
   sessionMemoryId,
+  repoSecrets = [],
+  repoSecretCombos = [],
 }: BuildWorkspacePrimerInput): string => {
   const sections: string[] = [
     [
@@ -84,6 +103,7 @@ export const buildWorkspacePrimer = ({
       `Workspace root: ${rootPath}`,
       'Use codegraph/wiki/search as a map; inspect source lazily only when the task needs it.',
       'Strict IDE Mode is enforced by Tomny: native repo tools (Bash, Read, Grep, Glob, Write, Edit, ...) can be rejected through the permission protocol before the backend executes them. This is a core policy denial, not a user decision: never report that the user blocked or denied the task. Retry with the matching neutral tool: Read/cat → `tomny_read`; Grep/rg → `tomny_search`; Glob/find/ls → `tomny_glob`; shell commands → `tomny_command`; partial edits → `tomny_team_edit`; full writes → `tomny_team_write`. Prefer `tomny_context`, `tomny_map`, and `tomny_analyze` before broad reads. The legacy `ide_*` and `team_*` names remain compatibility aliases.',
+      'Required legacy IDE arguments: ide_read_file { filePath }; ide_search { rootPath, query }; ide_grep { rootPath, pattern }; ide_find_definition { rootPath, name }. Never call these tools with an empty argument object.',
     ].join('\n'),
   ];
   if (planningEnabled) {
@@ -97,6 +117,27 @@ export const buildWorkspacePrimer = ({
   }
   if (rules.length > 0) {
     sections.push('## Project rules\n' + rules.map((rule) => `- ${rule}`).join('\n'));
+  }
+  if (repoSecrets.length > 0 || repoSecretCombos.length > 0) {
+    const entries = repoSecrets.map(({ alias, description, status }) => {
+      const purpose = description.replace(/\s+/g, ' ').trim();
+      return `- ${alias}: ${status}; purpose: ${purpose}`;
+    });
+    sections.push(
+      [
+        '## Repository Secret Context (metadata only)',
+        'These aliases are already registered for this workspace. A status of `set` means the local vault has a',
+        'value; never claim that the value or credential is missing merely because it is opaque to you.',
+        'Use the alias as an environment variable. For guarded commands, pass every required alias through the',
+        '`secretAliases` field so values enter only that child process and are redacted from its output.',
+        'A whole Combo can be injected by passing its comboId through secretComboIds.',
+        ...repoSecretCombos.map((combo) => {
+          const keys = combo.keys.map((key) => key.alias + ': ' + key.status).join(', ');
+          return '- Combo ' + combo.comboLabel + ' [' + combo.comboId + ']: ' + combo.description + '; keys: ' + keys;
+        }),
+        ...entries,
+      ].join('\n')
+    );
   }
   return withIdeMemorySection(sessionMemoryId, sections.join('\n\n'));
 };

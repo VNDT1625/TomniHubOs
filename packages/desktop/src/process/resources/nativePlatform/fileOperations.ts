@@ -1,10 +1,16 @@
-﻿import { watch, type FSWatcher } from 'node:fs';
+import { statSync, watch, type FSWatcher } from 'node:fs';
 import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import JSZip from 'jszip';
 
 export type ZipEntry = { name: string; content?: string | Uint8Array; source_path?: string };
 export type FileChangeEvent = { file_path: string; event_type: string };
+
+export const resolveWatchEventPath = (
+  target: string,
+  targetIsDirectory: boolean,
+  filename: string | Buffer | null
+): string => (targetIsDirectory && filename ? path.resolve(target, filename.toString()) : target);
 
 const safeArchiveName = (name: string): string => {
   const normalized = name.replace(/\\/g, '/').replace(/^\/+/, '');
@@ -45,7 +51,7 @@ export class NativeZipService {
         this.active.delete(requestId);
         this.cancelled.delete(requestId);
       }
-      await rm(temporary, { force: true }).catch(() => undefined);
+      await rm(temporary, { force: true }).catch((): void => undefined);
     }
   }
   cancel(requestId: string): boolean {
@@ -63,8 +69,9 @@ export class NativeWatchService {
   start(filePath: string, listener: (event: FileChangeEvent) => void): void {
     const target = path.resolve(filePath);
     if (this.watchers.has(target)) return;
+    const targetIsDirectory = statSync(target).isDirectory();
     const watcher = watch(target, { persistent: false }, (eventType, filename) => {
-      listener({ file_path: filename ? path.resolve(target, filename.toString()) : target, event_type: eventType });
+      listener({ file_path: resolveWatchEventPath(target, targetIsDirectory, filename), event_type: eventType });
     });
     watcher.once('error', () => this.stop(target));
     this.watchers.set(target, watcher);

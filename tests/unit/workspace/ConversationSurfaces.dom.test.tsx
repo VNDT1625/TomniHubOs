@@ -20,7 +20,7 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { ConfigProvider } from '@arco-design/web-react';
+import { ConfigProvider, Message } from '@arco-design/web-react';
 import type { TChatConversation } from '@/common/config/storage';
 
 import { readFileSync } from 'node:fs';
@@ -117,7 +117,10 @@ describe('ConversationSurfaces (DOM)', () => {
   it('shows the Super switch ON when the conversation already has Browser-Control attached', async () => {
     convMock.get.mockResolvedValue({
       id: 'c1',
-      extra: { session_mcp_servers: [{ id: 'bc1', name: BROWSER_CONTROL, transport: { type: 'sse', url: 'x' } }] },
+      extra: {
+        session_mcp_servers: [{ id: 'bc1', name: BROWSER_CONTROL, transport: { type: 'sse', url: 'x' } }],
+        super_mode: true,
+      },
     });
     renderHeader(conversation({ session_mcp_servers: [{ id: 'bc1', name: BROWSER_CONTROL }] }));
 
@@ -138,7 +141,7 @@ describe('ConversationSurfaces (DOM)', () => {
     const user = userEvent.setup();
     convMock.get.mockResolvedValue({
       id: 'c1',
-      extra: { session_mcp_servers: [{ id: 'bc1', name: BROWSER_CONTROL }] },
+      extra: { session_mcp_servers: [{ id: 'bc1', name: BROWSER_CONTROL }], super_mode: true },
     });
     renderHeader(conversation({ session_mcp_servers: [{ id: 'bc1', name: BROWSER_CONTROL }] }));
 
@@ -157,7 +160,7 @@ describe('ConversationSurfaces (DOM)', () => {
     const user = userEvent.setup();
     convMock.get.mockResolvedValue({
       id: 'c1',
-      extra: { session_mcp_servers: [{ id: 'bc1', name: BROWSER_CONTROL }] },
+      extra: { session_mcp_servers: [{ id: 'bc1', name: BROWSER_CONTROL }], super_mode: true },
     });
     browserMock.listTabs.mockResolvedValue([
       {
@@ -197,7 +200,7 @@ describe('ConversationSurfaces (DOM)', () => {
     const user = userEvent.setup();
     convMock.get.mockResolvedValue({
       id: 'c1',
-      extra: { session_mcp_servers: [{ id: 'bc1', name: BROWSER_CONTROL }] },
+      extra: { session_mcp_servers: [{ id: 'bc1', name: BROWSER_CONTROL }], super_mode: true },
     });
     browserMock.listTabs.mockResolvedValue([
       {
@@ -229,7 +232,7 @@ describe('ConversationSurfaces (DOM)', () => {
     const user = userEvent.setup();
     convMock.get.mockResolvedValue({
       id: 'c1',
-      extra: { session_mcp_servers: [{ id: 'bc1', name: BROWSER_CONTROL }] },
+      extra: { session_mcp_servers: [{ id: 'bc1', name: BROWSER_CONTROL }], super_mode: true },
     });
     browserMock.listTabs.mockResolvedValue([
       {
@@ -254,7 +257,7 @@ describe('ConversationSurfaces (DOM)', () => {
     const user = userEvent.setup();
     convMock.get.mockResolvedValue({
       id: 'c1',
-      extra: { session_mcp_servers: [{ id: 'bc1', name: BROWSER_CONTROL }] },
+      extra: { session_mcp_servers: [{ id: 'bc1', name: BROWSER_CONTROL }], super_mode: true },
     });
     const tab = {
       id: 'tab1',
@@ -282,7 +285,7 @@ describe('ConversationSurfaces (DOM)', () => {
   it('ignores hidden background tabs (e.g. the agent research tab)', async () => {
     convMock.get.mockResolvedValue({
       id: 'c1',
-      extra: { session_mcp_servers: [{ id: 'bc1', name: BROWSER_CONTROL }] },
+      extra: { session_mcp_servers: [{ id: 'bc1', name: BROWSER_CONTROL }], super_mode: true },
     });
     // One visible frame + one HIDDEN research tab. Only the visible one shows;
     // a hidden tab alone must NOT auto-open or render as a frame.
@@ -319,6 +322,19 @@ describe('ConversationSurfaces (DOM)', () => {
     const frames = await editorMock.listFrames();
     expect(frames).toHaveLength(1);
     expect(frames[0].title).toBe('notes.md');
+  });
+
+  it('reports a rejected Super update instead of showing a false success', async () => {
+    const user = userEvent.setup();
+    const error = vi.spyOn(Message, 'error').mockImplementation(() => undefined as never);
+    const success = vi.spyOn(Message, 'success').mockImplementation(() => undefined as never);
+    convMock.update.mockResolvedValue(false);
+
+    renderHeader(conversation({}));
+    await user.click(await screen.findByRole('switch'));
+
+    await waitFor(() => expect(error).toHaveBeenCalledWith('workspace.super.toggleError'));
+    expect(success).not.toHaveBeenCalled();
   });
 });
 

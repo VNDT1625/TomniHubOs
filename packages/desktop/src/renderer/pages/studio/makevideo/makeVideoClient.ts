@@ -155,6 +155,11 @@ export type { GenerateImageData } from '@process/makevideo/makeVideoBridge';
 export type {
   ExportFinalData,
   ExportFinalRequest,
+  FilmAsset,
+  FilmBible,
+  FilmTimeline,
+  ProductionPlan,
+  TimelineClip,
   GenerateVideoClipData,
   GenerateVideoClipRequest,
   GenerateVoiceData,

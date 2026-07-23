@@ -100,12 +100,20 @@ describe('createDirectCliAgentDriver', () => {
       dispose: vi.fn(async () => undefined),
     };
     const resolveWorkspace = vi.fn(async () => 'C:/workspace');
-    const context = { workspace: 'C:/selected', surface: 'ide', permissionMode: 'workspace-write' } as const;
+    const context = {
+      workspace: 'C:/selected',
+      surface: 'ide',
+      permissionMode: 'workspace-write',
+      sessionId: 'stable-agent-session',
+      excludedMcpServerNames: ['aionui-agent-orchestrator'],
+    } as const;
+    const resolveMcpServers = vi.fn(async () => []);
     const driver = createDirectCliAgentDriver(
       {
         detectTargets: vi.fn(async () => [directTarget]),
         adapters: [adapter],
         resolveWorkspace,
+        resolveMcpServers,
         createSessionId: () => 'direct-session',
       },
       context
@@ -116,7 +124,7 @@ describe('createDirectCliAgentDriver', () => {
     ).resolves.toBe('direct answer');
     expect(adapter.run).toHaveBeenCalledWith(
       expect.objectContaining({
-        sessionId: 'direct-session',
+        sessionId: 'stable-agent-session',
         target: directTarget,
         workspace: 'C:/workspace',
         modelKey: 'gpt',
@@ -125,6 +133,7 @@ describe('createDirectCliAgentDriver', () => {
       })
     );
     expect(resolveWorkspace).toHaveBeenCalledWith(context);
+    expect(resolveMcpServers).toHaveBeenCalledWith(context, 'C:/workspace', 'codex', 'stable-agent-session');
   });
 
   it('rejects a relative workspace instead of resolving it against process cwd', async () => {

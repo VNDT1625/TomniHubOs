@@ -59,6 +59,7 @@ type TMessageType =
   | 'tool_group'
   | 'agent_status'
   | 'permission'
+  | 'orchestration_proposal'
   | 'acp_permission'
   | 'acp_tool_call'
   | 'plan'
@@ -207,6 +208,8 @@ export type IMessageToolGroup = IMessage<
     call_id: string;
     description: string;
     name: string;
+    /** Logical Team/Company agent that owns this tool activity. */
+    agent_id?: string;
     render_output_as_markdown: boolean;
     result_display?:
       | string
@@ -219,6 +222,8 @@ export type IMessageToolGroup = IMessage<
           relative_path: string;
         };
     status: 'Executing' | 'Success' | 'Error' | 'Canceled' | 'Pending' | 'Confirming';
+    /** Structured arguments sent to the tool. Older records may omit this field. */
+    input?: unknown;
     confirmationDetails?:
       | IMessageToolGroupConfirmationDetailsBase<
           'edit',
@@ -271,6 +276,33 @@ export type IMessageAgentStatus = IMessage<
 export type IMessageAcpPermission = IMessage<'acp_permission', AcpPermissionRequest>;
 
 export type IMessagePermission = IMessage<'permission', IConfirmation>;
+
+export type OrchestrationProposalRole = {
+  id: string;
+  name: string;
+  responsibility: string;
+  dependsOn: string[];
+  estimatedTokens?: number;
+};
+
+export type OrchestrationProposalMessage = {
+  kind: 'team' | 'company';
+  name: string;
+  reason: string;
+  parallelism: number;
+  estimatedTokens?: number;
+  roles: OrchestrationProposalRole[];
+};
+
+export type IMessageOrchestrationProposal = IMessage<
+  'orchestration_proposal',
+  {
+    id: string;
+    proposal_id: string;
+    proposal: OrchestrationProposalMessage;
+    decision?: 'approved' | 'declined';
+  }
+>;
 
 export type IMessageAcpToolCall = IMessage<'acp_tool_call', ToolCallUpdate>;
 
@@ -403,6 +435,7 @@ export type TMessage =
   | IMessageToolGroup
   | IMessageAgentStatus
   | IMessagePermission
+  | IMessageOrchestrationProposal
   | IMessageAcpPermission
   | IMessageAcpToolCall
   | IMessagePlan
@@ -426,6 +459,8 @@ export interface IConfirmation<Option extends any = any> {
    * Used for "always allow" permission memory
    */
   command_type?: string;
+  /** Direct permission id owned by Tomni Core, resolved over Electron IPC rather than the legacy HTTP backend. */
+  native_core_permission_id?: string;
 }
 
 const isObject = (value: unknown): value is Record<string, unknown> =>
@@ -643,6 +678,17 @@ export const transformMessage = (message: IResponseMessage): TMessage | undefine
       return {
         id: uuid(),
         type: 'permission',
+        msg_id: message.msg_id,
+        position: 'left',
+        conversation_id: message.conversation_id,
+        created_at,
+        content: message.data as any,
+      };
+    }
+    case 'orchestration_proposal': {
+      return {
+        id: uuid(),
+        type: 'orchestration_proposal',
         msg_id: message.msg_id,
         position: 'left',
         conversation_id: message.conversation_id,

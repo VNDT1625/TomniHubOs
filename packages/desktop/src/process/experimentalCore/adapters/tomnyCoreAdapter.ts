@@ -5,6 +5,7 @@
  */
 
 import { execFile, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join, resolve as resolvePath } from 'node:path';
@@ -15,13 +16,18 @@ import { promisify } from 'node:util';
 import { parse as parseToml } from 'smol-toml';
 import {
   errorMessage,
+  dedupeCoreMcpServers,
   formatSpawnLabel,
   requireWorkspace,
   throwIfAborted,
   type CoreAdapter,
   type CoreAdapterEvent,
+  type CoreContextInspectionInput,
+  type CoreContextSnapshot,
+  type CoreContextTool,
   type CoreMcpServer,
   type CoreRunInput,
+  type CoreToolCatalogPolicy,
   type DetectedCoreTarget,
 } from './coreAdapter';
 import type {
@@ -43,6 +49,12 @@ import { redactCheckpointText } from '../sessionCheckpointStore';
 
 type TomnyStreamEvent = Record<string, unknown> & { type?: string };
 
+export type TomnySessionActionHistoryQuery = { limit: number; afterSequence?: number; query?: string };
+export type TomnySessionActionHistorySource = (
+  sessionId: string,
+  query: TomnySessionActionHistoryQuery
+) => Promise<Array<Record<string, unknown>>>;
+
 type PendingTurn = {
   msgId: string;
   emit: (event: CoreAdapterEvent) => void;
@@ -53,17 +65,26 @@ type PendingTurn = {
   reject: (error: Error) => void;
 };
 
+type PendingContextSnapshot = {
+  resolve: (snapshot: CoreContextSnapshot) => void;
+  reject: (error: Error) => void;
+};
+
 type TomnyProcess = {
+  sessionId: string;
   child: ChildProcessWithoutNullStreams;
   toolClient: Client;
   ready: Promise<void>;
   pending?: PendingTurn;
+  pendingContext?: PendingContextSnapshot;
+  contextSnapshot?: CoreContextSnapshot;
   stderrTail: string;
   isBusy: () => boolean;
   dispose: () => void;
 };
 
 const READY_TIMEOUT_MS = 30_000;
+const CONTEXT_SNAPSHOT_TIMEOUT_MS = 5_000;
 const TURN_TIMEOUT_MS = 90_000;
 const STDERR_TAIL_LIMIT = 4_000;
 
@@ -274,14 +295,48 @@ const tomnyRuntimeScope = (modelKey?: string): string => {
   return 'default';
 };
 
-/** Keep one Tomny engine per workspace/provider while model and permission remain hot-swappable. */
-export const tomnyRuntimeKey = (identity: ExperimentalSessionIdentity): string =>
+const tomnyMcpRuntimeFingerprint = (server: CoreMcpServer): string => {
+  const connection =
+    server.transport === 'stdio'
+      ? [
+          server.name.trim().toLowerCase(),
+          'stdio',
+          server.command,
+          server.args ?? [],
+          (server.env ?? []).map(({ name, value }) => `${name}\u0000${value}`).toSorted(),
+          server.deferred ?? true,
+        ]
+      : [
+          server.name.trim().toLowerCase(),
+          server.transport ?? 'sse',
+          server.url,
+          (server.headers ?? []).map(({ name, value }) => `${name}\u0000${value}`).toSorted(),
+          server.deferred ?? true,
+        ];
+  return createHash('sha256').update(JSON.stringify(connection)).digest('hex');
+};
+
+/**
+ * Keep one Tomny engine per workspace/provider while model and permission remain hot-swappable.
+ *
+ * The deferred MCP catalog is part of the engine's ToolMap. When Super adds or
+ * removes a surface, use a fresh runtime so StartAction receives the matching
+ * capability summary rather than retaining the previous catalog.
+ */
+export const tomnyRuntimeKey = (
+  identity: ExperimentalSessionIdentity,
+  mcpServers: readonly CoreMcpServer[] = [],
+  toolCatalog: CoreToolCatalogPolicy = { mode: 'surface', patterns: [] }
+): string =>
   JSON.stringify([
     identity.sessionId ?? '',
     identity.targetId,
     identity.workspace.trim(),
     tomnyRuntimeScope(identity.modelKey),
     identity.surface ?? 'chat',
+    dedupeCoreMcpServers(mcpServers).map(tomnyMcpRuntimeFingerprint).toSorted(),
+    toolCatalog.mode,
+    [...new Set(toolCatalog.patterns.map((pattern) => pattern.trim()).filter(Boolean))].toSorted(),
   ]);
 
 const tomnyDynamicModel = (modelKey?: string): string | undefined => {
@@ -322,6 +377,48 @@ const truncateEventText = (text: string): string =>
 
 const compactLine = (value: string): string => value.replace(/\s+/gu, ' ').trim();
 
+const TOMNY_CONTROL_PLANE_TOOLS = new Set(['startaction', 'toolsearch', 'tool_search', 'tool-search']);
+
+export const isTomnyControlPlaneTool = (toolName: string): boolean =>
+  TOMNY_CONTROL_PLANE_TOOLS.has(toolName.trim().toLowerCase());
+
+/**
+ * StartAction embeds the whole capability map in a text result. Drop verbose
+ * descriptions before the generic event-size guard runs; otherwise a large
+ * IDE/Super catalog is truncated into invalid JSON and disappears from the UI.
+ */
+const compactStartActionToolMapOutput = (toolName: string, output: string): string => {
+  if (toolName.trim().toLowerCase() !== 'startaction') return output;
+  const match = /(?:^|\r?\n)ToolMap:\s*(\[[^\r\n]*\])(?=\r?\n|$)/u.exec(output);
+  if (!match?.[1]) return output;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(match[1]);
+  } catch {
+    return output;
+  }
+  if (!Array.isArray(parsed)) return output;
+  const compact = parsed.flatMap((value): Array<Record<string, unknown>> => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
+    const entry = value as Record<string, unknown>;
+    const name = typeof entry.name === 'string' ? entry.name.trim() : '';
+    if (!name) return [];
+    return [
+      {
+        name,
+        ...(entry.recommended === true ? { recommended: true } : {}),
+        ...(entry.deferred === true ? { deferred: true } : {}),
+      },
+    ];
+  });
+  return `${output.slice(0, match.index)}\nToolMap: ${JSON.stringify(compact)}${output.slice(match.index + match[0].length)}`;
+};
+
+const isTomnyInternalInfo = (message: string): boolean =>
+  /^(?:token watermark override|loaded into the startaction sub-schema|action gate (?:opened|is already open))/iu.test(
+    message.trim()
+  );
+
 /** Preserve the worklog fields actually emitted by the provider; never synthesize hidden reasoning. */
 const richEventText = (event: TomnyStreamEvent, primaryKeys: readonly string[]): string => {
   const blocks: string[] = [];
@@ -351,6 +448,49 @@ const richEventText = (event: TomnyStreamEvent, primaryKeys: readonly string[]):
   return blocks.join('\n\n');
 };
 
+const parseTomnyContextTools = (values: unknown): CoreContextTool[] | null => {
+  if (!Array.isArray(values)) return null;
+  const tools: CoreContextTool[] = [];
+  for (const value of values) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+    const tool = value as Record<string, unknown>;
+    if (
+      typeof tool.name !== 'string' ||
+      typeof tool.description !== 'string' ||
+      !tool.input_schema ||
+      typeof tool.input_schema !== 'object' ||
+      Array.isArray(tool.input_schema) ||
+      typeof tool.deferred !== 'boolean'
+    ) {
+      return null;
+    }
+    tools.push({
+      name: tool.name,
+      description: tool.description,
+      input_schema: tool.input_schema as Record<string, unknown>,
+      deferred: tool.deferred,
+    });
+  }
+  return tools;
+};
+
+export const parseTomnyContextSnapshot = (event: TomnyStreamEvent): CoreContextSnapshot | null => {
+  if (event.type !== 'context_snapshot' || typeof event.system !== 'string') return null;
+  const tools = parseTomnyContextTools(event.tools);
+  const toolCache = event.tool_cache === undefined ? [] : parseTomnyContextTools(event.tool_cache);
+  const messages = event.messages === undefined ? [] : event.messages;
+  if (!tools || !toolCache || !Array.isArray(messages)) return null;
+  if (messages.some((message) => !message || typeof message !== 'object' || Array.isArray(message))) return null;
+  return {
+    system: event.system,
+    tools,
+    messages: messages as Array<Record<string, unknown>>,
+    capabilitySummary: textField(event, 'capability_summary'),
+    workingMemory: event.working_memory ?? {},
+    toolCache,
+  };
+};
+
 export const normalizeTomnyStreamEvent = (event: TomnyStreamEvent): CoreAdapterEvent | null => {
   if (event.type === 'text_delta') {
     const text = textField(event, 'text');
@@ -362,40 +502,84 @@ export const normalizeTomnyStreamEvent = (event: TomnyStreamEvent): CoreAdapterE
   }
   if (event.type === 'info') {
     const rawMessage = textField(event, 'message') || textField(event, 'text') || textField(event, 'summary');
+    if (isTomnyInternalInfo(rawMessage)) return null;
     const text = richEventText(event, ['message', 'text', 'summary']);
     if (!text) return null;
     const call = /^Tool call:\s*(.+)$/u.exec(rawMessage.trim());
     if (call?.[1]) {
       const tool = call[1].trim();
-      return { type: 'tool-call', tool, text, phase: 'requested' };
+
+      const input = tomnyToolRequestInput(event);
+      return {
+        type: 'tool-call',
+        tool,
+        text,
+        phase: 'requested',
+        ...(textField(event, 'call_id') ? { callId: textField(event, 'call_id') } : {}),
+        ...(input !== undefined ? { input: sanitizeTomnyToolInput(tool, input) } : {}),
+      };
     }
     const result = /^\[([^\]]+?)\s+(success|error)\]\s*([\s\S]*)$/u.exec(rawMessage.trim());
     if (result?.[1] && (result[2] === 'success' || result[2] === 'error')) {
+      const callId = textField(event, 'call_id');
+      const tool = result[1].trim();
+      if (!callId) return null;
       return {
         type: 'tool-result',
-        tool: result[1].trim(),
+        tool,
         outcome: result[2],
-        text: truncateEventText(result[3]?.trim() || text),
+        ...(textField(event, 'call_id') ? { callId: textField(event, 'call_id') } : {}),
+        text: truncateEventText(compactStartActionToolMapOutput(tool, result[3]?.trim() || text)),
+        ...(tomnyToolRequestInput(event) !== undefined
+          ? { input: sanitizeTomnyToolInput(tool, tomnyToolRequestInput(event)) }
+          : {}),
       };
     }
     return { type: 'step', text };
   }
   if (event.type === 'tool_result') {
     const tool = textField(event, 'tool_name') || 'Tomny tool';
+
     const output = textField(event, 'output') || textField(event, 'content') || '(no output)';
     const status = textField(event, 'status').toLowerCase();
+    // MCP validation failures can be returned as a normal tool-result payload
+    // (for example, `MCP error -32602: Input validation error...`) without an
+    // explicit `status` field. Treat the protocol error marker and both naming
+    // variants used by MCP/Rust as failures so the renderer does not display a
+    // failed call as green/"Hoàn tất".
+    const isError =
+      status === 'error' ||
+      event.is_error === true ||
+      event.isError === true ||
+      /^MCP\s+error\s+-\d+\s*:/iu.test(output);
     return {
       type: 'tool-result',
       tool,
-      outcome: status === 'error' ? 'error' : 'success',
-      text: truncateEventText(output),
+      outcome: isError ? 'error' : 'success',
+      ...(textField(event, 'call_id') ? { callId: textField(event, 'call_id') } : {}),
+      text: truncateEventText(compactStartActionToolMapOutput(tool, output)),
+      ...(tomnyToolRequestInput(event) !== undefined
+        ? { input: sanitizeTomnyToolInput(tool, tomnyToolRequestInput(event)) }
+        : {}),
     };
   }
   if (event.type === 'tool_running') {
     const tool = textField(event, 'tool_name');
+
     const text = richEventText(event, ['message', 'text', 'summary']);
     const rendered = text && text !== `Tool: ${tool}` ? text : `Tomny is running ${tool}`;
-    return tool ? { type: 'tool-call', tool, text: rendered, phase: 'running' } : null;
+    return tool
+      ? {
+          type: 'tool-call',
+          tool,
+          text: rendered,
+          phase: 'running',
+          ...(textField(event, 'call_id') ? { callId: textField(event, 'call_id') } : {}),
+          ...(tomnyToolRequestInput(event) !== undefined
+            ? { input: sanitizeTomnyToolInput(tool, tomnyToolRequestInput(event)) }
+            : {}),
+        }
+      : null;
   }
   return null;
 };
@@ -425,7 +609,7 @@ export const tomnyStrictProjectArgs = (directory: string): string[] => ['--proje
 
 const ensureTomnyStrictProject = async (): Promise<string> => {
   await mkdir(TOMNY_STRICT_CONFIG_DIRECTORY, { recursive: true });
-  await writeFile(join(TOMNY_STRICT_CONFIG_DIRECTORY, '.aionrs.toml'), tomnyStrictToolsConfig, 'utf8');
+  await writeFile(join(TOMNY_STRICT_CONFIG_DIRECTORY, '.tomny.toml'), tomnyStrictToolsConfig, 'utf8');
   return TOMNY_STRICT_CONFIG_DIRECTORY;
 };
 
@@ -449,10 +633,65 @@ export const tomnyNativeToolDenialReason = (toolName: string): string => {
   return `Native tool ${toolName} is disabled. Retry this operation with ${replacement}.`;
 };
 
+const HOST_BOUND_SESSION_TOOLS = [
+  'ide_memory_recall',
+  'ide_memory_remember',
+  'ide_memory_status',
+  'ide_memory_forget',
+  'ide_memory_set_secret',
+] as const;
+
+type HostBoundSessionToolName = (typeof HOST_BOUND_SESSION_TOOLS)[number];
+
+const WORKSPACE_BOUND_IDE_TOOLS = [
+  'ide_map',
+  'ide_scan_repo',
+  'ide_search',
+  'ide_grep',
+  'ide_find_definition',
+  'ide_find_references',
+  'ide_summary',
+  'ide_info',
+  'ide_compass',
+  'ide_context',
+  'ide_research',
+  'ide_test_script',
+  'ide_analyze',
+  'ide_compact',
+  'team_status',
+] as const;
+type WorkspaceBoundIdeToolName = (typeof WORKSPACE_BOUND_IDE_TOOLS)[number];
+
+const WORKSPACE_TOOL_REQUIRED_STRINGS: Partial<Record<WorkspaceBoundIdeToolName, readonly string[]>> = {
+  ide_search: ['query'],
+  ide_grep: ['pattern'],
+  ide_find_definition: ['name'],
+  ide_find_references: ['name'],
+  ide_summary: ['target'],
+  ide_info: ['target'],
+  ide_compass: ['filePath'],
+  ide_context: ['intent'],
+  ide_research: ['intent'],
+  ide_test_script: ['script', 'phase'],
+  ide_compact: ['input'],
+};
+
 export type TomnyToolTranslation = {
-  name: 'tomny_read' | 'tomny_search' | 'tomny_glob' | 'tomny_command';
+  name:
+    | 'tomny_read'
+    | 'tomny_search'
+    | 'tomny_glob'
+    | 'tomny_command'
+    | HostBoundSessionToolName
+    | WorkspaceBoundIdeToolName;
   arguments: Record<string, unknown>;
 };
+
+export type WorkspaceIdeToolPreflight =
+  | { kind: 'execute'; translation: TomnyToolTranslation }
+  | { kind: 'error'; message: string };
+
+export type SkillWorkflowToolPreflight = { kind: 'error'; message: string };
 
 const finiteNumber = (value: unknown): number | undefined =>
   typeof value === 'number' && Number.isFinite(value) ? value : undefined;
@@ -525,6 +764,122 @@ export const translateNativeTomnyTool = (
   return null;
 };
 
+/** Bind session-scoped IDE memory tools to the active Tomny conversation.
+ * The model must never invent, omit, or select another memory session id. */
+export const translateHostBoundTomnyTool = (
+  toolName: string,
+  input: unknown,
+  sessionId: string
+): TomnyToolTranslation | null => {
+  const normalized = normalizedToolName(toolName);
+  const canonical = HOST_BOUND_SESSION_TOOLS.find((name) => name === normalized);
+  if (!canonical) return null;
+  return {
+    name: canonical,
+    arguments: { ...objectRecord(input), sessionId },
+  };
+};
+
+/**
+ * Bind project-scoped IDE navigation calls to the active workspace before the
+ * Tomny child sends them to MCP. This prevents an omitted `rootPath` from
+ * becoming a protocol-level -32602. Tool-specific values cannot be inferred
+ * safely, so missing values are returned as real failed tool results.
+ */
+export const preflightWorkspaceIdeTool = (
+  toolName: string,
+  input: unknown,
+  cwd: string
+): WorkspaceIdeToolPreflight | null => {
+  const normalized = normalizedToolName(toolName);
+  if (normalized === 'ide_command') {
+    const args = objectRecord(input);
+    const missing = !stringValue(args.command) ? 'command' : !stringValue(args.rootPath) ? 'rootPath' : '';
+    return missing
+      ? {
+          kind: 'error',
+          message: `Invalid IDE tool arguments for ide_command: ${missing} is required. Retry with { rootPath, command }; do not send an empty argument object.`,
+        }
+      : null;
+  }
+  const canonical = WORKSPACE_BOUND_IDE_TOOLS.find((name) => name === normalized);
+  if (!canonical) return null;
+  const args = objectRecord(input);
+  const missing = (WORKSPACE_TOOL_REQUIRED_STRINGS[canonical] ?? []).find((field) => !stringValue(args[field]));
+  if (missing) {
+    return {
+      kind: 'error',
+      message: `Invalid IDE tool arguments for ${canonical}: ${missing} is required. Retry with { rootPath, ${missing} }; do not send an empty argument object.`,
+    };
+  }
+  if (stringValue(args.rootPath)) return null;
+  return {
+    kind: 'execute',
+    translation: { name: canonical, arguments: { ...args, rootPath: cwd } },
+  };
+};
+
+const invalidSkillWorkflowArguments = (toolName: string, field: string, retry: string): SkillWorkflowToolPreflight => ({
+  kind: 'error',
+  message: `Invalid skill workflow arguments for ${toolName}: ${field} is required. The host rejected this call before MCP dispatch. ${retry}`,
+});
+
+/**
+ * Reject missing required skill-workflow arguments at the host boundary. The
+ * model cannot safely invent a skill name, so malformed calls must become real
+ * failed tool results with an actionable retry instead of MCP -32602 errors.
+ */
+export const preflightSkillWorkflowTool = (toolName: string, input: unknown): SkillWorkflowToolPreflight | null => {
+  const normalized = normalizedToolName(toolName);
+  const args = objectRecord(input);
+  if (normalized === 'tools_search' && !stringValue(args.query)) {
+    return invalidSkillWorkflowArguments(toolName, 'query', 'Retry with {"query":"<current task>"}.');
+  }
+  if (normalized === 'tools_recall' && !stringValue(args.query)) {
+    return invalidSkillWorkflowArguments(toolName, 'query', 'Retry with {"query":"<current task>"}.');
+  }
+  if (normalized === 'skills_read' && !stringValue(args.name)) {
+    return invalidSkillWorkflowArguments(
+      toolName,
+      'name',
+      'First use tools_search, then retry with {"name":"<exact returned skill name>","resource":"SKILL.md"}.'
+    );
+  }
+  if (normalized === 'skills_select') {
+    if (!stringValue(args.goal)) {
+      return invalidSkillWorkflowArguments(
+        toolName,
+        'goal',
+        'Retry with {"goal":"<current task>","names":["<exact skill name>"]}.'
+      );
+    }
+    if (!Array.isArray(args.names)) {
+      return invalidSkillWorkflowArguments(
+        toolName,
+        'names',
+        'Retry with {"goal":"<current task>","names":["<exact skill name>"]}.'
+      );
+    }
+  }
+  if (normalized === 'skills_finish') {
+    if (!stringValue(args.goal)) {
+      return invalidSkillWorkflowArguments(
+        toolName,
+        'goal',
+        'Retry with {"goal":"<current task>","succeeded":true|false}.'
+      );
+    }
+    if (typeof args.succeeded !== 'boolean') {
+      return invalidSkillWorkflowArguments(
+        toolName,
+        'succeeded',
+        'Retry with {"goal":"<current task>","succeeded":true|false}.'
+      );
+    }
+  }
+  return null;
+};
+
 export const tomnyProvidedToolResultCommand = (
   callId: string,
   content: string,
@@ -555,6 +910,14 @@ const renderTranslatedToolResult = (result: unknown): { content: string; isError
 };
 
 const READ_ONLY_TOOLS = new Set([
+  // ToolSearch only discovers deferred definitions; it does not access the
+  // workspace or mutate state by itself.
+  'startaction',
+  'toolsearch',
+  'tool_search',
+  'tool-search',
+  'tool search',
+  'tomny_session_actions',
   'tomny_glob',
   'tomny_read',
   'tomny_search',
@@ -565,6 +928,23 @@ const READ_ONLY_TOOLS = new Set([
   'tomny_visual_analyze',
   'tomny_compact',
   'tomny_team_status',
+  'agent_targets',
+  'agent_track',
+  'agent_result',
+  'agent_sessions',
+  'test_list',
+  'test_report',
+  'browser_read_text',
+  'browser_screenshot',
+  'browser_summarize_video',
+  'browser_list_tabs',
+  'extract_content',
+  'quick_test_observe',
+  'quick_test_status',
+  'quick_test_audit',
+  'quick_test_capture',
+  'editor_read',
+  'editor_list',
   'ide_list_dir',
   'ide_glob',
   'ide_read_file',
@@ -577,6 +957,7 @@ const READ_ONLY_TOOLS = new Set([
   'ide_info',
   'ide_compass',
   'ide_context',
+  'ide_research',
   'ide_map',
   'ide_analyze',
   'ide_analyze_image',
@@ -609,14 +990,89 @@ export const tomnyToolAccessForPermission = (
   return 'deny';
 };
 
+/** Read arguments from every JSON-stream shape emitted by supported Tomny builds. */
+export const tomnyToolRequestInput = (event: TomnyStreamEvent): unknown => {
+  const tool = objectRecord(event.tool);
+  return (
+    event.input ??
+    event.arguments ??
+    event.args ??
+    event.raw_input ??
+    event.rawInput ??
+    event.tool_input ??
+    event.toolInput ??
+    tool.input ??
+    tool.arguments ??
+    tool.args ??
+    tool.raw_input ??
+    tool.rawInput
+  );
+};
+
 const tomnyToolRequest = (
   event: TomnyStreamEvent
 ): { name: string; category: string; input: unknown; detail?: string } => {
   const tool = objectRecord(event.tool);
   const name = textField(event, 'tool_name') || textField(tool, 'name') || 'Tomny tool';
   const category = textField(event, 'category') || textField(tool, 'category');
-  const input = event.input ?? tool.args;
+  const input = tomnyToolRequestInput(event);
   return { name, category, input, detail: input === undefined ? undefined : sanitizeTomnyToolDetail(name, input) };
+};
+
+export const tomnySessionActionHistoryQuery = (input: unknown): TomnySessionActionHistoryQuery => {
+  const record = objectRecord(input);
+  const rawLimit = finiteNumber(record.limit);
+  const rawAfter = finiteNumber(record.after_sequence);
+  const query = stringValue(record.query).trim().slice(0, 500);
+  return {
+    limit: Math.min(100, Math.max(1, Math.trunc(rawLimit ?? 20))),
+    ...(rawAfter !== undefined && rawAfter >= 0 ? { afterSequence: Math.trunc(rawAfter) } : {}),
+    ...(query ? { query } : {}),
+  };
+};
+
+const provideSessionActionHistory = async (
+  runtime: TomnyProcess,
+  pending: PendingTurn,
+  callId: string,
+  input: unknown,
+  source: TomnySessionActionHistorySource | undefined
+): Promise<void> => {
+  pending.lastActivityAt = Date.now();
+  pending.emit({
+    type: 'tool-call',
+    tool: 'tomny_session_actions',
+    callId,
+    text: 'Reading this session action journal',
+    phase: 'running',
+    input: sanitizeTomnyToolInput('tomny_session_actions', input),
+  });
+  if (!source) {
+    writeCommand(
+      runtime,
+      tomnyProvidedToolResultCommand(callId, 'Session action history is unavailable in this runtime.', true)
+    );
+    return;
+  }
+  try {
+    const actions = await source(runtime.sessionId, tomnySessionActionHistoryQuery(input));
+    if (runtime.pending !== pending) return;
+    writeCommand(
+      runtime,
+      tomnyProvidedToolResultCommand(
+        callId,
+        JSON.stringify({ session_scoped: true, entries: actions }).slice(0, 64_000),
+        false,
+        'tomny_session_actions'
+      )
+    );
+  } catch (error) {
+    if (runtime.pending !== pending) return;
+    writeCommand(
+      runtime,
+      tomnyProvidedToolResultCommand(callId, `Session action history failed: ${errorMessage(error)}`, true)
+    );
+  }
 };
 
 const SENSITIVE_TOOL_FIELD =
@@ -641,6 +1097,14 @@ const sanitizeToolValue = (value: unknown, redactTypedValues: boolean, key = '')
 /** Render permission metadata without placing credentials or browser-typed text in the event journal/UI. */
 export const sanitizeTomnyToolDetail = (toolName: string, input: unknown): string =>
   JSON.stringify(sanitizeToolValue(input, SENSITIVE_TYPING_TOOL.test(toolName)));
+
+/**
+ * Safe structured form used by the worklog/journal. Tool execution continues
+ * to receive the original arguments; only the display/persistence copy is
+ * redacted.
+ */
+export const sanitizeTomnyToolInput = (toolName: string, input: unknown): unknown =>
+  sanitizeToolValue(input, SENSITIVE_TYPING_TOOL.test(toolName));
 
 const provideTranslatedToolResult = async (
   runtime: TomnyProcess,
@@ -672,8 +1136,10 @@ const provideTranslatedToolResult = async (
   pending.emit({
     type: 'tool-call',
     tool: translation.name,
+    callId,
     text: `Auto-translated ${sourceName} → ${translation.name}`,
     phase: 'running',
+    input: sanitizeTomnyToolInput(translation.name, translation.arguments),
   });
   const heartbeat = setInterval(() => {
     if (runtime.pending === pending) pending.lastActivityAt = Date.now();
@@ -704,18 +1170,103 @@ export const tomnyMcpInjectionCommand = (url: string, name = TOMNY_TOOL_SERVER_N
   name,
   transport: 'sse',
   url,
+  deferred: true,
 });
+
+const tomnyCompatibleMcpServer = (server: CoreMcpServer): CoreMcpServer => {
+  if (server.transport !== 'streamable_http' || server.name.trim().toLowerCase() !== 'aionui-ide') return server;
+  try {
+    const endpoint = new URL(server.url);
+    const loopback = ['127.0.0.1', 'localhost', '[::1]'].includes(endpoint.hostname.toLowerCase());
+    if (!loopback || !endpoint.pathname.endsWith('/mcp')) return server;
+    endpoint.pathname = endpoint.pathname.replace(/\/mcp$/u, '/sse');
+    return { ...server, transport: 'sse', url: endpoint.toString() };
+  } catch {
+    return server;
+  }
+};
+
+export const tomnyMcpServerCommand = (server: CoreMcpServer): Record<string, unknown> => {
+  const compatible = tomnyCompatibleMcpServer(server);
+  if (compatible.transport === 'stdio') {
+    return {
+      type: 'add_mcp_server',
+      name: compatible.name,
+      transport: 'stdio',
+      command: compatible.command,
+      args: compatible.args ?? [],
+      env: Object.fromEntries((compatible.env ?? []).map((entry) => [entry.name, entry.value])),
+      deferred: compatible.deferred ?? true,
+    };
+  }
+  if (compatible.transport === 'http' || compatible.transport === 'streamable_http') {
+    throw new Error(
+      `Tomny CLI does not support HTTP MCP transport for ${compatible.name}. Configure this server with SSE or stdio.`
+    );
+  }
+  return {
+    ...tomnyMcpInjectionCommand(compatible.url, compatible.name),
+    headers: Object.fromEntries((compatible.headers ?? []).map((header) => [header.name, header.value])),
+    deferred: compatible.deferred ?? true,
+  };
+};
+
+/**
+ * Tomny's ready flag describes whether MCP is already configured; it is not a
+ * protocol-support flag. Selected IDE servers must still be injected during
+ * the pre-message phase and acknowledged through `mcp_ready`.
+ */
+export const tomnyShouldInitializeMcpServers = (
+  _event: TomnyStreamEvent,
+  mcpServers: readonly CoreMcpServer[]
+): boolean => mcpServers.length > 0;
+
+export const tomnySurfaceSystemPrompt = (
+  surface: string,
+  cwd: string,
+  toolCatalog: CoreToolCatalogPolicy = { mode: 'surface', patterns: [] }
+): string => {
+  const patterns = [...new Set(toolCatalog.patterns.map((pattern) => pattern.trim()).filter(Boolean))];
+  return [
+    '[TomnyExactSurfacePrompt]',
+    `[TomnyToolCatalog] ${toolCatalog.mode}`,
+    `[TomnyToolPatterns] ${patterns.join(',')}`,
+    `You are Tomny on AionUi ${surface}; project: ${cwd}`,
+    'Use StartAction only for tool/external turns, never casual chat. Once open, do not nest it.',
+    'Use ToolSearch only for another exact schema; otherwise call loaded tools directly.',
+    'For flow/bug/logic/purpose, call ide_research once; use its fresh Wiki test profile; follow up only for explicit gaps.',
+    'Bug root-cause gate: exact file/symbol/condition plus expected/actual; broad hypotheses are insufficient.',
+    'Before edits, ide_test_script phase=reproduce must assert failure. After the smallest fix, rerun the identical script as post-fix, then a focused framework test/typecheck.',
+    'Use ide_quick_test only for hard/runtime-only network, console, exception, interaction, native, or screenshot evidence; failure reopens diagnosis.',
+    `Required: rootPath=${JSON.stringify(cwd)}; ide_research.intent; ide_test_script.script+phase; never call tools with {}.`,
+    toolCatalog.mode === 'super'
+      ? 'Super is ON: the ToolMap is the unified catalog of every registered Surface capability, exposed through Tomny tool names. Use ToolSearch when you need an exact schema.'
+      : 'ToolMap contains only active-surface tools; later turns retain a short capability summary.',
+    'Skip skills for ordinary repo/bug work; use them when named or clearly specialized.',
+    'tomny_session_actions reads the action journal, not messages. Save is sole historical conversation context.',
+    'Secret Context values stay hidden; use safe aliases through authorized tools.',
+    'In YOLO, continue without approval. Otherwise respect the active permission mode.',
+  ].join('\n');
+};
 
 const spawnTarget = (
   target: DetectedCoreTarget,
   cwd: string,
   modelKey: string | undefined,
   strictProjectDirectory: string,
+  surface: string,
+  toolCatalog: CoreToolCatalogPolicy,
   environment: NodeJS.ProcessEnv = process.env
 ): ChildProcessWithoutNullStreams => {
   if (!target.command) throw new Error('Tomny CLI executable was not found.');
   const args = [...target.args];
-  args.push(...tomnyModelArgs(modelKey), ...tomnyStrictProjectArgs(strictProjectDirectory));
+  const surfacePrompt = tomnySurfaceSystemPrompt(surface, cwd, toolCatalog);
+  args.push(
+    ...tomnyModelArgs(modelKey),
+    ...tomnyStrictProjectArgs(strictProjectDirectory),
+    '--system-prompt',
+    surfacePrompt
+  );
   return spawn(target.command, args, {
     cwd,
     env: environment,
@@ -728,8 +1279,12 @@ const spawnTarget = (
 /** Direct host for the bundled Tomny CLI JSON stream protocol. */
 export class TomnyCoreAdapter implements CoreAdapter {
   public readonly protocol = 'tomny-json-stream' as const;
+  public readonly retainsConversationHistory = false;
 
-  public constructor(private readonly providerSource: TomnyProviderSource = defaultProviderSource) {}
+  public constructor(
+    private readonly providerSource: TomnyProviderSource = defaultProviderSource,
+    private readonly sessionActionHistory?: TomnySessionActionHistorySource
+  ) {}
 
   public async listModels(target: DetectedCoreTarget): Promise<ExperimentalCoreModel[]> {
     if (!target.command) return [];
@@ -753,6 +1308,71 @@ export class TomnyCoreAdapter implements CoreAdapter {
   }
   private readonly processes = new BoundedSessionPool<TomnyProcess>({ maxSessions: 8, idleTimeoutMs: 5 * 60_000 });
 
+  public async inspectContext(input: CoreContextInspectionInput): Promise<CoreContextSnapshot> {
+    const cwd = requireWorkspace(input.workspace);
+    const mcpServers = dedupeCoreMcpServers(input.mcpServers ?? []);
+    const toolCatalog = input.toolCatalog ?? { mode: 'surface', patterns: [] };
+    const key = tomnyRuntimeKey(
+      {
+        sessionId: input.sessionId,
+        targetId: input.target.id,
+        workspace: cwd,
+        modelKey: input.modelKey,
+        surface: input.surface,
+      },
+      mcpServers,
+      toolCatalog
+    );
+    const runtime = await this.getProcess(
+      key,
+      input.sessionId,
+      input.target,
+      cwd,
+      input.modelKey,
+      input.surface,
+      mcpServers,
+      toolCatalog
+    );
+    await runtime.ready;
+    if (runtime.pending) {
+      if (runtime.contextSnapshot) return structuredClone(runtime.contextSnapshot);
+      throw new Error('Tomny context is unavailable while the first message is still running.');
+    }
+    if (runtime.pendingContext) throw new Error('Tomny context inspection is already running for this session.');
+
+    const snapshot = await new Promise<CoreContextSnapshot>((resolve, reject) => {
+      let timer: NodeJS.Timeout | undefined;
+      const pending: PendingContextSnapshot = {
+        resolve: (value) => {
+          if (runtime.pendingContext !== pending) return;
+          runtime.pendingContext = undefined;
+          if (timer) clearTimeout(timer);
+          resolve(value);
+        },
+        reject: (error) => {
+          if (runtime.pendingContext !== pending) return;
+          runtime.pendingContext = undefined;
+          if (timer) clearTimeout(timer);
+          reject(error);
+        },
+      };
+      runtime.pendingContext = pending;
+      timer = setTimeout(
+        () => pending.reject(new Error('Tomny did not return its context snapshot within 5s.')),
+        CONTEXT_SNAPSHOT_TIMEOUT_MS
+      );
+      timer.unref();
+      try {
+        writeCommand(runtime, { type: 'context_snapshot' });
+      } catch (error) {
+        pending.reject(error instanceof Error ? error : new Error(String(error)));
+      }
+    });
+    runtime.contextSnapshot = snapshot;
+    this.processes.touch(key);
+    return structuredClone(snapshot);
+  }
+
   public async run(input: CoreRunInput): Promise<void> {
     await withPersistentAgentRetry({
       signal: input.signal,
@@ -766,14 +1386,29 @@ export class TomnyCoreAdapter implements CoreAdapter {
   private async runAttempt(input: CoreRunInput): Promise<void> {
     throwIfAborted(input.signal);
     const cwd = requireWorkspace(input.workspace);
-    const key = tomnyRuntimeKey({
-      sessionId: input.sessionId,
-      targetId: input.target.id,
-      workspace: cwd,
-      modelKey: input.modelKey,
-      surface: input.surface,
-    });
-    const runtime = await this.getProcess(key, input.target, cwd, input.modelKey, input.mcpServers ?? []);
+    const mcpServers = dedupeCoreMcpServers(input.mcpServers ?? []);
+    const toolCatalog = input.toolCatalog ?? { mode: 'surface', patterns: [] };
+    const key = tomnyRuntimeKey(
+      {
+        sessionId: input.sessionId,
+        targetId: input.target.id,
+        workspace: cwd,
+        modelKey: input.modelKey,
+        surface: input.surface,
+      },
+      mcpServers,
+      toolCatalog
+    );
+    const runtime = await this.getProcess(
+      key,
+      input.sessionId,
+      input.target,
+      cwd,
+      input.modelKey,
+      input.surface,
+      mcpServers,
+      toolCatalog
+    );
     await runtime.ready;
     if (runtime.pending) throw new Error('Tomny CLI is already processing a message in this session.');
 
@@ -833,20 +1468,28 @@ export class TomnyCoreAdapter implements CoreAdapter {
 
   private getProcess(
     key: string,
+    sessionId: string,
     target: DetectedCoreTarget,
     cwd: string,
     modelKey: string | undefined,
-    mcpServers: CoreMcpServer[]
+    surface: string,
+    mcpServers: CoreMcpServer[],
+    toolCatalog: CoreToolCatalogPolicy
   ): Promise<TomnyProcess> {
-    return this.processes.getOrCreate(key, () => this.startProcess(key, target, cwd, modelKey, mcpServers));
+    return this.processes.getOrCreate(key, () =>
+      this.startProcess(key, sessionId, target, cwd, modelKey, surface, mcpServers, toolCatalog)
+    );
   }
 
   private async startProcess(
     key: string,
+    sessionId: string,
     target: DetectedCoreTarget,
     cwd: string,
     modelKey: string | undefined,
-    mcpServers: CoreMcpServer[]
+    surface: string,
+    mcpServers: CoreMcpServer[],
+    toolCatalog: CoreToolCatalogPolicy
   ): Promise<TomnyProcess> {
     const environment = await appProviderEnvironment(modelKey, this.providerSource);
     const strictProjectDirectory = await ensureTomnyStrictProject();
@@ -855,7 +1498,7 @@ export class TomnyCoreAdapter implements CoreAdapter {
     const toolClient = new Client({ name: 'tomny-core-translator', version: '1.0.0' });
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     await Promise.all([toolServer.connect(serverTransport), toolClient.connect(clientTransport)]);
-    const child = spawnTarget(target, cwd, modelKey, strictProjectDirectory, environment);
+    const child = spawnTarget(target, cwd, modelKey, strictProjectDirectory, surface, toolCatalog, environment);
     let resolveReady: (() => void) | undefined;
     let rejectReady: ((error: Error) => void) | undefined;
     const ready = new Promise<void>((resolve, reject) => {
@@ -863,12 +1506,14 @@ export class TomnyCoreAdapter implements CoreAdapter {
       rejectReady = reject;
     });
     const runtime: TomnyProcess = {
+      sessionId,
       child,
       toolClient,
       ready,
       stderrTail: '',
-      isBusy: () => Boolean(runtime.pending),
+      isBusy: () => Boolean(runtime.pending || runtime.pendingContext),
       dispose: () => {
+        runtime.pendingContext?.reject(new Error('Tomny context inspection was interrupted.'));
         if (child.stdin.writable) child.stdin.end();
         if (!child.killed) child.kill();
         void toolClient.close();
@@ -897,11 +1542,11 @@ export class TomnyCoreAdapter implements CoreAdapter {
         return;
       }
       if (event.type === 'ready') {
-        if (mcpServers.length === 0) {
+        if (!tomnyShouldInitializeMcpServers(event, mcpServers)) {
           clearTimeout(readyTimer);
           resolveReady?.();
         } else {
-          for (const server of mcpServers) writeCommand(runtime, tomnyMcpInjectionCommand(server.url, server.name));
+          for (const server of mcpServers) writeCommand(runtime, tomnyMcpServerCommand(server));
         }
         return;
       }
@@ -910,6 +1555,17 @@ export class TomnyCoreAdapter implements CoreAdapter {
         if (pendingMcpServers.size === 0) {
           clearTimeout(readyTimer);
           resolveReady?.();
+        }
+        return;
+      }
+      if (event.type === 'context_snapshot') {
+        const pendingContext = runtime.pendingContext;
+        if (!pendingContext) return;
+        const snapshot = parseTomnyContextSnapshot(event);
+        if (!snapshot) pendingContext.reject(new Error('Tomny returned an invalid context snapshot.'));
+        else {
+          runtime.contextSnapshot = snapshot;
+          pendingContext.resolve(snapshot);
         }
         return;
       }
@@ -922,6 +1578,92 @@ export class TomnyCoreAdapter implements CoreAdapter {
           return;
         }
         const request = tomnyToolRequest(event);
+        // The `tool_request` envelope is the only guaranteed point where the
+        // model's structured JSON arguments are available.  Emit it before
+        // any host-side preflight/translation so the conversation worklog can
+        // retain the exact input even when execution fails early.
+        pending.emit({
+          type: 'tool-call',
+          tool: request.name,
+          callId,
+          text: `Calling ${request.name}`,
+          phase: 'requested',
+          ...(request.input !== undefined ? { input: sanitizeTomnyToolInput(request.name, request.input) } : {}),
+        });
+        const skillWorkflowPreflight = preflightSkillWorkflowTool(request.name, request.input);
+        if (skillWorkflowPreflight) {
+          writeCommand(
+            runtime,
+            tomnyProvidedToolResultCommand(callId, skillWorkflowPreflight.message, true, request.name)
+          );
+          return;
+        }
+        if (normalizedToolName(request.name) === 'tomny_session_actions') {
+          void provideSessionActionHistory(runtime, pending, callId, request.input, this.sessionActionHistory).catch(
+            () => {
+              if (runtime.pending !== pending) return;
+              try {
+                writeCommand(
+                  runtime,
+                  tomnyProvidedToolResultCommand(callId, 'Session action history failed before execution.', true)
+                );
+              } catch {
+                this.processes.invalidate(key, runtime);
+              }
+            }
+          );
+          return;
+        }
+        const workspacePreflight = preflightWorkspaceIdeTool(request.name, request.input, cwd);
+        if (workspacePreflight?.kind === 'error') {
+          writeCommand(runtime, tomnyProvidedToolResultCommand(callId, workspacePreflight.message, true, request.name));
+          return;
+        }
+        if (workspacePreflight?.kind === 'execute') {
+          void provideTranslatedToolResult(
+            runtime,
+            pending,
+            callId,
+            request.name,
+            workspacePreflight.translation
+          ).catch(() => {
+            if (runtime.pending !== pending) return;
+            try {
+              writeCommand(
+                runtime,
+                tomnyProvidedToolResultCommand(
+                  callId,
+                  'Workspace-bound IDE tool execution failed before dispatch.',
+                  true,
+                  workspacePreflight.translation.name
+                )
+              );
+            } catch {
+              this.processes.invalidate(key, runtime);
+            }
+          });
+          return;
+        }
+        const hostBoundTranslation = translateHostBoundTomnyTool(request.name, request.input, runtime.sessionId);
+        if (hostBoundTranslation) {
+          void provideTranslatedToolResult(runtime, pending, callId, request.name, hostBoundTranslation).catch(() => {
+            if (runtime.pending !== pending) return;
+            try {
+              writeCommand(
+                runtime,
+                tomnyProvidedToolResultCommand(
+                  callId,
+                  'Host-bound Tomny tool translation failed before execution.',
+                  true,
+                  hostBoundTranslation.name
+                )
+              );
+            } catch {
+              this.processes.invalidate(key, runtime);
+            }
+          });
+          return;
+        }
         const translation = translateNativeTomnyTool(request.name, request.input, cwd);
         if (translation) {
           void provideTranslatedToolResult(runtime, pending, callId, request.name, translation).catch(() => {
@@ -999,6 +1741,7 @@ export class TomnyCoreAdapter implements CoreAdapter {
       const suffix = runtime.stderrTail.trim() ? `\n${runtime.stderrTail.trim()}` : '';
       const error = new Error(`${formatSpawnLabel(target)} exited with code ${String(code)}.${suffix}`);
       rejectReady?.(error);
+      runtime.pendingContext?.reject(error);
       runtime.pending?.reject(error);
       runtime.pending = undefined;
     });
@@ -1007,6 +1750,7 @@ export class TomnyCoreAdapter implements CoreAdapter {
       this.processes.invalidate(key, runtime);
       const wrapped = new Error(`Failed to start ${formatSpawnLabel(target)}: ${errorMessage(error)}`);
       rejectReady?.(wrapped);
+      runtime.pendingContext?.reject(wrapped);
       runtime.pending?.reject(wrapped);
       runtime.pending = undefined;
     });

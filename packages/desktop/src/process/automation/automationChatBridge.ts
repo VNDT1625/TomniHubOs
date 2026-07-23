@@ -32,12 +32,13 @@
  */
 
 import { bridge } from '@office-ai/platform';
-import { httpRequest } from '@/common/adapter/httpBridge';
+import { listReadyProviders } from '@process/services/tomnyProviderBridge';
 import type { IProvider } from '@/common/config/storage';
 import { runAgentChatMessages } from '@process/services/agentChat';
 import type { ChatMessageInput } from '@process/browser/webAgentRunner';
-import { createAutomationStore, type IAutomationStore } from './automationStore';
+import type { IAutomationStore } from './automationStore';
 import type { Workflow } from './automationTypes';
+import { getSharedAutomationServices } from './automationBridge';
 
 // ---------------------------------------------------------------------------
 // Channel names (renderer-safe contract)
@@ -292,7 +293,7 @@ const pickForModel = (providers: IProvider[], model: string): { provider: IProvi
  * without a restart. Throws on failure; the caller wraps it into a result.
  */
 const runProviderChat = async (model: string, messages: ChatMessageInput[]): Promise<string> => {
-  const providers = (await httpRequest<IProvider[]>('GET', '/api/providers').catch(() => [] as IProvider[])) || [];
+  const providers = (await listReadyProviders().catch(() => [] as IProvider[])) || [];
   const selected = pickForModel(providers, model);
   if (!selected) {
     throw new Error('No usable model is configured. Open Settings → Model and add a provider/model, then try again.');
@@ -384,32 +385,35 @@ const runAutomationChat = async (req: AutomationChatRequest, store: IAutomationS
     { surface: 'automation', permissionMode: 'read-only' }
   );
 
-  // Attempt to extract and persist a workflow from the reply.
+  // Attempt to extract and persist a workflow from the reply. A create/modify/fix
+  // request must never report text-only success when persistence failed: that is
+  // indistinguishable from a workflow that was actually created in the UI.
   const partial = extractWorkflowJson(reply);
   if (partial) {
     try {
       const saved = await store.save(partial);
       return { reply, workflow: saved };
     } catch (saveError) {
-      // Log but do not fail the chat — the reply is still useful.
       console.error('[AutomationChatBridge] Failed to save extracted workflow:', saveError);
+      const detail = saveError instanceof Error ? saveError.message : String(saveError);
+      throw new Error(`The workflow was generated but could not be saved: ${detail}`, { cause: saveError });
     }
+  }
+
+  const requiresWorkflow = req.intent === 'create' || req.intent === 'modify' || req.intent === 'fix';
+  if (requiresWorkflow) {
+    throw new Error('The model did not return a valid workflow JSON object, so no workflow was created.');
   }
 
   return { reply };
 };
 
 // ---------------------------------------------------------------------------
-// Lazy shared store
+// Shared store
 // ---------------------------------------------------------------------------
 
-/** Lazily-built shared store (reuses the same userData file as automationBridge). */
-let sharedStore: IAutomationStore | undefined;
-
-const getSharedStore = (): IAutomationStore => {
-  if (!sharedStore) sharedStore = createAutomationStore();
-  return sharedStore;
-};
+/** Reuse the exact store instance owned by the Automation bridge. */
+const getSharedStore = (): IAutomationStore => getSharedAutomationServices().store;
 
 // ---------------------------------------------------------------------------
 // Registration
@@ -443,7 +447,7 @@ export function registerAutomationChatBridge(options: RegisterAutomationChatBrid
   });
 }
 
-/** Reset the lazily-built shared store (deterministic teardown for tests). */
+/** Automation Chat owns no separate store state; retained for bootstrap symmetry. */
 export function disposeAutomationChatBridge(): void {
-  sharedStore = undefined;
+  // The shared Automation services are disposed by automationBridge.
 }

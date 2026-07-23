@@ -10,10 +10,18 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { buildRuntimeInventory, planWikiSections, selectKeyFiles } from '@/process/ide/wikiPlanner';
+import {
+  buildRuntimeInventory,
+  buildWikiTestProfile,
+  planWikiSections,
+  renderWikiTestProfile,
+  selectKeyFiles,
+} from '@/process/ide/wikiPlanner';
 
 import { runWikiBootstrap } from '@/process/ide/wiki/wikiBootstrap';
 import type { RepoGraph } from '@/process/ide/repoGraph';
+import type { KnowledgeGraph } from '@/process/ide/understandTypes';
+import type { PersistedWiki } from '@/process/ide/wiki/wikiStore';
 
 /** Build a minimal RepoGraph for tests. */
 const makeGraph = (
@@ -106,6 +114,121 @@ describe('selectKeyFiles', () => {
 
     expect(picked.some((file) => file.path === 'src/feature.ts' && file.reason === 'source')).toBe(true);
     expect(picked.some((file) => file.path === 'src/helper.ts' && file.reason === 'source')).toBe(true);
+  });
+});
+
+describe('Wiki-guided test profile', () => {
+  const knowledgeGraph = (): KnowledgeGraph => ({
+    rootPath: '/repo',
+    version: 4,
+    builtAt: 200,
+    nodes: [
+      {
+        id: 'packages/desktop/src/process/ide/traceContextBuilder.ts',
+        label: 'traceContextBuilder.ts',
+        group: 'packages',
+        layer: 'service',
+        summary: 'Maps runtime trace evidence into a bounded ContextPack.',
+        tags: ['trace', 'context'],
+        symbols: [{ name: 'buildTraceContext', kind: 'function', line: 120 }],
+        language: 'typescript',
+        importedBy: 2,
+        fingerprint: 'source-fingerprint',
+      },
+      {
+        id: 'tests/unit/ide/traceContextBuilder.test.ts',
+        label: 'traceContextBuilder.test.ts',
+        group: 'tests',
+        layer: 'test',
+        summary: 'Covers network route ranking, trace evidence, and bounded context slices.',
+        tags: ['vitest'],
+        symbols: [
+          { name: 'makeTrace', kind: 'function', line: 30 },
+          { name: 'unrelatedHelper', kind: 'function', line: 45 },
+        ],
+        language: 'typescript',
+        importedBy: 0,
+        fingerprint: 'test-fingerprint',
+      },
+    ],
+    edges: [
+      {
+        from: 'tests/unit/ide/traceContextBuilder.test.ts',
+        to: 'packages/desktop/src/process/ide/traceContextBuilder.ts',
+      },
+    ],
+    tours: [],
+    runbook: {
+      packageManager: 'bun',
+      commands: [
+        { name: 'test', command: 'bunx vitest run', cwd: '.', kind: 'test' },
+        { name: 'typecheck', command: 'bunx tsc --noEmit', cwd: '.', kind: 'build' },
+      ],
+      env: [],
+      ports: [],
+    },
+    truncated: false,
+    fileCount: 2,
+  });
+
+  const staleWiki = (): PersistedWiki => ({
+    version: 1,
+    rootPath: '/repo',
+    builtAt: 100,
+    sections: [
+      {
+        id: 'architecture',
+        titleKey: 'architecture',
+        content: 'traceContextBuilder maps RuntimeTrace into a focused ContextPack for debugging.',
+      },
+    ],
+    keyFiles: ['packages/desktop/src/process/ide/traceContextBuilder.ts'],
+    docReports: [],
+  });
+
+  it('selects the nearest deterministic test, reusable fixture, and repository commands', () => {
+    const profile = buildWikiTestProfile({
+      graph: knowledgeGraph(),
+      wiki: staleWiki(),
+      intent: 'A network 404 is ranked into unrelated ContextPack slices',
+      targetFiles: ['packages/desktop/src/process/ide/traceContextBuilder.ts'],
+      symbols: ['buildTraceContext'],
+      graphFresh: true,
+    });
+
+    expect(profile).not.toBeNull();
+    expect(profile).toMatchObject({
+      source: 'wiki+live-graph',
+      strategy: 'unit',
+      deepRuntimeRecommended: false,
+      testFiles: ['tests/unit/ide/traceContextBuilder.test.ts'],
+    });
+    expect(profile?.fixtureSymbols).toContain('makeTrace');
+    expect(profile?.testCommands).toContain('.: bunx vitest run');
+    expect(profile?.typecheckCommands).toContain('.: bunx tsc --noEmit');
+    expect(profile?.freshness).toMatchObject({ graphFresh: true, wikiFresh: false });
+  });
+
+  it('labels stale Wiki prose as a hint while keeping live graph evidence authoritative', () => {
+    const profile = buildWikiTestProfile({
+      graph: knowledgeGraph(),
+      wiki: staleWiki(),
+      intent: 'Fix buildTraceContext network ranking',
+      symbols: ['buildTraceContext'],
+    });
+    const rendered = renderWikiTestProfile(profile!);
+
+    expect(rendered).toContain('wiki=stale-hints-only');
+    expect(rendered).toContain('Behavior hints (not assertions; verify against current source/tests)');
+    expect(rendered).toContain('confirm it fails before editing');
+  });
+
+  it('returns no plan when neither current files nor symbols identify a testable target', () => {
+    const graph = knowledgeGraph();
+    graph.nodes = [];
+    graph.edges = [];
+
+    expect(buildWikiTestProfile({ graph, intent: 'unrelated unknown concern' })).toBeNull();
   });
 });
 

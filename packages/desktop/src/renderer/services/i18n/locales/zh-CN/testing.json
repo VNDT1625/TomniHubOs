@@ -160,5 +160,153 @@
     "toolCompleted": "{{tool}} completed",
     "toolFailed": "{{tool}} failed",
     "toolWorkspace": "Workspace: {{workspace}}"
+  },
+  "benchmark": {
+    "tab": "基准测试",
+    "title": "智能体基准测试",
+    "subtitle": "让 Tomny、Claude Code 和 Codex 运行相同的双提示词套件，并比较验证后的结果。",
+    "liveContract": "实时 IPC",
+    "suite": {
+      "title": "套件定义",
+      "hint": "保持任务完全一致，让每个运行器从可比较的要求开始。",
+      "selectPlaceholder": "选择已保存的套件",
+      "selectLabel": "已保存的基准测试套件",
+      "nameLabel": "套件名称",
+      "namePlaceholder": "例如：修复并验证登录流程"
+    },
+    "prompts": {
+      "firstLabel": "提示词 1 · 实现",
+      "firstName": "实现提示词",
+      "firstPlaceholder": "描述问题，以及每个运行器都应完成的修改。",
+      "secondLabel": "提示词 2 · 复查",
+      "secondName": "复查提示词",
+      "secondPlaceholder": "要求每个运行器检查、测试并完善第一轮结果。"
+    },
+    "verification": {
+      "label": "验证命令",
+      "placeholder": "例如：bunx vitest run tests/unit/auth.test.ts",
+      "hint": "填写后，此命令应在智能体工作前失败，并在工作完成后通过。"
+    },
+    "runner": {
+      "tomny": "Tomny",
+      "claude": "Claude Code",
+      "codex": "Codex"
+    },
+    "runnerDescription": {
+      "tomny": "通过 Tomny 运行时接入的集成式 IDE 智能体。",
+      "claude": "隔离的原生 Claude CLI 会话。",
+      "codex": "隔离的原生 Codex CLI 会话。"
+    },
+    "runners": {
+      "title": "运行器通道",
+      "hint": "每个已选择的运行器都需要独立的隔离工作区。",
+      "selectedCount": "已选择 {{count}} 个",
+      "available": "可用",
+      "unavailable": "不可用",
+      "notProbed": "尚未探测",
+      "detail": "运行器可用性详情",
+      "enabledLabel": "启用 {{runner}}",
+      "modelLabel": "模型",
+      "modelPlaceholder": "运行器默认模型",
+      "modelAriaLabel": "{{runner}} 使用的模型",
+      "workspaceLabel": "工作区",
+      "workspacePlaceholder": "隔离工作区的绝对路径",
+      "workspaceAriaLabel": "{{runner}} 使用的工作区"
+    },
+    "actions": {
+      "newSuite": "新建套件",
+      "probe": "探测运行器",
+      "retry": "重试",
+      "save": "保存套件",
+      "startSelected": "启动所选项",
+      "refreshHistory": "刷新历史记录",
+      "rerun": "重新运行此运行器",
+      "cancelRun": "取消运行"
+    },
+    "history": {
+      "title": "运行历史",
+      "hint": "所选套件的实时进度和已保存结果。",
+      "empty": "此套件尚无基准测试运行记录。",
+      "rerunBadge": "重新运行",
+      "changedFiles": "已修改 {{count}} 个文件"
+    },
+    "metrics": {
+      "hint": "令牌数据保留其来源；无法获得的值会保持为未知。",
+      "duration": "耗时",
+      "ttft": "首字延迟",
+      "inputTokens": "输入令牌",
+      "outputTokens": "输出令牌",
+      "cachedTokens": "缓存令牌",
+      "totalTokens": "总令牌",
+      "provenance": "令牌来源"
+    },
+    "provenance": {
+      "reported": "已报告",
+      "estimated": "估算值",
+      "unavailable": "不可用"
+    },
+    "status": {
+      "queued": "排队中",
+      "preparing": "准备中",
+      "running": "运行中",
+      "verifying": "验证中",
+      "completed": "已完成",
+      "passed": "已通过",
+      "failed": "未通过",
+      "error": "错误",
+      "cancelled": "已取消",
+      "interrupted": "已中断"
+    },
+    "messages": {
+      "probeComplete": "运行器探测完成。",
+      "saved": "基准测试套件已保存。",
+      "started": "已启动 {{count}} 个运行器。",
+      "rerunStarted": "已为一个运行器启动重新运行。",
+      "cancelled": "已请求取消。"
+    },
+    "errors": {
+      "loadSuites": "无法加载基准测试套件。",
+      "loadRuns": "无法加载基准测试历史记录。",
+      "probe": "无法探测基准测试运行器。",
+      "save": "无法保存基准测试套件。",
+      "start": "无法启动所选运行器。",
+      "rerun": "无法重新运行此运行器。",
+      "cancel": "无法取消此次运行。",
+      "cancelNotActive": "此运行已不再处于活动状态。",
+      "runnerUnavailable": "{{runner}} 不可用。安装或配置后请重新检测。",
+      "requiredFields": "请输入套件名称和两个提示词。",
+      "selectRunner": "请至少启用一个运行器。",
+      "workspaceRequired": "请为每个已启用的运行器输入工作区。"
+    },
+    "runMetrics": {
+      "modelRequests": "Model requests",
+      "toolCalls": "Tool calls",
+      "toolFailures": "Tool failures",
+      "quickTestCalls": "Quick Test calls"
+    },
+    "checks": {
+      "precheck": "Precheck",
+      "postVerification": "Post-verification",
+      "notRun": "Not run",
+      "timedOut": "Timed out",
+      "expectedFailure": "Expected failure",
+      "unexpectedPass": "Unexpected pass",
+      "passed": "Passed",
+      "failed": "Failed"
+    },
+    "runDetails": {
+      "details": "Run details",
+      "turnsEmpty": "No turn response has been recorded yet.",
+      "response": "Final response",
+      "changedFilesTitle": "Changed files",
+      "diffTitle": "补丁",
+      "exitCode": "退出码",
+      "batchId": "批次 ID",
+      "comparisonKey": "比较键",
+      "suiteRevision": "测试套件版本",
+      "sourceFingerprint": "源代码指纹",
+      "sessionId": "会话 ID",
+      "errorTitle": "Run error"
+    }
   }
 }

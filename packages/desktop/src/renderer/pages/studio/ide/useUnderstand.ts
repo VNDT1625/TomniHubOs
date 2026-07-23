@@ -18,8 +18,8 @@
  *  - {@link UseUnderstand.build} runs a fresh build: it subscribes to the
  *    phase-progress stream, calls `kgBuild`, and on success records the elapsed
  *    duration so {@link GenerationProgress}'s ETA improves next time, and
- *  - Live mode only watches repo changes and marks the current graph stale; it
- *    never starts semantic model work by itself.
+ *  - Live mode watches repo changes and reloads the already-persisted
+ *    incremental graph; it never starts semantic model work by itself.
  *
  * A monotonically increasing run token guards against a stale build: when a new
  * build (or a `rootPath` change) supersedes an in-flight one, the older run's
@@ -269,19 +269,48 @@ export const useUnderstand = (rootPath: string | null): UseUnderstand => {
 
   const clearChanged = useCallback((): void => setChangedFiles([]), []);
 
-  // Live mode: subscribe to debounced repo-change batches. On each batch, record
-  // changed files for stale/diff-impact UI only. Semantic summary is explicit
-  // user work and must not start from a file watcher.
+  // Live mode: bridge events arrive only after the incremental graph + summary
+  // revision is published. Reload that graph without semantic model work.
+  // At most one read runs at once; bursts while it is in flight collapse into
+  // one follow-up read of the newest persisted revision.
   useEffect(() => {
     if (!live || !rootPath) return undefined;
+    let disposed = false;
+    let loading = false;
+    let pending = false;
+
+    const reloadPublishedGraph = async (): Promise<void> => {
+      if (loading) {
+        pending = true;
+        return;
+      }
+      loading = true;
+      try {
+        do {
+          pending = false;
+          const result = await ideClient.kgGet(rootPath).catch(toFailure);
+          if (disposed || !mountedRef.current) return;
+          if (result.ok && result.data) {
+            setGraph(result.data);
+            setStatus('ready');
+            setPhase('done');
+          }
+        } while (pending && !disposed);
+      } finally {
+        loading = false;
+      }
+    };
+
     const unsubscribe = ideClient.onKgChanged((event) => {
       if (!mountedRef.current || event.rootPath !== rootPath) return;
       const touched = [...event.changed, ...event.removed];
       if (touched.length > 0) setChangedFiles(touched);
       setError(null);
       setErrorCode(null);
+      void reloadPublishedGraph();
     });
     return () => {
+      disposed = true;
       unsubscribe();
     };
   }, [live, rootPath]);

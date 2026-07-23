@@ -1,0 +1,267 @@
+.runtime {
+  position: relative;
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--color-bg-1);
+  color: var(--color-text-1);
+  isolation: isolate;
+}
+
+.chrome {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  left: 12px;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 40px;
+  padding: 4px 6px;
+  border: 1px solid color-mix(in srgb, var(--color-border-2) 76%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--color-bg-2) 88%, transparent);
+  box-shadow: 0 12px 36px color-mix(in srgb, var(--color-text-1) 12%, transparent);
+  backdrop-filter: blur(18px);
+}
+
+.routeTag {
+  max-width: 280px;
+  overflow: hidden;
+  color: var(--color-text-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.viewport {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  background: var(--color-fill-1);
+  scroll-behavior: smooth;
+  scroll-snap-type: y proximity;
+}
+
+.section {
+  position: relative;
+  width: 100%;
+  min-height: 1px;
+  overflow: hidden;
+  background: var(--color-bg-1);
+}
+
+.section[data-scroll-snap='start'] {
+  scroll-snap-align: start;
+}
+
+.section[data-scroll-snap='center'] {
+  scroll-snap-align: center;
+}
+
+.section[data-sticky='true'] {
+  position: sticky;
+  top: 0;
+}
+
+.scaler {
+  position: relative;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+
+.node {
+  box-sizing: border-box;
+  transform-origin: 0 0;
+}
+
+.control:global(.arco-btn) {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  line-height: inherit;
+  white-space: pre-wrap;
+}
+
+.control:global(.arco-btn):not(.arco-btn-disabled):hover,
+.control:global(.arco-btn):not(.arco-btn-disabled):active {
+  border-color: inherit;
+  background: inherit;
+  color: inherit;
+}
+
+.mediaViewport {
+  position: absolute;
+  inset: 0;
+  display: block;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.media {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.empty {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2000;
+  display: grid;
+  place-items: center;
+  overflow: auto;
+  padding: 64px;
+  background: color-mix(in srgb, var(--color-text-1) 42%, transparent);
+  backdrop-filter: blur(14px);
+}
+
+.overlaySurface {
+  position: relative;
+  max-width: 100%;
+  max-height: 100%;
+  overflow: auto;
+  border: 1px solid var(--color-border-2);
+  border-radius: 16px;
+  background: var(--color-bg-1);
+  box-shadow: 0 30px 90px color-mix(in srgb, var(--color-text-1) 28%, transparent);
+}
+
+.overlayClose {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  z-index: 1;
+}
+
+.node[data-motion-state='active'][data-motion='fade'],
+.node[data-motion-trigger='hover'][data-motion='fade']:hover,
+.viewport[data-route-motion='fade'] .section {
+  animation-name: viu-runtime-fade;
+}
+
+.node[data-motion-state='active'][data-motion='rise'],
+.node[data-motion-trigger='hover'][data-motion='rise']:hover,
+.viewport[data-route-motion='rise'] .section {
+  animation-name: viu-runtime-rise;
+}
+
+.node[data-motion-state='active'][data-motion='scale'],
+.node[data-motion-trigger='hover'][data-motion='scale']:hover,
+.viewport[data-route-motion='scale'] .section {
+  animation-name: viu-runtime-scale;
+}
+
+.node[data-motion-state='active'][data-motion='slide-left'],
+.node[data-motion-trigger='hover'][data-motion='slide-left']:hover,
+.viewport[data-route-motion='slide-left'] .section {
+  animation-name: viu-runtime-slide-left;
+}
+
+.node[data-motion-state='active'][data-motion='slide-right'],
+.node[data-motion-trigger='hover'][data-motion='slide-right']:hover,
+.viewport[data-route-motion='slide-right'] .section {
+  animation-name: viu-runtime-slide-right;
+}
+
+.node[data-motion-state='active'][data-motion='blur-in'],
+.node[data-motion-trigger='hover'][data-motion='blur-in']:hover,
+.viewport[data-route-motion='blur-in'] .section {
+  animation-name: viu-runtime-blur-in;
+}
+
+.node[data-motion-state='active'][data-motion='reveal'],
+.node[data-motion-trigger='hover'][data-motion='reveal']:hover,
+.viewport[data-route-motion='reveal'] .section {
+  animation-name: viu-runtime-reveal;
+}
+
+@keyframes viu-runtime-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes viu-runtime-rise {
+  from {
+    opacity: 0;
+    translate: 0 28px;
+  }
+}
+
+@keyframes viu-runtime-scale {
+  from {
+    opacity: 0;
+    scale: 0.96;
+  }
+}
+
+@keyframes viu-runtime-slide-left {
+  from {
+    opacity: 0;
+    translate: 48px 0;
+  }
+}
+
+@keyframes viu-runtime-slide-right {
+  from {
+    opacity: 0;
+    translate: -48px 0;
+  }
+}
+
+@keyframes viu-runtime-blur-in {
+  from {
+    opacity: 0;
+    filter: blur(18px);
+  }
+}
+
+@keyframes viu-runtime-reveal {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+.node[data-smart-animate-state='matched'] {
+  will-change: transform, opacity;
+}
+
+.node[data-timeline-active='true'] {
+  will-change: transform, opacity, filter;
+}
+
+.runtime[data-reduced-motion='true'] *,
+.runtime[data-reduced-motion='true'] *::before,
+.runtime[data-reduced-motion='true'] *::after {
+  scroll-behavior: auto !important;
+  animation: none !important;
+  transition: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .runtime *,
+  .runtime *::before,
+  .runtime *::after {
+    scroll-behavior: auto !important;
+    animation: none !important;
+    transition: none !important;
+  }
+}

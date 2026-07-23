@@ -413,6 +413,123 @@
     "open": "開く",
     "close": "閉じる"
   },
+  "workspace": {
+    "controlCenter": "コントロールセンター",
+    "navigation": "マネージャーナビゲーション",
+    "system": "システム",
+    "todayCommand": "今日のコントロールセンター",
+    "overviewTitle": "重要なことを見極め、今日を前へ進める。",
+    "overviewSubtitle": "タスク、予定、ナレッジ、Tomny Core のライブ活動を集約して確認します。",
+    "viewAll": "すべて表示",
+    "viewCalendar": "カレンダーを開く",
+    "openCore": "Core を開く",
+    "nav": {
+      "overview": "概要",
+      "core": "Tomny Core"
+    },
+    "descriptions": {
+      "overview": "優先事項、進捗、システムのライブ活動",
+      "tasks": "作業を計画し、優先順位を付けて完了",
+      "schedule": "固定・柔軟な時間枠を調整",
+      "daily": "今日の記録をすぐに残す",
+      "learn": "つながるナレッジベースを構築",
+      "data": "文書、情報源、要約を整理",
+      "core": "ネイティブターゲット、実行、自動化を確認"
+    },
+    "metrics": {
+      "activeTasks": "進行中のタスク",
+      "overdue": "期限超過 {{count}} 件",
+      "eventsToday": "今日の予定",
+      "nextAt": "次は {{time}}",
+      "clearDay": "この後の予定なし",
+      "notes": "ノート",
+      "knowledgeBase": "ナレッジベース全体",
+      "activeRuns": "Core の実行中ジョブ"
+    },
+    "focus": {
+      "title": "フォーカスキュー",
+      "subtitle": "期限超過と高影響の作業を優先",
+      "completion": "全体の完了率",
+      "empty": "緊急の作業はありません。"
+    },
+    "timeline": {
+      "title": "今日のタイムライン",
+      "subtitle": "次の固定・柔軟な時間枠",
+      "empty": "今日のカレンダーは空です。"
+    },
+    "recent": {
+      "title": "最近のナレッジ",
+      "subtitle": "最近更新されたノートと文書",
+      "empty": "最近のノートはありません。"
+    },
+    "corePulse": {
+      "title": "Core Pulse",
+      "subtitle": "ネイティブランタイムと自動化の準備状況",
+      "targets": "利用可能なターゲット",
+      "sessions": "セッション",
+      "automations": "自動化",
+      "completion": "完了率 {{rate}}%"
+    }
+  },
+  "core": {
+    "title": "Tomny Core オペレーション",
+    "subtitle": "ランタイムの健全性、実行中の作業、ターゲット、永続的な自動化を管理するネイティブ画面です。",
+    "nativeRuntime": "ネイティブランタイム",
+    "loading": "Tomny Core に接続中…",
+    "unavailableTitle": "Tomny Core が応答していません",
+    "unavailableDescription": "マネージャーデータは引き続き利用できます。デスクトップランタイムを再起動するか、Core の起動完了後に再試行してください。",
+    "status": {
+      "loading": "Core 起動中",
+      "offline": "Core オフライン",
+      "healthy": "Core 正常",
+      "degraded": "Core 低下",
+      "unhealthy": "Core 異常"
+    },
+    "actions": {
+      "refresh": "更新",
+      "cancel": "実行をキャンセル",
+      "runNow": "今すぐ実行",
+      "runSuccess": "自動化を開始しました",
+      "cancelSuccess": "実行をキャンセルしました",
+      "failed": "Core 操作に失敗しました"
+    },
+    "metrics": {
+      "health": "ランタイム健全性",
+      "checked": "{{count}} 件のチェック",
+      "targets": "利用可能なターゲット",
+      "ofTotal": "検出 {{total}} 件中",
+      "activeRuns": "実行中",
+      "sessions": "{{count}} セッション",
+      "automations": "有効な自動化",
+      "scheduledTotal": "合計 {{count}} スケジュール"
+    },
+    "health": {
+      "title": "ランタイム診断",
+      "subtitle": "ヘルスチェックと実行信頼性",
+      "completionRate": "完了率",
+      "noReport": "診断レポートはまだありません。"
+    },
+    "runs": {
+      "title": "実行中",
+      "subtitle": "新しい Core で現在実行されている作業",
+      "empty": "実行中の Core ジョブはありません。",
+      "started": "{{time}} に開始"
+    },
+    "automations": {
+      "title": "永続的な自動化",
+      "subtitle": "再試行とライフサイクル状態を持つネイティブスケジュール",
+      "empty": "Core 自動化はまだありません。",
+      "enabled": "有効",
+      "disabled": "無効",
+      "manual": "手動",
+      "intervalMinutes": "{{count}} 分ごと"
+    },
+    "targets": {
+      "title": "ランタイムターゲット",
+      "subtitle": "組み込み、ACP、CLI、リモート実行アダプター",
+      "models": "{{count}} モデル"
+    }
+  },
   "quickAdd": {
     "placeholder": "タスクを追加 —「レポート 明日 5pm !high #work」",
     "hint": "ヒント：!high・#タグ・「明日 5pm」/「月 9am」を自動認識します。",

@@ -18,7 +18,7 @@
  *
  * The Manager AI calls the user's configured model. Rather than binding a fixed
  * model id at construction, the AI helper here resolves the current model on
- * each call from `GET /api/providers` (mirrors `company/companyGenerator.ts`):
+ * each call from the native Tomni provider catalog (mirrors `company/companyGenerator.ts`):
  * the underlying `createProviderChat` then issues the request and falls back to
  * the first usable provider/model when the resolved id is gone. When nothing is
  * configured the helper throws the "no usable model" sentinel, which the bridge
@@ -27,7 +27,7 @@
  * Process boundary: Main-process (Node.js) module. No DOM APIs.
  */
 
-import { httpRequest } from '@/common/adapter/httpBridge';
+import { listReadyProviders } from '@process/services/tomnyProviderBridge';
 import type { IProvider } from '@/common/config/storage';
 import { showNotification } from '@process/bridge/notificationBridge';
 import { createProviderChat } from '@process/browser/providerChat';
@@ -48,7 +48,7 @@ const isUsable = (p: IProvider): boolean =>
 
 /** Resolve the user's current default model id (first enabled model of a usable provider). */
 const resolveModelId = async (): Promise<string> => {
-  const providers = (await httpRequest<IProvider[]>('GET', '/api/providers').catch(() => [] as IProvider[])) || [];
+  const providers = (await listReadyProviders().catch(() => [] as IProvider[])) || [];
   for (const provider of providers.filter(isUsable)) {
     const model = provider.models.find((m) => provider.model_enabled?.[m] !== false) ?? provider.models[0];
     if (model) return model;

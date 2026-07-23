@@ -9,7 +9,11 @@ import type {
   AgentMeshSendRequest,
   AgentMeshStopRequest,
 } from '@process/agentRuntime/agentMesh/ipc';
-import type { AgentMeshSnapshot } from '@process/agentRuntime/agentMesh/service';
+import type {
+  AgentMeshConcurrencyPolicy,
+  AgentMeshOverview,
+  AgentMeshSnapshot,
+} from '@process/agentRuntime/agentMesh/service';
 import type { AgentWorklogEntry } from '@process/agentRuntime/agentMesh/controller';
 import type {
   AgentId,
@@ -23,7 +27,10 @@ import type {
 const CHANNELS = {
   create: 'agent-mesh.create',
   sessions: 'agent-mesh.sessions',
+  overview: 'agent-mesh.overview',
   snapshot: 'agent-mesh.snapshot',
+  concurrencyGet: 'agent-mesh.concurrency-get',
+  concurrencySet: 'agent-mesh.concurrency-set',
   inspect: 'agent-mesh.inspect',
   worklog: 'agent-mesh.worklog',
   send: 'agent-mesh.send',
@@ -65,11 +72,17 @@ const invokeWithTimeout = <T>(call: () => Promise<T>): Promise<T> =>
 const channels = {
   create: bridge.buildProvider<AgentMeshResult<string>, { sessionId: string }>(CHANNELS.create),
   sessions: bridge.buildProvider<string[], void>(CHANNELS.sessions),
+  overview: bridge.buildProvider<AgentMeshResult<AgentMeshOverview>, { sessionId: string }>(CHANNELS.overview),
   snapshot: bridge.buildProvider<AgentMeshResult<AgentMeshSnapshot>, { sessionId: string }>(CHANNELS.snapshot),
-  inspect: bridge.buildProvider<AgentMeshResult<AgentInspection>, AgentMeshInspectRequest>(CHANNELS.inspect),
-  worklog: bridge.buildProvider<AgentMeshResult<AgentWorklogEntry[]>, { sessionId: string; agentId?: AgentId }>(
-    CHANNELS.worklog
+  concurrencyGet: bridge.buildProvider<AgentMeshResult<AgentMeshConcurrencyPolicy>, void>(CHANNELS.concurrencyGet),
+  concurrencySet: bridge.buildProvider<AgentMeshResult<AgentMeshConcurrencyPolicy>, { maxConcurrent: number }>(
+    CHANNELS.concurrencySet
   ),
+  inspect: bridge.buildProvider<AgentMeshResult<AgentInspection>, AgentMeshInspectRequest>(CHANNELS.inspect),
+  worklog: bridge.buildProvider<
+    AgentMeshResult<AgentWorklogEntry[]>,
+    { sessionId: string; agentId?: AgentId; limit?: number }
+  >(CHANNELS.worklog),
   send: bridge.buildProvider<AgentMeshResult<AgentMessage>, AgentMeshSendRequest>(CHANNELS.send),
   queueUpdate: bridge.buildProvider<AgentMeshResult<AgentMessage | undefined>, AgentMeshQueueUpdateRequest>(
     CHANNELS.queueUpdate
@@ -90,12 +103,18 @@ export const agentMeshClient = {
   create: (sessionId: string): Promise<AgentMeshResult<string>> =>
     invokeWithTimeout(() => channels.create.invoke({ sessionId })),
   sessions: (): Promise<string[]> => invokeWithTimeout(() => channels.sessions.invoke()),
+  overview: (sessionId: string): Promise<AgentMeshResult<AgentMeshOverview>> =>
+    invokeWithTimeout(() => channels.overview.invoke({ sessionId })),
   snapshot: (sessionId: string): Promise<AgentMeshResult<AgentMeshSnapshot>> =>
     invokeWithTimeout(() => channels.snapshot.invoke({ sessionId })),
+  getConcurrencyPolicy: (): Promise<AgentMeshResult<AgentMeshConcurrencyPolicy>> =>
+    invokeWithTimeout(() => channels.concurrencyGet.invoke()),
+  setConcurrencyPolicy: (maxConcurrent: number): Promise<AgentMeshResult<AgentMeshConcurrencyPolicy>> =>
+    invokeWithTimeout(() => channels.concurrencySet.invoke({ maxConcurrent })),
   inspect: (request: AgentMeshInspectRequest): Promise<AgentMeshResult<AgentInspection>> =>
     invokeWithTimeout(() => channels.inspect.invoke(request)),
-  worklog: (sessionId: string, agentId?: AgentId): Promise<AgentMeshResult<AgentWorklogEntry[]>> =>
-    invokeWithTimeout(() => channels.worklog.invoke({ sessionId, agentId })),
+  worklog: (sessionId: string, agentId?: AgentId, limit = 200): Promise<AgentMeshResult<AgentWorklogEntry[]>> =>
+    invokeWithTimeout(() => channels.worklog.invoke({ sessionId, agentId, limit })),
   send: (request: AgentMeshSendRequest): Promise<AgentMeshResult<AgentMessage>> =>
     invokeWithTimeout(() => channels.send.invoke(request)),
   updateQueue: (request: AgentMeshQueueUpdateRequest): Promise<AgentMeshResult<AgentMessage | undefined>> =>

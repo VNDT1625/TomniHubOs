@@ -9,7 +9,7 @@ import { AIONUI_FILES_MARKER } from '@/common/config/constants';
 import { useConversationContextSafe } from '@/renderer/hooks/context/ConversationContext';
 import { useLayoutContext } from '@/renderer/hooks/context/LayoutContext';
 import { iconColors } from '@/renderer/styles/colors';
-import { Alert, Button, Message, Tooltip } from '@arco-design/web-react';
+import { Alert, Button, Input, Message, Tag, Tooltip } from '@arco-design/web-react';
 import { Copy, PreviewOpen } from '@icon-park/react';
 import classNames from 'classnames';
 import React, { useEffect, useMemo, useState } from 'react';
@@ -24,6 +24,7 @@ import { stripTokenWatermarkNotice } from '@/common/chat/chatLib';
 import { stripSkillSuggest, hasSkillSuggest } from '@renderer/utils/chat/skillSuggestParser';
 import { getSecretMarkers, renderSecretMarkers } from '@renderer/utils/chat/secretMarkers';
 import { ideClient } from '@/renderer/pages/studio/ide/ideClient';
+import { usePreviewContext } from '@/renderer/pages/conversation/Preview';
 
 /**
  * Format a timestamp for message display.
@@ -96,10 +97,229 @@ const useFormatContent = (content: string) => {
     }
   }, [content]);
 };
+const BUILD0_INPUT_OPEN = '<build0_input>';
+const BUILD0_INPUT_CLOSE = '</build0_input>';
+
+export type Build0InputOption = {
+  label: string;
+  value: string;
+  description?: string;
+  recommended?: boolean;
+};
+
+export type Build0InputQuestion = {
+  id: string;
+  label: string;
+  type: 'single' | 'multi' | 'text';
+  required: boolean;
+  placeholder?: string;
+  options: Build0InputOption[];
+};
+
+export type Build0InputRequest = {
+  title: string;
+  description?: string;
+  questions: Build0InputQuestion[];
+};
+
+type ParsedBuild0Input = {
+  text: string;
+  request: Build0InputRequest;
+};
+
+const objectValue = (value: unknown): Record<string, unknown> | null =>
+  typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+
+const stringValue = (value: unknown): string | undefined =>
+  typeof value === 'string' && value.trim() ? value.trim() : undefined;
+
+const parseBuild0Option = (value: unknown): Build0InputOption | null => {
+  const record = objectValue(value);
+  const label = stringValue(record?.label);
+  const optionValue = stringValue(record?.value);
+  if (!label || !optionValue) return null;
+  return {
+    label,
+    value: optionValue,
+    ...(stringValue(record?.description) ? { description: stringValue(record?.description) } : {}),
+    ...(record?.recommended === true ? { recommended: true } : {}),
+  };
+};
+
+const parseBuild0Question = (value: unknown): Build0InputQuestion | null => {
+  const record = objectValue(value);
+  const id = stringValue(record?.id);
+  const label = stringValue(record?.label);
+  const type = record?.type;
+  if (!id || !label || (type !== 'single' && type !== 'multi' && type !== 'text')) return null;
+  const options = Array.isArray(record?.options)
+    ? record.options
+        .map(parseBuild0Option)
+        .filter((option): option is Build0InputOption => Boolean(option))
+        .slice(0, 8)
+    : [];
+  if (type !== 'text' && options.length === 0) return null;
+  return {
+    id,
+    label,
+    type,
+    required: record?.required !== false,
+    ...(stringValue(record?.placeholder) ? { placeholder: stringValue(record?.placeholder) } : {}),
+    options,
+  };
+};
+
+/** Parse and remove one complete Build0 structured-input marker from an assistant response. */
+export const parseBuild0Input = (content: string): ParsedBuild0Input | null => {
+  const start = content.indexOf(BUILD0_INPUT_OPEN);
+  if (start < 0) return null;
+  const end = content.indexOf(BUILD0_INPUT_CLOSE, start + BUILD0_INPUT_OPEN.length);
+  if (end < 0) return null;
+
+  try {
+    const payload = JSON.parse(content.slice(start + BUILD0_INPUT_OPEN.length, end)) as unknown;
+    const record = objectValue(payload);
+    const title = stringValue(record?.title);
+    const questions = Array.isArray(record?.questions)
+      ? record.questions
+          .map(parseBuild0Question)
+          .filter((question): question is Build0InputQuestion => Boolean(question))
+          .slice(0, 6)
+      : [];
+    if (!title || questions.length === 0) return null;
+    return {
+      text: (content.slice(0, start) + content.slice(end + BUILD0_INPUT_CLOSE.length)).trim(),
+      request: {
+        title,
+        ...(stringValue(record?.description) ? { description: stringValue(record?.description) } : {}),
+        questions,
+      },
+    };
+  } catch {
+    return null;
+  }
+};
+
+type Build0Answer = string | string[];
+
+const Build0StructuredInput: React.FC<{ request: Build0InputRequest }> = ({ request }) => {
+  const { t } = useTranslation();
+  const { addToSendBox } = usePreviewContext();
+  const [answers, setAnswers] = useState<Record<string, Build0Answer>>({});
+
+  const setSingleAnswer = (id: string, value: string): void => {
+    setAnswers((current) => ({ ...current, [id]: value }));
+  };
+
+  const toggleMultiAnswer = (id: string, value: string): void => {
+    setAnswers((current) => {
+      const selected = Array.isArray(current[id]) ? current[id] : [];
+      return {
+        ...current,
+        [id]: selected.includes(value) ? selected.filter((item) => item !== value) : [...selected, value],
+      };
+    });
+  };
+
+  const isAnswered = (question: Build0InputQuestion): boolean => {
+    const answer = answers[question.id];
+    return Array.isArray(answer) ? answer.length > 0 : Boolean(answer?.trim());
+  };
+  const canSubmit = request.questions.every((question) => !question.required || isAnswered(question));
+
+  const submit = (): void => {
+    if (!canSubmit) return;
+    const lines = request.questions.flatMap((question) => {
+      const answer = answers[question.id];
+      if (!answer || (Array.isArray(answer) && answer.length === 0)) return [];
+      const values = Array.isArray(answer) ? answer : [answer];
+      const labels = values.map((value) => question.options.find((option) => option.value === value)?.label ?? value);
+      return ['- ' + question.label + ': ' + labels.join(', ')];
+    });
+    addToSendBox([request.title, ...lines].join('\n'));
+  };
+
+  return (
+    <div
+      className='mt-12px w-full max-w-780px rd-16px border border-b-1 bg-bg-2 p-14px shadow-sm'
+      data-testid='build0-structured-input'
+    >
+      <div className='flex items-start justify-between gap-10px'>
+        <div className='min-w-0'>
+          <div className='text-14px font-700 text-t-primary'>{request.title}</div>
+          {request.description ? (
+            <div className='mt-3px text-12px leading-relaxed text-t-secondary'>{request.description}</div>
+          ) : null}
+        </div>
+        <Tag color='arcoblue'>Build0</Tag>
+      </div>
+
+      <div className='mt-14px flex flex-col gap-14px'>
+        {request.questions.map((question) => {
+          const answer = answers[question.id];
+          return (
+            <div key={question.id} className='flex flex-col gap-8px'>
+              <div className='text-12px font-650 text-t-primary'>
+                {question.label}
+                {question.required ? <span className='ml-3px text-danger-6'>*</span> : null}
+              </div>
+              {question.type === 'text' ? (
+                <Input.TextArea
+                  value={typeof answer === 'string' ? answer : ''}
+                  placeholder={question.placeholder}
+                  autoSize={{ minRows: 2, maxRows: 5 }}
+                  onChange={(value) => setSingleAnswer(question.id, value)}
+                />
+              ) : (
+                <div className='grid grid-cols-1 gap-7px sm:grid-cols-2'>
+                  {question.options.map((option) => {
+                    const selected = Array.isArray(answer) ? answer.includes(option.value) : answer === option.value;
+                    return (
+                      <Button
+                        key={option.value}
+                        type={selected ? 'primary' : 'secondary'}
+                        className='!h-auto !min-h-42px !justify-start !whitespace-normal !text-left'
+                        onClick={() =>
+                          question.type === 'multi'
+                            ? toggleMultiAnswer(question.id, option.value)
+                            : setSingleAnswer(question.id, option.value)
+                        }
+                      >
+                        <span className='flex flex-col items-start py-3px'>
+                          <span className='font-600'>
+                            {option.label}
+                            {option.recommended ? (
+                              <Tag size='small' color='green' className='ml-6px'>
+                                {t('ide.build0.structured.recommended')}
+                              </Tag>
+                            ) : null}
+                          </span>
+                          {option.description ? (
+                            <span className='mt-2px text-11px font-400 opacity-80'>{option.description}</span>
+                          ) : null}
+                        </span>
+                      </Button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <div className='mt-14px flex justify-end'>
+        <Button type='primary' disabled={!canSubmit} onClick={submit}>
+          {t('common.confirm')}
+        </Button>
+      </div>
+    </div>
+  );
+};
 
 const MessageText: React.FC<{ message: IMessageText }> = ({ message }) => {
   // Filter think tags from content before rendering
-  // 在渲染前过滤 think 标签
+  // Filter think tags before rendering.
   const contentToRender = useMemo(() => {
     let content = message.content.content;
     if (typeof content === 'string') {
@@ -142,7 +362,12 @@ const MessageText: React.FC<{ message: IMessageText }> = ({ message }) => {
       renderSecretMarkers(text, {}, unavailableSecrets, (alias) => t('ide.memory.secret.chatUnavailable', { alias })),
     [locallyRevealedText, t, text, unavailableSecrets]
   );
-  const { data, json } = useFormatContent(renderedText);
+  const build0Input = useMemo(
+    () => (isUserMessage ? null : parseBuild0Input(renderedText)),
+    [isUserMessage, renderedText]
+  );
+  const displayText = build0Input?.text ?? renderedText;
+  const { data, json } = useFormatContent(displayText);
 
   useEffect(() => {
     setLocallyRevealedText(null);
@@ -154,14 +379,14 @@ const MessageText: React.FC<{ message: IMessageText }> = ({ message }) => {
     [conversationContext?.workspace, files]
   );
 
-  // 过滤空内容，避免渲染空DOM
+  // Skip empty content to avoid rendering an empty DOM node.
   if (!message.content.content || (typeof message.content.content === 'string' && !message.content.content.trim())) {
     return null;
   }
 
   const handleCopy = () => {
     // Copy the persisted opaque marker, never a value revealed only in this local view.
-    const baseText = shouldRenderPlainText ? text : json ? JSON.stringify(data, null, 2) : text;
+    const baseText = shouldRenderPlainText ? text : json ? JSON.stringify(data, null, 2) : displayText;
     const fileList = files.length ? `Files:\n${files.map((path) => `- ${path}`).join('\n')}\n\n` : '';
     const textToCopy = fileList + baseText;
     copyText(textToCopy)
@@ -277,7 +502,7 @@ const MessageText: React.FC<{ message: IMessageText }> = ({ message }) => {
                 : undefined),
           }}
         >
-          {/* JSON 内容使用折叠组件 Use CollapsibleContent for JSON content */}
+          {/* Use CollapsibleContent for JSON content. */}
           {shouldRenderPlainText ? (
             <div className='whitespace-pre-wrap break-words' data-testid='message-text-content'>
               {text}
@@ -295,9 +520,10 @@ const MessageText: React.FC<{ message: IMessageText }> = ({ message }) => {
               <MarkdownView codeStyle={CODE_STYLE}>{data}</MarkdownView>
             </div>
           )}
+          {build0Input ? <Build0StructuredInput request={build0Input.request} /> : null}
         </div>
         {/* Hover-revealed copy + timestamp row. Mobile has no hover affordance,
-            so we drop the row entirely — system-level long-press still copies. */}
+            so we drop the row entirely; system-level long-press still copies. */}
         {!isMobile && (
           <div
             className={classNames('h-32px flex items-center mt-4px gap-8px', {

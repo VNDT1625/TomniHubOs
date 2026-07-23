@@ -154,6 +154,44 @@ describe('createAutomationStore', () => {
     expect(withNodes?.nodes[0].kind).toBe('action.log');
   });
 
+  it('preserves dynamic execution policy, workflow knowledge, and newer node kinds after reload', async () => {
+    const dynamic: Workflow = {
+      id: 'dynamic-1',
+      name: 'Dynamic flow',
+      knowledge: {
+        goal: 'Summarise GitHub Trending',
+        security: { preferTrustedConnectors: true, websiteLogin: 'forbid' },
+        tokenPolicy: { maxAgentSteps: 2, maxEstimatedTokens: 1200 },
+      },
+      nodes: [
+        {
+          id: 'fetch',
+          kind: 'action.n8n',
+          name: 'Fetch data',
+          config: { webhookUrl: 'https://example.test/hook' },
+          execution: { mode: 'hybrid', access: 'api', estimatedTokens: 200 },
+        },
+        {
+          id: 'approve',
+          kind: 'control.approval',
+          name: 'Approve publish',
+          config: { message: 'Publish?' },
+        },
+      ],
+      enabled: true,
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    const { fs } = createMemoryFs({ [FILE]: JSON.stringify([dynamic]) });
+    const store = createAutomationStore({ dir: DIR, fs, now: () => 2, newId: makeIds() });
+
+    const loaded = await store.list();
+
+    expect(loaded[0].knowledge).toEqual(dynamic.knowledge);
+    expect(loaded[0].nodes.map((item) => item.kind)).toEqual(['action.n8n', 'control.approval']);
+    expect(loaded[0].nodes[0].execution).toEqual(dynamic.nodes[0].execution);
+  });
+
   it('fires onChange listeners after a mutation and stops after unsubscribe', async () => {
     const { fs } = createMemoryFs();
     const store = createAutomationStore({ dir: DIR, fs, now: () => 1, newId: makeIds() });

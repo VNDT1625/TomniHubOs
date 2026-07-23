@@ -22,6 +22,7 @@ import {
   Code,
   People,
   Lightning,
+  Magic,
   VideoTwo,
   MusicOne,
 } from '@icon-park/react';
@@ -43,6 +44,8 @@ type StudioDashboardProps = {
   onOpenFile: (filePath: string) => void;
   /** Called when the user clicks the "IDE" entry. */
   onOpenIde: () => void;
+  /** Called when the user opens the Viu Visual UI workspace. */
+  onOpenViu: () => void;
   /** Called when the user joins a shared session as a peer. */
   onJoinSession: (join: CollabJoinData, joinCode: string) => void;
   /** Called when the user opens the Automation (workflow) app. */
@@ -56,6 +59,7 @@ type StudioDashboardProps = {
 const StudioDashboard: React.FC<StudioDashboardProps> = ({
   onOpenFile,
   onOpenIde,
+  onOpenViu,
   onJoinSession,
   onAutomation,
   onMakeVideo,
@@ -116,6 +120,16 @@ const StudioDashboard: React.FC<StudioDashboardProps> = ({
           onClick={() => setCreateOpen(true)}
         >
           {t('studio.create.action')}
+        </Button>
+        <Button
+          long
+          size='large'
+          type='outline'
+          icon={<Magic theme='outline' size={17} />}
+          className='!rd-10px !h-44px !font-[600] !justify-start !text-primary !border-primary-light-3'
+          onClick={onOpenViu}
+        >
+          {t('ide.viu.open')}
         </Button>
         <button
           type='button'

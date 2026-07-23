@@ -151,7 +151,7 @@ function hasBootstrapCliAgent(agents: AgentMetadata[], entry: BootstrapCliAgent)
 
 function normalizeAgentDisplayName(agent: AgentMetadata): AgentMetadata {
   if (agent.agent_type === 'aionrs' || agent.backend === 'aionrs') {
-    return { ...agent, name: 'Tomni Agentic' };
+    return { ...agent, name: 'Tomny Agentic' };
   }
   return agent;
 }

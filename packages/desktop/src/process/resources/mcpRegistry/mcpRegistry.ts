@@ -4,16 +4,23 @@
  * backend.
  */
 import { randomUUID } from 'node:crypto';
-import type { IMcpServer } from '@/common/config/storage';
+import type { IMcpServer, IMcpTool } from '@/common/config/storage';
 
 export type McpRegistryStore = {
   get(key: 'mcp.config'): Promise<IMcpServer[] | undefined>;
-  set(key: 'mcp.config', value: IMcpServer[]): Promise<void>;
+  set(key: 'mcp.config', value: IMcpServer[]): Promise<unknown>;
 };
 
 export type McpServerDraft = Pick<IMcpServer, 'name' | 'description' | 'transport' | 'original_json' | 'builtin'>;
 
 export type McpServerImport = Partial<IMcpServer> & Pick<IMcpServer, 'name' | 'transport'>;
+
+export type McpTestSnapshot = {
+  success: boolean;
+  tools?: IMcpTool[];
+  error?: string;
+  testedAt?: number;
+};
 
 const normalizeName = (name: string): string => name.trim();
 
@@ -92,6 +99,24 @@ export class McpRegistry {
     });
   }
 
+  recordTest(id: string, result: McpTestSnapshot): Promise<IMcpServer> {
+    return this.mutate((servers) => {
+      const index = servers.findIndex((server) => server.id === id);
+      if (index < 0) throw new Error(`MCP server ${id} was not found.`);
+      const testedAt = result.testedAt ?? this.now();
+      const next: IMcpServer = {
+        ...servers[index],
+        last_test_status: result.success ? 'connected' : 'error',
+        last_test_at: testedAt,
+        ...(result.success ? { last_connected: testedAt, tools: result.tools ?? [], last_test_error: undefined } : {}),
+        ...(!result.success ? { last_test_error: result.error?.slice(0, 2_000) || 'MCP connection test failed.' } : {}),
+        updated_at: this.now(),
+      };
+      servers[index] = next;
+      return cloneServer(next);
+    });
+  }
+
   importMany(drafts: McpServerImport[]): Promise<IMcpServer[]> {
     return this.mutate((servers) => {
       const byName = new Map(servers.map((server) => [normalizeName(server.name).toLowerCase(), server]));
@@ -126,8 +151,8 @@ export class McpRegistry {
       return value;
     });
     this.writeQueue = result.then(
-      () => undefined,
-      () => undefined
+      (): void => undefined,
+      (): void => undefined
     );
     return result;
   }

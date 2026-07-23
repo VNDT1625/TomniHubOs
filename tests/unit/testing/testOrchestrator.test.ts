@@ -262,4 +262,28 @@ describe('testOrchestrator — session lifecycle', () => {
     expect(session.reportPath).toBe(`/r/${session.id}.md`);
     expect(acct.held.size).toBe(0);
   });
+
+  it('copies an added image into session artifacts and regenerates the markdown report', async () => {
+    const acct = createAccountingCoordinator(2);
+    const writtenReports: string[] = [];
+    const orchestrator = createTestOrchestrator({
+      displayManager: fakeDisplayManager(),
+      targets: [fakeTarget('web')],
+      scriptDriver: okDriver,
+      computerUseDriver: okDriver,
+      recorder: fakeRecorder(),
+      coordinator: acct.coordinator,
+      writeReport: async (id, report) => {
+        writtenReports.push(report.markdown);
+        return `/r/${id}/report.md`;
+      },
+      importReportImage: async (id) => `/r/${id}/attachments/evidence.png`,
+    });
+
+    const session = await orchestrator.run(scenario('web'));
+    const updated = await orchestrator.addReportImage?.(session.id, 's1', 'C:/captures/evidence.png');
+
+    expect(updated?.results[0].screenshots).toContain(`/r/${session.id}/attachments/evidence.png`);
+    expect(writtenReports.at(-1)).toContain(`/r/${session.id}/attachments/evidence.png`);
+  });
 });

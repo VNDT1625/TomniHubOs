@@ -66,5 +66,21 @@
     "yesAlwaysAllowTool": "Evet, \"{{serverName}}\" sunucusundan \"{{toolName}}\" aracına her zaman izin ver",
     "yesAlwaysAllowServer": "Evet, \"{{serverName}}\" sunucusundaki tüm araçlara her zaman izin ver",
     "no": "Hayır (esc)"
+  },
+  "steps": {
+    "title": "{{count}} işlem adımı",
+    "live": "Canlı",
+    "status": {
+      "pending": "Bekliyor",
+      "running": "Çalışıyor",
+      "completed": "Tamamlandı",
+      "error": "Başarısız",
+      "canceled": "İptal edildi"
+    },
+    "loadingDetail": "Adım ayrıntıları yükleniyor...",
+    "loadDetailFailed": "Adım ayrıntıları yüklenemedi",
+    "input": "Girdi",
+    "output": "Çıktı",
+    "viewFull": "Tümünü göster"
   }
 }

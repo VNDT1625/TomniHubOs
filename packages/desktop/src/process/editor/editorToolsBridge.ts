@@ -35,7 +35,35 @@ export const EDITOR_TOOLS_CHANNELS = {
 } as const;
 
 /** Document family the tools branch on (mirrors `OfficeDocKind`). */
+import type { ObjectAnimationSpec } from '@/common/presentationDesign';
+
 export type EditorToolDocKind = 'word' | 'cell' | 'slide';
+
+/** One fail-closed, end-to-end Office capability exposed to an agent. */
+export type EditorToolCapabilityStatus = {
+  /** True only when the app currently has a callable implementation. */
+  supported: boolean;
+  /** Human-readable evidence or the concrete reason the capability is unavailable. */
+  reason: string;
+};
+
+/** Live Office capability snapshot for one file. */
+export type EditorToolCapabilities = {
+  /** Path requested by the caller (the connector registry may resolve it tolerantly). */
+  filePath: string;
+  /** Document family when an editor state is registered. */
+  kind: EditorToolDocKind | null;
+  /** Whether the editor reported that the document is ready. */
+  editorReady: boolean;
+  /** ONLYOFFICE `createConnector()` is present and returned a live connector. */
+  automationApi: EditorToolCapabilityStatus;
+  /** Purposeful per-object animation apply/review support in the agent tool surface. */
+  objectAnimation: EditorToolCapabilityStatus;
+  /** Programmatic slide-show playback/control support in the app. */
+  slideShowControl: EditorToolCapabilityStatus;
+  /** Slide-show recording plus agent-visible playback-review support. */
+  recording: EditorToolCapabilityStatus;
+};
 
 /** Character/paragraph formatting (mirrors `TextFormat` in onlyOfficeConnector). */
 export type EditorToolTextFormat = {
@@ -60,6 +88,7 @@ export type EditorToolTextFormat = {
  * code. The renderer validates + dispatches each action to `onlyOfficeConnector`.
  */
 export type EditorToolAction =
+  | { tool: 'get_capabilities' }
   | { tool: 'read_document' }
   | { tool: 'replace_all'; text: string }
   | { tool: 'search_replace'; search: string; replace: string }
@@ -74,7 +103,19 @@ export type EditorToolAction =
   | { tool: 'set_cells'; start: string; values: Array<Array<string | number>>; sheet?: string }
   | { tool: 'create_premium_doc'; plan: unknown }
   | { tool: 'create_premium_deck'; plan: unknown }
+  | { tool: 'add_premium_slide'; plan: unknown }
+  | { tool: 'structure_report'; headings: Array<{ text: string; level: number }>; insertToc: boolean }
+  | { tool: 'add_speaker_notes'; slideIndex: number; text: string }
+  | { tool: 'apply_slide_transitions'; effect: 'fade' | 'push' | 'wipe' | 'split'; speed: 'slow' | 'medium' | 'fast' }
+  | {
+      tool: 'apply_object_animations';
+      animations: ObjectAnimationSpec[];
+      /** Clears only the main sequence on touched slides. */
+      replaceExistingMainSequence: boolean;
+    }
+  | { tool: 'review_object_animations'; expectedAnimations?: ObjectAnimationSpec[] }
   | { tool: 'review_premium_quality' }
+  | { tool: 'open_visual_review' }
   | { tool: 'run_office_api'; code: string };
 
 /** Request for {@link EDITOR_TOOLS_CHANNELS.run}. */
@@ -91,5 +132,11 @@ export type EditorToolRunRequest = {
  * model; `kind` reports the document family when known.
  */
 export type EditorToolRunResult =
-  | { ok: true; observation: string; kind: EditorToolDocKind | null }
+  | {
+      ok: true;
+      observation: string;
+      kind: EditorToolDocKind | null;
+      /** Present only for `get_capabilities`; MCP rejects a missing snapshot. */
+      capabilities?: EditorToolCapabilities;
+    }
   | { ok: false; error: string; reason: 'not-ready' | 'error' };

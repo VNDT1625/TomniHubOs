@@ -13,6 +13,7 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import * as path from 'node:path';
+import { parse as parseToml } from 'smol-toml';
 import { applyConnectorPlan, type Router9ApplierDeps } from '@process/router9/router9Applier';
 import type { Router9Endpoint } from '@/common/router9';
 
@@ -48,24 +49,26 @@ const makeDeps = (
 };
 
 describe('applyConnectorPlan — claude-code (configFile, deepMerge)', () => {
-  it('writes ~/.claude/config.json with home expanded and anthropic keys', async () => {
+  it('writes ~/.claude/settings.json with home expanded and gateway env', async () => {
     const { deps, files } = makeDeps();
     const res = await applyConnectorPlan('claude-code', endpoint, deps);
 
-    const target = norm('/home/me/.claude/config.json');
+    const target = norm('/home/me/.claude/settings.json');
     expect(res.files).toHaveLength(1);
     expect(res.files[0]).toMatchObject({ path: target, status: 'written' });
     expect(res.files[0].backupPath).toBeUndefined(); // no prior file → no backup
 
     const written = JSON.parse(files.get(target) as string);
-    expect(written.anthropic_api_base).toBe('http://127.0.0.1:20128/v1');
-    expect(written.anthropic_api_key).toBe('sk_test');
+    expect(written.env.ANTHROPIC_BASE_URL).toBe('http://127.0.0.1:20128');
+    expect(written.env.ANTHROPIC_AUTH_TOKEN).toBe('sk_test');
+    expect(written.model).toBe('kr/claude-sonnet-4.5');
+    expect(written.availableModels).toEqual(['kr/claude-sonnet-4.5']);
   });
 
   it('backs up + deep-merges an existing config (preserves unrelated keys)', async () => {
-    const target = norm('/home/me/.claude/config.json');
+    const target = norm('/home/me/.claude/settings.json');
     const { deps, files, backups } = makeDeps({
-      [target]: JSON.stringify({ theme: 'dark', anthropic_api_key: 'old' }),
+      [target]: JSON.stringify({ theme: 'dark', env: { KEEP_ME: 'yes', ANTHROPIC_AUTH_TOKEN: 'old' } }),
     });
 
     const res = await applyConnectorPlan('claude-code', endpoint, deps);
@@ -76,24 +79,35 @@ describe('applyConnectorPlan — claude-code (configFile, deepMerge)', () => {
     const written = JSON.parse(files.get(target) as string);
     expect(written).toEqual({
       theme: 'dark',
-      anthropic_api_base: 'http://127.0.0.1:20128/v1',
-      anthropic_api_key: 'sk_test',
+      model: 'kr/claude-sonnet-4.5',
+      availableModels: ['kr/claude-sonnet-4.5'],
+      env: {
+        KEEP_ME: 'yes',
+        ANTHROPIC_BASE_URL: 'http://127.0.0.1:20128',
+        ANTHROPIC_AUTH_TOKEN: 'sk_test',
+        ANTHROPIC_MODEL: 'kr/claude-sonnet-4.5',
+      },
     });
   });
 });
 
-describe('applyConnectorPlan — codex (env mechanism)', () => {
-  it('writes no files and returns env vars as notes', async () => {
+describe('applyConnectorPlan — codex (configFile mechanism)', () => {
+  it('writes and merges a durable custom Responses provider', async () => {
     const { deps, files } = makeDeps();
     const res = await applyConnectorPlan('codex', endpoint, deps);
 
-    expect(res.files).toHaveLength(0);
-    expect(files.size).toBe(0);
-    expect(res.notes).toEqual([
-      'OPENAI_BASE_URL=http://127.0.0.1:20128',
-      'OPENAI_API_KEY=sk_test',
-      'OPENAI_MODEL=kr/claude-sonnet-4.5',
-    ]);
+    const target = norm('/home/me/.codex/config.toml');
+    expect(res.files).toHaveLength(1);
+    expect(res.files[0]).toMatchObject({ path: target, status: 'written' });
+    expect(res.notes).toEqual([]);
+    const written = parseToml(files.get(target) as string) as Record<string, unknown>;
+    expect(written.model_provider).toBe('tomni_gateway');
+    expect(written.model).toBe('kr/claude-sonnet-4.5');
+    expect((written.model_providers as Record<string, unknown>).tomni_gateway).toMatchObject({
+      base_url: 'http://127.0.0.1:20128/v1',
+      wire_api: 'responses',
+      experimental_bearer_token: 'sk_test',
+    });
   });
 });
 

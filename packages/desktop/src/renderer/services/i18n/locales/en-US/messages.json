@@ -66,5 +66,21 @@
     "yesAlwaysAllowTool": "Yes, always allow tool \"{{toolName}}\" from server \"{{serverName}}\"",
     "yesAlwaysAllowServer": "Yes, always allow all tools from server \"{{serverName}}\"",
     "no": "No (esc)"
+  },
+  "steps": {
+    "title": "{{count}} action steps",
+    "live": "Live",
+    "status": {
+      "pending": "Pending",
+      "running": "Running",
+      "completed": "Done",
+      "error": "Failed",
+      "canceled": "Canceled"
+    },
+    "loadingDetail": "Loading step details...",
+    "loadDetailFailed": "Failed to load step details",
+    "input": "Input",
+    "output": "Output",
+    "viewFull": "View full"
   }
 }

@@ -42,10 +42,13 @@ describe('isAllowedIdeTool', () => {
     expect(isAllowedIdeTool('ide_quick_test_cancel')).toBe(true);
   });
 
-  it('allows MTUI, team, and database gateway tools', () => {
+  it('allows MTUI, coordination, team, and database gateway tools', () => {
     expect(isAllowedIdeTool('mtui')).toBe(true);
     expect(isAllowedIdeTool('ToolSearch')).toBe(true);
+    expect(isAllowedIdeTool('Tool Map')).toBe(true);
+    expect(isAllowedIdeTool('StartAction')).toBe(true);
     expect(isAllowedIdeTool('toolsearch_extra')).toBe(false);
+    expect(isAllowedIdeTool('startaction_extra')).toBe(false);
     expect(isAllowedIdeTool('team_write_file')).toBe(true);
     expect(isAllowedIdeTool('db_query')).toBe(true);
   });
@@ -78,9 +81,12 @@ describe('isToolCallAllowedInStrictMode', () => {
     expect(isToolCallAllowedInStrictMode({ raw_input: { server: 'untrusted-tools' } })).toBe(false);
   });
 
-  it('allows ToolSearch so an agent can discover the provided IDE tools', () => {
+  it('allows safe agent-runtime primitives without allowing native repo tools', () => {
     expect(isToolCallAllowedInStrictMode({ title: 'ToolSearch' })).toBe(true);
     expect(isToolCallAllowedInStrictMode({ raw_input: { tool_name: 'ToolSearch' } })).toBe(true);
+    expect(isToolCallAllowedInStrictMode({ title: 'Tool Map' })).toBe(true);
+    expect(isToolCallAllowedInStrictMode({ raw_input: { name: 'StartAction' } })).toBe(true);
+    expect(isToolCallAllowedInStrictMode({ title: 'StartAction', kind: 'execute' })).toBe(true);
   });
 
   it('allows advertised grep and glob tools from the built-in IDE MCP server', () => {
@@ -177,6 +183,14 @@ describe('evaluateStrictModeConfirmation (aionrs legacy shape)', () => {
   it('allows an ide_* tool identified by title', () => {
     const d = evaluateStrictModeConfirmation(true, {
       title: 'ide_search',
+      options: [{ label: 'Reject', value: 'reject' }],
+    });
+    expect(d.deny).toBe(false);
+  });
+
+  it('allows an agent-runtime primitive identified by confirmation action', () => {
+    const d = evaluateStrictModeConfirmation(true, {
+      action: 'StartAction',
       options: [{ label: 'Reject', value: 'reject' }],
     });
     expect(d.deny).toBe(false);

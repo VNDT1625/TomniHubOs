@@ -66,5 +66,21 @@
     "yesAlwaysAllowTool": "Có, luôn cho phép công cụ \"{{toolName}}\" từ máy chủ \"{{serverName}}\"",
     "yesAlwaysAllowServer": "Có, luôn cho phép tất cả công cụ từ máy chủ \"{{serverName}}\"",
     "no": "Không (esc)"
+  },
+  "steps": {
+    "title": "{{count}} bước thực hiện",
+    "live": "Đang chạy",
+    "status": {
+      "pending": "Đang chờ",
+      "running": "Đang thực hiện",
+      "completed": "Hoàn tất",
+      "error": "Lỗi",
+      "canceled": "Đã hủy"
+    },
+    "loadingDetail": "Đang tải chi tiết bước...",
+    "loadDetailFailed": "Không tải được chi tiết bước",
+    "input": "Đầu vào",
+    "output": "Kết quả",
+    "viewFull": "Xem toàn bộ"
   }
 }

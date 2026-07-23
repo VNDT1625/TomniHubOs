@@ -1,4 +1,4 @@
-﻿import { readFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -59,7 +59,7 @@ export class NativeMcpProbe {
       };
     } finally {
       if (timer) clearTimeout(timer);
-      await client.close().catch(() => transport.close().catch(() => undefined));
+      await client.close().catch((): Promise<void> => transport.close().catch((): void => undefined));
     }
   }
 }

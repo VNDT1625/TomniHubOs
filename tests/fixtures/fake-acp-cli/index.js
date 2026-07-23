@@ -5,6 +5,7 @@ const scenario = process.argv[2] || 'happy';
 let sessionCounter = 0;
 let promptCounter = 0;
 const pendingPrompts = new Map();
+const promptsBySession = new Map();
 
 function sendResponse(id, result) {
   process.stdout.write(`${JSON.stringify({ jsonrpc: JSONRPC_VERSION, id, result })}\n`);
@@ -99,7 +100,9 @@ function handleRequest(message) {
         pendingPrompts.set(sessionId, id);
         break;
       }
-      completePrompt(id, sessionId, promptText);
+      const history = [...(promptsBySession.get(sessionId) || []), promptText];
+      promptsBySession.set(sessionId, history);
+      completePrompt(id, sessionId, scenario === 'history' ? `${sessionId}: ${history.join(' | ')}` : promptText);
       break;
     }
     case 'session/cancel': {

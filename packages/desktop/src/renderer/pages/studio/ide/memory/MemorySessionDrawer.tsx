@@ -5,7 +5,7 @@
  */
 
 /**
- * `MemorySessionDrawer` — a live view of one IDE chat tab's EPHEMERAL session
+ * `MemorySessionDrawer` — a live view of one IDE chat tab's session-scoped Save
  * super-memory. Opened from the chat tab strip, it lets the user watch what the
  * agent has chosen to remember this session: a token-budget gauge, compaction /
  * dedup / recall counters, the notes themselves (summaries, pinned, recent), and
@@ -49,7 +49,7 @@ type MemorySessionDrawerProps = {
   memId: string | null;
   /** Active real conversation id. */
   conversationId?: string | null;
-  /** Runtime type; Context is exposed only for AionRS. */
+  /** Runtime type; provider-specific Context is exposed only where supported. */
   conversationType?: string | null;
   /** Repository bound to this IDE chat. Required for persistent Secret Context. */
   repository?: string | null;
@@ -114,7 +114,9 @@ const MemorySessionDrawer: React.FC<MemorySessionDrawerProps> = ({
 }) => {
   const { t } = useTranslation();
   const { snapshot, loading, refresh, clear, remember } = useIdeMemory(memId, visible);
-  const showContext = conversationType === 'aionrs' && conversationId !== null;
+  const showContext = (conversationType === 'aionrs' || conversationType === 'tomny') && conversationId !== null;
+  const showRepositorySecretContext = Boolean(repository);
+  const showTabs = showContext || showRepositorySecretContext;
   const [activePane, setActivePane] = useState<'save' | 'context' | 'secret'>('save');
 
   useEffect(() => {
@@ -161,7 +163,7 @@ const MemorySessionDrawer: React.FC<MemorySessionDrawerProps> = ({
 
   return (
     <Drawer
-      width={showContext ? 620 : 420}
+      width={showTabs ? 620 : 420}
       visible={visible}
       onCancel={onClose}
       footer={null}
@@ -183,7 +185,7 @@ const MemorySessionDrawer: React.FC<MemorySessionDrawerProps> = ({
         </div>
       ) : (
         <div className='flex flex-col gap-16px h-full min-h-0'>
-          {showContext ? (
+          {showTabs ? (
             <Tabs
               activeTab={activePane}
               onChange={(key) => setActivePane(key as 'save' | 'context' | 'secret')}

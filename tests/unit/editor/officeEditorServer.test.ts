@@ -51,23 +51,43 @@ describe('officeEditorServer', () => {
     const { tools } = await client.listTools();
     const names = tools.map((t) => t.name).toSorted();
     expect(names).toEqual([
+      'office_add_agenda_slide',
+      'office_add_architecture_slide',
+      'office_add_comparison_slide',
+      'office_add_metrics_slide',
+      'office_add_process_slide',
+      'office_add_speaker_notes',
+      'office_add_timeline_slide',
       'office_append_text',
       'office_apply_headings',
+
+      'office_apply_object_animations',
+      'office_apply_slide_transitions',
       'office_create_premium_deck',
       'office_create_premium_doc',
       'office_format_passage',
       'office_format_text',
+
+      'office_get_capabilities',
       'office_insert_table',
       'office_insert_text',
       'office_insert_toc',
+      'office_open_visual_review',
+
       'office_read_document',
       'office_replace_all',
       'office_replace_passage',
+      'office_review_object_animations',
       'office_review_premium_quality',
       'office_run_api',
       'office_search_replace',
       'office_set_cells',
+
+      'office_structure_report',
     ]);
+
+    const capabilitiesTool = tools.find((tool) => tool.name === 'office_get_capabilities');
+    expect(capabilitiesTool?.description).toContain('fails closed');
 
     const premiumDocTool = tools.find((tool) => tool.name === 'office_create_premium_doc');
     expect(premiumDocTool?.description).toContain('polished, document-native deliverable');
@@ -81,6 +101,36 @@ describe('officeEditorServer', () => {
     const runApiTool = tools.find((tool) => tool.name === 'office_run_api');
     expect(runApiTool?.description).toContain('premium PPTX decks');
     expect(runApiTool?.description).toContain('transitions/effects when supported');
+  });
+
+  it('get_capabilities forwards a non-blocking fail-closed probe', async () => {
+    const deps = makeDeps({
+      runTool: vi.fn(
+        async (): Promise<EditorToolRunResult> => ({
+          ok: true,
+          observation: 'Office capabilities: automation unavailable',
+          kind: 'slide',
+          capabilities: {
+            filePath: '/tmp/a.pptx',
+            kind: 'slide',
+            editorReady: true,
+            automationApi: { supported: false, reason: 'createConnector() is unavailable.' },
+            objectAnimation: { supported: false, reason: 'Automation API is unavailable.' },
+            slideShowControl: { supported: false, reason: 'No playback adapter.' },
+            recording: { supported: false, reason: 'No recording adapter.' },
+          },
+        })
+      ),
+    });
+    const client = await connect(deps);
+
+    const result = await client.callTool({
+      name: 'office_get_capabilities',
+      arguments: { filePath: '/tmp/a.pptx' },
+    });
+
+    expect(deps.runTool).toHaveBeenCalledWith('/tmp/a.pptx', { tool: 'get_capabilities' });
+    expect(textOf(result)).toContain('automation unavailable');
   });
 
   it('read_document forwards a read_document action with the file path', async () => {
@@ -154,6 +204,107 @@ describe('officeEditorServer', () => {
       arguments: { filePath: '/tmp/deck.pptx', plan },
     });
     expect(deps.runTool).toHaveBeenCalledWith('/tmp/deck.pptx', { tool: 'create_premium_deck', plan });
+  });
+
+  it('office_add_agenda_slide forwards a normalized append-slide plan', async () => {
+    const deps = makeDeps();
+    const client = await connect(deps);
+    await client.callTool({
+      name: 'office_add_agenda_slide',
+      arguments: {
+        filePath: '/tmp/deck.pptx',
+        title: 'Agenda',
+        sections: ['Problem', 'Solution', 'Demo'],
+        designStyle: 'technical',
+      },
+    });
+
+    expect(deps.runTool).toHaveBeenCalledWith('/tmp/deck.pptx', {
+      tool: 'add_premium_slide',
+      plan: expect.objectContaining({
+        title: 'Agenda',
+        designStyle: 'technical',
+        slides: [
+          expect.objectContaining({
+            layout: 'agenda',
+            items: [{ label: 'Problem' }, { label: 'Solution' }, { label: 'Demo' }],
+          }),
+        ],
+      }),
+    });
+  });
+
+  it('office_structure_report combines headings and automatic TOC intent', async () => {
+    const deps = makeDeps();
+    const client = await connect(deps);
+    await client.callTool({
+      name: 'office_structure_report',
+      arguments: {
+        filePath: '/tmp/report.docx',
+        headings: [{ text: 'Architecture', level: 2 }],
+      },
+    });
+
+    expect(deps.runTool).toHaveBeenCalledWith('/tmp/report.docx', {
+      tool: 'structure_report',
+      headings: [{ text: 'Architecture', level: 2 }],
+      insertToc: true,
+    });
+  });
+
+  it('forwards a purpose-led object animation plan with normalized order', async () => {
+    const deps = makeDeps();
+    const client = await connect(deps);
+    await client.callTool({
+      name: 'office_apply_object_animations',
+      arguments: {
+        filePath: '/tmp/deck.pptx',
+        animations: [
+          {
+            slideIndex: 2,
+            drawingName: 'Evidence card',
+            effect: 'entranceFade',
+            trigger: 'onclick',
+            purpose: 'progressive-disclosure',
+            rationale: 'Reveal the proof only after the claim is introduced.',
+          },
+        ],
+      },
+    });
+    expect(deps.runTool).toHaveBeenCalledWith('/tmp/deck.pptx', {
+      tool: 'apply_object_animations',
+      animations: [
+        {
+          slideIndex: 2,
+          drawingName: 'Evidence card',
+          effect: 'entranceFade',
+          trigger: 'onclick',
+          durationMs: 500,
+          delayMs: 0,
+          repeatCount: 1,
+          order: 0,
+          purpose: 'progressive-disclosure',
+          rationale: 'Reveal the proof only after the claim is introduced.',
+        },
+      ],
+      replaceExistingMainSequence: false,
+    });
+  });
+
+  it('forwards a review request and rejects a purpose-less animation plan', async () => {
+    const deps = makeDeps();
+    const client = await connect(deps);
+    await client.callTool({ name: 'office_review_object_animations', arguments: { filePath: '/tmp/deck.pptx' } });
+    expect(deps.runTool).toHaveBeenCalledWith('/tmp/deck.pptx', { tool: 'review_object_animations' });
+
+    const invalid = await client.callTool({
+      name: 'office_apply_object_animations',
+      arguments: {
+        filePath: '/tmp/deck.pptx',
+        animations: [{ slideIndex: 1, drawingIndex: 0, effect: 'entranceFade', trigger: 'onclick' }],
+      },
+    });
+    expect((invalid as { isError?: boolean }).isError).toBe(true);
   });
 
   it('office_review_premium_quality forwards a quality audit action', async () => {

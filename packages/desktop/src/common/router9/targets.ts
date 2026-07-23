@@ -16,11 +16,34 @@ import type { ConnectorTarget } from './types';
  */
 export const CONNECTOR_TARGETS: ConnectorTarget[] = [
   {
+    id: 'claude-code',
+    label: 'Claude Code',
+    protocol: 'anthropic',
+    mechanism: 'configFile',
+    descriptionKey: 'settings.router9.target.claudeCode',
+    agentPreferenceKey: 'claude',
+    // Claude Code appends `/v1/messages` itself. Its documented LLM-gateway
+    // setting therefore expects the bare gateway origin.
+    baseUrlStyle: 'origin',
+  },
+  {
+    id: 'codex',
+    label: 'Codex CLI',
+    protocol: 'openai',
+    // Codex durable provider configuration belongs in ~/.codex/config.toml.
+    // Environment variables alone only configure the current shell.
+    mechanism: 'configFile',
+    descriptionKey: 'settings.router9.target.codex',
+    agentPreferenceKey: 'codex',
+    baseUrlStyle: 'withV1',
+  },
+  {
     id: 'kiro',
     label: 'Kiro',
     protocol: 'openai',
     mechanism: 'manual',
     descriptionKey: 'settings.router9.target.kiro',
+    agentPreferenceKey: 'kiro',
     baseUrlStyle: 'withV1',
   },
   {
@@ -29,23 +52,8 @@ export const CONNECTOR_TARGETS: ConnectorTarget[] = [
     protocol: 'openai',
     mechanism: 'manual',
     descriptionKey: 'settings.router9.target.antigravity',
+    agentPreferenceKey: 'antigravity',
     baseUrlStyle: 'withV1',
-  },
-  {
-    id: 'claude-code',
-    label: 'Claude Code',
-    protocol: 'anthropic',
-    mechanism: 'configFile',
-    descriptionKey: 'settings.router9.target.claudeCode',
-    baseUrlStyle: 'withV1',
-  },
-  {
-    id: 'codex',
-    label: 'Codex CLI',
-    protocol: 'openai',
-    mechanism: 'env',
-    descriptionKey: 'settings.router9.target.codex',
-    baseUrlStyle: 'origin',
   },
   {
     id: 'cursor',
@@ -53,6 +61,7 @@ export const CONNECTOR_TARGETS: ConnectorTarget[] = [
     protocol: 'openai',
     mechanism: 'manual',
     descriptionKey: 'settings.router9.target.cursor',
+    agentPreferenceKey: 'cursor',
     baseUrlStyle: 'withV1',
   },
   {
@@ -69,6 +78,7 @@ export const CONNECTOR_TARGETS: ConnectorTarget[] = [
     protocol: 'openai',
     mechanism: 'configFile',
     descriptionKey: 'settings.router9.target.openclaw',
+    agentPreferenceKey: 'openclaw-gateway',
     baseUrlStyle: 'withV1',
   },
 ];

@@ -56,5 +56,130 @@
       "interview": "Lên kế hoạch phỏng vấn chuyên sâu giữa các tác nhân",
       "expert_review": "Để nhiều chuyên gia phân tích cùng một vấn đề"
     }
+  },
+  "workspace": {
+    "nav": {
+      "activity": "Hoạt động",
+      "tasks": "Công việc",
+      "communication": "Trao đổi",
+      "caption": "Không gian làm việc nhóm"
+    },
+    "tasks": {
+      "title": "Công việc của nhóm",
+      "subtitle": "Quản lý công việc cá nhân, mục tiêu nhóm nhiều tầng và cuộc trò chuyện AI gắn theo từng công việc.",
+      "newGroup": "Tạo nhóm",
+      "editGroup": "Sửa nhóm",
+      "newTask": "Tạo công việc",
+      "editTask": "Sửa công việc",
+      "groupsTitle": "Các nhóm và tầng trách nhiệm",
+      "groupsEmpty": "Tạo nhóm khi workspace cần quản lý mục tiêu lớn hơn việc giao việc trực tiếp giữa hai người.",
+      "groupMeta": "{{members}} thành viên · {{tasks}} công việc",
+      "confirmDeleteGroup": "Xóa nhóm này? Bạn cần chuyển các nhóm con và công việc liên quan trước.",
+      "confirmDeleteTask": "Xóa công việc này cùng toàn bộ công việc con?",
+      "currentUser": "Bạn",
+      "childTask": "Công việc con",
+      "visibleCount": "Đang hiển thị {{count}} công việc",
+      "empty": "Không có công việc phù hợp với chế độ xem này.",
+      "filters": {
+        "mine": "Của tôi",
+        "group": "Theo nhóm",
+        "all": "Tất cả"
+      },
+      "scope": {
+        "personal": "Cá nhân",
+        "group": "Nhóm"
+      },
+      "status": {
+        "draft": "Bản nháp",
+        "ready": "Sẵn sàng",
+        "running": "Đang làm",
+        "blocked": "Bị chặn",
+        "review": "Đang duyệt",
+        "needsChanges": "Cần chỉnh sửa",
+        "done": "Hoàn thành",
+        "cancelled": "Đã hủy"
+      },
+      "priority": {
+        "low": "Thấp",
+        "medium": "Trung bình",
+        "high": "Cao",
+        "critical": "Khẩn cấp"
+      },
+      "role": {
+        "planner": "Lập kế hoạch",
+        "executor": "Thực hiện",
+        "reviewer": "Duyệt",
+        "tester": "Kiểm thử",
+        "advisor": "Tư vấn"
+      },
+      "summary": {
+        "total": "Tổng công việc",
+        "running": "Đang làm",
+        "review": "Đang duyệt",
+        "bound": "Liên kết AI"
+      },
+      "validation": {
+        "title": "Hãy nhập tên công việc.",
+        "group": "Hãy chọn nhóm cho công việc nhóm.",
+        "groupName": "Hãy nhập tên nhóm.",
+        "agent": "Hãy chọn một tác nhân AI."
+      },
+      "meta": {
+        "owner": "Chịu trách nhiệm",
+        "assignee": "Người thực hiện",
+        "group": "Nhóm",
+        "criteria": "Tiêu chí"
+      },
+      "acceptanceCriteria": "Tiêu chí hoàn thành",
+      "fields": {
+        "title": "Tên công việc",
+        "description": "Mô tả",
+        "scope": "Tầng công việc",
+        "group": "Nhóm",
+        "parentTask": "Công việc cha",
+        "assignee": "Người thực hiện",
+        "status": "Trạng thái",
+        "priority": "Mức ưu tiên",
+        "sharedWith": "Chia sẻ với",
+        "acceptance": "Tiêu chí hoàn thành",
+        "acceptancePlaceholder": "Mỗi dòng là một tiêu chí",
+        "context": "Gợi ý context mã nguồn",
+        "contextPlaceholder": "File, thư mục, symbol, module hoặc vùng kỹ thuật — mỗi dòng một mục",
+        "groupName": "Tên nhóm",
+        "parentGroup": "Nhóm cha",
+        "members": "Thành viên"
+      },
+      "pin": {
+        "title": "Ghim công việc vào chat AI",
+        "action": "Ghim vào AI",
+        "description": "Chat AI được chọn sẽ hiển thị nhãn công việc và nhận mục tiêu, tiêu chí hoàn thành, cây phân cấp cùng gợi ý context phù hợp ở mỗi lượt trao đổi.",
+        "agent": "Tác nhân AI",
+        "role": "Vai trò của AI",
+        "replacesPrimary": "Thao tác này sẽ thay công việc chính đang ghim cho tác nhân đó.",
+        "success": "Đã ghim công việc vào chat AI",
+        "removed": "Đã bỏ ghim công việc khỏi chat AI",
+        "boundAgents": "Chat AI đang liên kết"
+      }
+    },
+    "activity": {
+      "title": "Hoạt động của nhóm",
+      "subtitle": "Theo dõi tác nhân đang làm gì, công việc nào đang dẫn hướng và tiến độ chung của các nhóm.",
+      "liveAgents": "Tác nhân đang hoạt động",
+      "progress": "Tiến độ công việc",
+      "boundTask": "Công việc đang ghim",
+      "noBoundTask": "Chat AI này chưa được ghim công việc.",
+      "completedCount": "Đã hoàn thành {{completed}}/{{total}} công việc",
+      "bindingCount": "{{count}} liên kết giữa công việc và AI",
+      "recentTasks": "Hoạt động công việc gần đây",
+      "empty": "Hoạt động sẽ xuất hiện sau khi tạo công việc đầu tiên.",
+      "unassigned": "Chưa giao cho chat AI",
+      "agentStatus": {
+        "pending": "Đang chờ",
+        "idle": "Rảnh",
+        "active": "Đang hoạt động",
+        "completed": "Đã hoàn thành",
+        "failed": "Thất bại"
+      }
+    }
   }
 }

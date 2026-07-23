@@ -8,6 +8,7 @@ import { Tabs } from '@arco-design/web-react';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import SettingsPageWrapper from '../settings/components/SettingsPageWrapper';
+import Benchmark from './Benchmark';
 import CoreChatLab from './components/CoreChatLab';
 import TestingPage from './TestingPage';
 
@@ -24,6 +25,9 @@ const TestingSettings: React.FC = () => {
         </TabPane>
         <TabPane key='test-runs' title={t('testing.runnerTab')}>
           <TestingPage />
+        </TabPane>
+        <TabPane key='benchmark' title={t('testing.benchmark.tab')}>
+          <Benchmark />
         </TabPane>
       </Tabs>
     </SettingsPageWrapper>

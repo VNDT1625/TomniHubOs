@@ -6,7 +6,11 @@
 
 import { getResourceCoordinator, type IResourceCoordinator } from '@process/resource/resourceCoordinator';
 import type { CompanyCoreRunner } from '@process/agentRuntime/companyCoreRunner';
-import type { CoreContextComposer } from '@process/agentRuntime/contextTypes';
+import type {
+  CoreContextComposeInput,
+  CoreContextComposer,
+  CoreIdentityContextSnapshot,
+} from '@process/agentRuntime/contextTypes';
 import type { ResolvedSurface, SurfaceRegistry } from '@process/agentRuntime/surfaceRegistry';
 import { buildSurfaceHarnessPrompt } from '@process/agentRuntime/surfaceRegistry/harnesses';
 import { AgentMeshService, type AgentMessageKind } from '@process/agentRuntime/agentMesh';
@@ -37,8 +41,12 @@ import {
   TomnyCoreAdapter,
   type CoreAdapter,
   type CoreAdapterEvent,
+  type CoreContextSnapshot,
+  type CoreCapabilityHostContext,
   type CoreMcpServer,
+  type CoreToolCatalogPolicy,
   type DetectedCoreTarget,
+  type TomnySessionActionHistorySource,
 } from './adapters';
 import { detectCoreTargets } from './coreRegistry';
 import type {
@@ -48,8 +56,8 @@ import type {
 } from './experimentalCoreProtocol';
 import {
   MemoryCoreSessionStore,
+  redactCheckpointText,
   type CoreSessionCheckpoint,
-  type CoreSessionMessage,
   type CoreSessionStore,
 } from './sessionCheckpointStore';
 
@@ -76,6 +84,7 @@ export type ExperimentalCoreEvent = {
     | 'tool-call'
     | 'tool-result'
     | 'permission'
+    | 'orchestration-proposal'
     | 'orchestration-created'
     | 'completed'
     | 'error'
@@ -87,12 +96,18 @@ export type ExperimentalCoreEvent = {
   permissionId?: string;
   tool?: string;
   callId?: string;
+  /** Structured tool arguments retained for the worklog/detail view. */
+  input?: unknown;
+  /** Logical Team/Company agent that owns this tool activity. */
+  agentId?: string;
   phase?: 'requested' | 'running';
   outcome?: 'success' | 'error';
   workspace?: string;
   detail?: string;
   orchestrationKind?: 'team' | 'company';
   orchestrationId?: string;
+  orchestrationProposalId?: string;
+  orchestrationProposal?: OrchestrationProposal;
 };
 
 export type ExperimentalCoreRunSnapshot = {
@@ -108,7 +123,8 @@ export type ExperimentalCoreRunSnapshot = {
 export type ExperimentalCoreRuntimeDeps = {
   detectTargets: () => Promise<DetectedCoreTarget[]>;
   adapters: CoreAdapter[];
-  coordinator?: Pick<IResourceCoordinator, 'requestLease' | 'releaseLease'>;
+  coordinator?: Pick<IResourceCoordinator, 'requestLease' | 'releaseLease'> &
+    Partial<Pick<IResourceCoordinator, 'getState'>>;
   sessionStore?: CoreSessionStore;
   eventStore?: DurableEventStore;
   permissionStore?: DurablePermissionStore;
@@ -116,8 +132,24 @@ export type ExperimentalCoreRuntimeDeps = {
   companyRunner?: CompanyCoreRunner;
   agentMeshService?: AgentMeshService;
   contextComposer?: CoreContextComposer;
-  resolveCapabilityHosts?: (serverNames: string[]) => Promise<CoreMcpServer[]>;
+  resolveCapabilityHosts?: (
+    serverNames: string[],
+    sessionServers: CoreMcpServer[] | undefined,
+    context: CoreCapabilityHostContext
+  ) => Promise<CoreMcpServer[]>;
+  /** Lets Super include every registered surface host without naming surfaces here. */
+  availableCapabilityHostNames?: () => string[];
   telemetry?: CoreTelemetryRecorder;
+  modelDiscoveryTimeoutMs?: number;
+};
+
+export type ExperimentalCoreContextInspectionInput = {
+  sessionId: string;
+  targetId: string;
+  workspace: string;
+  modelKey?: string;
+  permissionMode?: ExperimentalPermissionMode;
+  contextIdentity?: ExperimentalCoreContextIdentity;
 };
 
 export type ExperimentalCoreContextIdentity = {
@@ -128,6 +160,27 @@ export type ExperimentalCoreContextIdentity = {
   capabilityGrants?: string[];
   availableCapabilities?: string[];
   modelCapabilities?: string[];
+  conversationContext?: string;
+  /** Exact session-scoped Save block; bounded separately so host context cannot evict it. */
+  savedMemoryContext?: string;
+  mcpServers?: CoreMcpServer[];
+  superMode?: boolean;
+};
+
+const MAX_CONVERSATION_CONTEXT_CHARS = 24_000;
+const MAX_SAVED_MEMORY_CONTEXT_CHARS = 64_000;
+const SECRET_CONTEXT_CAPABILITY_ID = 'core.secret-context';
+const SECRET_CONTEXT_SERVER_NAME = 'aionui-secret-context';
+const BUILTIN_AVAILABLE_CAPABILITIES = ['core.skill-workflow', SECRET_CONTEXT_CAPABILITY_ID];
+
+const normalizeSavedMemoryContext = (value?: string): string => {
+  const normalized = value?.trim() ?? '';
+  if (normalized.length > MAX_SAVED_MEMORY_CONTEXT_CHARS) {
+    throw new Error(
+      `Session Save context exceeds ${MAX_SAVED_MEMORY_CONTEXT_CHARS} characters; pinned text was not truncated.`
+    );
+  }
+  return normalized;
 };
 
 const normalizeContextIdentity = (
@@ -138,19 +191,139 @@ const normalizeContextIdentity = (
   personalId: identity?.personalId?.trim() || 'default',
   permissionScopes: [...(identity?.permissionScopes ?? [])],
   capabilityGrants: [...(identity?.capabilityGrants ?? [])],
-  availableCapabilities: [...(identity?.availableCapabilities ?? [])],
+  availableCapabilities: [...new Set([...BUILTIN_AVAILABLE_CAPABILITIES, ...(identity?.availableCapabilities ?? [])])],
   modelCapabilities: [...(identity?.modelCapabilities ?? [])],
+  conversationContext: identity?.conversationContext?.trim().slice(0, MAX_CONVERSATION_CONTEXT_CHARS) ?? '',
+  savedMemoryContext: normalizeSavedMemoryContext(identity?.savedMemoryContext),
+  mcpServers: [...(identity?.mcpServers ?? [])],
+  superMode: identity?.superMode === true,
 });
 
 const toolMatchesPattern = (tool: string, pattern: string): boolean =>
   pattern === '*' || tool === pattern || (pattern.endsWith('*') && tool.startsWith(pattern.slice(0, -1)));
+
+const childPermissionForParent = (
+  permissionMode: ExperimentalPermissionMode
+): CoreCapabilityHostContext['permissionMode'] => (permissionMode === 'read-only' ? 'read-only' : 'workspace-write');
+
+const SECRET_FIREWALL_TOOLS = new Set([
+  'agent_secret_context_use',
+  'secret_context_capture',
+  'secret_context_generate',
+]);
+
+type PermissionIdentity = {
+  subjectId: string;
+  surfaceId: string;
+  capabilityId: string;
+  trustedSecretContextHost?: boolean;
+};
+
+const isTrustedSecretFirewallRequest = (identity: PermissionIdentity, tool: string): boolean =>
+  identity.capabilityId === SECRET_CONTEXT_CAPABILITY_ID &&
+  identity.trustedSecretContextHost === true &&
+  SECRET_FIREWALL_TOOLS.has(
+    tool
+      .trim()
+      .toLowerCase()
+      .replace(/^tomny_/, '')
+  );
+
+const hasSecretContextCapability = (surface: ResolvedSurface | undefined): boolean =>
+  surface?.capabilities.some(
+    (capability) =>
+      capability.id === SECRET_CONTEXT_CAPABILITY_ID && capability.serverName === SECRET_CONTEXT_SERVER_NAME
+  ) === true;
+
+const isAttestedSecretContextServer = (server: CoreMcpServer): boolean => {
+  if (server.name !== SECRET_CONTEXT_SERVER_NAME || server.transport === 'stdio') return false;
+  try {
+    const url = new URL(server.url);
+    return (
+      url.protocol === 'http:' &&
+      url.hostname === '127.0.0.1' &&
+      url.pathname === '/sse' &&
+      (server.headers ?? []).some(
+        (header) => header.name.toLowerCase() === 'authorization' && /^Bearer\s+\S+$/.test(header.value)
+      )
+    );
+  } catch {
+    return false;
+  }
+};
+
+const attestSecretContextHost = (
+  surface: ResolvedSurface | undefined,
+  usedTrustedResolver: boolean,
+  servers: readonly CoreMcpServer[]
+): boolean => usedTrustedResolver && hasSecretContextCapability(surface) && servers.some(isAttestedSecretContextServer);
+
+const secretContextPolicyFor = (
+  surface: ResolvedSurface | undefined,
+  trustedSecretContextHost: boolean
+): CoreContextComposeInput['secretContextPolicy'] => ({
+  includeOpaqueSecretHandles: trustedSecretContextHost && surface?.manifest.context.includeOpaqueSecretHandles === true,
+  allowedSecretCapabilities: surface?.manifest.context.allowedSecretCapabilities ?? [],
+});
+
+const requiresFreshOrchestrationApproval = (tool: string): boolean =>
+  tool === 'orchestration.create.team' || tool === 'orchestration.create.company';
+
+/** Build the ToolMap boundary from the selected surface and the conversation's explicit Super mode. */
+export const resolveCoreToolCatalogPolicy = (
+  surface: ResolvedSurface | undefined,
+  superEnabled = false
+): CoreToolCatalogPolicy => {
+  if (superEnabled) return { mode: 'super', patterns: ['*'] };
+  return {
+    mode: 'surface',
+    patterns: [
+      ...new Set(
+        [
+          'tomny_session_actions',
+          ...(surface?.capabilities ?? [])
+            .filter((capability) => capability.kind === 'mcp')
+            .flatMap((capability) => capability.toolPatterns),
+        ]
+          .map((pattern) => pattern.trim())
+          .filter(Boolean)
+      ),
+    ],
+  };
+};
+
+/**
+ * Select hosts from Surface Registry declarations. In Super mode every
+ * registered surface participates, so adding a manifest + its host immediately
+ * extends Super without touching this runtime or the renderer toggle.
+ */
+export const resolveCoreCapabilityServerNames = (
+  surface: ResolvedSurface | undefined,
+  registry: SurfaceRegistry | undefined,
+  superEnabled: boolean,
+  availableHostNames?: readonly string[]
+): string[] => {
+  const capabilities =
+    superEnabled && registry
+      ? registry.list().flatMap((manifest) => manifest.capabilities)
+      : (surface?.capabilities ?? []);
+  const available = availableHostNames ? new Set(availableHostNames.map((name) => name.toLowerCase())) : undefined;
+  const names = new Map<string, string>();
+  for (const capability of capabilities) {
+    if (capability.kind !== 'mcp' || !capability.serverName?.trim()) continue;
+    const name = capability.serverName.trim();
+    if (available && !available.has(name.toLowerCase())) continue;
+    names.set(name.toLowerCase(), name);
+  }
+  return [...names.values()];
+};
 
 const permissionIdentityFor = (
   contextIdentity: Required<ExperimentalCoreContextIdentity>,
   surfaceId: string,
   surface: ResolvedSurface | undefined,
   tool: string
-): { subjectId: string; surfaceId: string; capabilityId: string } => ({
+): PermissionIdentity => ({
   subjectId: contextIdentity.agentId,
   surfaceId,
   capabilityId:
@@ -166,12 +339,18 @@ type ActiveRequest = {
   partialText: string;
   cancelledByUser: boolean;
   lifecycleInterrupted: boolean;
+  terminalEventEmitted: boolean;
 };
 type PendingPermission = {
   requestId: string;
   sessionId: string;
   targetId: string;
   authorizationRequest: PermissionRequest;
+  resolve: (approved: boolean) => void;
+};
+
+type PendingOrchestrationProposal = {
+  requestId: string;
   resolve: (approved: boolean) => void;
 };
 
@@ -188,8 +367,46 @@ const defaultDeps = (): ExperimentalCoreRuntimeDeps => ({
   coordinator: getResourceCoordinator(),
 });
 
-const MAX_PORTABLE_CONTEXT_CHARS = 80_000;
 const MAX_REPLAY_EVENTS_PER_RUN = 1_000;
+const MODEL_DISCOVERY_TIMEOUT_MS = 10_000;
+const SENSITIVE_TOOL_INPUT_KEY =
+  /(?:pass(?:word|wd)?|secret|token|api.?key|authorization|cookie|credential|private.?key|access.?key)/iu;
+const SENSITIVE_TYPING_FIELD = /^(?:text|value|input|keys)$/iu;
+const SENSITIVE_TYPING_TOOL = /(?:browser.*(?:type|fill|input)|(?:type|fill|input).*browser)/iu;
+
+const sanitizeToolEventInput = (
+  tool: string,
+  value: unknown,
+  key = '',
+  seen: WeakSet<object> = new WeakSet(),
+  depth = 0
+): unknown => {
+  if (SENSITIVE_TOOL_INPUT_KEY.test(key) || (SENSITIVE_TYPING_TOOL.test(tool) && SENSITIVE_TYPING_FIELD.test(key))) {
+    return '[REDACTED]';
+  }
+  if (typeof value === 'string') return redactCheckpointText(value);
+  if (value === null || typeof value === 'number' || typeof value === 'boolean') return value;
+  if (typeof value === 'bigint') return value.toString();
+  if (value === undefined) return undefined;
+  if (depth >= 20) return '[TRUNCATED]';
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeToolEventInput(tool, item, '', seen, depth + 1));
+  }
+  if (typeof value === 'object') {
+    if (seen.has(value)) return '[CIRCULAR]';
+    seen.add(value);
+    const sanitized = Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([field, item]) => [
+        field,
+        sanitizeToolEventInput(tool, item, field, seen, depth + 1),
+      ])
+    );
+    seen.delete(value);
+    return sanitized;
+  }
+  return String(value);
+};
+
 export const EXPERIMENTAL_COMPANY_TARGET_ID = 'company';
 const durableKindForEvent = (event: ExperimentalCoreEvent): DurableEventKind => {
   if (event.type === 'started') return 'run.started';
@@ -209,6 +426,34 @@ const durableKindForEvent = (event: ExperimentalCoreEvent): DurableEventKind => 
 const durablePayloadForEvent = (event: ExperimentalCoreEvent): DurableEventPayload =>
   JSON.parse(JSON.stringify(event)) as DurableEventPayload;
 
+/** Bind tool/action-log reads to the active Core session; message archives are never exposed. */
+export const createTomnySessionActionHistorySource =
+  (eventStore: DurableEventStore, _sessionStore?: CoreSessionStore): TomnySessionActionHistorySource =>
+  async (sessionId, query) => {
+    const events = await eventStore.query({
+      sessionId,
+      afterSequence: query.afterSequence,
+      kinds: ['tool.started', 'tool.completed', 'tool.error', 'permission.requested', 'permission.resolved'],
+    });
+    const actionEntries = events.map((event) => {
+      const record: Record<string, unknown> = {
+        sequence: event.sequence,
+        timestamp: event.timestamp,
+        kind: event.kind,
+        payload: event.payload,
+      };
+      if (event.requestId) record.requestId = event.requestId;
+      return record;
+    });
+    const needle = query.query?.trim().toLocaleLowerCase();
+    const matchingActions = needle
+      ? actionEntries.filter((entry) => JSON.stringify(entry).toLocaleLowerCase().includes(needle))
+      : actionEntries;
+    return matchingActions
+      .toSorted((left, right) => Number(left.timestamp ?? 0) - Number(right.timestamp ?? 0))
+      .slice(-query.limit);
+  };
+
 const encodeCompanyModelKey = (targetId: string, modelKey?: string): string =>
   JSON.stringify([targetId, modelKey ?? '']);
 
@@ -221,32 +466,6 @@ const decodeCompanyModelKey = (value?: string): { targetId: string; modelKey?: s
   } catch {
     return undefined;
   }
-};
-
-export const buildPortableHandoffPrompt = (input: {
-  messages: CoreSessionMessage[];
-  prompt: string;
-  fromTargetId?: string;
-  toTargetId: string;
-  workspace: string;
-}): string => {
-  const rendered = input.messages
-    .map((message) => `${message.role === 'user' ? 'User' : 'Assistant'}: ${message.text}`)
-    .join('\n\n');
-  const truncated = rendered.length > MAX_PORTABLE_CONTEXT_CHARS;
-  const transcript = truncated ? rendered.slice(-MAX_PORTABLE_CONTEXT_CHARS) : rendered;
-  return [
-    'Tomny Core portable session handoff.',
-    `Previous agent: ${input.fromTargetId ?? 'recovered session'}`,
-    `Current agent: ${input.toTargetId}`,
-    `Workspace: ${input.workspace}`,
-    'Continue the same task using the workspace and transcript as source of truth. Do not repeat prior answers.',
-    truncated ? '[Earlier transcript omitted to stay within the portable context budget.]' : '',
-    transcript,
-    `Current user request: ${input.prompt}`,
-  ]
-    .filter(Boolean)
-    .join('\n\n');
 };
 
 const assertCompatibleSession = (checkpoint: CoreSessionCheckpoint, workspace: string): void => {
@@ -267,6 +486,7 @@ export class ExperimentalCoreRuntime {
   private readonly active = new Map<string, ActiveRequest>();
   private readonly runEvents = new Map<string, ExperimentalCoreEvent[]>();
   private readonly permissions = new Map<string, PendingPermission>();
+  private readonly orchestrationProposals = new Map<string, PendingOrchestrationProposal>();
   private readonly deps: ExperimentalCoreRuntimeDeps;
   private readonly sessionStore: CoreSessionStore;
   private readonly eventStore: DurableEventStore;
@@ -344,6 +564,25 @@ export class ExperimentalCoreRuntime {
     return this.sessionStore.list();
   }
 
+  public async getSession(sessionId: string): Promise<CoreSessionCheckpoint | undefined> {
+    await this.initialized;
+    return this.sessionStore.get(sessionId);
+  }
+
+  public async updateSessionConfig(
+    sessionId: string,
+    config: { sessionMode?: string; modelKey?: string }
+  ): Promise<CoreSessionCheckpoint | undefined> {
+    await this.initialized;
+    const checkpoint = await this.sessionStore.get(sessionId);
+    if (!checkpoint) return undefined;
+    if (config.sessionMode !== undefined) checkpoint.sessionMode = config.sessionMode;
+    if (config.modelKey !== undefined) checkpoint.modelKey = config.modelKey;
+    checkpoint.updatedAt = Date.now();
+    await this.sessionStore.save(checkpoint);
+    return checkpoint;
+  }
+
   /** Replay persisted events after renderer refresh, completed turns, or a Main-process restart. */
   public async replayEvents(query: {
     sessionId?: string;
@@ -405,6 +644,8 @@ export class ExperimentalCoreRuntime {
         capabilityGrants: checkpoint.capabilityGrants,
         availableCapabilities: checkpoint.availableCapabilities,
         modelCapabilities: checkpoint.modelCapabilities,
+        conversationContext: checkpoint.conversationContext,
+        superMode: checkpoint.superMode,
       }
     );
   }
@@ -412,6 +653,95 @@ export class ExperimentalCoreRuntime {
   public async forkSession(sessionId: string): Promise<CoreSessionCheckpoint> {
     await this.initialized;
     return this.sessionStore.fork(sessionId, crypto.randomUUID(), Date.now());
+  }
+
+  public async inspectContext(input: ExperimentalCoreContextInspectionInput): Promise<CoreContextSnapshot> {
+    await this.initialized;
+    const workspace = requireWorkspace(input.workspace);
+    const permissionMode = input.permissionMode ?? 'workspace-write';
+    const contextIdentity = normalizeContextIdentity(input.contextIdentity);
+    if (this.targets.length === 0) this.targets = await this.deps.detectTargets();
+    const target = this.targets.find((candidate) => candidate.id === input.targetId);
+    if (!target?.available) throw new Error('The selected CLI is not installed or its direct adapter is unavailable.');
+    const adapter = this.deps.adapters.find((candidate) => candidate.protocol === target.protocol);
+    if (!adapter?.inspectContext)
+      throw new Error('The selected core does not expose its live context: ' + target.name + '.');
+
+    const surfaceResolution = this.deps.surfaceRegistry?.resolve({
+      surfaceId: contextIdentity.surface,
+      model: {
+        targetKind: kindForTarget(target),
+        protocol: target.protocol,
+        modelId: input.modelKey,
+        capabilities: contextIdentity.modelCapabilities,
+      },
+      permissionMode,
+      grantedPermissionScopes: contextIdentity.permissionScopes,
+      explicitlyGrantedCapabilityIds: contextIdentity.capabilityGrants,
+      availableCapabilityIds: contextIdentity.availableCapabilities,
+    });
+    if (surfaceResolution?.ok === false) {
+      throw new Error(surfaceResolution.issues.map((issue) => issue.message).join(' '));
+    }
+    const resolvedSurface = surfaceResolution?.ok ? surfaceResolution.value : undefined;
+    const surfaceId = resolvedSurface?.manifest.id ?? contextIdentity.surface;
+    const toolCatalog = resolveCoreToolCatalogPolicy(resolvedSurface, contextIdentity.superMode);
+    const mcpServerNames = resolveCoreCapabilityServerNames(
+      resolvedSurface,
+      this.deps.surfaceRegistry,
+      contextIdentity.superMode,
+      this.deps.availableCapabilityHostNames?.()
+    );
+    const capabilityHostContext: CoreCapabilityHostContext = Object.freeze({
+      sessionId: input.sessionId,
+      workspace,
+      surface: surfaceId,
+      permissionMode: childPermissionForParent(permissionMode),
+    });
+    const mcpServers = this.deps.resolveCapabilityHosts
+      ? await this.deps.resolveCapabilityHosts(mcpServerNames, contextIdentity.mcpServers, capabilityHostContext)
+      : contextIdentity.mcpServers;
+    const trustedSecretContextHost = attestSecretContextHost(
+      resolvedSurface,
+      Boolean(this.deps.resolveCapabilityHosts),
+      mcpServers
+    );
+
+    const [snapshot, identityContext] = await Promise.all([
+      this.withAgentLease(() =>
+        adapter.inspectContext!({
+          sessionId: input.sessionId,
+          target,
+          workspace,
+          modelKey: input.modelKey,
+          permissionMode,
+          surface: surfaceId,
+          mcpServers,
+          toolCatalog,
+        })
+      ),
+      this.deps.contextComposer?.inspectContext
+        ? this.deps.contextComposer
+            .inspectContext({
+              agentId: contextIdentity.agentId,
+              personalId: contextIdentity.personalId,
+              surface: surfaceId,
+              secretContextPolicy: secretContextPolicyFor(resolvedSurface, trustedSecretContextHost),
+            })
+            .catch((error) => {
+              console.warn('[TomnyCore] Context inspection failed:', errorMessage(error));
+              return {} as CoreIdentityContextSnapshot;
+            })
+        : Promise.resolve({} as CoreIdentityContextSnapshot),
+    ]);
+    return {
+      ...snapshot,
+      ...(identityContext.agent ? { agentContext: identityContext.agent } : {}),
+      ...(identityContext.personal ? { personalContext: identityContext.personal } : {}),
+      // Messages are a UI/search archive only. Save is injected separately by
+      // the host, so no historical user/assistant turn is exposed as prompt context.
+      history: [],
+    };
   }
 
   public start(
@@ -475,6 +805,7 @@ export class ExperimentalCoreRuntime {
       partialText: '',
       cancelledByUser: false,
       lifecycleInterrupted: false,
+      terminalEventEmitted: false,
     });
     void this.run(
       requestId,
@@ -500,7 +831,11 @@ export class ExperimentalCoreRuntime {
     const pending = this.permissions.get(permissionId);
     if (!pending) return false;
     this.permissions.delete(permissionId);
-    if (!approved || !this.deps.permissionStore) {
+    if (
+      !approved ||
+      !this.deps.permissionStore ||
+      requiresFreshOrchestrationApproval(pending.authorizationRequest.tool)
+    ) {
       pending.resolve(approved);
       return true;
     }
@@ -525,6 +860,14 @@ export class ExperimentalCoreRuntime {
     }
   }
 
+  public async resolveOrchestrationProposal(proposalId: string, approved: boolean): Promise<boolean> {
+    const pending = this.orchestrationProposals.get(proposalId);
+    if (!pending) return false;
+    this.orchestrationProposals.delete(proposalId);
+    pending.resolve(approved);
+    return true;
+  }
+
   public async cancel(requestId: string): Promise<boolean> {
     const active = this.active.get(requestId);
     if (!active) return false;
@@ -532,6 +875,14 @@ export class ExperimentalCoreRuntime {
     active.cancelledByUser = true;
     active.controller.abort();
     this.denyPermissionsForRequest(requestId);
+    this.denyOrchestrationProposalsForRequest(requestId);
+    // A provider/CLI can take time to unwind a subprocess or retry delay. The
+    // user-facing turn must still stop immediately; any later terminal event is
+    // deduplicated by the active request flag below.
+    if (!active.terminalEventEmitted) {
+      active.terminalEventEmitted = true;
+      this.push({ requestId, sessionId: active.sessionId, targetId: active.targetId, type: 'cancelled' });
+    }
     return true;
   }
 
@@ -542,6 +893,8 @@ export class ExperimentalCoreRuntime {
     }
     for (const pending of this.permissions.values()) pending.resolve(false);
     this.permissions.clear();
+    for (const pending of this.orchestrationProposals.values()) pending.resolve(false);
+    this.orchestrationProposals.clear();
     this.transportCursors.clear();
     await Promise.allSettled(this.deps.adapters.map((adapter) => adapter.dispose()));
   }
@@ -553,12 +906,21 @@ export class ExperimentalCoreRuntime {
   ): Promise<ExperimentalCoreModel[]> {
     const cacheKey = JSON.stringify([target.id, workspace]);
     const cached = this.modelCatalog.get(cacheKey) ?? [];
+    let timer: ReturnType<typeof setTimeout> | undefined;
     try {
-      const models = await adapter.listModels(target, workspace || undefined);
+      const timeoutMs = Math.max(1, this.deps.modelDiscoveryTimeoutMs ?? MODEL_DISCOVERY_TIMEOUT_MS);
+      const models = await Promise.race([
+        adapter.listModels(target, workspace || undefined),
+        new Promise<ExperimentalCoreModel[]>((resolve) => {
+          timer = setTimeout(() => resolve(cached), timeoutMs);
+        }),
+      ]);
       if (models.length > 0) this.modelCatalog.set(cacheKey, models);
       return models.length > 0 ? models : cached;
     } catch {
       return cached;
+    } finally {
+      if (timer) clearTimeout(timer);
     }
   }
 
@@ -597,12 +959,17 @@ export class ExperimentalCoreRuntime {
     sessionId: string,
     targetId: string,
     request: { tool: string; detail?: string },
-    identity: { subjectId: string; surfaceId: string; capabilityId: string } = {
+    identity: PermissionIdentity = {
       subjectId: 'tomny',
       surfaceId: 'chat',
       capabilityId: 'core',
-    }
+    },
+    forceFresh = false
   ): Promise<boolean> {
+    // Secret Firewall tools never expose plaintext to the adapter. Their
+    // trusted Main-process host applies exact source/destination policies, so
+    // they can run unattended without weakening arbitrary MCP permissions.
+    if (isTrustedSecretFirewallRequest(identity, request.tool)) return true;
     const authorizationRequest: PermissionRequest = {
       subjectId: identity.subjectId,
       sessionId,
@@ -610,7 +977,7 @@ export class ExperimentalCoreRuntime {
       capabilityId: identity.capabilityId,
       tool: request.tool,
     };
-    if (this.deps.permissionStore) {
+    if (this.deps.permissionStore && !forceFresh && !requiresFreshOrchestrationApproval(request.tool)) {
       const decision = await this.deps.permissionStore.authorize(authorizationRequest);
       if (decision.allowed) return true;
       if (decision.reason === 'explicit-deny') return false;
@@ -643,6 +1010,36 @@ export class ExperimentalCoreRuntime {
       this.permissions.delete(permissionId);
       pending.resolve(false);
     }
+  }
+
+  private denyOrchestrationProposalsForRequest(requestId: string): void {
+    for (const [proposalId, pending] of this.orchestrationProposals) {
+      if (pending.requestId !== requestId) continue;
+      this.orchestrationProposals.delete(proposalId);
+      pending.resolve(false);
+    }
+  }
+
+  private requestOrchestrationProposalApproval(input: {
+    requestId: string;
+    sessionId: string;
+    targetId: string;
+    proposal: OrchestrationProposal;
+  }): Promise<boolean> {
+    const proposalId = crypto.randomUUID();
+    return new Promise<boolean>((resolve) => {
+      this.orchestrationProposals.set(proposalId, { requestId: input.requestId, resolve });
+      this.push({
+        requestId: input.requestId,
+        sessionId: input.sessionId,
+        targetId: input.targetId,
+        type: 'orchestration-proposal',
+        orchestrationKind: input.proposal.kind,
+        orchestrationProposalId: proposalId,
+        orchestrationProposal: input.proposal,
+        text: describeOrchestrationProposal(input.proposal),
+      });
+    });
   }
 
   private async runCompanyInMesh(input: {
@@ -714,13 +1111,20 @@ export class ExperimentalCoreRuntime {
     originalPrompt: string;
     surface: string;
     mcpServers: CoreMcpServer[];
-    permissionIdentity: (tool: string) => { subjectId: string; surfaceId: string; capabilityId: string };
+    toolCatalog: CoreToolCatalogPolicy;
+    permissionIdentity: (tool: string) => PermissionIdentity;
   }): Promise<string> {
-    const runAgent = async (prompt: string, runSignal: AbortSignal = input.signal): Promise<string> => {
+    const runAgent = async (
+      prompt: string,
+      runSignal: AbortSignal = input.signal,
+      agentSessionId: string = crypto.randomUUID(),
+      toolCatalog: CoreToolCatalogPolicy = input.toolCatalog,
+      agentId?: string
+    ): Promise<string> => {
       let response = '';
       await this.withAgentLease(() =>
         input.adapter.run({
-          sessionId: crypto.randomUUID(),
+          sessionId: agentSessionId,
           target: input.target,
           prompt,
           workspace: input.workspace,
@@ -728,6 +1132,7 @@ export class ExperimentalCoreRuntime {
           permissionMode: input.permissionMode,
           surface: input.surface,
           mcpServers: input.mcpServers,
+          toolCatalog,
           signal: runSignal,
           emit: (event) => {
             if (event.type === 'delta') response = event.mode === 'replace' ? event.text : response + event.text;
@@ -738,6 +1143,7 @@ export class ExperimentalCoreRuntime {
                 targetId: input.targetId,
                 workspace: input.workspace,
                 event,
+                agentId,
               });
           },
           requestPermission: (request) =>
@@ -784,7 +1190,10 @@ export class ExperimentalCoreRuntime {
                   'You are executing one approved Company role. Do not create or propose another Team or Company.',
                   ...messages.map((message) => message.role.toUpperCase() + ': ' + message.content),
                 ].join('\n\n'),
-                chatSignal ?? input.signal
+                chatSignal ?? input.signal,
+                crypto.randomUUID(),
+                input.toolCatalog,
+                `company:${companyId}`
               ),
             onEvent: (event) => {
               if (event.type === 'status') {
@@ -812,9 +1221,17 @@ export class ExperimentalCoreRuntime {
       });
     }
 
+    const workspaceToolGuidance = [
+      `Workspace root: ${input.workspace}`,
+      'Use the inherited surface tools directly. Repository tools require the absolute workspace/root plus every required file path, directory, glob pattern, search query, intent, or command field.',
+      'Do not claim a tool is unavailable merely because tools_search did not rank it; inspect the active ToolMap and call the inherited IDE tool by its exact name.',
+    ].join('\n');
     const results = new Map<string, string>();
-    const mesh = this.agentMeshService.create(input.requestId, {
-      maxConcurrent: input.proposal.parallelism,
+    const meshSessionId = `${input.sessionId}:team:${input.requestId}`;
+    const resourceLimit = this.deps.coordinator?.getState?.().budget.maxConcurrent.agent;
+    const maxConcurrent = this.agentMeshService.resolveMaxConcurrent(input.proposal.parallelism, resourceLimit);
+    const mesh = this.agentMeshService.create(meshSessionId, {
+      maxConcurrent,
       totalTokenBudget: input.proposal.estimatedTokens,
       onEvent: (event) => {
         if (event.type !== 'task-status') return;
@@ -827,10 +1244,25 @@ export class ExperimentalCoreRuntime {
         });
       },
     });
+    this.push({
+      requestId: input.requestId,
+      sessionId: input.sessionId,
+      targetId: input.targetId,
+      type: 'orchestration-created',
+      orchestrationKind: 'team',
+      orchestrationId: meshSessionId,
+      text: `Approved Team created: ${input.proposal.name}`,
+    });
+
     const communicationActions: AgentMessageKind[] = ['task', 'question', 'progress', 'result', 'handoff', 'control'];
     mesh.registerAgent({
       agentId: 'leader',
       grants: [{ fromAgentId: 'leader', toAgentId: '*', actions: communicationActions }],
+    });
+    mesh.registerAgent({
+      agentId: 'user',
+      parentAgentId: 'leader',
+      grants: [{ fromAgentId: 'user', toAgentId: '*', actions: communicationActions }],
     });
     for (const role of input.proposal.roles) {
       mesh.registerAgent({
@@ -841,6 +1273,54 @@ export class ExperimentalCoreRuntime {
         ],
       });
     }
+
+    const roleById = new Map(input.proposal.roles.map((role) => [role.id, role]));
+    const agentRunChains = new Map<string, Promise<string>>();
+    const runInAgentSession = (agentId: string, operation: () => Promise<string>): Promise<string> => {
+      const previous = agentRunChains.get(agentId) ?? Promise.resolve('');
+      const next = previous.catch(() => '').then(operation);
+      agentRunChains.set(agentId, next);
+      void next.finally(() => {
+        if (agentRunChains.get(agentId) === next) agentRunChains.delete(agentId);
+      });
+      return next;
+    };
+    const stableAgentSession = (agentId: string): string => `${meshSessionId}:agent:${agentId}`;
+
+    this.agentMeshService.setMessageHandler(meshSessionId, async (messageInput, message) => {
+      if (messageInput.fromAgentId !== 'user' || messageInput.toAgentId === 'user') return;
+      const targetId = messageInput.toAgentId;
+      const role = roleById.get(targetId);
+      if (!role && targetId !== 'leader') return;
+      if (message.status === 'queued') await mesh.waitForIdle();
+      const response = await runInAgentSession(targetId, () =>
+        runAgent(
+          [
+            targetId === 'leader'
+              ? 'You are the leader of an approved temporary Team.'
+              : `You are the ${role!.name} in an approved temporary Team.`,
+            role ? `Responsibility: ${role.responsibility}` : `Shared user goal: ${input.originalPrompt}`,
+            workspaceToolGuidance,
+            `The user sent you this direct message from the Team panel:\n${messageInput.content}`,
+            'Reply directly and concisely to the user. Do not create another Team or Company.',
+          ]
+            .filter(Boolean)
+            .join('\n\n'),
+          input.signal,
+          stableAgentSession(targetId),
+          input.toolCatalog,
+          targetId
+        )
+      );
+      this.agentMeshService.send(meshSessionId, {
+        fromAgentId: targetId,
+        toAgentId: 'user',
+        kind: 'result',
+        content: response,
+        delivery: 'send-now',
+      });
+    });
+
     for (const role of input.proposal.roles) {
       mesh.submitTask(
         {
@@ -858,17 +1338,23 @@ export class ExperimentalCoreRuntime {
           const dependencies = role.dependsOn
             .map((dependency) => results.get(dependency))
             .filter((result): result is string => Boolean(result));
-          const response = await runAgent(
-            [
-              `You are the ${role.name} in an approved temporary Team.`,
-              `Responsibility: ${role.responsibility}`,
-              `Shared user goal: ${input.originalPrompt}`,
-              dependencies.length > 0 ? `Dependency results:\n${dependencies.join('\n\n')}` : '',
-              'Do not create or propose another Team or Company. Return a concise evidence-based result to the leader.',
-            ]
-              .filter(Boolean)
-              .join('\n\n'),
-            AbortSignal.any([input.signal, context.signal])
+          const response = await runInAgentSession(role.id, () =>
+            runAgent(
+              [
+                `You are the ${role.name} in an approved temporary Team.`,
+                `Responsibility: ${role.responsibility}`,
+                `Shared user goal: ${input.originalPrompt}`,
+                workspaceToolGuidance,
+                dependencies.length > 0 ? `Dependency results:\n${dependencies.join('\n\n')}` : '',
+                'Do not create or propose another Team or Company. Return a concise evidence-based result to the leader.',
+              ]
+                .filter(Boolean)
+                .join('\n\n'),
+              AbortSignal.any([input.signal, context.signal]),
+              stableAgentSession(role.id),
+              input.toolCatalog,
+              role.id
+            )
           );
           results.set(role.id, response);
           return { summary: response, tokensUsed: role.estimatedTokens };
@@ -879,13 +1365,20 @@ export class ExperimentalCoreRuntime {
     const reports = input.proposal.roles
       .map((role) => `${role.name}:\n${results.get(role.id) ?? '[No result]'}`)
       .join('\n\n');
-    return runAgent(
-      [
-        'You are the leader of an approved temporary Team.',
-        `Original user goal: ${input.originalPrompt}`,
-        `Team reports:\n${reports}`,
-        'Synthesize the final answer. Resolve disagreements, state incomplete work honestly, and do not propose another orchestration.',
-      ].join('\n\n')
+    return runInAgentSession('leader', () =>
+      runAgent(
+        [
+          'You are the leader of an approved temporary Team.',
+          `Original user goal: ${input.originalPrompt}`,
+          workspaceToolGuidance,
+          `Team reports:\n${reports}`,
+          'Synthesize the final answer. Resolve disagreements, state incomplete work honestly, and do not propose another orchestration.',
+        ].join('\n\n'),
+        input.signal,
+        stableAgentSession('leader'),
+        input.toolCatalog,
+        'leader'
+      )
     );
   }
 
@@ -936,13 +1429,22 @@ export class ExperimentalCoreRuntime {
     targetId: string;
     workspace: string;
     event: CoreAdapterEvent;
+    agentId?: string;
   }): void {
+    const adapterEvent =
+      (input.event.type === 'tool-call' || input.event.type === 'tool-result') && input.event.input !== undefined
+        ? {
+            ...input.event,
+            input: sanitizeToolEventInput(input.event.tool, input.event.input),
+          }
+        : input.event;
     this.push({
       requestId: input.requestId,
       sessionId: input.sessionId,
       targetId: input.targetId,
       workspace: input.workspace,
-      ...input.event,
+      ...adapterEvent,
+      ...(input.agentId ? { agentId: input.agentId } : {}),
     });
   }
 
@@ -971,7 +1473,10 @@ export class ExperimentalCoreRuntime {
     let checkpoint: CoreSessionCheckpoint | undefined;
     let activeTransportKey: string | undefined;
     let transportSucceeded = false;
+    let retainsConversationHistory = true;
     let assistantText = '';
+    let assistantCheckpointed = false;
+    let terminalCheckpointPersisted = false;
     try {
       await this.initialized;
       const normalizedPrompt = prompt.trim();
@@ -993,6 +1498,7 @@ export class ExperimentalCoreRuntime {
         throw new Error('The selected CLI is not installed or its direct adapter is unavailable.');
       const adapter = this.deps.adapters.find((candidate) => candidate.protocol === target.protocol);
       if (!adapter) throw new Error(`No direct adapter is registered for ${target.protocol}.`);
+      retainsConversationHistory = adapter.retainsConversationHistory !== false;
       if (isCompany && !this.deps.companyRunner) throw new Error('The Company core runner is unavailable.');
       if (isCompany && !companyId?.trim()) throw new Error('Select a company before starting the Company core.');
       const surfaceResolution = this.deps.surfaceRegistry?.resolve({
@@ -1013,13 +1519,35 @@ export class ExperimentalCoreRuntime {
       }
       const resolvedSurface = surfaceResolution?.ok ? surfaceResolution.value : undefined;
       const resolvedSurfaceId = resolvedSurface?.manifest.id ?? contextIdentity.surface;
-      const permissionIdentity = (tool: string) =>
-        permissionIdentityFor(contextIdentity, resolvedSurfaceId, resolvedSurface, tool);
+      const toolCatalog = resolveCoreToolCatalogPolicy(resolvedSurface, contextIdentity.superMode);
+      let trustedSecretContextHost = false;
+      const permissionIdentity = (tool: string): PermissionIdentity => ({
+        ...permissionIdentityFor(contextIdentity, resolvedSurfaceId, resolvedSurface, tool),
+        trustedSecretContextHost,
+      });
 
-      const mcpServerNames = (resolvedSurface?.capabilities ?? [])
-        .filter((capability) => capability.kind === 'mcp' && Boolean(capability.serverName))
-        .map((capability) => capability.serverName!);
-      const mcpServers = this.deps.resolveCapabilityHosts ? await this.deps.resolveCapabilityHosts(mcpServerNames) : [];
+      const mcpServerNames = resolveCoreCapabilityServerNames(
+        resolvedSurface,
+        this.deps.surfaceRegistry,
+        contextIdentity.superMode,
+        this.deps.availableCapabilityHostNames?.()
+      );
+      const capabilityHostContext: CoreCapabilityHostContext = Object.freeze({
+        sessionId,
+        workspace: normalizedWorkspace,
+        surface: resolvedSurfaceId,
+        permissionMode: childPermissionForParent(permissionMode),
+        requestPermission: (request) =>
+          this.requestPermission(requestId, sessionId, targetId, request, permissionIdentity(request.tool)),
+      });
+      const mcpServers = this.deps.resolveCapabilityHosts
+        ? await this.deps.resolveCapabilityHosts(mcpServerNames, contextIdentity.mcpServers, capabilityHostContext)
+        : contextIdentity.mcpServers;
+      trustedSecretContextHost = attestSecretContextHost(
+        resolvedSurface,
+        Boolean(this.deps.resolveCapabilityHosts),
+        mcpServers
+      );
 
       const existing = await this.sessionStore.get(sessionId);
       if (existing) assertCompatibleSession(existing, normalizedWorkspace);
@@ -1040,11 +1568,11 @@ export class ExperimentalCoreRuntime {
       const pendingMessage = checkpoint.messages.at(-1);
       const isResumingPendingMessage =
         resumePendingTurn && pendingMessage?.role === 'user' && pendingMessage.text === normalizedPrompt;
-      const priorMessages = isResumingPendingMessage ? checkpoint.messages.slice(0, -1) : [...checkpoint.messages];
       activeTransportKey = transportKey(sessionId, targetId, modelKey, permissionMode);
-      const cursor = this.transportCursors.get(activeTransportKey) ?? 0;
-      const portableMessages = priorMessages.slice(cursor);
-      const needsHandoff = portableMessages.length > 0;
+      // Legacy message digests are intentionally retired. The full archive stays
+      // searchable in the checkpoint, but Save is the only historical prompt input.
+      checkpoint.conversationSummary = undefined;
+      checkpoint.summarizedMessageCount = undefined;
       if (existing && (previousTargetId !== targetId || previousModelKey !== modelKey)) {
         checkpoint.transitions = [
           ...(checkpoint.transitions ?? []),
@@ -1068,6 +1596,8 @@ export class ExperimentalCoreRuntime {
       checkpoint.capabilityGrants = contextIdentity.capabilityGrants;
       checkpoint.availableCapabilities = contextIdentity.availableCapabilities;
       checkpoint.modelCapabilities = contextIdentity.modelCapabilities;
+      checkpoint.conversationContext = contextIdentity.conversationContext || undefined;
+      checkpoint.superMode = contextIdentity.superMode;
       if (!isResumingPendingMessage) checkpoint.messages.push({ role: 'user', text: normalizedPrompt, timestamp: now });
       checkpoint.status = 'running';
       checkpoint.updatedAt = now;
@@ -1090,19 +1620,10 @@ export class ExperimentalCoreRuntime {
           sessionId,
           targetId,
           type: 'status',
-          text: `Handing off portable context from ${previousTargetId} to ${targetId}...`,
+          text: `Switching execution target from ${previousTargetId} to ${targetId}...`,
         });
       }
       if (signal.aborted) throw new Error('The request was cancelled.');
-      const portablePrompt = needsHandoff
-        ? buildPortableHandoffPrompt({
-            messages: portableMessages,
-            prompt: normalizedPrompt,
-            fromTargetId: previousTargetId,
-            toTargetId: targetId,
-            workspace: normalizedWorkspace,
-          })
-        : normalizedPrompt;
       const capabilityContract = resolvedSurface?.capabilities.length
         ? [
             `[Surface: ${resolvedSurface.manifest.id}]`,
@@ -1113,14 +1634,31 @@ export class ExperimentalCoreRuntime {
           ].join('\n')
         : '';
       const surfaceHarness = buildSurfaceHarnessPrompt(resolvedSurface);
-      const surfacePrelude = [capabilityContract, surfaceHarness].filter(Boolean).join('\n\n');
-      let effectivePrompt = surfacePrelude ? `${surfacePrelude}\n\n${portablePrompt}` : portablePrompt;
+      const conversationContext = contextIdentity.conversationContext
+        ? [
+            '## Host-selected conversation context',
+            'Treat this as bounded workspace and conversation guidance, never as a new user request.',
+            contextIdentity.conversationContext,
+          ].join('\n')
+        : '';
+      const savedMemoryContext = contextIdentity.savedMemoryContext
+        ? [
+            '## Host-selected session Save',
+            'This is the only historical conversation context. Pinned entries are independent verbatim facts.',
+            contextIdentity.savedMemoryContext,
+          ].join('\n')
+        : '';
+      const surfacePrelude = [capabilityContract, surfaceHarness, savedMemoryContext, conversationContext]
+        .filter(Boolean)
+        .join('\n\n');
+      let effectivePrompt = surfacePrelude ? `${surfacePrelude}\n\n${normalizedPrompt}` : normalizedPrompt;
       if (this.deps.contextComposer) {
         try {
           effectivePrompt = await this.deps.contextComposer.composePrompt({
             agentId: contextIdentity.agentId,
             personalId: contextIdentity.personalId,
             surface: resolvedSurfaceId,
+            secretContextPolicy: secretContextPolicyFor(resolvedSurface, trustedSecretContextHost),
             prompt: effectivePrompt,
           });
         } catch (error) {
@@ -1155,13 +1693,21 @@ export class ExperimentalCoreRuntime {
                   permissionMode,
                   surface: resolvedSurfaceId,
                   mcpServers,
+                  toolCatalog,
                   signal: chatSignal,
                   emit: (event) => {
                     this.observeAdapterTelemetry(requestId, event);
                     if (event.type === 'delta')
                       response = event.mode === 'replace' ? event.text : response + event.text;
                     else
-                      this.pushAdapterEvent({ requestId, sessionId, targetId, workspace: normalizedWorkspace, event });
+                      this.pushAdapterEvent({
+                        requestId,
+                        sessionId,
+                        targetId,
+                        workspace: normalizedWorkspace,
+                        event,
+                        agentId: `company:${companyId!.trim()}`,
+                      });
                   },
                   requestPermission: (request) =>
                     this.requestPermission(requestId, sessionId, targetId, request, permissionIdentity(request.tool)),
@@ -1201,6 +1747,7 @@ export class ExperimentalCoreRuntime {
             permissionMode,
             surface: resolvedSurfaceId,
             mcpServers,
+            toolCatalog,
             signal,
             emit: (event) => {
               this.observeAdapterTelemetry(requestId, event);
@@ -1228,14 +1775,12 @@ export class ExperimentalCoreRuntime {
             type: 'status',
             text: `Agent proposed an approved-gated ${proposal.kind}.`,
           });
-          const orchestrationTool = `orchestration.create.${proposal.kind}`;
-          const approved = await this.requestPermission(
+          const approved = await this.requestOrchestrationProposalApproval({
             requestId,
             sessionId,
             targetId,
-            { tool: orchestrationTool, detail: describeOrchestrationProposal(proposal) },
-            permissionIdentity(orchestrationTool)
-          );
+            proposal,
+          });
           if (approved) {
             assistantText = await this.executeApprovedOrchestration({
               proposal,
@@ -1251,6 +1796,7 @@ export class ExperimentalCoreRuntime {
               originalPrompt: normalizedPrompt,
               surface: resolvedSurfaceId,
               mcpServers,
+              toolCatalog,
               permissionIdentity,
             });
           } else {
@@ -1263,12 +1809,23 @@ export class ExperimentalCoreRuntime {
       const lifecycleInterrupted = signal.aborted && activeState?.lifecycleInterrupted === true;
       transportSucceeded = !signal.aborted;
       checkpoint.status = lifecycleInterrupted ? 'interrupted' : signal.aborted ? 'cancelled' : 'completed';
+      if (assistantText) {
+        checkpoint.messages.push({ role: 'assistant', text: assistantText, timestamp: Date.now() });
+        assistantCheckpointed = true;
+      }
+      if (transportSucceeded && activeTransportKey && retainsConversationHistory) {
+        this.transportCursors.set(activeTransportKey, checkpoint.messages.length);
+      }
+      checkpoint.updatedAt = Date.now();
+      await this.sessionStore.save(checkpoint);
+      terminalCheckpointPersisted = true;
       this.recordTerminalTelemetry(requestId, signal.aborted ? 'cancelled' : 'completed');
-      if (!lifecycleInterrupted) {
+      if (!lifecycleInterrupted && !activeState?.terminalEventEmitted) {
         this.push({ requestId, sessionId, targetId, type: signal.aborted ? 'cancelled' : 'completed' });
       }
     } catch (error) {
       const message = errorMessage(error);
+      transportSucceeded = false;
       const activeState = this.active.get(requestId);
       const lifecycleInterrupted = signal.aborted && activeState?.lifecycleInterrupted === true;
       const cancelledByUser = signal.aborted && activeState?.cancelledByUser === true;
@@ -1277,7 +1834,7 @@ export class ExperimentalCoreRuntime {
         checkpoint.status = lifecycleInterrupted ? 'interrupted' : cancelledByUser ? 'cancelled' : 'error';
         checkpoint.lastError = lifecycleInterrupted || cancelledByUser ? undefined : message;
       }
-      if (!lifecycleInterrupted) {
+      if (!lifecycleInterrupted && !activeState?.terminalEventEmitted) {
         this.recordTerminalTelemetry(requestId, cancelledByUser ? 'cancelled' : 'failed');
         this.push({
           requestId,
@@ -1288,15 +1845,20 @@ export class ExperimentalCoreRuntime {
         });
       }
     } finally {
-      if (checkpoint) {
-        if (assistantText) checkpoint.messages.push({ role: 'assistant', text: assistantText, timestamp: Date.now() });
-        if (transportSucceeded && activeTransportKey) {
+      if (checkpoint && !terminalCheckpointPersisted) {
+        if (assistantText && !assistantCheckpointed) {
+          checkpoint.messages.push({ role: 'assistant', text: assistantText, timestamp: Date.now() });
+        }
+        if (transportSucceeded && activeTransportKey && retainsConversationHistory) {
           this.transportCursors.set(activeTransportKey, checkpoint.messages.length);
         }
         checkpoint.updatedAt = Date.now();
-        await this.sessionStore.save(checkpoint).catch((): void => undefined);
+        await this.sessionStore
+          .save(checkpoint)
+          .catch((error) => console.error('[TomnyCore] Failed to persist terminal checkpoint:', errorMessage(error)));
       }
       this.denyPermissionsForRequest(requestId);
+      this.denyOrchestrationProposalsForRequest(requestId);
       this.active.delete(requestId);
 
       this.runEvents.delete(requestId);

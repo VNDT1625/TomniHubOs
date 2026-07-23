@@ -19,11 +19,71 @@ vi.mock('@renderer/pages/editor/adapters/onlyOfficeConnector', () => ({
   insertText: vi.fn(async () => undefined),
   insertHtml: vi.fn(async () => undefined),
   appendText: vi.fn(async () => undefined),
+  applyHeadings: vi.fn(async () => 2),
+  insertTableOfContents: vi.fn(async () => undefined),
+  formatText: vi.fn(async () => 1),
+  formatPassage: vi.fn(async () => true),
+  replacePassage: vi.fn(async () => true),
+  insertTable: vi.fn(async () => undefined),
+  setCells: vi.fn(async () => 1),
   runOfficeScript: vi.fn(async () => 'script-result'),
+  getOfficeCapabilities: vi.fn(() => ({
+    filePath: '/deck.pptx',
+    kind: 'slide',
+    editorReady: true,
+    automationApi: { supported: true, reason: 'test connector' },
+    objectAnimation: { supported: true, reason: 'test animation API' },
+    slideShowControl: { supported: false, reason: 'not tested' },
+    recording: { supported: false, reason: 'not tested' },
+  })),
 }));
 
-import { insertHtml, replaceAllText, runOfficeScript } from '@renderer/pages/editor/adapters/onlyOfficeConnector';
-import { TOOL_GUIDE, extractActionJson, parseAction, runTool } from '@/renderer/pages/studio/docAgentTools';
+import {
+  applyHeadings,
+  insertTableOfContents,
+  runOfficeScript,
+} from '@renderer/pages/editor/adapters/onlyOfficeConnector';
+
+import {
+  TOOL_GUIDE,
+  buildObjectAnimationReviewScript,
+  buildObjectAnimationsScript,
+  buildPremiumDeckScript,
+  buildPremiumDeckAppendScript,
+  extractActionJson,
+  parseAction,
+  runTool,
+  type PremiumDeckPlan,
+} from '@/renderer/pages/studio/docAgentTools';
+
+const strongDeckPlan = (): PremiumDeckPlan => ({
+  title: 'AI Security Armor',
+  designStyle: 'technical',
+  theme: {
+    primary: '#246BFD',
+    secondary: '#10A37F',
+    background: '#F7F8FA',
+    text: '#121826',
+    fontFamily: 'Aptos',
+  },
+  slides: [
+    { title: 'AI Security Armor', subtitle: 'Evidence-led defense', bullets: [], layout: 'cover' },
+    {
+      title: 'Validated detection performance',
+      bullets: ['Local ONNX inference'],
+      layout: 'chart',
+      chartValues: [[84, 92, 99]],
+      chartLabels: ['URL', 'Text', 'Prompt'],
+      source: 'MODEL_VALIDATION_REPORT.md',
+    },
+    {
+      title: 'Approve the competition demo',
+      subtitle: 'Run the evidence-backed judge flow',
+      bullets: ['Open the demo'],
+      layout: 'closing',
+    },
+  ],
+});
 
 describe('TOOL_GUIDE', () => {
   it('frames Office API as the premium PPTX path for visual deck work', () => {
@@ -33,6 +93,194 @@ describe('TOOL_GUIDE', () => {
     expect(TOOL_GUIDE).toContain('For premium PPTX work');
     expect(TOOL_GUIDE).toContain('place shapes/images');
     expect(TOOL_GUIDE).toContain('transitions/effects when supported');
+  });
+});
+
+describe('premium deck design engine', () => {
+  it('generates a deterministic grid-based script with fitted typography and varied layouts', () => {
+    const script = buildPremiumDeckScript({
+      title: 'Market launch',
+      subtitle: 'Executive briefing',
+
+      designStyle: 'technical',
+      theme: {
+        primary: '#246BFD',
+        secondary: '#7C3AED',
+        background: '#F7F8FA',
+        text: '#172033',
+        fontFamily: 'Arial',
+      },
+      slides: [
+        { title: 'Market launch', subtitle: 'North star', bullets: [], layout: 'cover' },
+        { title: 'Momentum', subtitle: 'Quarterly progress', bullets: ['Revenue', 'Pipeline'], layout: 'chart' },
+      ],
+    });
+
+    expect(script).toContain('const COL = Math.floor');
+    expect(script).toContain('const dna =');
+
+    expect(script).toContain('const stylePresets =');
+    expect(script).toContain('const nativeChart =');
+    expect(script).toContain('const agendaList =');
+    expect(script).toContain('const comparisonGrid =');
+    expect(script).toContain('const timelineDiagram =');
+    expect(script).toContain('const architectureDiagram =');
+    expect(script).toContain('pres.RemoveSlides');
+    expect(script).toContain('const fit =');
+    expect(script).toContain('const collisionCount =');
+    expect(script).toContain('const metricCards =');
+    expect(script).toContain('const processDiagram =');
+    expect(script).toContain('const lineChart =');
+    expect(script).toContain('const qualityScore =');
+    expect(script).toContain("spec.layout === 'chart'");
+    expect(script).toContain('Created apex design-engine deck');
+    expect(() => new Function('Api', script)).not.toThrow();
+  });
+});
+
+describe('premium deck collision QA', () => {
+  it('does not report intended text-inside-card containment as a collision', () => {
+    const docContent = { RemoveAllElements: vi.fn(), Push: vi.fn() };
+    const createShape = () => ({ SetPosition: vi.fn(), GetDocContent: () => docContent });
+    const slide = {
+      RemoveAllObjects: vi.fn(),
+      SetBackground: vi.fn(),
+      AddObject: vi.fn(),
+    };
+    const presentation = {
+      SetSizes: vi.fn(),
+      GetSlidesCount: () => 1,
+      RemoveSlides: vi.fn(),
+      GetSlideByIndex: () => slide,
+      AddSlide: vi.fn(),
+    };
+    const api = {
+      GetPresentation: () => presentation,
+      RGB: (red: number, green: number, blue: number) => ({ red, green, blue }),
+      CreateSolidFill: (color: unknown) => ({ color }),
+      CreateNoFill: () => ({}),
+      CreateStroke: (width: number, fill: unknown) => ({ width, fill }),
+      CreateShape: createShape,
+      CreateParagraph: () => ({
+        SetJc: vi.fn(),
+        SetFontSize: vi.fn(),
+        SetColor: vi.fn(),
+        SetBold: vi.fn(),
+        SetFontFamily: vi.fn(),
+        AddText: vi.fn(),
+      }),
+      CreateSlide: () => slide,
+    };
+    const script = buildPremiumDeckScript({
+      title: 'Three evidence signals',
+      designStyle: 'minimal',
+      theme: {
+        primary: '#246BFD',
+        secondary: '#10A37F',
+        background: '#F7F8FA',
+        text: '#121826',
+        fontFamily: 'Aptos',
+      },
+      slides: [
+        {
+          title: 'Three evidence signals',
+          bullets: ['Static analysis', 'Runtime validation', 'Reproducible demo'],
+          layout: 'content',
+        },
+      ],
+    });
+
+    const output = JSON.parse(String(new Function('Api', script)(api))) as {
+      qa: Array<{ collisions: number; score: number }>;
+    };
+    expect(output.qa).toEqual([{ slide: 1, score: 100, collisions: 0 }]);
+  });
+});
+
+describe('premium deck append mode', () => {
+  it('adds new slides without replacing the existing deck', () => {
+    const script = buildPremiumDeckAppendScript({
+      title: 'Agenda',
+      designStyle: 'editorial',
+      theme: {
+        primary: '#246BFD',
+        secondary: '#7C3AED',
+        background: '#F7F8FA',
+        text: '#172033',
+        fontFamily: 'Arial',
+      },
+      slides: [
+        {
+          title: 'Agenda',
+          bullets: [],
+          layout: 'agenda',
+          items: [{ label: 'Problem' }, { label: 'Solution' }, { label: 'Demo' }],
+        },
+      ],
+    });
+
+    expect(script).toContain('"mode":"append"');
+    expect(script).toContain("const appendMode = buildOptions.mode === 'append'");
+    expect(() => new Function('Api', script)).not.toThrow();
+  });
+});
+
+describe('purposeful object animation scripts', () => {
+  const animation = {
+    slideIndex: 1,
+    drawingName: 'Conclusion',
+    effect: 'entranceFade' as const,
+    trigger: 'onclick' as const,
+    durationMs: 500,
+    delayMs: 0,
+    repeatCount: 1,
+    order: 0,
+    purpose: 'progressive-disclosure' as const,
+    rationale: 'Reveal the conclusion after the evidence is explained.',
+  };
+
+  it('embeds its plan and uses ONLYOFFICE timeline APIs without captured state', () => {
+    const applyScript = buildObjectAnimationsScript([animation], true);
+    const reviewScript = buildObjectAnimationReviewScript();
+    expect(applyScript).toContain('GetTimeLine');
+    expect(applyScript).toContain('AddEffect');
+    expect(applyScript).toContain('RemoveAllEffects');
+    expect(applyScript).toContain('SetDuration');
+    expect(applyScript).toContain('progressive-disclosure');
+    expect(reviewScript).toContain('GetInteractiveSequences');
+    expect(reviewScript).toContain('GetInternalId');
+    expect(() => new Function('Api', applyScript)).not.toThrow();
+    expect(() => new Function('Api', reviewScript)).not.toThrow();
+  });
+
+  it('turns a live timeline into a timing and density QA report', async () => {
+    vi.mocked(runOfficeScript).mockResolvedValueOnce(
+      JSON.stringify({
+        ok: true,
+        drawings: [{ slideIndex: 1, drawingIndex: 0, drawingName: 'Conclusion', classType: 'shape' }],
+        effects: [
+          {
+            slideIndex: 1,
+            sequenceType: 'main',
+            drawingName: 'Conclusion',
+            drawingId: '',
+            effect: 'entranceFade',
+            trigger: 'onclick',
+            durationMs: 3000,
+            delayMs: 2500,
+            repeatCount: 3,
+          },
+        ],
+      })
+    );
+    const result = await runTool('/deck.pptx', 'slide', {
+      tool: 'review_object_animations',
+      expectedAnimations: [animation],
+    });
+    expect(result.observation).toContain('Purposeful animation QA');
+    expect(result.observation).toContain('duration should usually');
+    expect(result.observation).toContain('delay above 2000');
+    expect(result.observation).toContain('repeat count above 2');
   });
 });
 
@@ -50,11 +298,71 @@ describe('parseAction', () => {
     expect(parseAction({ tool: 'finish', summary: 's' })).toEqual({ tool: 'finish', summary: 's' });
   });
 
+  it('accepts report structure, slide notes, transitions and visual review actions', () => {
+    expect(
+      parseAction({
+        tool: 'structure_report',
+        headings: [{ text: 'Architecture', level: 2 }],
+        insertToc: true,
+      })
+    ).toEqual({
+      tool: 'structure_report',
+      headings: [{ text: 'Architecture', level: 2 }],
+      insertToc: true,
+    });
+    expect(parseAction({ tool: 'add_speaker_notes', slideIndex: 2, text: 'Explain the trust boundary.' })).toEqual({
+      tool: 'add_speaker_notes',
+      slideIndex: 2,
+      text: 'Explain the trust boundary.',
+    });
+    expect(parseAction({ tool: 'apply_slide_transitions', effect: 'fade' })).toEqual({
+      tool: 'apply_slide_transitions',
+      effect: 'fade',
+      speed: 'medium',
+    });
+    expect(
+      parseAction({
+        tool: 'apply_object_animations',
+        animations: [
+          {
+            slideIndex: 1,
+            drawingName: 'Conclusion',
+            effect: 'entranceFade',
+            trigger: 'onclick',
+            purpose: 'progressive-disclosure',
+            rationale: 'Reveal the conclusion after the evidence is explained.',
+          },
+        ],
+      })
+    ).toMatchObject({
+      tool: 'apply_object_animations',
+      replaceExistingMainSequence: false,
+      animations: [
+        {
+          durationMs: 500,
+          delayMs: 0,
+          repeatCount: 1,
+          order: 0,
+          purpose: 'progressive-disclosure',
+        },
+      ],
+    });
+    expect(parseAction({ tool: 'review_object_animations' })).toEqual({ tool: 'review_object_animations' });
+    expect(parseAction({ tool: 'review_premium_quality' })).toEqual({ tool: 'review_premium_quality' });
+    expect(parseAction({ tool: 'open_visual_review' })).toEqual({ tool: 'open_visual_review' });
+  });
+
   it('rejects malformed or unknown actions', () => {
     expect(parseAction(null)).toBeNull();
     expect(parseAction({})).toBeNull();
     expect(parseAction({ tool: 'replace_all' })).toBeNull(); // missing text
     expect(parseAction({ tool: 'search_replace', search: 'a' })).toBeNull(); // missing replace
+    expect(
+      parseAction({
+        tool: 'apply_object_animations',
+        animations: [{ slideIndex: 0, drawingIndex: 0, effect: 'wrong', rationale: 'too short' }],
+      })
+    ).toBeNull();
     expect(parseAction({ tool: 'nope' })).toBeNull();
   });
 
@@ -63,6 +371,8 @@ describe('parseAction', () => {
       tool: 'create_premium_doc',
       plan: {
         title: ' Executive brief ',
+
+        includeToc: true,
         theme: { primary: '0f62fe', background: 'bad-color' },
         sections: [
           {
@@ -80,6 +390,8 @@ describe('parseAction', () => {
       tool: 'create_premium_doc',
       plan: {
         title: 'Executive brief',
+
+        includeToc: true,
         theme: { primary: '#0F62FE', background: '#F7F8FA' },
         sections: [
           {
@@ -106,10 +418,21 @@ describe('parseAction', () => {
       tool: 'create_premium_deck',
       plan: {
         title: ' Market launch ',
+
+        designStyle: 'technical',
         theme: { primary: 'ff5500', background: 'bad-color' },
         slides: [
           { title: 'Cover', subtitle: 'North star', layout: 'cover', imageUrl: 'https://example.com/hero.png' },
-          { title: 'Momentum', bullets: ['Revenue up', 'Pipeline deep'], layout: 'chart', chartValues: [[25, 55, 90]] },
+          {
+            title: 'Momentum',
+            bullets: ['Revenue up', 'Pipeline deep'],
+            layout: 'chart',
+            chartValues: [[25, 55, 90]],
+            chartLabels: ['Q1', 'Q2', 'Q3'],
+            source: 'MODEL_VALIDATION_REPORT.md',
+            speakerNotes: 'Explain the validation split.',
+            transition: 'fade',
+          },
         ],
       },
     });
@@ -118,10 +441,21 @@ describe('parseAction', () => {
       tool: 'create_premium_deck',
       plan: {
         title: 'Market launch',
+
+        designStyle: 'technical',
         theme: { primary: '#FF5500', background: '#F7F8FA' },
         slides: [
           { title: 'Cover', layout: 'cover', imageUrl: 'https://example.com/hero.png' },
-          { title: 'Momentum', layout: 'chart', bullets: ['Revenue up', 'Pipeline deep'], chartValues: [[25, 55, 90]] },
+          {
+            title: 'Momentum',
+            layout: 'chart',
+            bullets: ['Revenue up', 'Pipeline deep'],
+            chartValues: [[25, 55, 90]],
+            chartLabels: ['Q1', 'Q2', 'Q3'],
+            source: 'MODEL_VALIDATION_REPORT.md',
+            speakerNotes: 'Explain the validation split.',
+            transition: 'fade',
+          },
         ],
       },
     });
@@ -206,6 +540,64 @@ describe('runTool', () => {
     const r = await runTool('/f.docx', 'word', { tool: 'append_text', text: 'p' });
     expect(r.done).toBe(false);
     expect(r.observation).toMatch(/appended/i);
+  });
+
+  it('blocks a weak full-deck plan before mutating the live editor', async () => {
+    vi.mocked(runOfficeScript).mockClear();
+    const weakPlan: PremiumDeckPlan = {
+      ...strongDeckPlan(),
+      slides: [{ title: 'Only slide', bullets: [], layout: 'content' }],
+    };
+
+    const result = await runTool('/deck.pptx', 'slide', { tool: 'create_premium_deck', plan: weakPlan });
+
+    expect(result.observation).toContain('Deck preflight blocked');
+    expect(runOfficeScript).not.toHaveBeenCalled();
+  });
+
+  it('builds an evidence-led full deck after preflight passes', async () => {
+    vi.mocked(runOfficeScript).mockResolvedValueOnce('deck-created');
+    const result = await runTool('/deck.pptx', 'slide', {
+      tool: 'create_premium_deck',
+      plan: strongDeckPlan(),
+    });
+
+    expect(result.observation).toContain('deck-created');
+    expect(runOfficeScript).toHaveBeenCalledWith('/deck.pptx', expect.stringContaining('pres.RemoveSlides'));
+  });
+
+  it('appends a structured agenda slide without replacing existing slides', async () => {
+    vi.mocked(runOfficeScript).mockResolvedValueOnce('slide-appended');
+    const plan: PremiumDeckPlan = {
+      ...strongDeckPlan(),
+      slides: [
+        {
+          title: 'Agenda',
+          bullets: [],
+          layout: 'agenda',
+          items: [{ label: 'Problem' }, { label: 'Solution' }, { label: 'Demo' }],
+        },
+      ],
+    };
+    const result = await runTool('/deck.pptx', 'slide', { tool: 'add_premium_slide', plan });
+
+    expect(result.observation).toContain('slide-appended');
+    const appendedScript = vi.mocked(runOfficeScript).mock.calls.at(-1)?.[1] ?? '';
+    expect(appendedScript).toContain(JSON.stringify({ mode: 'append' }));
+  });
+
+  it('structures a report and inserts an automatic TOC in one action', async () => {
+    vi.mocked(applyHeadings).mockClear();
+    vi.mocked(insertTableOfContents).mockClear();
+    const result = await runTool('/report.docx', 'word', {
+      tool: 'structure_report',
+      headings: [{ text: 'Architecture', level: 2 }],
+      insertToc: true,
+    });
+
+    expect(result.observation).toContain('automatic TOC');
+    expect(applyHeadings).toHaveBeenCalledWith('/report.docx', [{ text: 'Architecture', level: 2 }]);
+    expect(insertTableOfContents).toHaveBeenCalledWith('/report.docx', true);
   });
 
   it('audits premium slide quality with live visual metadata', async () => {

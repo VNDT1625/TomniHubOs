@@ -79,6 +79,7 @@ const mainAliases = {
 export default defineConfig(({ mode }) => {
   const isDevelopment = mode === 'development';
   const enableSentrySourceMaps = !isDevelopment && !!process.env.SENTRY_AUTH_TOKEN;
+  const webDevProxy = process.env.TOMNI_WEB_DEV_PROXY?.trim();
 
   const sentryPluginOptions = {
     org: process.env.SENTRY_ORG,
@@ -198,13 +199,24 @@ export default defineConfig(({ mode }) => {
         // Default to 5173; when occupied (e.g. another AionUi clone is running),
         // Vite auto-increments to the next available port.
         // electron-vite reads the actual port and sets ELECTRON_RENDERER_URL accordingly.
-        port: 5173,
+        port: Number(process.env.TOMNI_DEV_RENDERER_PORT || 5173),
+        strictPort: Boolean(webDevProxy),
         // Explicit HMR host so Vite client connects directly to the Vite dev server,
         // not to the WebUI proxy server (which would reject the WebSocket and cause infinite reload).
         // Port is omitted so it automatically matches the server port.
         hmr: {
           host: 'localhost',
         },
+        ...(webDevProxy
+          ? {
+              proxy: {
+                '/api': { target: webDevProxy, changeOrigin: true },
+                '/login': { target: webDevProxy, changeOrigin: true },
+                '/logout': { target: webDevProxy, changeOrigin: true },
+                '/ws': { target: webDevProxy, changeOrigin: true, ws: true },
+              },
+            }
+          : {}),
       },
       resolve: {
         alias: {

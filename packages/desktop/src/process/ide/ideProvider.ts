@@ -18,7 +18,7 @@
  * Process boundary: Main-process (Node.js) module. No DOM APIs.
  */
 
-import { httpRequest } from '@/common/adapter/httpBridge';
+import { listReadyProviders } from '@process/services/tomnyProviderBridge';
 import type { IProvider } from '@/common/config/storage';
 import { runAgentChatMessages, type DirectCliExecutionContext } from '@process/services/agentChat';
 
@@ -66,7 +66,7 @@ const pickForModel = (providers: IProvider[], model: string): { provider: IProvi
  * enabled model of the first usable provider; returns `null` when none exists.
  */
 export const resolveDefaultModel = async (): Promise<string | null> => {
-  const providers = (await httpRequest<IProvider[]>('GET', '/api/providers').catch(() => [] as IProvider[])) || [];
+  const providers = (await listReadyProviders().catch(() => [] as IProvider[])) || [];
   const picked = pickForModel(providers, '');
   return picked ? picked.model : null;
 };
@@ -83,7 +83,7 @@ export const classifyModelError = (error: unknown): 'no-model' | 'error' => {
  * picked up without a restart. Throws on failure; callers wrap into a result.
  */
 const runProviderChat = async (model: string, messages: IdeChatMessage[], signal?: AbortSignal): Promise<string> => {
-  const providers = (await httpRequest<IProvider[]>('GET', '/api/providers').catch(() => [] as IProvider[])) || [];
+  const providers = (await listReadyProviders().catch(() => [] as IProvider[])) || [];
   const selected = pickForModel(providers, model);
   if (!selected) {
     throw new Error('No usable model is configured. Open Settings → Model and add a provider/model, then try again.');

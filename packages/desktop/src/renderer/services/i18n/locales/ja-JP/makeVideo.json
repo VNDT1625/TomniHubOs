@@ -87,6 +87,31 @@
     "duration": "クリップの長さ",
     "supportsEndFrame": "このモデルは開始フレーム＋終了フレームの補間をサポートしています"
   },
+  "editor": {
+    "storyboard": "ストーリーボード",
+    "timeline": "タイムライン",
+    "noPreview": "再生ヘッドをビデオクリップ上に移動してプレビューします。",
+    "inspector": "クリップインスペクター",
+    "selectClip": "タイムライン上のクリップを選択してください。",
+    "trackLabel": "トラック",
+    "start": "開始（秒）",
+    "duration": "長さ（秒）",
+    "volume": "音量",
+    "split": "分割",
+    "delete": "削除",
+    "play": "再生",
+    "pause": "一時停止",
+    "undo": "元に戻す",
+    "redo": "やり直す",
+    "zoom": "ズーム",
+    "save": "タイムラインを保存",
+    "snapping": "スナップ",
+    "ripple": "リップル編集",
+    "transitionIn": "開始トランジション",
+    "transitionOut": "終了トランジション",
+    "transition": { "cut": "カット", "fade": "フェード", "dissolve": "ディゾルブ" },
+    "track": { "video": "ビデオ", "voice": "音声", "music": "音楽", "sfx": "効果音", "subtitle": "字幕" }
+  },
   "export": {
     "success": "動画を書き出しました：{{path}}"
   }
