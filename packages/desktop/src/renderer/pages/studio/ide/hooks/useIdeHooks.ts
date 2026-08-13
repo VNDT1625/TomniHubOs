@@ -25,7 +25,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Message } from '@arco-design/web-react';
 import { useTranslation } from 'react-i18next';
-import { terminalClient } from '@/renderer/pages/terminal/terminalBridgeClient';
 import { ideHookClient, type IdeHook, type IdeHookFireRequest } from './ideHookClient';
 
 /** Options for {@link useIdeHooks}. */
@@ -43,6 +42,11 @@ export type UseIdeHooksOptions = {
    * omitted, an info toast is shown instead.
    */
   onAskAgent?: (prompt: string, hookName: string) => void;
+  /**
+   * Receives command hook intent for an activated Terminal package or an
+   * approved capability host. The IDE package never opens a shell directly.
+   */
+  onRunCommand?: (command: string, rootPath: string, hookName: string) => void;
 };
 
 /** Public shape returned by {@link useIdeHooks}. */
@@ -61,16 +65,6 @@ export type UseIdeHooks = {
   refresh: () => Promise<void>;
 };
 
-/** Run a fired hook's command in a fresh terminal session at the workspace root. */
-const dispatchRunCommand = async (firing: IdeHookFireRequest): Promise<void> => {
-  const command = firing.hook.command?.trim();
-  if (!command) return;
-  const res = await terminalClient.create({ options: { cwd: firing.rootPath } }).catch((): null => null);
-  if (!res || !res.ok) return;
-  // Send the command followed by a newline so the shell executes it.
-  void terminalClient.write({ id: res.data.id, data: `${command}\r` }).catch(() => {});
-};
-
 /** Build the prompt text for an askAgent firing (with the triggering file note). */
 const askAgentPrompt = (firing: IdeHookFireRequest): string => {
   const prompt = firing.hook.prompt?.trim() ?? '';
@@ -84,7 +78,7 @@ const askAgentPrompt = (firing: IdeHookFireRequest): string => {
  * @param options  Set `dispatch: true` on the single owning instance.
  */
 export const useIdeHooks = (rootPath: string | null, options: UseIdeHooksOptions = {}): UseIdeHooks => {
-  const { dispatch = false, onAskAgent } = options;
+  const { dispatch = false, onAskAgent, onRunCommand } = options;
   const { t } = useTranslation();
   const [hooks, setHooks] = useState<IdeHook[]>([]);
   const [loading, setLoading] = useState(false);
@@ -93,6 +87,8 @@ export const useIdeHooks = (rootPath: string | null, options: UseIdeHooksOptions
   // Keep the latest onAskAgent without resubscribing the fired listener.
   const onAskAgentRef = useRef(onAskAgent);
   onAskAgentRef.current = onAskAgent;
+  const onRunCommandRef = useRef(onRunCommand);
+  onRunCommandRef.current = onRunCommand;
 
   useEffect(() => {
     aliveRef.current = true;
@@ -104,8 +100,11 @@ export const useIdeHooks = (rootPath: string | null, options: UseIdeHooksOptions
   const dispatchFiring = useCallback(
     (firing: IdeHookFireRequest): void => {
       if (firing.hook.action === 'runCommand') {
-        void dispatchRunCommand(firing);
-        Message.info(t('ide.hooks.firedCommand', { name: firing.hook.name }));
+        const command = firing.hook.command?.trim();
+        if (command && onRunCommandRef.current) {
+          onRunCommandRef.current(command, firing.rootPath, firing.hook.name);
+          Message.info(t('ide.hooks.firedCommand', { name: firing.hook.name }));
+        }
       } else {
         const prompt = askAgentPrompt(firing);
         if (onAskAgentRef.current) onAskAgentRef.current(prompt, firing.hook.name);

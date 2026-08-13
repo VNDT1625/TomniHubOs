@@ -70,6 +70,9 @@ interface EventTypes {
   // IDE Agent Hooks: a fired hook wants the IDE Chat surface to run a prompt
   // (the workspace root + the prompt to send to a new/active agent tab).
   'ide.hook.askAgent': [{ rootPath: string; prompt: string; hookName: string; filePaths?: string[] }];
+  // Command hooks are delegated to an activated, approved capability package.
+  // The IDE package itself must never create a terminal session.
+  'ide.hook.runCommand': [{ rootPath: string; command: string; hookName: string }];
   // IDE navigation: the editor asks the workspace to resolve a symbol's
   // definition/references (the workspace owns rootPath + file-opening). When
   // `lsp` is present (a language server is attached to the file), the workspace

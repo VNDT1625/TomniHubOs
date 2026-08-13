@@ -230,6 +230,9 @@ const IdeWorkspace: React.FC<IdeWorkspaceProps> = ({ onBack, initialMode = 'file
       }
       setMode('chat');
     },
+    onRunCommand: (command, rootPath, hookName) => {
+      emitter.emit('ide.hook.runCommand', { command, rootPath, hookName });
+    },
   });
 
   const groupCount = useMemo(() => {
