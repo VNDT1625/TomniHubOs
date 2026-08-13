@@ -1,13 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('electron', () => ({
-  app: { getPath: () => 'C:/test-user-data' },
+  app: { getPath: () => 'C:/test-user-data', isPackaged: false },
+  BrowserWindow: { fromWebContents: vi.fn(() => ({ isDestroyed: () => false })) },
   ipcMain: { handle: vi.fn() },
 }));
 
 import {
   createFoundationHubTargets,
   executeFoundationHubRun,
+  foundationTrustedOrigin,
   isFoundationMainFrame,
   parseFoundationRunId,
   parseFoundationRunPayload,
@@ -52,11 +54,29 @@ describe('Foundation bridge payload validation', () => {
     expect(() => parseFoundationRunId('')).toThrow('INVALID_FOUNDATION_RUN_ID');
   });
 
+  it('uses only the configured development origin of the owning main frame', () => {
+    const previous = process.env.ELECTRON_RENDERER_URL;
+    process.env.ELECTRON_RENDERER_URL = 'http://localhost:5173/app';
+    const trustedFrame = { url: 'http://localhost:5173/foundation' };
+    const foreignFrame = { url: 'https://untrusted.example/foundation' };
+    try {
+      expect(foundationTrustedOrigin({ sender: { mainFrame: trustedFrame }, senderFrame: trustedFrame })).toBe(
+        'http://localhost:5173'
+      );
+      expect(
+        foundationTrustedOrigin({ sender: { mainFrame: foreignFrame }, senderFrame: foreignFrame })
+      ).toBeUndefined();
+    } finally {
+      if (previous === undefined) delete process.env.ELECTRON_RENDERER_URL;
+      else process.env.ELECTRON_RENDERER_URL = previous;
+    }
+  });
+
   it('discovers executable Hub targets in Main and never accepts renderer candidates', async () => {
     const coreRuntime = {
       listTargets: vi.fn().mockResolvedValue([
         { id: 'local-core', kind: 'builtin', available: true, defaultModelKey: 'local-model' },
-        { id: 'remote-core', kind: 'remote', available: true },
+        { id: 'remote-core', kind: 'remote', available: true, networkHost: 'api.example.test' },
         { id: 'hidden-core', kind: 'cli', available: false },
       ]),
       executeToCompletion: vi.fn().mockResolvedValue({ text: 'local answer', evidenceRefs: ['core-receipt'] }),
@@ -68,7 +88,7 @@ describe('Foundation bridge payload validation', () => {
         expect.objectContaining({ id: 'remote-core', kind: 'cloud', priority: 30 }),
       ])
     );
-    const result = await executeFoundationHubRun(new RunKernel(), coreRuntime, intent);
+    const result = await executeFoundationHubRun(new RunKernel(), coreRuntime, intent, 'app://foundation');
     expect(result).toMatchObject({ targetId: 'remote-core', text: 'local answer', receipt: { status: 'verified' } });
     expect(coreRuntime.executeToCompletion).toHaveBeenCalledWith(
       expect.objectContaining({ targetId: 'remote-core', requestId: intent.runId, prompt: intent.goal })

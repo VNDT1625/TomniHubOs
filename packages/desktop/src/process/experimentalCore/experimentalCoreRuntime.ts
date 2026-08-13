@@ -69,6 +69,7 @@ export type ExperimentalCoreTarget = {
   detail?: string;
   models: ExperimentalCoreModel[];
   defaultModelKey?: string;
+  networkHost?: string;
 };
 
 /** Main-process request used by Hub to await a direct-core target to a terminal receipt. */
@@ -548,6 +549,7 @@ export class ExperimentalCoreRuntime {
           kind: kindForTarget(target),
           available: target.available && Boolean(adapter),
           detail: target.detected ? target.detail : `${target.detail} - executable not found`,
+          ...(target.networkHost ? { networkHost: target.networkHost } : {}),
           models,
           defaultModelKey: models.find((model) => model.isDefault)?.key ?? models[0]?.key,
         };

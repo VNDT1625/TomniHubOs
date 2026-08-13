@@ -29,6 +29,8 @@ export type DetectedCoreTarget = CoreAdapterDefinition & {
   detected: boolean;
   available: boolean;
   command?: string;
+  /** A validated destination hostname for a remote target; credentials are never included. */
+  networkHost?: string;
 };
 
 export type CoreAdapterEvent =

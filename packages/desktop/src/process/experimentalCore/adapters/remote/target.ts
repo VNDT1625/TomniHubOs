@@ -15,6 +15,7 @@ export const createRemoteCoreTarget = (input: {
   name: string;
   detail?: string;
   available?: boolean;
+  networkHost?: string;
 }): DetectedCoreTarget => ({
   id: input.id.trim(),
   name: input.name.trim(),
@@ -25,4 +26,5 @@ export const createRemoteCoreTarget = (input: {
   runnable: input.available !== false,
   detected: true,
   available: input.available !== false,
+  ...(input.networkHost ? { networkHost: input.networkHost } : {}),
 });

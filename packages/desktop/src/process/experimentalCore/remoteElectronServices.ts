@@ -124,6 +124,13 @@ export const createElectronRemoteCoreServices = (
           name: target.name,
           available: target.enabled !== false,
           detail: 'Remote Tomny Core gateway (opaque credential)',
+          networkHost: (() => {
+            try {
+              return new URL(target.endpoint).hostname;
+            } catch {
+              return undefined;
+            }
+          })(),
         })
       ),
   };

@@ -2,8 +2,9 @@
  * IPC bridge exposing Foundation RunKernel to Renderer process.
  */
 
-import { app, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { RunIntent } from '../../common/foundation/runTypes';
 import { assertRunIntent } from '../../common/foundation/runTypes';
 import { JsonlDurableEventStore } from '../services/agentChat/durability';
@@ -11,6 +12,7 @@ import { EventStore } from '../foundation/eventStore';
 import { HubExecutionAdapter, type HubExecutionTarget } from '../foundation/hubExecutionAdapter';
 import { ResourceAdapter } from '../foundation/resourceAdapter';
 import { RunKernel } from '../foundation/runKernel';
+import { TrustBroker } from '../foundation/trustBroker';
 import { getResourceCoordinator } from '../resource/resourceCoordinator';
 
 let globalKernel: RunKernel | undefined;
@@ -23,6 +25,7 @@ export type FoundationCoreRuntime = {
       kind: 'builtin' | 'acp' | 'cli' | 'remote';
       available: boolean;
       defaultModelKey?: string;
+      networkHost?: string;
     }>
   >;
   executeToCompletion: (input: {
@@ -36,10 +39,39 @@ export type FoundationCoreRuntime = {
   }) => Promise<{ text: string; evidenceRefs: readonly string[] }>;
 };
 export type FoundationBridgeOptions = { coreRuntime: FoundationCoreRuntime };
-type FoundationSenderEvent = { sender: { mainFrame?: unknown }; senderFrame?: unknown };
+type FoundationSenderEvent = {
+  sender: { mainFrame?: unknown; isDestroyed?: () => boolean };
+  senderFrame?: { url?: string };
+};
 
 export const isFoundationMainFrame = (event: FoundationSenderEvent): boolean =>
   event.senderFrame !== undefined && event.senderFrame === event.sender.mainFrame;
+
+/** Returns the exact trusted renderer origin for the main application frame only. */
+export const foundationTrustedOrigin = (event: FoundationSenderEvent): string | undefined => {
+  if (!isFoundationMainFrame(event) || event.sender.isDestroyed?.()) return undefined;
+  const ownerWindow = BrowserWindow.fromWebContents(event.sender as never);
+  if (!ownerWindow || ownerWindow.isDestroyed()) return undefined;
+  const rawUrl = event.senderFrame?.url;
+  if (!rawUrl) return undefined;
+  try {
+    const senderUrl = new URL(rawUrl);
+    if (senderUrl.protocol === 'file:') {
+      const expectedFile = path.resolve(__dirname, '../renderer/index.html');
+      const actualFile = path.resolve(fileURLToPath(senderUrl));
+      const sameFile =
+        process.platform === 'win32'
+          ? actualFile.toLowerCase() === expectedFile.toLowerCase()
+          : actualFile === expectedFile;
+      return sameFile ? senderUrl.href : undefined;
+    }
+    if (app.isPackaged) return undefined;
+    const rendererUrl = process.env.ELECTRON_RENDERER_URL;
+    return rendererUrl && senderUrl.origin === new URL(rendererUrl).origin ? senderUrl.origin : undefined;
+  } catch {
+    return undefined;
+  }
+};
 
 export const parseFoundationRunId = (value: unknown): string => {
   if (typeof value !== 'string' || value.length === 0 || value.length > 200)
@@ -68,7 +100,7 @@ export const createFoundationHubTargets = async (
     .filter((target) => target.available)
     .map((target) => {
       const kind = kindForCoreTarget(target.kind);
-      return {
+      const hubTarget: HubExecutionTarget = {
         id: target.id,
         kind,
         priority: priorityForCoreTarget(kind),
@@ -84,6 +116,8 @@ export const createFoundationHubTargets = async (
             signal,
           }),
       };
+      if (target.networkHost) hubTarget.networkHost = target.networkHost;
+      return hubTarget;
     });
 
 /** Executes a Hub run using only Main-discovered direct-core targets. */
@@ -91,8 +125,17 @@ export const executeFoundationHubRun = async (
   kernel: RunKernel,
   runtime: FoundationCoreRuntime,
   intent: RunIntent,
+  origin: string,
   signal?: AbortSignal
-) => new HubExecutionAdapter(kernel, await createFoundationHubTargets(runtime)).execute(intent, signal);
+) => {
+  const targets = await createFoundationHubTargets(runtime);
+  const trustBroker = new TrustBroker({
+    allowedCapabilities: ['target.execute'],
+    allowedOrigins: [origin],
+    allowedNetworkHosts: targets.flatMap((target) => (target.networkHost ? [target.networkHost] : [])),
+  });
+  return new HubExecutionAdapter(kernel, targets, { trustBroker, origin }).execute(intent, signal);
+};
 
 const getGlobalKernel = (): RunKernel => {
   globalKernel ??= new RunKernel({
@@ -107,9 +150,10 @@ const getGlobalKernel = (): RunKernel => {
 export const registerFoundationBridge = ({ coreRuntime }: FoundationBridgeOptions): void => {
   ipcMain.handle('foundation:execute-run', async (event, rawPayload: unknown) => {
     try {
-      if (!isFoundationMainFrame(event)) throw new Error('FOUNDATION_SENDER_REJECTED');
+      const origin = foundationTrustedOrigin(event);
+      if (!origin) throw new Error('FOUNDATION_SENDER_REJECTED');
       const payload = parseFoundationRunPayload(rawPayload);
-      const result = await executeFoundationHubRun(getGlobalKernel(), coreRuntime, payload.intent);
+      const result = await executeFoundationHubRun(getGlobalKernel(), coreRuntime, payload.intent, origin);
       return {
         success: result.receipt.status === 'verified',
         receipt: result.receipt,
@@ -127,7 +171,7 @@ export const registerFoundationBridge = ({ coreRuntime }: FoundationBridgeOption
 
   ipcMain.handle('foundation:get-events', async (event, rawRunId: unknown) => {
     try {
-      if (!isFoundationMainFrame(event)) throw new Error('FOUNDATION_SENDER_REJECTED');
+      if (!foundationTrustedOrigin(event)) throw new Error('FOUNDATION_SENDER_REJECTED');
       const runId = parseFoundationRunId(rawRunId);
       const kernel = getGlobalKernel();
       await kernel.eventStore.initialize();
