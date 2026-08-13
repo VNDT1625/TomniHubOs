@@ -7,7 +7,7 @@
 import { useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ipcBridge } from '@/common';
-import { openInAppBrowserTab } from '@/renderer/utils/platform';
+import { openExternalUrl } from '@/renderer/utils/platform';
 
 /**
  * Deep link event payload from main process
@@ -48,7 +48,8 @@ const ALLOWED_NAVIGATE_PATTERNS = [/^\/team\/[^/]+$/, /^\/conversation\/[^/]+$/]
  * Routes 'add-provider' action to the model settings page.
  * Routes 'navigate' action to the specified route (whitelist-validated).
  * Routes 'open-url' action (http/https handed to Tomny as the default browser)
- * to the built-in Browser tab.
+ * to the operating system's default browser. The embedded Browser is an
+ * independently installed package and is not part of the Hub base runtime.
  * The pre-fill data is stored in a module-level variable and consumed
  * by ModelModalContent on mount via consumePendingDeepLink().
  */
@@ -71,15 +72,16 @@ export const useDeepLink = () => {
         return;
       }
 
-      // Web URL handed to Tomny by the OS (default browser) → open in a tab.
+      // Web URL handed to Tomny by the OS (default browser) → preserve the URL
+      // hand-off without activating an optional Browser package from core.
       if (payload.action === 'open-url') {
         const url = payload.params.url;
         if (!url || !/^https?:\/\//i.test(url)) {
           console.warn('[DeepLink] open-url action missing or invalid url param');
           return;
         }
-        void openInAppBrowserTab(url, (route) => navigate(route)).catch((error) => {
-          console.error('[DeepLink] Failed to open URL in built-in browser:', error);
+        void openExternalUrl(url).catch((error) => {
+          console.error('[DeepLink] Failed to open URL in system browser:', error);
         });
         return;
       }
