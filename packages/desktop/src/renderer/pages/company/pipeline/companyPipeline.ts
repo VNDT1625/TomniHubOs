@@ -21,13 +21,11 @@
 import { ipcBridge } from '@/common';
 import type { CompanyStructure, RoleNode } from '@process/company/companyOrchestrator';
 import { openRoleChat, loadCompanyRoleConversations, saveCompanyRoleConversation } from '../companySession';
-import { testingClient } from '@/renderer/pages/testing/testingBridgeClient';
 import { recommendedConcurrency } from '@/renderer/utils/hardwareConcurrency';
 import { createPipelineChat } from './pipelineChat';
 import { composeSoul, directReportsOf, findRoleNode } from './soulComposer';
 import { createApprovalGate, type IApprovalGate } from './approvalGate';
 import { executeViaConversation, type RoleExecutorDeps } from './roleExecutor';
-import { runTestGate } from './testGate';
 import { createRoleRunner, type RoleMind } from './roleRunner';
 import type { PipelineStore } from './pipelineStore';
 import type { ApprovalDecision, RoleRunState, RunConfig } from './pipelineTypes';
@@ -222,17 +220,6 @@ export const runCompany = (input: RunCompanyInput): CompanyRunHandle => {
         estCostMB: input.config?.estCostMB,
       }),
     approvalGate,
-    runTest: async ({ scenarioName, steps, fix, signal }) =>
-      runTestGate(
-        { run: (request) => testingClient.run(request) },
-        {
-          scenarioName,
-          steps,
-          maxRounds: input.config?.maxTestRounds,
-          fix: ({ failureDetail }) => fix(failureDetail),
-          signal,
-        }
-      ),
     emit: (event) => store.dispatch(event),
     runId,
     newId,

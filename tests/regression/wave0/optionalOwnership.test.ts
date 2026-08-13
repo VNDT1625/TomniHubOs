@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { relative, resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
@@ -48,6 +48,35 @@ const LEGACY_OPTIONAL_ROOTS = [
     artifactPathPrefixes: ['packages/desktop/src/renderer/pages/studio/ide'],
   },
 ] as const;
+
+/** Optional domains that must not be emitted by a clean MVP base candidate. */
+const MVP_BASE_OPTIONAL_OWNERSHIP: readonly OptionalPackageOwnershipDeclaration[] = [
+  IDE_OWNERSHIP,
+  {
+    manifest: { id: 'com.tomni.browser' },
+    importPathPrefixes: ['@renderer/pages/browser'],
+    artifactPathPrefixes: ['packages/desktop/src/renderer/pages/browser'],
+  },
+  {
+    manifest: { id: 'com.tomni.terminal' },
+    importPathPrefixes: ['@renderer/pages/terminal'],
+    artifactPathPrefixes: ['packages/desktop/src/renderer/pages/terminal'],
+  },
+  {
+    manifest: { id: 'com.tomni.testing' },
+    importPathPrefixes: ['@renderer/pages/testing'],
+    artifactPathPrefixes: ['packages/desktop/src/renderer/pages/testing'],
+  },
+];
+
+const RELEASE_GRAPH_PATH = resolve(PROJECT_ROOT, 'store-artifacts/base-renderer-metafile.json');
+
+const readRendererGraphSourceFiles = (inputs: readonly string[]): OptionalOwnershipSourceFile[] =>
+  inputs.flatMap((input): OptionalOwnershipSourceFile[] => {
+    if (!input.startsWith('packages/desktop/src/renderer/') || !/\.(?:ts|tsx)$/.test(input)) return [];
+    const absolutePath = resolve(PROJECT_ROOT, input);
+    return existsSync(absolutePath) ? [{ path: input, content: readFileSync(absolutePath, 'utf8') }] : [];
+  });
 
 describe('optional package ownership audit', () => {
   it('allows core-only imports and artifact inputs', () => {
@@ -210,5 +239,23 @@ describe('optional package ownership audit', () => {
       ])
     );
     expect(() => assertOptionalPackageOwnershipClean(result)).toThrow('Optional package ownership audit failed:');
+  });
+
+  it('rejects optional domains from the exact emitted base graph when release evidence is present', () => {
+    const required = process.env.TOMNI_REQUIRE_RELEASE_ARTIFACT_AUDIT === '1';
+    if (!existsSync(RELEASE_GRAPH_PATH)) {
+      expect(required, 'release audit requires a freshly emitted base graph').toBe(false);
+      return;
+    }
+
+    const inputs = collectBaseArtifactInputsFromGraph(JSON.parse(readFileSync(RELEASE_GRAPH_PATH, 'utf8')));
+    const result = scanOptionalPackageOwnership({
+      denylist: createOptionalPackageOwnershipDenylist(MVP_BASE_OPTIONAL_OWNERSHIP),
+      coreSourceFiles: readRendererGraphSourceFiles(inputs),
+      baseArtifactInputs: inputs,
+    });
+
+    expect(result.violations).toEqual([]);
+    expect(() => assertOptionalPackageOwnershipClean(result)).not.toThrow();
   });
 });
