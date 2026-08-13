@@ -9,6 +9,7 @@ vi.mock('electron', () => ({
 import {
   createFoundationConversationRuntime,
   createFoundationHubTargets,
+  createFoundationRunLifecycle,
   executeFoundationHubRun,
   foundationTrustedOrigin,
   isFoundationMainFrame,
@@ -148,6 +149,47 @@ describe('Foundation bridge payload validation', () => {
         sessionId: 'conversation-session',
       })
     );
+  });
+
+  it('routes compatibility start/cancel lifecycle through Foundation while preserving Core capability context', async () => {
+    const coreRuntime = {
+      listTargets: vi.fn().mockResolvedValue([{ id: 'local-engine', kind: 'local', available: true }]),
+      executeToCompletion: vi.fn().mockResolvedValue({ text: 'offline answer', evidenceRefs: ['core-receipt'] }),
+      cancel: vi.fn().mockResolvedValue(false),
+    };
+    const kernel = new RunKernel();
+    const lifecycle = createFoundationRunLifecycle(coreRuntime, { kernel });
+
+    const started = lifecycle.start({
+      requestId: 'compatibility-request',
+      targetId: 'local-engine',
+      prompt: 'keep the Core stream',
+      workspace: 'C:/workspace',
+      permissionMode: 'workspace-write',
+      sessionId: 'compatibility-session',
+      contextIdentity: {
+        surface: 'testing',
+        personalId: 'user_1',
+        capabilityGrants: ['workspace.read'],
+        availableCapabilities: ['core.workspace'],
+      },
+    });
+
+    await expect(started.terminal).resolves.toBeUndefined();
+    expect(coreRuntime.executeToCompletion).toHaveBeenCalledWith(
+      expect.objectContaining({
+        requestId: 'compatibility-request',
+        contextIdentity: expect.objectContaining({
+          capabilityGrants: ['workspace.read'],
+          availableCapabilities: ['core.workspace'],
+        }),
+      })
+    );
+    expect(kernel.eventStore.getEventsByRunId('compatibility-request').map((event) => event.eventType)).toEqual(
+      expect.arrayContaining(['run.created', 'policy.decided', 'outcome.verified'])
+    );
+    await expect(lifecycle.cancel('compatibility-request')).resolves.toBe(false);
+    expect(coreRuntime.cancel).toHaveBeenCalledWith('compatibility-request');
   });
 
   it('returns a terminal error when Foundation rejects a native conversation before Core starts', async () => {

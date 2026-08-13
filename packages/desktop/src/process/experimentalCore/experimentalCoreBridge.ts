@@ -19,7 +19,7 @@ import { app } from 'electron';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 
-import { createFoundationConversationRuntime } from '@process/bridge/foundationBridge';
+import { createFoundationConversationRuntime, createFoundationRunLifecycle } from '@process/bridge/foundationBridge';
 import { registerNativeConversationBridge } from '@process/services/database/nativeConversation';
 import type { TChatConversation } from '@/common/config/storage';
 import {
@@ -481,24 +481,32 @@ export const registerExperimentalCoreBridge = (agentMeshService: AgentMeshServic
     availableCapabilityHostNames: () => capabilityHosts.names(),
   });
   registeredRuntime = runtime;
+  const experimentalFoundationLifecycle = createFoundationRunLifecycle(runtime, {
+    origin: 'tomny://experimental-core',
+  });
+  const benchmarkFoundationLifecycle = createFoundationRunLifecycle(runtime, {
+    origin: 'tomny://benchmark',
+  });
+  const scheduledFoundationLifecycle = createFoundationRunLifecycle(runtime, {
+    origin: 'tomny://scheduler',
+  });
   const benchmarkService = new BenchmarkService({
     store: new BenchmarkStore(path.join(app.getPath('userData'), 'testing', 'benchmarks', 'catalog.json')),
     tomny: {
       listTargets: () => runtime.listTargets(),
       listModels: (targetId, workspace) => runtime.listModels(targetId, workspace),
       start: ({ requestId, sessionId, targetId, prompt, workspace, modelKey, permissionMode, contextIdentity }) =>
-        runtime.start(
+        benchmarkFoundationLifecycle.start({
           requestId,
+          sessionId,
           targetId,
           prompt,
           workspace,
           modelKey,
           permissionMode,
-          sessionId,
-          undefined,
-          contextIdentity
-        ),
-      cancel: (requestId) => runtime.cancel(requestId),
+          contextIdentity,
+        }),
+      cancel: (requestId) => benchmarkFoundationLifecycle.cancel(requestId),
       resolvePermission: (permissionId, approved) => runtime.resolvePermission(permissionId, approved, 'allow-once'),
       resolveOrchestrationProposal: (proposalId, approved) =>
         runtime.resolveOrchestrationProposal(proposalId, approved),
@@ -565,10 +573,37 @@ export const registerExperimentalCoreBridge = (agentMeshService: AgentMeshServic
     if (event.kind === 'conversation.completed') void telegramService.forwardCompleted(event.payload);
   });
   void telegramService.resume().catch((error) => console.error('[Telegram] Native polling startup failed:', error));
-  const scheduledPort = bindScheduledCoreRuntime(runtime, (listener) => {
-    coreEventListeners.add(listener);
-    return () => coreEventListeners.delete(listener);
-  });
+  const scheduledPort = bindScheduledCoreRuntime(
+    {
+      start: (
+        requestId,
+        targetId,
+        prompt,
+        workspace,
+        modelKey,
+        permissionMode,
+        sessionId,
+        _companyId,
+        contextIdentity
+      ) =>
+        scheduledFoundationLifecycle.start({
+          requestId,
+          targetId,
+          prompt,
+          workspace,
+          modelKey,
+          permissionMode,
+          sessionId,
+          contextIdentity,
+        }),
+      cancel: (requestId) => scheduledFoundationLifecycle.cancel(requestId),
+      resolvePermission: (permissionId, approved) => runtime.resolvePermission(permissionId, approved),
+    },
+    (listener) => {
+      coreEventListeners.add(listener);
+      return () => coreEventListeners.delete(listener);
+    }
+  );
   let legacyCronAdapter!: LegacyCronAdapter;
   const scheduledService = createCoreScheduledTaskService({
     store: new JsonCoreScheduleStore(path.join(app.getPath('userData'), 'tomny-core', 'scheduled-tasks.json')),
@@ -641,7 +676,6 @@ export const registerExperimentalCoreBridge = (agentMeshService: AgentMeshServic
       prompt,
       workspace,
       modelKey,
-      companyId,
       surface,
       agentId,
       personalId,
@@ -652,18 +686,27 @@ export const registerExperimentalCoreBridge = (agentMeshService: AgentMeshServic
       permissionMode,
     }) =>
       Promise.resolve(
-        runtime.start(requestId, targetId, prompt, workspace, modelKey, permissionMode, sessionId, companyId, {
-          surface,
-          agentId,
-          personalId,
-          permissionScopes,
-          capabilityGrants,
-          availableCapabilities,
-          modelCapabilities,
+        experimentalFoundationLifecycle.start({
+          requestId,
+          targetId,
+          prompt,
+          workspace,
+          modelKey,
+          permissionMode,
+          sessionId,
+          contextIdentity: {
+            surface,
+            agentId,
+            personalId,
+            permissionScopes,
+            capabilityGrants,
+            availableCapabilities,
+            modelCapabilities,
+          },
         })
       )
   );
-  channels.cancel.provider(({ requestId }) => runtime.cancel(requestId));
+  channels.cancel.provider(({ requestId }) => experimentalFoundationLifecycle.cancel(requestId));
   channels.resolvePermission.provider(({ permissionId, approved, lifetime }) =>
     runtime.resolvePermission(permissionId, approved, lifetime)
   );

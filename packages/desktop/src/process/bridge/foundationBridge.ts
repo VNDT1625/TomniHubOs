@@ -22,6 +22,16 @@ import type {
 let globalKernel: RunKernel | undefined;
 
 export type FoundationRunPayload = { intent: RunIntent };
+export type FoundationCoreContextIdentity = {
+  surface?: string;
+  agentId?: string;
+  personalId?: string;
+  permissionScopes?: string[];
+  capabilityGrants?: string[];
+  availableCapabilities?: string[];
+  modelCapabilities?: string[];
+};
+
 export type FoundationCoreRuntime = {
   listTargets: () => Promise<
     ReadonlyArray<{
@@ -40,13 +50,7 @@ export type FoundationCoreRuntime = {
     modelKey?: string;
     permissionMode: 'read-only' | 'workspace-write' | 'full-access';
     sessionId?: string;
-    contextIdentity?: {
-      surface?: string;
-      agentId?: string;
-      personalId?: string;
-      permissionScopes?: string[];
-      capabilityGrants?: string[];
-    };
+    contextIdentity?: FoundationCoreContextIdentity;
     signal?: AbortSignal;
   }) => Promise<{ text: string; evidenceRefs: readonly string[] }>;
 };
@@ -56,13 +60,7 @@ export type FoundationExecutionOverrides = {
   modelKey?: string;
   permissionMode?: 'read-only' | 'workspace-write' | 'full-access';
   sessionId?: string;
-  contextIdentity?: {
-    surface?: string;
-    agentId?: string;
-    personalId?: string;
-    permissionScopes?: string[];
-    capabilityGrants?: string[];
-  };
+  contextIdentity?: FoundationCoreContextIdentity;
   onCoreExecutionStarted?: () => void;
 };
 
@@ -70,7 +68,25 @@ export type FoundationConversationCoreRuntime = FoundationCoreRuntime &
   Omit<NativeConversationRuntime, 'start' | 'cancel'> & {
     cancel: (requestId: string) => Promise<boolean>;
   };
-export type FoundationConversationRuntimeOptions = { kernel?: RunKernel };
+export type FoundationConversationRuntimeOptions = { kernel?: RunKernel; origin?: string };
+export type FoundationRunLifecycleStart = {
+  requestId: string;
+  targetId: string;
+  prompt: string;
+  workspace: string;
+  modelKey?: string;
+  permissionMode: 'read-only' | 'workspace-write' | 'full-access';
+  sessionId?: string;
+  contextIdentity?: FoundationCoreContextIdentity;
+};
+export type FoundationRunLifecycle = {
+  start: (input: FoundationRunLifecycleStart) => {
+    requestId: string;
+    sessionId: string;
+    terminal: Promise<NativeConversationStartTerminal | undefined>;
+  };
+  cancel: (requestId: string) => Promise<boolean>;
+};
 type FoundationSenderEvent = {
   sender: { mainFrame?: unknown; isDestroyed?: () => boolean };
   senderFrame?: { url?: string };
@@ -192,24 +208,25 @@ export const executeFoundationHubRun = async (
 const FOUNDATION_CONVERSATION_ORIGIN = 'tomny://native-conversation';
 
 /**
- * Routes ordinary native conversations through the Foundation policy sequence
- * while retaining the ExperimentalCore event stream consumed by the existing
- * conversation UI. A terminal is returned only when policy rejects before the
- * Core runtime starts, preventing a pending conversation from being stranded.
+ * Owns the governed start/cancel lifecycle for every compatibility caller that
+ * still relies on ExperimentalCore's streaming transport. Core remains the
+ * event producer, while Foundation owns the policy, target choice, lease, and
+ * terminal receipt around that transport.
  */
-export const createFoundationConversationRuntime = (
-  coreRuntime: FoundationConversationCoreRuntime,
+export const createFoundationRunLifecycle = (
+  coreRuntime: FoundationCoreRuntime & { cancel: (requestId: string) => Promise<boolean> },
   options: FoundationConversationRuntimeOptions = {}
-): NativeConversationRuntime => {
+): FoundationRunLifecycle => {
   const active = new Map<string, AbortController>();
   return {
-    start(requestId, targetId, prompt, workspace, modelKey, permissionMode, sessionId, _companyId, contextIdentity) {
+    start: ({ requestId, targetId, prompt, workspace, modelKey, permissionMode, sessionId, contextIdentity }) => {
+      const resolvedSessionId = sessionId ?? requestId;
       const controller = new AbortController();
       active.set(requestId, controller);
       let coreExecutionStarted = false;
       const intent: RunIntent = {
         runId: requestId,
-        rootTaskId: `conversation:${sessionId}`,
+        rootTaskId: `core-session:${resolvedSessionId}`,
         surface: contextIdentity?.surface ?? 'chat',
         goal: prompt,
         constraints: [`target:${targetId}`],
@@ -219,13 +236,13 @@ export const createFoundationConversationRuntime = (
         createdAt: Date.now(),
         correlationId: requestId,
         policyVersion: 'foundation-v1',
-        capabilityGrant: ['target.execute'],
+        capabilityGrant: [...new Set(['target.execute', ...(contextIdentity?.capabilityGrants ?? [])])],
       };
       const terminal = executeFoundationHubRun(
         options.kernel ?? getGlobalKernel(),
         coreRuntime,
         intent,
-        FOUNDATION_CONVERSATION_ORIGIN,
+        options.origin ?? FOUNDATION_CONVERSATION_ORIGIN,
         controller.signal,
         {
           requestId,
@@ -253,7 +270,7 @@ export const createFoundationConversationRuntime = (
           };
         })
         .finally(() => active.delete(requestId));
-      return { requestId, sessionId, terminal };
+      return { requestId, sessionId: resolvedSessionId, terminal };
     },
     cancel: async (requestId) => {
       const controller = active.get(requestId);
@@ -261,6 +278,24 @@ export const createFoundationConversationRuntime = (
       const cancelledCore = await coreRuntime.cancel(requestId);
       return Boolean(controller) || cancelledCore;
     },
+  };
+};
+
+/**
+ * Routes ordinary native conversations through the Foundation policy sequence
+ * while retaining the ExperimentalCore event stream consumed by the existing
+ * conversation UI. A terminal is returned only when policy rejects before the
+ * Core runtime starts, preventing a pending conversation from being stranded.
+ */
+export const createFoundationConversationRuntime = (
+  coreRuntime: FoundationConversationCoreRuntime,
+  options: FoundationConversationRuntimeOptions = {}
+): NativeConversationRuntime => {
+  const lifecycle = createFoundationRunLifecycle(coreRuntime, options);
+  return {
+    start: (requestId, targetId, prompt, workspace, modelKey, permissionMode, sessionId, _companyId, contextIdentity) =>
+      lifecycle.start({ requestId, targetId, prompt, workspace, modelKey, permissionMode, sessionId, contextIdentity }),
+    cancel: (requestId) => lifecycle.cancel(requestId),
     inspectContext: (input) => coreRuntime.inspectContext(input),
     resolvePermission: (permissionId, approved, lifetime) =>
       coreRuntime.resolvePermission(permissionId, approved, lifetime),
