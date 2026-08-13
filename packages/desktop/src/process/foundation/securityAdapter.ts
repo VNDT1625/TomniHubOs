@@ -2,8 +2,11 @@ import type { PolicyDecision } from '../../common/foundation/decisionTypes';
 import type { RunIntent } from '../../common/foundation/runTypes';
 import { inspectOutboundText } from '../services/security/outboundTextInspection';
 import type { OutboundInspectionRequest, OutboundPolicyContext } from '../services/security/types';
+import { TrustBroker } from './trustBroker';
 
 export class SecurityAdapter {
+  public constructor(private readonly trustBroker = new TrustBroker()) {}
+
   public async preflightCheck(intent: RunIntent): Promise<PolicyDecision> {
     const request: OutboundInspectionRequest = {
       schemaVersion: 1,
@@ -38,26 +41,34 @@ export class SecurityAdapter {
     const isBlocked = inspection.decision === 'block' || inspection.decision === 'failed_closed';
     const isApproval = inspection.decision === 'approval_required';
 
-    return {
-      decision: isBlocked ? 'deny' : isApproval ? 'approval_required' : 'allow',
+    if (isBlocked || isApproval) {
+      return {
+        decision: isBlocked ? 'deny' : 'approval_required',
+        runId: intent.runId,
+        taskId: intent.rootTaskId,
+        capabilities: intent.capabilityGrant ?? ['workspace.read', 'execution.safe'],
+        reasonCode: inspection.reasonCode,
+        receiptId: inspection.receipt.receiptId,
+      };
+    }
+    return this.trustBroker.authorize({
       runId: intent.runId,
       taskId: intent.rootTaskId,
-      capabilities: ['workspace.read', 'execution.safe'],
-      reasonCode: inspection.reasonCode,
-      receiptId: inspection.receipt.receiptId,
-    };
+      operation: 'agent',
+      targetId: intent.surface,
+      requestedCapabilities: intent.capabilityGrant ?? ['workspace.read', 'execution.safe'],
+      workspaceScope: intent.workspaceScope,
+    });
   }
 
   public async targetPreflight(intent: RunIntent, targetId: string): Promise<PolicyDecision> {
-    return {
-      decision: 'allow',
+    return this.trustBroker.authorize({
       runId: intent.runId,
       taskId: intent.rootTaskId,
+      operation: 'agent',
       targetId,
-      capabilities: ['target.execute'],
-      reasonCode: 'SECURITY_TARGET_ALLOWED',
-      receiptId: `sec_target_${Date.now()}`,
-    };
+      requestedCapabilities: ['target.execute'],
+      workspaceScope: intent.workspaceScope,
+    });
   }
 }
-
