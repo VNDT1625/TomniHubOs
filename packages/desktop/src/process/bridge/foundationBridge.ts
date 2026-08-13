@@ -9,7 +9,9 @@ import type { RunIntent } from '../../common/foundation/runTypes';
 import { assertRunIntent } from '../../common/foundation/runTypes';
 import { JsonlDurableEventStore } from '../services/agentChat/durability';
 import { EventStore } from '../foundation/eventStore';
+import { ResourceAdapter } from '../foundation/resourceAdapter';
 import { RunKernel } from '../foundation/runKernel';
+import { getResourceCoordinator } from '../resource/resourceCoordinator';
 
 let globalKernel: RunKernel | undefined;
 
@@ -44,6 +46,7 @@ const getGlobalKernel = (): RunKernel => {
     eventStore: new EventStore({
       journal: new JsonlDurableEventStore(path.join(app.getPath('userData'), 'tomny-core', 'runs', 'foundation.jsonl')),
     }),
+    resourceAdapter: new ResourceAdapter(getResourceCoordinator()),
   });
   return globalKernel;
 };
