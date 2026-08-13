@@ -294,6 +294,8 @@ Wave 5 is sequential. A later subwave cannot begin until the preceding gate pass
 
 Implement versioned native syscalls, main-process capability/resource leases, isolated community runtime, activation, cancellation, evidence, revocation, update, rollback, and uninstall. Trusted React is first-party-only.
 
+Progress: the main-process broker has a versioned `host.runtime.info` pilot syscall, manifest-declared capability leases, expiry, cancellation/revocation, and receipts. It is deliberately transport-neutral until the authenticated package-runtime bridge is in place; no sandboxed package currently gains host access from this work alone.
+
 Prove the ABI with a tiny signed pilot package that contributes one governed capability. Package targets are not a Wave 4 prerequisite.
 
 Gate: pilot installs without rebuilding base, runs only through syscalls and Run Kernel, and leaves no route/process/lease/grant/data after uninstall.

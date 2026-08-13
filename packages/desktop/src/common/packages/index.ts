@@ -5,6 +5,7 @@
  */
 
 export * from './catalog';
+export * from './capability';
 export * from './appGroups';
 export * from './dependencyResolver';
 export * from './federatedCatalog';
