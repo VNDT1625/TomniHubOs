@@ -4,6 +4,10 @@ import type {
   PackageAppGroupDocument,
   PackageAppGroupReadRequest,
   PackageAppGroupRemoveRequest,
+  PackageCapabilityLease,
+  PackageCapabilityLeaseRequest,
+  PackageCapabilityResult,
+  PackageCapabilitySyscall,
   PackageAppGroupRenameRequest,
   PackageAppGroupReorderRequest,
   PackageMutationConsentGrant,
@@ -83,6 +87,21 @@ export type PackageRuntimeCloseRequest = PackageRuntimeOpenRequest;
 export type PackageRuntimeNativeAPI = {
   open(payload: PackageRuntimeOpenRequest): Promise<void>;
   close(payload: PackageRuntimeCloseRequest): Promise<void>;
+};
+
+export const PACKAGE_CAPABILITY_NATIVE_CHANNELS = {
+  activate: 'package-platform.capability.activate',
+  invoke: 'package-platform.capability.invoke',
+  cancel: 'package-platform.capability.cancel',
+} as const;
+
+export type PackageCapabilityCancelRequest = Pick<PackageCapabilityLease, 'leaseId' | 'packageId' | 'runtimeId'>;
+
+/** Main-owned native capability ABI available only through the package host gateway. */
+export type PackageCapabilityNativeAPI = {
+  activate(payload: PackageCapabilityLeaseRequest): Promise<PackageCapabilityLease>;
+  invoke(payload: PackageCapabilitySyscall): Promise<PackageCapabilityResult>;
+  cancel(payload: PackageCapabilityCancelRequest): Promise<boolean>;
 };
 
 export const MICROSOFT_STORE_NATIVE_CHANNELS = {
@@ -196,6 +215,7 @@ export interface ElectronBridgeAPI {
   creatorPreview?: CreatorPreviewNativeAPI;
   packageMutation?: PackageMutationNativeAPI;
   packageRuntime?: PackageRuntimeNativeAPI;
+  packageCapability?: PackageCapabilityNativeAPI;
   microsoftStore?: MicrosoftStoreNativeAPI;
   packageAppGroups?: PackageAppGroupNativeAPI;
 }

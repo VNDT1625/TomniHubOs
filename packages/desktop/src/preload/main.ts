@@ -17,6 +17,7 @@ import {
 } from '../common/packages/studioCompatibility';
 import {
   CREATOR_PREVIEW_NATIVE_CHANNELS,
+  PACKAGE_CAPABILITY_NATIVE_CHANNELS,
   MICROSOFT_STORE_NATIVE_CHANNELS,
   PACKAGE_APP_GROUP_NATIVE_CHANNELS,
   PACKAGE_MUTATION_NATIVE_CHANNELS,
@@ -84,6 +85,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   packageRuntime: {
     open: (payload: unknown) => ipcRenderer.invoke(PACKAGE_RUNTIME_NATIVE_CHANNELS.open, payload),
     close: (payload: unknown) => ipcRenderer.invoke(PACKAGE_RUNTIME_NATIVE_CHANNELS.close, payload),
+  },
+  packageCapability: {
+    activate: (payload: unknown) => ipcRenderer.invoke(PACKAGE_CAPABILITY_NATIVE_CHANNELS.activate, payload),
+    invoke: (payload: unknown) => ipcRenderer.invoke(PACKAGE_CAPABILITY_NATIVE_CHANNELS.invoke, payload),
+    cancel: (payload: unknown) => ipcRenderer.invoke(PACKAGE_CAPABILITY_NATIVE_CHANNELS.cancel, payload),
   },
   microsoftStore: {
     requestConsent: (payload: unknown) => ipcRenderer.invoke(MICROSOFT_STORE_NATIVE_CHANNELS.requestConsent, payload),

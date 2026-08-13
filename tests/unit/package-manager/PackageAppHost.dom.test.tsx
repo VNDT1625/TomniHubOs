@@ -24,6 +24,9 @@ const packageMocks = vi.hoisted(() => ({
   readAsset: vi.fn(),
   openRuntime: vi.fn(),
   closeRuntime: vi.fn(),
+  activateCapability: vi.fn(),
+  invokeCapability: vi.fn(),
+  cancelCapability: vi.fn(),
 }));
 
 vi.mock('@/renderer/pages/hub/packageClient', () => ({
@@ -193,6 +196,20 @@ describe('downloaded package app sandbox', () => {
     packageMocks.readAsset.mockReset();
     packageMocks.openRuntime.mockReset().mockResolvedValue(undefined);
     packageMocks.closeRuntime.mockReset().mockResolvedValue(undefined);
+    packageMocks.activateCapability.mockReset().mockResolvedValue({
+      version: 1,
+      leaseId: 'lease-1',
+      packageId: 'com.tomni.calculator',
+      runtimeId: 'runtime-1',
+      capability: 'host.runtime.info',
+      expiresAt: '2026-08-13T00:01:00.000Z',
+    });
+    packageMocks.invokeCapability.mockReset().mockResolvedValue({
+      ok: true,
+      data: { abiVersion: 1, packageId: 'com.tomni.calculator' },
+      receipt: { receiptId: 'receipt-1' },
+    });
+    packageMocks.cancelCapability.mockReset().mockResolvedValue(true);
     packageMocks.list.mockResolvedValue([createListing()]);
     packageMocks.readAsset.mockResolvedValue({
       content:
@@ -443,6 +460,62 @@ describe('downloaded package app sandbox', () => {
 
     expect(await screen.findByTestId('package-app-failed')).toBeInTheDocument();
     expect(screen.queryByTestId('package-app-frame')).not.toBeInTheDocument();
+  });
+
+  it('brokers the pilot capability only from the mounted sandbox frame and cancels its lease', async () => {
+    render(
+      <PackageAppHost packageId='com.tomni.calculator' moduleId='calculator' onBack={vi.fn()} allowSandboxedWeb />
+    );
+    const frame = (await screen.findByTestId('package-app-frame')) as HTMLIFrameElement;
+    const runtimeId = packageMocks.openRuntime.mock.calls[0]?.[1] as string;
+    const postMessage = vi.spyOn(frame.contentWindow!, 'postMessage');
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: frame.contentWindow,
+        data: { type: 'tomni.capability.invoke', requestId: 'request-1', capability: 'host.runtime.info' },
+      })
+    );
+
+    await waitFor(() =>
+      expect(packageMocks.activateCapability).toHaveBeenCalledWith({
+        version: 1,
+        packageId: 'com.tomni.calculator',
+        runtimeId,
+        capability: 'host.runtime.info',
+      })
+    );
+    expect(packageMocks.invokeCapability).toHaveBeenCalledWith({
+      version: 1,
+      leaseId: 'lease-1',
+      packageId: 'com.tomni.calculator',
+      runtimeId,
+      name: 'host.runtime.info',
+    });
+    await waitFor(() => expect(packageMocks.cancelCapability).toHaveBeenCalled());
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'tomni.capability.result',
+        requestId: 'request-1',
+        result: { ok: true, data: expect.any(Object), receipt: expect.any(Object) },
+      }),
+      '*'
+    );
+  });
+
+  it('ignores capability messages not sent by the mounted sandbox frame', async () => {
+    render(
+      <PackageAppHost packageId='com.tomni.calculator' moduleId='calculator' onBack={vi.fn()} allowSandboxedWeb />
+    );
+    await screen.findByTestId('package-app-frame');
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: window,
+        data: { type: 'tomni.capability.invoke', requestId: 'request-1', capability: 'host.runtime.info' },
+      })
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(packageMocks.activateCapability).not.toHaveBeenCalled();
   });
 
   it('removes a running trusted host after another tab uninstalls the package', async () => {

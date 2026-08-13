@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { app, BrowserWindow, ipcMain, type IpcMainInvokeEvent, type WebContents } from 'electron';
 import { ipcBridge } from '@/common';
 import {
+  PACKAGE_CAPABILITY_NATIVE_CHANNELS,
   PACKAGE_RUNTIME_NATIVE_CHANNELS,
   type PackageRuntimeCloseRequest,
   type PackageRuntimeOpenRequest,
@@ -18,8 +19,16 @@ import {
   FIRST_PARTY_PACKAGE_CATALOG,
   FIRST_PARTY_PACKAGE_SIGNING_POLICIES,
   FIRST_PARTY_PACKAGE_TRUSTED_KEYS,
+  type PackageCapabilityLease,
+  type PackageCapabilityLeaseRequest,
+  type PackageCapabilityResult,
+  type PackageCapabilitySyscall,
   type LinkedMicrosoftAppRecord,
 } from '@/common/packages';
+import {
+  createPackageCapabilityBroker,
+  type PackageCapabilityBroker,
+} from '@process/resources/packageCapability/broker';
 import {
   createPackageManagerService,
   type PackageManagerService,
@@ -63,6 +72,7 @@ const loadBundledMicrosoftLinkedApp = (linkedAppId: string): LinkedMicrosoftAppR
 
 let singleton: PackageManagerService | undefined;
 let runtimeRegistrySingleton: PackageRuntimeRegistry | undefined;
+let capabilityBrokerSingleton: PackageCapabilityBroker | undefined;
 
 let federationSingleton: CatalogFederationBroker | undefined;
 let microsoftStoreNativeSingleton: MicrosoftStoreNativeRuntime | undefined;
@@ -71,6 +81,7 @@ let unsubscribeContributions: (() => void) | undefined;
 let mutationSingleton: PackageMutationRuntime | undefined;
 let disposeMutationIpc: (() => void) | undefined;
 let disposeRuntimeIpc: (() => void) | undefined;
+let disposeCapabilityIpc: (() => void) | undefined;
 let disposeMicrosoftStoreNativeIpc: (() => void) | undefined;
 let appGroupSingleton: PackageAppGroupService | undefined;
 let disposeAppGroupIpc: (() => void) | undefined;
@@ -89,6 +100,7 @@ export type PackageRuntimeRegistry = {
   close: (ownerId: string, request: PackageRuntimeCloseRequest) => void;
   revokeOwner: (ownerId: string) => void;
   isActive: (packageId: string) => boolean;
+  isRuntimeActive: (packageId: string, runtimeId: string) => boolean;
   reserveMutation: (packageId: string) => PackageSandboxMutationLease | undefined;
 };
 
@@ -123,6 +135,10 @@ export const createPackageRuntimeRegistry = (): PackageRuntimeRegistry => {
       }
     },
     isActive: (packageId) => (activeByPackage.get(packageId)?.size ?? 0) > 0,
+    isRuntimeActive: (packageId, runtimeId) => {
+      const owners = activeByPackage.get(packageId);
+      return Boolean(owners && [...owners.values()].some((runtimes) => runtimes.has(runtimeId)));
+    },
     reserveMutation: (packageId) => {
       if ((activeByPackage.get(packageId)?.size ?? 0) > 0 || mutationReservations.has(packageId)) return undefined;
       const reservation = Symbol(packageId);
@@ -190,6 +206,48 @@ export const registerTrustedPackageRuntimeIpcBridge = <TSender>(options: {
 export const getPackageRuntimeRegistry = (): PackageRuntimeRegistry => {
   runtimeRegistrySingleton ??= createPackageRuntimeRegistry();
   return runtimeRegistrySingleton;
+};
+
+const getPackageCapabilityBroker = (): PackageCapabilityBroker => {
+  capabilityBrokerSingleton ??= createPackageCapabilityBroker({
+    isPackageActive: (packageId) => getPackageRuntimeRegistry().isActive(packageId),
+  });
+  return capabilityBrokerSingleton;
+};
+
+const isCapabilityLeaseRequest = (value: unknown): value is PackageCapabilityLeaseRequest => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const request = value as Record<string, unknown>;
+  return (
+    request.version === 1 &&
+    typeof request.packageId === 'string' &&
+    typeof request.runtimeId === 'string' &&
+    request.capability === 'host.runtime.info'
+  );
+};
+
+const isCapabilitySyscall = (value: unknown): value is PackageCapabilitySyscall => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const request = value as Record<string, unknown>;
+  return (
+    request.version === 1 &&
+    typeof request.leaseId === 'string' &&
+    typeof request.packageId === 'string' &&
+    typeof request.runtimeId === 'string' &&
+    request.name === 'host.runtime.info'
+  );
+};
+
+const isCapabilityCancelRequest = (
+  value: unknown
+): value is Pick<PackageCapabilityLease, 'leaseId' | 'packageId' | 'runtimeId'> => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const request = value as Record<string, unknown>;
+  return (
+    typeof request.leaseId === 'string' &&
+    typeof request.packageId === 'string' &&
+    typeof request.runtimeId === 'string'
+  );
 };
 
 export const getPackageManagerService = (): PackageManagerService => {
@@ -417,6 +475,40 @@ const registerProductionPackageRuntimeIpc = (registry: PackageRuntimeRegistry): 
   };
 };
 
+const registerProductionPackageCapabilityIpc = (
+  service: PackageManagerService,
+  registry: PackageRuntimeRegistry
+): (() => void) => {
+  const broker = getPackageCapabilityBroker();
+  const requireTrustedRuntime = (event: IpcMainInvokeEvent, packageId: string, runtimeId: string): void => {
+    if (!isTrustedPackageMutationSender(event)) throw new Error('PACKAGE_CAPABILITY_SENDER_UNTRUSTED');
+    if (!registry.isRuntimeActive(packageId, runtimeId)) throw new Error('PACKAGE_CAPABILITY_RUNTIME_UNAVAILABLE');
+  };
+  ipcMain.handle(PACKAGE_CAPABILITY_NATIVE_CHANNELS.activate, async (event, payload: unknown) => {
+    if (!isCapabilityLeaseRequest(payload)) throw new Error('PACKAGE_CAPABILITY_REQUEST_INVALID');
+    requireTrustedRuntime(event, payload.packageId, payload.runtimeId);
+    const listing = await service.status(payload.packageId);
+    const manifest = listing.state === 'installed' && listing.enabled ? listing.installedManifest : undefined;
+    if (!manifest) throw new Error('PACKAGE_CAPABILITY_PACKAGE_INACTIVE');
+    return broker.activate(manifest, payload);
+  });
+  ipcMain.handle(PACKAGE_CAPABILITY_NATIVE_CHANNELS.invoke, (event, payload: unknown): PackageCapabilityResult => {
+    if (!isCapabilitySyscall(payload)) throw new Error('PACKAGE_CAPABILITY_REQUEST_INVALID');
+    requireTrustedRuntime(event, payload.packageId, payload.runtimeId);
+    return broker.invoke(payload);
+  });
+  ipcMain.handle(PACKAGE_CAPABILITY_NATIVE_CHANNELS.cancel, (event, payload: unknown): boolean => {
+    if (!isCapabilityCancelRequest(payload)) throw new Error('PACKAGE_CAPABILITY_REQUEST_INVALID');
+    requireTrustedRuntime(event, payload.packageId, payload.runtimeId);
+    return broker.cancel(payload.leaseId, payload.packageId, payload.runtimeId);
+  });
+  return () => {
+    ipcMain.removeHandler(PACKAGE_CAPABILITY_NATIVE_CHANNELS.activate);
+    ipcMain.removeHandler(PACKAGE_CAPABILITY_NATIVE_CHANNELS.invoke);
+    ipcMain.removeHandler(PACKAGE_CAPABILITY_NATIVE_CHANNELS.cancel);
+  };
+};
+
 const registerProductionPackageAppGroupIpc = (): (() => void) => {
   const host: TrustedPackageAppGroupIpcHost<IpcMainInvokeEvent> = {
     handle: (channel, handler) => {
@@ -496,6 +588,8 @@ export const registerPackageManagerBridge = (): void => {
   disposeMutationIpc = registerProductionPackageMutationIpc(readyMutation);
   disposeRuntimeIpc?.();
   disposeRuntimeIpc = registerProductionPackageRuntimeIpc(getPackageRuntimeRegistry());
+  disposeCapabilityIpc?.();
+  disposeCapabilityIpc = registerProductionPackageCapabilityIpc(service, getPackageRuntimeRegistry());
   disposeMicrosoftStoreNativeIpc?.();
   disposeMicrosoftStoreNativeIpc = registerProductionMicrosoftStoreNativeIpc(getMicrosoftStoreNativeRuntime());
   disposeAppGroupIpc?.();
@@ -548,12 +642,14 @@ export const registerPackageManagerBridge = (): void => {
 export const disposePackageManagerBridge = (): void => {
   disposeMutationIpc?.();
   disposeRuntimeIpc?.();
+  disposeCapabilityIpc?.();
   disposeMicrosoftStoreNativeIpc?.();
   disposeAppGroupIpc?.();
   unsubscribe?.();
   unsubscribeContributions?.();
   disposeMutationIpc = undefined;
   disposeRuntimeIpc = undefined;
+  disposeCapabilityIpc = undefined;
   disposeMicrosoftStoreNativeIpc = undefined;
   disposeAppGroupIpc = undefined;
   unsubscribe = undefined;
@@ -564,6 +660,7 @@ export const __resetPackageManagerBridgeForTests = (): void => {
   disposePackageManagerBridge();
   singleton = undefined;
   runtimeRegistrySingleton = undefined;
+  capabilityBrokerSingleton = undefined;
   mutationSingleton = undefined;
   appGroupSingleton = undefined;
 

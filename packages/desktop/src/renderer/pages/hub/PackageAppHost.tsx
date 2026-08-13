@@ -42,6 +42,8 @@ const IFRAME_PERMISSIONS = [
   "payment 'none'",
   "usb 'none'",
 ].join('; ');
+const PACKAGE_CAPABILITY_INVOKE_MESSAGE = 'tomni.capability.invoke';
+const PACKAGE_CAPABILITY_RESULT_MESSAGE = 'tomni.capability.result';
 
 type SandboxedWebModule = PackageModuleContribution & {
   runtime: 'sandboxed-web';
@@ -163,6 +165,24 @@ type PackageAppMountOptions = {
 
 type PackageAppUnmountResult = void | (() => void) | { unmount: () => void };
 
+type SandboxCapabilityInvokeMessage = {
+  type: typeof PACKAGE_CAPABILITY_INVOKE_MESSAGE;
+  requestId: string;
+  capability: 'host.runtime.info';
+};
+
+const isSandboxCapabilityInvokeMessage = (value: unknown): value is SandboxCapabilityInvokeMessage => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const message = value as Record<string, unknown>;
+  return (
+    message.type === PACKAGE_CAPABILITY_INVOKE_MESSAGE &&
+    typeof message.requestId === 'string' &&
+    message.requestId.length > 0 &&
+    message.requestId.length <= 128 &&
+    message.capability === 'host.runtime.info'
+  );
+};
+
 type TrustedPackageRuntime = {
   mount: (container: HTMLElement, options: PackageAppMountOptions) => PackageAppUnmountResult;
 };
@@ -235,6 +255,7 @@ export const PackageAppHost: React.FC<PackageAppHostProps> = ({
 }) => {
   const { t, i18n } = useTranslation();
   const [hostState, setHostState] = useState<PackageAppHostState>({ status: 'loading' });
+  const sandboxFrameRef = useRef<HTMLIFrameElement>(null);
 
   useEffect(() => {
     let disposed = false;
@@ -332,17 +353,79 @@ export const PackageAppHost: React.FC<PackageAppHostProps> = ({
       if (document.visibilityState === 'visible') void synchronize();
     };
 
+    const invokeSandboxCapability = async (event: MessageEvent<unknown>): Promise<void> => {
+      const frame = sandboxFrameRef.current;
+      if (
+        !frame?.contentWindow ||
+        event.source !== frame.contentWindow ||
+        !isSandboxCapabilityInvokeMessage(event.data)
+      )
+        return;
+      const runtimeId = activeSandboxRuntimeId;
+      if (!runtimeId) {
+        frame.contentWindow.postMessage(
+          {
+            type: PACKAGE_CAPABILITY_RESULT_MESSAGE,
+            requestId: event.data.requestId,
+            result: { ok: false, code: 'PACKAGE_CAPABILITY_RUNTIME_UNAVAILABLE' },
+          },
+          '*'
+        );
+        return;
+      }
+      try {
+        const lease = await packageClient.activateCapability({
+          version: 1,
+          packageId,
+          runtimeId,
+          capability: event.data.capability,
+        });
+        try {
+          const result = await packageClient.invokeCapability({
+            version: 1,
+            leaseId: lease.leaseId,
+            packageId,
+            runtimeId,
+            name: 'host.runtime.info',
+          });
+          if (!disposed && sandboxFrameRef.current?.contentWindow === event.source) {
+            sandboxFrameRef.current.contentWindow.postMessage(
+              { type: PACKAGE_CAPABILITY_RESULT_MESSAGE, requestId: event.data.requestId, result },
+              '*'
+            );
+          }
+        } finally {
+          await packageClient
+            .cancelCapability({ leaseId: lease.leaseId, packageId, runtimeId })
+            .catch((): undefined => undefined);
+        }
+      } catch {
+        if (!disposed && sandboxFrameRef.current?.contentWindow === event.source) {
+          sandboxFrameRef.current.contentWindow.postMessage(
+            {
+              type: PACKAGE_CAPABILITY_RESULT_MESSAGE,
+              requestId: event.data.requestId,
+              result: { ok: false, code: 'PACKAGE_CAPABILITY_SYSCALL_DENIED' },
+            },
+            '*'
+          );
+        }
+      }
+    };
+
     void synchronize();
     const interval = window.setInterval((): void => {
       void synchronize();
     }, PACKAGE_APP_SYNC_INTERVAL_MS);
     window.addEventListener('focus', synchronizeWhenVisible);
     document.addEventListener('visibilitychange', synchronizeWhenVisible);
+    window.addEventListener('message', invokeSandboxCapability);
     return () => {
       disposed = true;
       window.clearInterval(interval);
       window.removeEventListener('focus', synchronizeWhenVisible);
       document.removeEventListener('visibilitychange', synchronizeWhenVisible);
+      window.removeEventListener('message', invokeSandboxCapability);
       void closeSandboxRuntime().catch((): undefined => undefined);
     };
   }, [allowSandboxedWeb, moduleId, packageId]);
@@ -393,6 +476,7 @@ export const PackageAppHost: React.FC<PackageAppHostProps> = ({
             sandbox='allow-scripts'
             allow={IFRAME_PERMISSIONS}
             referrerPolicy='no-referrer'
+            ref={sandboxFrameRef}
             srcDoc={hostState.sourceContent}
           />
         ) : (

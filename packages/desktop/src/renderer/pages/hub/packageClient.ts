@@ -9,6 +9,10 @@ import type {
   FederatedCatalogSearchRequest,
   FederatedCatalogSearchResult,
   PackageAsset,
+  PackageCapabilityLease,
+  PackageCapabilityLeaseRequest,
+  PackageCapabilityResult,
+  PackageCapabilitySyscall,
   PackageContributionChangedEvent,
   PackageContributionState,
   PackageListFilter,
@@ -226,6 +230,26 @@ export const packageClient = {
     const api = window.electronAPI?.packageRuntime;
     if (!api) throw new Error('PACKAGE_RUNTIME_TRACKING_UNAVAILABLE');
     await api.close({ packageId, runtimeId });
+  },
+  activateCapability: async (payload: PackageCapabilityLeaseRequest): Promise<PackageCapabilityLease> => {
+    if (!isElectronDesktop()) throw new Error('PACKAGE_CAPABILITY_DESKTOP_REQUIRED');
+    const api = window.electronAPI?.packageCapability;
+    if (!api) throw new Error('PACKAGE_CAPABILITY_TRUSTED_CHANNEL_UNAVAILABLE');
+    return api.activate(payload);
+  },
+  invokeCapability: async (payload: PackageCapabilitySyscall): Promise<PackageCapabilityResult> => {
+    if (!isElectronDesktop()) throw new Error('PACKAGE_CAPABILITY_DESKTOP_REQUIRED');
+    const api = window.electronAPI?.packageCapability;
+    if (!api) throw new Error('PACKAGE_CAPABILITY_TRUSTED_CHANNEL_UNAVAILABLE');
+    return api.invoke(payload);
+  },
+  cancelCapability: async (
+    payload: Pick<PackageCapabilityLease, 'leaseId' | 'packageId' | 'runtimeId'>
+  ): Promise<boolean> => {
+    if (!isElectronDesktop()) throw new Error('PACKAGE_CAPABILITY_DESKTOP_REQUIRED');
+    const api = window.electronAPI?.packageCapability;
+    if (!api) throw new Error('PACKAGE_CAPABILITY_TRUSTED_CHANNEL_UNAVAILABLE');
+    return api.cancel(payload);
   },
   contributions: (): Promise<PackageContributionState> =>
     isElectronDesktop() ? ipcBridge.packagePlatform.contributions.invoke() : request('/api/packages/contributions'),

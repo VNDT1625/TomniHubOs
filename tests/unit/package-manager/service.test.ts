@@ -340,8 +340,11 @@ describe('package manager service', () => {
     registry.open('renderer-1', { packageId: 'org.example.app', runtimeId: 'runtime-1' });
     registry.open('renderer-2', { packageId: 'org.example.app', runtimeId: 'runtime-2' });
 
+    expect(registry.isRuntimeActive('org.example.app', 'runtime-1')).toBe(true);
+    expect(registry.isRuntimeActive('org.example.app', 'runtime-missing')).toBe(false);
     registry.close('renderer-1', { packageId: 'org.example.app', runtimeId: 'runtime-1' });
     expect(registry.isActive('org.example.app')).toBe(true);
+    expect(registry.isRuntimeActive('org.example.app', 'runtime-1')).toBe(false);
     registry.close('renderer-2', { packageId: 'org.example.app', runtimeId: 'runtime-2' });
     expect(registry.isActive('org.example.app')).toBe(false);
   });
