@@ -68,7 +68,20 @@ export type PersonalContext = {
   decisionPolicy: DecisionPolicy;
   habits: ContextFact[];
   secretReferences: PersonalSecretReference[];
+  learningRecords?: PersonalLearningRecord[];
   updatedAt: number;
+};
+
+export type PersonalLearningRecord = {
+  id: string;
+  collection: 'facts' | 'preferences' | 'habits';
+  fact: ContextFact;
+  explanation: string;
+  provenance: string;
+  status: 'proposed' | 'applied' | 'rejected' | 'corrected' | 'forgotten';
+  createdAt: number;
+  confirmedAt?: number;
+  outcome?: 'helpful' | 'not_helpful';
 };
 
 export type ContextDocument = { version: 1; agents: AgentContext[]; people: PersonalContext[] };

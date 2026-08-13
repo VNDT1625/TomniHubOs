@@ -5,6 +5,7 @@ import type {
   AgentContext,
   ContextDocument,
   ContextFact,
+  PersonalLearningRecord,
   PersonalContext,
   PersonalSecretReference,
   SecretDescriptor,
@@ -140,6 +141,126 @@ export const createPersonalContextMutationCoordinator = (
           updatedAt: now(),
         });
       }),
+  };
+};
+
+export type PersonalLearningCoordinator = {
+  propose(input: Omit<PersonalLearningRecord, 'id' | 'status' | 'createdAt'>): Promise<PersonalLearningRecord>;
+  confirm(recordId: string): Promise<boolean>;
+  reject(recordId: string): Promise<boolean>;
+  correct(recordId: string, fact: ContextFact, explanation: string): Promise<boolean>;
+  forget(recordId: string): Promise<boolean>;
+  recordOutcome(recordId: string, outcome: 'helpful' | 'not_helpful'): Promise<boolean>;
+};
+
+/** Consent gate for personal context: proposed observations never enter projections until confirmed. */
+export const createPersonalLearningCoordinator = (
+  store: PersonalContextMutationStore,
+  options: { personalId?: string; now?: () => number; createId?: () => string } = {}
+): PersonalLearningCoordinator => {
+  const personalId = options.personalId ?? 'default';
+  const now = options.now ?? Date.now;
+  const createId = options.createId ?? randomUUID;
+  let queue = Promise.resolve();
+  const mutate = <T>(operation: () => Promise<T>): Promise<T> => {
+    const result = queue.then(operation, operation);
+    queue = result.then(
+      (): void => undefined,
+      (): void => undefined
+    );
+    return result;
+  };
+  const update = async (
+    recordId: string,
+    operation: (profile: PersonalContext, record: PersonalLearningRecord) => PersonalContext
+  ): Promise<boolean> => {
+    const profile = await store.getPersonal(personalId);
+    if (!profile) throw new Error(`Personal context not found: ${personalId}`);
+    const record = profile.learningRecords?.find((item) => item.id === recordId);
+    if (!record) return false;
+    await store.upsertPersonal(operation(profile, record));
+    return true;
+  };
+  return {
+    propose: (input) =>
+      mutate(async () => {
+        const profile = await store.getPersonal(personalId);
+        if (!profile) throw new Error(`Personal context not found: ${personalId}`);
+        const record: PersonalLearningRecord = { ...input, id: createId(), status: 'proposed', createdAt: now() };
+        await store.upsertPersonal({
+          ...profile,
+          learningRecords: [...(profile.learningRecords ?? []), record],
+          updatedAt: now(),
+        });
+        return record;
+      }),
+    confirm: (recordId) =>
+      mutate(() =>
+        update(recordId, (profile, record) => {
+          if (record.status !== 'proposed') return profile;
+          const merged = mergeLearnedFact(profile[record.collection], record.fact);
+          if (!merged.accepted)
+            return {
+              ...profile,
+              learningRecords: profile.learningRecords?.map((item) =>
+                item.id === record.id ? { ...item, status: 'rejected' } : item
+              ),
+              updatedAt: now(),
+            };
+          return {
+            ...profile,
+            [record.collection]: merged.values,
+            learningRecords: profile.learningRecords?.map((item) =>
+              item.id === record.id ? { ...item, status: 'applied', confirmedAt: now() } : item
+            ),
+            updatedAt: now(),
+          };
+        })
+      ),
+    reject: (recordId) =>
+      mutate(() =>
+        update(recordId, (profile, record) => ({
+          ...profile,
+          learningRecords: profile.learningRecords?.map((item) =>
+            item.id === record.id ? { ...item, status: 'rejected' } : item
+          ),
+          updatedAt: now(),
+        }))
+      ),
+    correct: (recordId, fact, explanation) =>
+      mutate(() =>
+        update(recordId, (profile, record) => ({
+          ...profile,
+          [record.collection]: mergeLearnedFact(profile[record.collection], fact).values,
+          learningRecords: profile.learningRecords?.map((item) =>
+            item.id === record.id ? { ...item, fact, explanation, status: 'corrected', confirmedAt: now() } : item
+          ),
+          updatedAt: now(),
+        }))
+      ),
+    forget: (recordId) =>
+      mutate(() =>
+        update(recordId, (profile, record) => ({
+          ...profile,
+          [record.collection]: profile[record.collection].filter(
+            (fact) => fact.key !== record.fact.key || fact.value !== record.fact.value
+          ),
+          learningRecords: profile.learningRecords?.map((item) =>
+            item.id === record.id ? { ...item, status: 'forgotten' } : item
+          ),
+          updatedAt: now(),
+        }))
+      ),
+    recordOutcome: (recordId, outcome) =>
+      mutate(() =>
+        update(recordId, (profile, record) => ({
+          ...profile,
+          learningRecords: profile.learningRecords?.map((item) =>
+            item.id === record.id ? { ...item, outcome } : item
+          ),
+          updatedAt: now(),
+        }))
+      ),
   };
 };
 
@@ -298,8 +419,10 @@ const parsePersonal = (value: unknown): PersonalContext => {
   if (communication.verbosity !== undefined && !['concise', 'balanced', 'detailed'].includes(communication.verbosity))
     throw new Error('Invalid personal communication style.');
   const refs = Array.isArray(item.secretReferences) ? item.secretReferences : [];
+  const learningRecords = Array.isArray(item.learningRecords) ? item.learningRecords : [];
   if (refs.length > 100 || refs.some((ref) => !ref || typeof ref !== 'object'))
     throw new Error('Invalid secret references.');
+  if (learningRecords.length > 1_000) throw new Error('Invalid learning records.');
   return {
     id: boundedText(item.id, 'personal id', 200),
     facts: (item.facts ?? []).map(parseFact),
@@ -340,6 +463,36 @@ const parsePersonal = (value: unknown): PersonalContext => {
         description: record.description ? boundedText(record.description, 'secret description', 500) : undefined,
       };
     }),
+    ...(item.learningRecords === undefined
+      ? {}
+      : {
+          learningRecords: learningRecords.map((rawRecord): PersonalLearningRecord => {
+            if (!rawRecord || typeof rawRecord !== 'object') throw new Error('Invalid learning record.');
+            const record = rawRecord as Partial<PersonalLearningRecord>;
+            if (
+              typeof record.id !== 'string' ||
+              !['facts', 'preferences', 'habits'].includes(record.collection ?? '') ||
+              !record.fact ||
+              typeof record.explanation !== 'string' ||
+              typeof record.provenance !== 'string' ||
+              !['proposed', 'applied', 'rejected', 'corrected', 'forgotten'].includes(record.status ?? '') ||
+              !Number.isSafeInteger(record.createdAt)
+            ) {
+              throw new Error('Invalid learning record.');
+            }
+            return {
+              id: boundedText(record.id, 'learning record id', 200),
+              collection: record.collection,
+              fact: parseFact(record.fact),
+              explanation: boundedText(record.explanation, 'learning explanation', 1_000),
+              provenance: boundedText(record.provenance, 'learning provenance', 500),
+              status: record.status,
+              createdAt: record.createdAt,
+              confirmedAt: record.confirmedAt,
+              outcome: record.outcome,
+            };
+          }),
+        }),
     updatedAt: item.updatedAt,
   };
 };

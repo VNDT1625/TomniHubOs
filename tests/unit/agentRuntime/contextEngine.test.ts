@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { createCoreContextComposer } from '@/process/agentRuntime/contextComposer';
 import {
   createContextStore,
+  createPersonalLearningCoordinator,
   createPersonalContextMutationCoordinator,
   mergeLearnedFact,
   reconcilePersonalSecretReferences,
@@ -773,6 +774,34 @@ describe('Context learning conflict policy', () => {
     await expect(store.learnPersonalFact('unknown', 'facts', fact())).rejects.toThrow(
       'Personal context not found: unknown'
     );
+  });
+
+  it('requires consent before a proposed observation changes projections, then supports outcome and forgetting', async () => {
+    let current = personal();
+    const store: ContextStore = {
+      getAgent: async () => undefined,
+      getPersonal: async () => structuredClone(current),
+      upsertAgent: async () => undefined,
+      upsertPersonal: async (value) => {
+        current = structuredClone(value);
+      },
+      learnPersonalFact: async () => false,
+    };
+    const learning = createPersonalLearningCoordinator(store, { now: () => NOW, createId: () => 'learning_1' });
+    const proposed = await learning.propose({
+      collection: 'preferences',
+      fact: fact({ key: 'responseLanguage', value: 'Vietnamese', source: 'inferred', confidence: 0.8 }),
+      explanation: 'Observed from the user language in this session.',
+      provenance: 'conversation:turn-1',
+    });
+
+    expect(current.preferences).toEqual([]);
+    await learning.confirm(proposed.id);
+    expect(current.preferences).toMatchObject([{ key: 'responseLanguage', value: 'Vietnamese' }]);
+    await learning.recordOutcome(proposed.id, 'not_helpful');
+    await learning.forget(proposed.id);
+    expect(current.preferences).toEqual([]);
+    expect(current.learningRecords).toMatchObject([{ status: 'forgotten', outcome: 'not_helpful' }]);
   });
 });
 
