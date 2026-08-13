@@ -113,7 +113,7 @@ Security, IPC, package, database, and run-lifecycle changes require contract or 
 
 ## 8. Multi-agent execution
 
-For work spanning independent domains, follow [docs/execution/mvp-plan.md](docs/execution/mvp-plan.md):
+For work spanning independent domains, follow the [autonomous multi-agent master plan](docs/execution/mvp-plan.md):
 
 - one integrator owns shared contracts and final merge;
 - each subagent receives an explicit file allowlist, acceptance evidence, and no-overlap rule;

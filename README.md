@@ -52,7 +52,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md) before changin
 - [Trust and user understanding](docs/core/trust-and-understanding.md)
 - [Local and cloud AI runtime](docs/core/ai-runtime.md)
 - [Package and Store contract](docs/platform/packages.md)
-- [Autonomous MVP execution plan](docs/execution/mvp-plan.md)
+- [Autonomous multi-agent master plan](docs/execution/mvp-plan.md)
 - [Engineering conventions](docs/engineering/conventions.md)
 - [Testing and release](docs/engineering/testing-and-release.md)
 

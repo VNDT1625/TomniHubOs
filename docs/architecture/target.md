@@ -162,11 +162,13 @@ Do not begin by moving directories. First establish a dependency rule and a runn
 The target core is complete for MVP when:
 
 - every enabled release-candidate execution target enters one durable run lifecycle; unmigrated targets are disabled;
+- one multi-step Hub goal creates durable parent/child lineage with narrowed grants and budgets, cascading cancellation, and verified evidence aggregation;
 - every privileged operation has identity, capability, policy, audit, cancellation, and recovery evidence;
 - one local, one cloud, one CLI, and one MCP adapter pass the same contract suite and deterministic router;
 - private context is user-inspectable and its projection is recorded;
+- one controlled user-intelligence proposal, consent, outcome, correction, forgetting, export, and deletion loop works without changing authorization;
 - ResourceCoordinator is the single resource owner and the P0 router deterministically uses capability, privacy, allowed pin, health, resources, and hard budget;
 - a community package cannot execute in the trusted renderer path;
-- a generated ownership denylist proves zero core-to-optional imports and no optional implementation in the base artifact; IDE, Browser, Office, Studio-related, and all other optional owners become available only after independent package install;
+- a generated ownership denylist proves zero core-to-optional imports and no optional implementation in the base artifact; for MVP, the signed pilot and IDE are independently installable, while Browser, Office, Studio-related, and all remaining optional owners are absent and inactive until independently packaged in P1;
 - a clean restart can resume or safely terminate an interrupted run;
 - denial and uninstall leave no orphan process, grant, route, or package data outside declared retention policy.

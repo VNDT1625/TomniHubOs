@@ -26,7 +26,7 @@ Prefer changes that advance one of the two MVP cores:
 
 Local/cloud adapters and package extraction are supporting platform work when they unlock those cores. Optional applications must be changed in their package boundary, not expanded inside the base.
 
-For broad tasks, split work according to the multi-agent protocol in [docs/execution/mvp-plan.md](docs/execution/mvp-plan.md). Shared contracts, IPC registration, bootstrap wiring, and database migrations have one owner at a time.
+For broad tasks, split work according to the [multi-agent master plan](docs/execution/mvp-plan.md). Shared contracts, IPC registration, bootstrap wiring, and database migrations have one owner at a time.
 
 ## Making changes
 

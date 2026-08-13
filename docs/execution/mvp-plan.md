@@ -1,7 +1,7 @@
-﻿# Autonomous multi-agent MVP execution plan
+# Autonomous multi-agent master plan
 
-**Status:** TARGET execution order.
-**Objective:** reach the smallest release candidate that proves the Hub Agent OS and Trust and User Intelligence cores. Local/cloud AI and package extraction are supporting platform slices.
+**Status:** TARGET master plan and execution order.
+**Objective:** reach the smallest release candidate that proves the Hub Agent OS and Trust and User Intelligence cores. Local/cloud AI and package extraction are supporting platform slices; post-MVP expansion remains ordered but cannot delay the two-core release.
 
 This is the only implementation plan. A wave completes only when its current-revision evidence passes. Later waves cannot redefine an earlier P0 contract without reopening that earlier gate.
 
@@ -10,18 +10,36 @@ This is the only implementation plan. A wave completes only when its current-rev
 A clean base installation with no optional application package must let a user:
 
 1. submit a goal through the Hub and receive a durable Run receipt;
-2. use one cloud adapter with a write-only credential and no secret in renderer memory;
-3. install or select one local model and complete an ordinary conversation offline;
-4. connect one supervised CLI and one MCP tool;
-5. run local, cloud, CLI, and MCP through the same Run Kernel;
-6. see deterministic target choice, context projection, permission decisions, resource use, evidence, verification, and terminal state;
-7. cancel and restart without an orphan process or duplicated side effect;
-8. explicitly save a preference or consent to a specific inference, then inspect provenance, use, correct, export, and delete it;
-9. install one tiny signed pilot package through an isolated capability ABI;
-10. install, use, update, disable, uninstall, and roll back a fully extracted IDE package;
-11. operate normal conversation and recover private context while every optional package is absent.
+2. complete one multi-step goal whose parent Run delegates at least one bounded child step, narrows its budget and capabilities, cascades cancellation, and aggregates verified evidence;
+3. use one cloud adapter with a write-only credential and no secret in renderer memory;
+4. install or select one local model and complete an ordinary conversation offline;
+5. connect one supervised CLI and one MCP tool;
+6. run local, cloud, CLI, and MCP through the same Run Kernel;
+7. see deterministic target choice, context projection, permission decisions, resource use, evidence, verification, and terminal state;
+8. cancel and restart without an orphan process or duplicated side effect;
+9. complete one controlled user-intelligence loop from observation or explicit input through proposal, consent, use, outcome, correction or forgetting;
+10. inspect provenance, projection use, export, and deletion for every saved or consented record;
+11. install one tiny signed pilot package through an isolated capability ABI;
+12. install, use, update, disable, uninstall, and roll back a fully extracted IDE package;
+13. operate normal conversation and recover private context while every optional package is absent.
 
 The base graph and artifact must contain no implementation owned by the generated optional-domain denylist. That list includes IDE, Browser, Office, Studio, Music, MakeVideo, Terminal, Testing, Monitor, media/design, and every future manifest marked optional; it is not a hardcoded four-app checklist.
+
+## Critical path and parallel tracks
+
+Wave numbers define gate families, not a requirement to leave independent agents idle. The dependency spine is:
+
+```text
+Wave 0 -> Wave 1 -> Wave 2A
+                      |-> Wave 2B release-surface migrations --|
+                      |-> Wave 3 Trust + User Intelligence -----|-> Wave 6
+                      |-> Wave 4 local/cloud/CLI/MCP ------------|
+                      |-> Wave 5A package ABI -> 5B -> 5C -> 5D-|
+```
+
+After Wave 2A passes, Waves 2B, 3, 4, and 5A may progress concurrently when the ownership matrix proves that they do not write the same contracts, bootstrap, IPC registry, or schema. Wave 5B additionally depends on the Wave 3 context/recovery boundary; 5C depends on 5A and 5B; 5D depends on the generated ownership inventory and 5C. Wave 6 starts only after every P0 branch converges at one revision.
+
+The fastest-MVP scope guard is strict: one cloud adapter, one offline local target, one CLI, one MCP path, one signed pilot, and one extracted IDE are enough. Additional providers, legacy executors, autonomous learning, learned routing, Browser packaging, and optional-app polish are disabled or deferred instead of extending the critical path.
 
 ## Mandatory orchestration protocol
 
@@ -49,6 +67,25 @@ Serialize Run, TrustBroker, capability, context, adapter, and package ABI change
 
 When two lanes need one shared file, subagents prepare isolated modules or evidence and the Integrator edits the shared file once.
 
+### Automatic lane matrix
+
+At the start of a wave, the Integrator instantiates these default lanes and may merge a lane when fewer slots are available. A lane is omitted only when its acceptance evidence is already CURRENT at the working revision.
+
+| Gate        | Subagent A                     | Subagent B                  | Subagent C                                            | Integrator-only work                                            |
+| ----------- | ------------------------------ | --------------------------- | ----------------------------------------------------- | --------------------------------------------------------------- |
+| Wave 0      | runtime inventory              | trust/IPC inventory         | optional ownership and artifact inventory             | baselines, release-surface decision, generated-rule integration |
+| Wave 1      | credential boundary            | IPC boundary                | durable Run store and replay fixtures                 | shared contracts, TrustBroker seam, bootstrap wiring            |
+| Wave 2A     | real context/resource adapters | cloud adapter compatibility | recovery, cancellation, and characterization verifier | Run Kernel state machine and one-time integration               |
+| Wave 2B     | first executor batch           | second executor batch       | delegation and bypass verifier                        | flags, shared registry, parent/child Run integration            |
+| Wave 3      | TrustBroker policy breadth     | user-intelligence loop      | user controls and denial tests                        | receipt binding and shared context schema                       |
+| Wave 4      | local offline target           | cloud plus supervised CLI   | MCP and common contract verifier                      | deterministic router and ResourceCoordinator integration        |
+| Wave 5A     | syscall/runtime implementation | sandbox and lifecycle       | signed pilot and adversarial verifier                 | ABI version, package registry, bootstrap                        |
+| Waves 5B-5C | neutral primitive extraction   | IDE-owned UI/artifact       | IDE services and lifecycle verifier                   | shared route/bridge/build integration                           |
+| Wave 5D     | optional-owner removal batches | graph/artifact scanner      | clean-base journey verifier                           | shared router/bridge cleanup                                    |
+| Wave 6      | adversarial security           | reliability and migration   | clean-machine journeys and fixed eval                 | release decision and evidence reconciliation                    |
+
+For repeated executor or optional-owner batches, the Integrator assigns at most two implementation lanes and reserves the third lane for independent verification. A batch that requires a shared-contract change returns to serialized Integrator ownership before work continues.
+
 ### Handoff and failure
 
 Each subagent returns changed files, behavior, tests and exit codes, acceptance evidence, unresolved risk, unrelated dirty files, and required integration work.
@@ -64,6 +101,7 @@ Every wave records:
 - **Kill criteria:** measurable conditions that stop the rollout and disable the new path.
 - **Evidence:** commands, revision, artifact, and test results.
 
+Wave 0 also freezes the representative-goal evaluation set and baseline budgets for verified outcome success, tool success, latency, cost, and resource use. Later waves may version these inputs only through an explicit reviewed migration; they cannot replace failing cases to make a gate pass.
 Rollback must never restore API keys to renderer responses or restore reversible Base64 secret persistence. User-intelligence rollback returns to explicit-only records; it never keeps partially trusted autonomous inferences active.
 
 ## Wave 0 - Freeze evidence and generated ownership
@@ -80,6 +118,7 @@ Integrator work:
 
 - define enabled release-candidate surfaces;
 - add inventory drift tests;
+- freeze a representative multi-step goal set and baseline verified outcome, tool, latency, cost, and resource metrics;
 - record baseline failures in current architecture.
 
 Exit gate:
@@ -87,6 +126,7 @@ Exit gate:
 - every enabled execution and egress surface has an owner;
 - 100 percent of base preload methods appear in the IPC inventory;
 - generated ownership denylist is versioned and fails on an unowned optional import;
+- the versioned evaluation set and measurable release budgets are reproducible from the checkpoint revision;
 - baseline graph and artifact scans cover all optional owners.
 
 Migration: inventories are additive and do not move runtime behavior.
@@ -97,7 +137,7 @@ Kill criteria: stop if inventory generation is nondeterministic or omits an enab
 
 **Purpose:** establish the minimum boundary used by the first vertical slice.
 
-The Integrator owns versioned Run, adapter, TrustBroker, capability, ContextProjection, evidence, receipt, cancellation, stable error, and future package-syscall contracts.
+The Integrator owns versioned Run, adapter, TrustBroker, capability, ContextProjection, evidence, receipt, cancellation, stable error, and package identity/envelope primitives. The full syscall ABI is frozen only in Wave 5A after the Run and Trust seams are proven.
 
 Parallel lanes:
 
@@ -159,13 +199,16 @@ The Hub ordinary conversation is the only first enabled production slice.
 
 ### Wave 2B - Per-executor compatibility migration
 
-Migrate native conversation variants, company, automation, remote, CLI, local, MCP, and future package calls one executor at a time behind explicit feature flags and the same contract suite.
+Migrate only existing executors selected for the release candidate, one at a time behind explicit feature flags and the same contract suite. The local, CLI, and MCP targets selected for MVP may enter through Wave 4 instead of preserving a legacy path; package calls cannot enter before Wave 5A.
+
+Move goal planning and delegation behind the Run Kernel. A parent Run creates bounded child steps with explicit lineage, narrowed capabilities and budgets, cascading cancellation, independent terminal states, and verified evidence aggregation. Prove the contract with one multi-step goal and at least one child step.
 
 An executor that has not migrated is disabled for the release candidate. It may not silently use its old direct provider or side-effect route.
 
 2B exit gate:
 
 - every enabled release-candidate surface enters the same kernel;
+- one multi-step Hub goal delegates a bounded child step without privilege amplification and produces one parent receipt with linked evidence;
 - inventory shows no enabled bypass;
 - ExperimentalCoreRuntime and Foundation are no longer peer lifecycle owners;
 - recovery does not import IDE memory;
@@ -186,8 +229,8 @@ Parallel lanes:
    - implement scoped approvals, destination validation, final serialized-payload inspection, audit, revocation, and denial evidence.
 2. **Canonical user intelligence**
    - remove or delegate PreferenceManager to ContextStore;
-   - implement explicit save and specifically consented inference;
-   - add provenance, confidence, contradiction, correction, export, deletion, retention, and projection-use evidence.
+   - implement the controlled loop `observe or explicit input -> propose -> explain -> confirm -> apply -> record outcome -> correct or forget`;
+   - add provenance, confidence, contradiction, correction, export, deletion, retention, projection-use, and outcome evidence.
 3. **Base control surface**
    - expose grants, approvals, audit receipts, context provenance, cloud-projection policy, correction, export, deletion, and learning pause.
 
@@ -202,6 +245,7 @@ Exit gate:
 - every enabled egress surface uses TrustBroker;
 - no secret plaintext reaches renderer, prompts, logs, or receipts;
 - explicit and consented memory works end to end;
+- one proposed inference is explained and confirmed, its outcome is recorded, and rejection or correction changes the next proposal without changing authorization;
 - correction and deletion change subsequent projections;
 - normal conversation restarts with IDE absent;
 - inferred context cannot change permission outcomes.
@@ -283,10 +327,6 @@ Migration: replace base static imports with disabled registry slots; do not buil
 Rollback: disable the offending base reference; never restore optional implementation to base.
 Kill criteria: any core-to-optional import, undeclared optional artifact, preinstall Browser host/database, or base activation stops the MVP candidate.
 
-### P1 after MVP - Browser and remaining application packages
-
-Migrate Browser first through the proven ABI, then independent Office, Studio-related, Music, MakeVideo, Terminal, Testing, Monitor, media/design, and other optional packages. Each receives signed install, use, update, disable, uninstall, and rollback evidence before activation. Studio remains a Store group and compatibility resolver, not a monolith.
-
 ## Wave 6 - MVP hardening and release candidate
 
 Parallel lanes:
@@ -305,6 +345,8 @@ Release candidate gate:
 - generated optional denylist and zero-import checks pass;
 - base webviewTag is false and no Browser state exists before install;
 - local offline, cloud, CLI, MCP, signed pilot, and fully extracted IDE lifecycle journeys pass; every other optional owner is absent and inactive in base;
+- one multi-step delegated goal passes parent/child lineage, privilege narrowing, budget accounting, cancellation cascade, evidence aggregation, and terminal-state tests;
+- the frozen representative-goal evaluation set meets its verified-outcome and tool-success budgets with no unexplained regression from the checkpoint baseline;
 - rollback and kill drills pass;
 - no known P0 security, data-loss, duplicated-effect, or package-isolation issue remains;
 - documentation matches the artifact.
@@ -312,6 +354,15 @@ Release candidate gate:
 Migration: release from a clean signed candidate and test update from the previous supported build.
 Rollback: restore the previous signed base and compatible package set while retaining readable Run evidence; never weaken credential or trust boundaries.
 Kill criteria: any P0 failure rejects the candidate. There are no waivers.
+
+## Post-MVP expansion tracks
+
+These tracks start only after the Wave 6 candidate passes. They use the same Run, TrustBroker, ResourceCoordinator, context, and package contracts rather than reopening the base architecture.
+
+1. **Optional applications:** package Browser first through the proven ABI, then independent Office, Studio-related, Music, MakeVideo, Terminal, Testing, Monitor, media/design, and other optional owners. Every package receives signed install, use, update, disable, uninstall, and rollback evidence before activation. Studio remains a Store group and compatibility resolver, not a monolith.
+2. **Open AI and CLI ecosystem:** publish an adapter SDK and conformance suite so additional API providers, local runtimes, subscription CLIs, remote agents, and MCP servers can ship as governed packages without core changes. Compatibility means passing lifecycle, trust, usage, cancellation, and cleanup contracts; it never means executing arbitrary binaries without policy.
+3. **Advanced intelligence and efficiency:** add opt-in autonomous observation, confidence decay, contradiction resolution, learned quality/cost/latency routing, and outcome-driven planning only after versioned evaluations prove improvement and user controls remain effective.
+4. **Platform parity:** port package isolation, local-runtime supervision, secret storage, update, and clean-machine release evidence to each additional desktop platform before claiming support; web and remote surfaces remain clients of the same governed core.
 
 ## Progress reporting
 

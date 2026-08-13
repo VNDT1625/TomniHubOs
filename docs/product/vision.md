@@ -107,10 +107,11 @@ The product distinguishes implemented behavior from an aspiration. A feature is 
 The first release candidate must prove these journeys end to end.
 
 1. **Provider-neutral run:** connect one local model, one cloud API, and one CLI adapter; submit the same goal; observe governed selection or an explicit pin; cancel safely; receive a durable receipt.
-2. **Protected side effect:** an agent proposes an outbound or filesystem action; the Hub shows destination, data class, capability, and scope; denial stops the action; approval is time- and scope-bounded.
-3. **Useful private memory:** explicitly save a preference or consent to a specific inference with provenance; use a bounded projection in a later plan; inspect, correct, export, and delete it; prove deletion affects subsequent projections.
-4. **Downloadable capability:** start with a base artifact whose generated ownership denylist excludes every optional domain; install a tiny signed pilot and a fully extracted IDE package; use, update, disable, uninstall, and roll back both without rebuilding base. Browser and other optional packages follow after MVP.
-5. **Failure recovery:** interrupt a run during execution; restart the application; resume or terminate from durable state without duplicating an external side effect.
+2. **Governed delegation:** submit one multi-step goal; a parent Run delegates a bounded child step with narrowed capability and budget, cascades cancellation, verifies the child result, and aggregates linked evidence into one receipt.
+3. **Protected side effect:** an agent proposes an outbound or filesystem action; the Hub shows destination, data class, capability, and scope; denial stops the action; approval is time- and scope-bounded.
+4. **Controlled user intelligence:** enter or observe a preference, receive an explained proposal, consent or reject it, use a bounded projection, record the outcome, then inspect, correct, export, forget, and delete it; prove the next proposal and projection change without changing permissions.
+5. **Downloadable capability:** start with a base artifact whose generated ownership denylist excludes every optional domain; install a tiny signed pilot and a fully extracted IDE package; use, update, disable, uninstall, and roll back both without rebuilding base. Browser and other optional packages follow after MVP.
+6. **Failure recovery:** interrupt a run during execution; restart the application; resume or terminate from durable state without duplicating an external side effect.
 
 ## MVP success measures
 
@@ -118,8 +119,10 @@ Release evidence should report:
 
 - percentage of production execution targets covered by the shared security seam;
 - percentage of runs reaching exactly one valid terminal state;
+- delegated parent/child runs with valid lineage, no privilege amplification, cancellation cascade, and verified evidence aggregation;
 - cancellation latency and orphan-process count;
 - context projection size, provenance coverage, and user correction/deletion success;
+- controlled learning proposals accepted, rejected, corrected, forgotten, and reflected in later outcomes without permission drift;
 - routing latency, cost estimate accuracy, and fallback reason coverage;
 - base artifact size and forbidden optional-module count;
 - signed pilot and IDE install, rollback, quarantine, uninstall, and clean-base optional-owner absence;

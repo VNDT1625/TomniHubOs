@@ -23,7 +23,7 @@ A document can describe current and target behavior together only when it labels
 | Security, private context, preferences, user control     | [Trust and user understanding](core/trust-and-understanding.md) |
 | Provider APIs, CLIs, local models, cloud models, routing | [AI runtime](core/ai-runtime.md)                                |
 | Store, manifest, ABI, sandbox, package extraction        | [Packages](platform/packages.md)                                |
-| Ordered waves and autonomous subagent protocol           | [MVP plan](execution/mvp-plan.md)                               |
+| Ordered waves and autonomous subagent protocol           | [Master plan](execution/mvp-plan.md)                            |
 | Source layout, naming, UI, i18n                          | [Engineering conventions](engineering/conventions.md)           |
 | Test levels, evidence, release gates                     | [Testing and release](engineering/testing-and-release.md)       |
 

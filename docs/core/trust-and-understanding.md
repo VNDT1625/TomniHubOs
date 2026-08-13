@@ -181,7 +181,7 @@ Telemetry is opt-in, data-minimized, and separate from private context. User con
 - No API key or decrypted secret appears in renderer responses, logs, serialized state, or snapshots.
 - Persistent secret creation fails safely when protected storage is unavailable.
 - Every enabled release-candidate outbound surface passes the same TrustBroker contract and final serialized-payload egress hook; unmigrated surfaces are disabled.
-- Explicit save and any specifically consented learnPersonalFact replacement have provenance, deduplication, correction, export, and deletion; background autonomous learning remains P1.
+- One controlled `observe or explicit input -> propose -> explain -> confirm -> apply -> outcome -> correct or forget` loop has provenance, deduplication, rejection, correction, export, and deletion; background autonomous learning remains P1.
 - The in-memory preference manager is removed or delegates entirely to the canonical context store.
 - A normal conversation can restart, recover context, and complete with the IDE package absent.
 - Context export and deletion are round-trip tested.

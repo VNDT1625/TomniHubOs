@@ -125,6 +125,8 @@ Property, contract, and integration tests enforce:
 - every enabled release-candidate surface enters the same kernel;
 - unmigrated executors are disabled and cannot use old direct routes;
 - stable unique run identity and legal transitions;
+- parent/child lineage is durable and every delegated capability, data projection, and budget is equal to or narrower than the parent grant;
+- child failure, timeout, and cancellation follow explicit propagation rules, while parent cancellation cascades to all active descendants;
 - exactly one terminal state and no events after it;
 - idempotent cancellation and release of every resource/capability lease;
 - committed effects have proposal/commit and idempotency evidence;
@@ -134,6 +136,14 @@ Property, contract, and integration tests enforce:
 - ExperimentalCoreRuntime and Foundation are not peer lifecycle owners.
 
 The initial migration test is Hub plus one cloud adapter. Each later executor is enabled only after passing the same suite behind its compatibility flag.
+
+## Agent effectiveness gate
+
+Wave 0 freezes a versioned representative-goal set covering ordinary conversation, one delegated multi-step goal, tool use, recovery, and context-assisted follow-up. The checkpoint records verified task success, correct tool completion, unsafe or unapproved effects, retries, elapsed time, model and tool usage, monetary estimate, and peak resource use.
+
+Later waves run the same cases through the enabled production path. The release budget requires zero unsafe or unapproved effects, meets the versioned minimum for verified task and tool success, and has no unexplained regression in completion time, usage, or resource cost. A reviewed dataset version may add cases but cannot remove a failing case or change its oracle to pass a gate.
+
+Activity, token count, or a plausible response is not success. Each case has executable or independently inspectable evidence linked to its Run receipt.
 
 ## Deterministic target and ResourceCoordinator gate
 
@@ -159,6 +169,7 @@ The local adapter passes a real network-blocked clean-machine journey. The CLI p
 MVP tests cover:
 
 - explicit save and a specifically consented inference;
+- a complete `observe or explicit input -> propose -> explain -> confirm -> apply -> outcome -> correct or forget` loop;
 - provenance, scope, projection budget, and destination policy;
 - correction, contradiction, export, retention, and deletion;
 - deletion changing later projections;
@@ -276,10 +287,12 @@ Reject the candidate for any of these:
 - raw API key or decrypted secret in renderer, log, prompt, snapshot, or receipt;
 - reversible plaintext-equivalent secret storage;
 - any enabled surface bypassing Run Kernel or TrustBroker;
+- Hub delegation remains renderer-only, lacks durable parent/child lineage, amplifies capability or budget, or fails cancellation cascade;
 - less than 100 percent base preload inventory/schema/sender coverage;
 - unrestricted string IPC dispatch;
 - local offline flow wired only in tests;
 - nondeterministic P0 routing or a second resource owner;
+- the frozen representative-goal set misses its verified task/tool-success budget or has an unexplained effectiveness regression;
 - context recovery dependent on IDE;
 - autonomous learning required instead of explicit/consented memory;
 - community code executing in the trusted renderer;
