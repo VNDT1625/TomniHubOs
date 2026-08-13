@@ -13,30 +13,48 @@ export type ResourceLease = {
 export class ResourceAdapter {
   private activeLeases = new Map<string, ResourceLease>();
 
-  public constructor(private readonly coordinator?: Pick<IResourceCoordinator, 'requestLease' | 'releaseLease'>) {}
+  public constructor(
+    private readonly coordinator?: Pick<IResourceCoordinator, 'requestLease' | 'releaseLease' | 'cancelQueuedRequest'>
+  ) {}
 
-  public async requestLease(plan: ExecutionPlan): Promise<ResourceLease> {
+  public async requestLease(plan: ExecutionPlan, signal?: AbortSignal): Promise<ResourceLease> {
     validateExecutionPlan(plan);
-    const leaseId = this.coordinator
-      ? (
-          await this.coordinator.requestLease({
-            kind: 'agent',
-            estCostMB: plan.estimatedCostMB,
-            priority: plan.priority,
-            requestId: `foundation:${plan.runId}:${plan.taskId}`,
-            owner: { processKind: 'main', serviceId: 'foundation-run-kernel', taskId: plan.taskId },
-          })
-        ).id
-      : `lease_${plan.runId}_${plan.taskId}_${Date.now()}`;
-    const lease: ResourceLease = {
-      leaseId,
-      runId: plan.runId,
-      taskId: plan.taskId,
-      kind: plan.resourceKind,
-      grantedAt: Date.now(),
+    if (signal?.aborted) throw new Error('RESOURCE_LEASE_ABORTED');
+    const requestId = `foundation:${plan.runId}:${plan.taskId}`;
+    let aborted = false;
+    const abort = (): void => {
+      aborted = true;
+      this.coordinator?.cancelQueuedRequest(requestId);
     };
-    this.activeLeases.set(leaseId, lease);
-    return lease;
+    signal?.addEventListener('abort', abort, { once: true });
+    try {
+      const leaseId = this.coordinator
+        ? (
+            await this.coordinator.requestLease({
+              kind: 'agent',
+              estCostMB: plan.estimatedCostMB,
+              priority: plan.priority,
+              requestId,
+              owner: { processKind: 'main', serviceId: 'foundation-run-kernel', taskId: plan.taskId },
+            })
+          ).id
+        : `lease_${plan.runId}_${plan.taskId}_${Date.now()}`;
+      if (aborted) {
+        this.coordinator?.releaseLease(leaseId);
+        throw new Error('RESOURCE_LEASE_ABORTED');
+      }
+      const lease: ResourceLease = {
+        leaseId,
+        runId: plan.runId,
+        taskId: plan.taskId,
+        kind: plan.resourceKind,
+        grantedAt: Date.now(),
+      };
+      this.activeLeases.set(leaseId, lease);
+      return lease;
+    } finally {
+      signal?.removeEventListener('abort', abort);
+    }
   }
 
   public async releaseLease(leaseId: string): Promise<boolean> {

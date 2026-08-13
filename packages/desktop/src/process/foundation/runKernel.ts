@@ -305,14 +305,17 @@ export class RunKernel {
     await this.emit(intent, 'lease.requested', { candidateId: selection.selectedId });
     let lease: ResourceLease;
     try {
-      lease = await this.resourceAdapter.requestLease({
-        runId: intent.runId,
-        taskId: intent.rootTaskId,
-        candidateId: selection.selectedId,
-        resourceKind: 'agent.execution',
-        estimatedCostMB: 128,
-        priority: 1,
-      });
+      lease = await this.resourceAdapter.requestLease(
+        {
+          runId: intent.runId,
+          taskId: intent.rootTaskId,
+          candidateId: selection.selectedId,
+          resourceKind: 'agent.execution',
+          estimatedCostMB: 128,
+          priority: 1,
+        },
+        signal
+      );
     } catch {
       await this.emit(intent, 'run.failed', { reason: 'RESOURCE_LEASE_REJECTED' });
       return {
