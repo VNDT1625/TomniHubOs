@@ -137,6 +137,21 @@ type TomnyEnvironment = Record<string, string | undefined>;
 type TomnyConfigRecord = Record<string, unknown>;
 type TomnyProviderSource = Pick<IProviderStore, 'list' | 'get'>;
 
+const APP_PROVIDER_RUNTIME_ENVIRONMENT_KEYS = [
+  'APPDATA',
+  'ComSpec',
+  'COMSPEC',
+  'LOCALAPPDATA',
+  'Path',
+  'PATH',
+  'PATHEXT',
+  'SystemRoot',
+  'SYSTEMROOT',
+  'TEMP',
+  'TMP',
+  'WINDIR',
+] as const;
+
 const defaultProviderSource: TomnyProviderSource = {
   list: async () => (await getReadyProviderStore()).list(),
   get: async (id) => (await getReadyProviderStore()).get(id),
@@ -177,16 +192,26 @@ const tomnyProviderType = (platform: string): string => {
   return 'openai';
 };
 
-const appProviderEnvironment = async (
+/**
+ * App-provider runs receive only the selected credential and OS execution primitives.
+ * Inherited proxy, cloud, and unrelated application credentials must not cross this boundary.
+ */
+export const appProviderEnvironment = async (
   modelKey: string | undefined,
-  source: TomnyProviderSource
+  source: TomnyProviderSource,
+  inheritedEnvironment: NodeJS.ProcessEnv = process.env
 ): Promise<NodeJS.ProcessEnv> => {
   const selected = parseAppProviderModelKey(modelKey);
-  if (!selected) return process.env;
+  if (!selected) return inheritedEnvironment;
   const provider = await source.get(selected.providerId);
   if (!provider) throw new Error(`The selected Tomny provider no longer exists: ${selected.providerId}`);
+  const runtimeEnvironment: NodeJS.ProcessEnv = {};
+  for (const key of APP_PROVIDER_RUNTIME_ENVIRONMENT_KEYS) {
+    const value = inheritedEnvironment[key];
+    if (value !== undefined) runtimeEnvironment[key] = value;
+  }
   return {
-    ...process.env,
+    ...runtimeEnvironment,
     PROVIDER: tomnyProviderType(provider.platform),
     MODEL: selected.modelId,
     API_KEY: provider.api_key.split(/[,\n]/u)[0]?.trim() ?? '',
