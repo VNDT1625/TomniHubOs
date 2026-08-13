@@ -14,7 +14,7 @@ Trust and user understanding form one product core because useful autonomy requi
 
 **BLOCKED:** process/userUnderstanding/preferenceManager.ts is an in-memory map and must not become a second canonical store.
 
-**BLOCKED:** tomnyProviderStore can fall back to reversible Base64 when protected storage is unavailable and reconstructs provider objects containing API keys for renderer-facing paths. The target guarantee is no raw provider credential in renderer memory.
+**CURRENT:** tomnyProviderStore fails closed when protected storage is unavailable, persists provider secrets only through OS-backed encryption, and renderer-facing provider responses reduce credentials to metadata. A selected provider credential may still be reconstructed in the main process for its supervised child only; exact HTTP egress enforcement inside that child remains a separate partial boundary.
 
 **BLOCKED:** generic IPC registrations are not uniformly proven to validate sender identity and payload schema.
 
