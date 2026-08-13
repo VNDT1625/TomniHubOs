@@ -96,13 +96,21 @@ export class HubExecutionAdapter {
           };
           const capability = this.options.trustBroker.requestCapability(request, this.options.origin);
           if (capability.decision !== 'allow') throw new Error(`Hub target denied: ${capability.reasonCode}`);
+          if (target.kind === 'cloud') {
+            const outbound = this.options.trustBroker.inspectFinalEgress({
+              ...request,
+              origin: this.options.origin,
+              serializedPayload: intent.goal,
+            });
+            if (outbound.decision !== 'allow') throw new Error('HUB_OUTBOUND_EGRESS_DENIED');
+          }
           const result = await target.execute({ intent, signal: executorSignal });
           const egress = this.options.trustBroker.inspectFinalEgress({
             ...request,
             origin: this.options.origin,
             serializedPayload: result.text,
           });
-          if (egress.decision !== 'allow') throw new Error(`Hub final egress denied: ${egress.reasonCode}`);
+          if (egress.decision !== 'allow') throw new Error('HUB_FINAL_EGRESS_DENIED');
           output = { targetId, text: result.text };
           return { evidenceRefs: result.evidenceRefs };
         }

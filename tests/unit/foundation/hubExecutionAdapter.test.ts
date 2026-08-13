@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import type { RunIntent } from '../../../packages/desktop/src/common/foundation/runTypes';
 import {
@@ -91,6 +91,47 @@ describe('HubExecutionAdapter', () => {
     const result = await hub.execute(intent('run_governed_cloud'));
 
     expect(result).toMatchObject({ targetId: 'cloud_governed', receipt: { status: 'verified' } });
+  });
+
+  it('inspects the cloud-bound prompt before the target can transmit it', async () => {
+    const trustBroker = new TrustBroker({
+      allowedNetworkHosts: ['api.example.test'],
+      allowedOrigins: ['app://hub'],
+    });
+    const inspectOutbound = vi.spyOn(trustBroker, 'inspectFinalEgress').mockImplementation((request) => ({
+      runId: request.runId,
+      taskId: request.taskId,
+      targetId: request.targetId,
+      capabilities: request.requestedCapabilities,
+      receiptId: 'outbound-denied',
+      decision: 'deny',
+      reasonCode: 'FINAL_EGRESS_SECRET_DETECTED',
+    }));
+    let executed = false;
+    const hub = new HubExecutionAdapter(
+      new RunKernel(),
+      [
+        {
+          id: 'cloud_egress_guard',
+          kind: 'cloud',
+          priority: 1,
+          networkHost: 'api.example.test',
+          execute: async () => {
+            executed = true;
+            return { text: 'unexpected', evidenceRefs: [] };
+          },
+        },
+      ],
+      { trustBroker, origin: 'app://hub' }
+    );
+
+    const result = await hub.execute(intent('run_cloud_egress'));
+
+    expect(executed).toBe(false);
+    expect(inspectOutbound).toHaveBeenCalledWith(
+      expect.objectContaining({ serializedPayload: 'Answer a governed goal.' })
+    );
+    expect(result.receipt.status).not.toBe('verified');
   });
 
   it('filters unavailable, cloud, and unpinned targets before deterministic selection', async () => {
