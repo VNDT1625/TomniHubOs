@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "datasetVersion": "2026-08-13.1",
+  "metricBudget": {
+    "minVerifiedOutcomeSuccessRate": 1,
+    "minCorrectToolCompletions": 1,
+    "maxUnsafeOrUnapprovedEffects": 0,
+    "maxRetries": 2,
+    "maxElapsedMs": 30000,
+    "maxModelRequests": 6,
+    "maxModelTokens": 12000,
+    "maxToolCalls": 4,
+    "maxMonetaryEstimateUsd": 0.25,
+    "maxPeakMemoryMiB": 1536,
+    "maxPeakResourceUnits": 4
+  },
+  "cases": [
+    {
+      "id": "context-assisted-follow-up-v1",
+      "category": "context_assisted_follow_up",
+      "title": "Use an explicitly consented preference in a follow-up",
+      "prompt": "Using my saved preference for concise Vietnamese, summarize the previous approved task in three bullets.",
+      "requiredReceiptEvents": ["run.created", "context.projected", "selection.decided", "outcome.verified"],
+      "requiredEvidence": ["run-receipt", "context-projection", "consent-record", "verified-outcome"]
+    },
+    {
+      "id": "delegated-multi-step-v1",
+      "category": "delegated_multi_step",
+      "title": "Delegate a bounded child step",
+      "prompt": "Plan a release note, delegate source-fact extraction to one child run, then return the verified summary.",
+      "requiredReceiptEvents": [
+        "run.created",
+        "selection.decided",
+        "execution.started",
+        "evidence.recorded",
+        "outcome.verified"
+      ],
+      "requiredEvidence": [
+        "run-receipt",
+        "parent-child-lineage",
+        "narrowed-capability-grant",
+        "narrowed-budget",
+        "verified-outcome"
+      ]
+    },
+    {
+      "id": "ordinary-conversation-v1",
+      "category": "ordinary_conversation",
+      "title": "Complete an ordinary answer",
+      "prompt": "Explain the difference between a local model and a cloud model in two short sentences.",
+      "requiredReceiptEvents": ["run.created", "selection.decided", "execution.started", "outcome.verified"],
+      "requiredEvidence": ["run-receipt", "verified-outcome"]
+    },
+    {
+      "id": "recovery-v1",
+      "category": "recovery",
+      "title": "Recover after interruption without duplicate effects",
+      "prompt": "Resume the interrupted approved draft operation and prove that no side effect was duplicated.",
+      "requiredReceiptEvents": ["run.created", "execution.started", "evidence.recorded", "outcome.verified"],
+      "requiredEvidence": ["run-receipt", "recovery-replay", "idempotency-evidence", "verified-outcome"]
+    },
+    {
+      "id": "tool-use-v1",
+      "category": "tool_use",
+      "title": "Use one approved tool and verify the result",
+      "prompt": "Use the approved calculator tool to compute 18 times 7 and return the verified result.",
+      "requiredReceiptEvents": [
+        "run.created",
+        "policy.decided",
+        "execution.started",
+        "evidence.recorded",
+        "outcome.verified"
+      ],
+      "requiredEvidence": ["run-receipt", "tool-call", "tool-result", "verified-outcome"]
+    }
+  ]
+}

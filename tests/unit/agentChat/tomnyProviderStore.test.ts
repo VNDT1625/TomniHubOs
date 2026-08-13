@@ -12,6 +12,7 @@ vi.mock('electron', () => ({
 
 import {
   createProviderStore,
+  toRendererProviderMetadata,
   type ProviderCrypto,
   type ProviderFs,
 } from '../../../packages/desktop/src/process/services/tomnyProviderStore';
@@ -65,6 +66,51 @@ describe('Tomny provider store', () => {
       api_key: 'sk-secret-value',
       models: ['gpt-5.6'],
       enabled: true,
+    });
+  });
+
+  it('fails closed before persisting credentials when secure storage is unavailable', async () => {
+    const unavailableCrypto: ProviderCrypto = {
+      isAvailable: () => false,
+      encrypt: crypto.encrypt,
+      decrypt: crypto.decrypt,
+    };
+    const store = createProviderStore({ dir: 'test-data', fs, crypto: unavailableCrypto, newId: () => 'provider-1' });
+
+    await expect(
+      store.create({
+        platform: 'openai',
+        name: 'OpenAI',
+        base_url: 'https://api.openai.com/v1',
+        api_key: 'sk-secret-value',
+      })
+    ).rejects.toThrow('Secure credential storage is unavailable');
+
+    expect(files.size).toBe(0);
+  });
+
+  it('removes provider secret material from renderer metadata', () => {
+    expect(
+      toRendererProviderMetadata({
+        id: 'provider-1',
+        platform: 'bedrock',
+        name: 'Bedrock',
+        base_url: 'https://bedrock.example.test',
+        api_key: 'secret-api-key',
+        models: ['model-a'],
+        bedrock_config: {
+          auth_method: 'accessKey',
+          region: 'ap-southeast-1',
+          access_key_id: 'access-key-id',
+          secret_access_key: 'secret-access-key',
+        },
+      })
+    ).toMatchObject({
+      api_key: '',
+      bedrock_config: {
+        access_key_id: 'access-key-id',
+        secret_access_key: undefined,
+      },
     });
   });
 

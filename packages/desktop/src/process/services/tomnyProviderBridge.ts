@@ -3,7 +3,7 @@ import { providerChannels } from '@/common/types/provider/providerChannels';
 import type { IProvider } from '@/common/config/storage';
 
 import { detectProviderProtocol, fetchProviderModelList } from './tomnyModelDiscovery';
-import { createProviderStore, type IProviderStore } from './tomnyProviderStore';
+import { createProviderStore, toRendererProviderMetadata, type IProviderStore } from './tomnyProviderStore';
 import { readLegacyCatalog } from './database/legacyCatalogReader';
 import { discoverLegacyDatabasePaths } from './database/runLegacyDatabaseMigrations';
 import { ProcessConfig } from '@process/utils/initStorage';
@@ -60,10 +60,12 @@ export const registerProviderBridge = (): void => {
   const store = getProviderStore();
   providerChannels.listProviders.provider(async () => {
     await getReadyProviderStore();
-    return store.list();
+    return (await store.list()).map(toRendererProviderMetadata);
   });
-  providerChannels.createProvider.provider((request) => store.create(request));
-  providerChannels.updateProvider.provider(({ id, ...request }) => store.update(id, request));
+  providerChannels.createProvider.provider(async (request) => toRendererProviderMetadata(await store.create(request)));
+  providerChannels.updateProvider.provider(async ({ id, ...request }) =>
+    toRendererProviderMetadata(await store.update(id, request))
+  );
   providerChannels.deleteProvider.provider(({ id }) => store.remove(id));
   providerChannels.fetchProviderModels.provider(async ({ id }) => {
     const provider = await store.get(id);

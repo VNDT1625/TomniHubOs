@@ -32,6 +32,19 @@ export type IProviderStore = {
   update(id: string, input: UpdateProviderRequest): Promise<IProvider>;
   remove(id: string): Promise<void>;
 };
+
+/** Returns provider metadata that is safe to expose to the untrusted renderer. */
+export const toRendererProviderMetadata = (provider: IProvider): IProvider => ({
+  ...provider,
+  api_key: '',
+  bedrock_config: provider.bedrock_config
+    ? {
+        ...provider.bedrock_config,
+        secret_access_key: undefined,
+      }
+    : undefined,
+});
+
 const defaultFs: ProviderFs = {
   readFile: (filePath, encoding) => fs.promises.readFile(filePath, encoding),
   writeFile: (filePath, data, options) => fs.promises.writeFile(filePath, data, options),
@@ -47,16 +60,17 @@ const defaultCrypto: ProviderCrypto = {
     }
   },
   encrypt: (plain) => {
-    try {
-      if (safeStorage.isEncryptionAvailable()) return safeStorage.encryptString(plain).toString('base64');
-    } catch {
-      /* Fall through when the OS keychain is unavailable. */
+    if (!safeStorage.isEncryptionAvailable()) {
+      throw new Error('Secure credential storage is unavailable.');
     }
-    return Buffer.from(plain, 'utf-8').toString('base64');
+    return safeStorage.encryptString(plain).toString('base64');
   },
   decrypt: (base64, osEncrypted) => {
+    if (!osEncrypted || !safeStorage.isEncryptionAvailable()) {
+      throw new Error('Secure credential storage is unavailable.');
+    }
     const bytes = Buffer.from(base64, 'base64');
-    return osEncrypted ? safeStorage.decryptString(bytes) : bytes.toString('utf-8');
+    return safeStorage.decryptString(bytes);
   },
 };
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
@@ -152,6 +166,9 @@ export const createProviderStore = (options: ProviderStoreOptions = {}): IProvid
   };
 
   const encode = (provider: IProvider): StoredProvider => {
+    if (!crypto.isAvailable()) {
+      throw new Error('Secure credential storage is unavailable.');
+    }
     const secrets: ProviderSecrets = {
       apiKey: provider.api_key,
       bedrockSecretAccessKey: provider.bedrock_config?.secret_access_key,
@@ -159,7 +176,7 @@ export const createProviderStore = (options: ProviderStoreOptions = {}): IProvid
     return {
       ...metadataFor(provider),
       encryptedSecrets: crypto.encrypt(JSON.stringify(secrets)),
-      osEncrypted: crypto.isAvailable(),
+      osEncrypted: true,
     };
   };
 
