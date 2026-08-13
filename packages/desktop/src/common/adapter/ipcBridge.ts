@@ -749,6 +749,10 @@ export type PersonalLearningCorrectRequest = PersonalLearningRecordIdRequest & {
   explanation: string;
 };
 
+export type PersonalLearningOutcomeRequest = PersonalLearningRecordIdRequest & {
+  outcome: 'helpful' | 'not_helpful';
+};
+
 /** Export intentionally excludes every secret handle and vault reference. */
 export type PersonalContextExport = Omit<PersonalContext, 'secretReferences'>;
 
@@ -761,6 +765,9 @@ export const personal = {
   confirmLearning: bridge.buildProvider<boolean, PersonalLearningRecordIdRequest>('personal-context.learning.confirm'),
   rejectLearning: bridge.buildProvider<boolean, PersonalLearningRecordIdRequest>('personal-context.learning.reject'),
   correctLearning: bridge.buildProvider<boolean, PersonalLearningCorrectRequest>('personal-context.learning.correct'),
+  recordLearningOutcome: bridge.buildProvider<boolean, PersonalLearningOutcomeRequest>(
+    'personal-context.learning.outcome'
+  ),
   forgetLearning: bridge.buildProvider<boolean, PersonalLearningRecordIdRequest>('personal-context.learning.forget'),
   deleteLearning: bridge.buildProvider<boolean, PersonalLearningRecordIdRequest>('personal-context.learning.delete'),
   exportLearning: bridge.buildProvider<PersonalContextExport, void>('personal-context.learning.export'),

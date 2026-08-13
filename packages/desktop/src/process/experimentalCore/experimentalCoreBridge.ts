@@ -10,6 +10,7 @@ import {
   telegramChannel,
   type PersonalContextExport,
   type PersonalLearningCorrectRequest,
+  type PersonalLearningOutcomeRequest,
   type PersonalLearningProposeRequest,
   type PersonalLearningRecordIdRequest,
   type PersonalSecretSetSaveRequest,
@@ -114,6 +115,7 @@ export const EXPERIMENTAL_CORE_CHANNELS = {
   personalLearningConfirm: 'personal-context.learning.confirm',
   personalLearningReject: 'personal-context.learning.reject',
   personalLearningCorrect: 'personal-context.learning.correct',
+  personalLearningOutcome: 'personal-context.learning.outcome',
   personalLearningForget: 'personal-context.learning.forget',
   personalLearningDelete: 'personal-context.learning.delete',
   personalLearningExport: 'personal-context.learning.export',
@@ -258,6 +260,16 @@ export const parsePersonalLearningCorrectRequest = (value: unknown): PersonalLea
   };
 };
 
+export const parsePersonalLearningOutcomeRequest = (value: unknown): PersonalLearningOutcomeRequest => {
+  if (!isPlainRecord(value) || !hasOnlyKeys(value, ['recordId', 'outcome'])) {
+    throw new Error('INVALID_PERSONAL_LEARNING_OUTCOME');
+  }
+  if (value.outcome !== 'helpful' && value.outcome !== 'not_helpful') {
+    throw new Error('INVALID_PERSONAL_LEARNING_OUTCOME');
+  }
+  return { recordId: parsePersonalLearningRecordIdValue(value.recordId), outcome: value.outcome };
+};
+
 /** Keep renderer diagnostics bounded even when a caller supplies invalid input. */
 export const normalizeTelemetryLimit = (limit?: number): number =>
   Math.min(
@@ -327,6 +339,9 @@ const channels = {
   ),
   personalLearningCorrect: bridge.buildProvider<boolean, PersonalLearningCorrectRequest>(
     EXPERIMENTAL_CORE_CHANNELS.personalLearningCorrect
+  ),
+  personalLearningOutcome: bridge.buildProvider<boolean, PersonalLearningOutcomeRequest>(
+    EXPERIMENTAL_CORE_CHANNELS.personalLearningOutcome
   ),
   personalLearningForget: bridge.buildProvider<boolean, PersonalLearningRecordIdRequest>(
     EXPERIMENTAL_CORE_CHANNELS.personalLearningForget
@@ -660,6 +675,10 @@ export const registerExperimentalCoreBridge = (agentMeshService: AgentMeshServic
   channels.personalLearningCorrect.provider((input) => {
     const request = parsePersonalLearningCorrectRequest(input);
     return personalLearning.correct(request.recordId, request.fact, request.explanation);
+  });
+  channels.personalLearningOutcome.provider((input) => {
+    const request = parsePersonalLearningOutcomeRequest(input);
+    return personalLearning.recordOutcome(request.recordId, request.outcome);
   });
   channels.personalLearningForget.provider((input) => personalLearning.forget(parsePersonalLearningRecordId(input)));
   channels.personalLearningDelete.provider((input) => personalLearning.delete(parsePersonalLearningRecordId(input)));

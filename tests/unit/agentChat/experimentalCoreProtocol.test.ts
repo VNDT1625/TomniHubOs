@@ -23,6 +23,7 @@ import {
 } from '../../../packages/desktop/src/process/experimentalCore/experimentalCoreProtocol';
 import {
   parsePersonalLearningCorrectRequest,
+  parsePersonalLearningOutcomeRequest,
   parsePersonalLearningProposeRequest,
   parsePersonalLearningRecordId,
 } from '../../../packages/desktop/src/process/experimentalCore/experimentalCoreBridge';
@@ -63,6 +64,10 @@ describe('experimental core protocol', () => {
         explanation: 'The user corrected this preference.',
       })
     ).toMatchObject({ recordId: 'learning_1', fact: { ...fact, value: 'corrected value' } });
+    expect(parsePersonalLearningOutcomeRequest({ recordId: 'learning_1', outcome: 'helpful' })).toEqual({
+      recordId: 'learning_1',
+      outcome: 'helpful',
+    });
   });
 
   it.each([
@@ -70,9 +75,11 @@ describe('experimental core protocol', () => {
     { collection: 'preferences', fact: {}, explanation: 'reason', provenance: 'run:1' },
     { collection: 'invalid', fact: {}, explanation: 'reason', provenance: 'run:1' },
     { recordId: '../escape' },
+    { recordId: 'learning_1', outcome: 'unknown' },
   ])('rejects malformed personal learning IPC payload %o', (payload) => {
     expect(() => parsePersonalLearningRecordId(payload)).toThrow();
     expect(() => parsePersonalLearningProposeRequest(payload)).toThrow();
+    expect(() => parsePersonalLearningOutcomeRequest(payload)).toThrow();
   });
 
   it('normalizes string and object content into append deltas', () => {
