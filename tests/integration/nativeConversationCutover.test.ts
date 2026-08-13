@@ -47,7 +47,8 @@ const params = (): ICreateConversationParams => ({
 
 const createHarness = async (
   workspaceProvisioner?: NativeConversationWorkspaceProvisioner,
-  memory?: ISessionMemoryStore
+  memory?: ISessionMemoryStore,
+  terminal?: Promise<{ type: 'error' | 'cancelled'; text: string } | undefined>
 ) => {
   const { repository, filePath } = await makeRepository();
   const starts: Parameters<NativeConversationRuntime['start']>[] = [];
@@ -57,7 +58,7 @@ const createHarness = async (
   const runtime: NativeConversationRuntime = {
     start: (...args) => {
       starts.push(args);
-      return { requestId: args[0], sessionId: args[6] };
+      return { requestId: args[0], sessionId: args[6], terminal };
     },
     cancel: async (requestId) => {
       cancels.push(requestId);
@@ -834,6 +835,23 @@ describe('native conversation cutover', () => {
     await harness.service.cancel(conversation.id);
 
     expect(harness.cancels).toEqual([requestId]);
+  });
+
+  it('settles a conversation when Foundation rejects before the Core runtime starts', async () => {
+    const harness = await createHarness(
+      undefined,
+      undefined,
+      Promise.resolve({ type: 'error', text: 'TARGET_DENIED' })
+    );
+    const conversation = await harness.service.create(params());
+
+    await harness.service.send({ conversation_id: conversation.id, input: 'blocked before Core' });
+
+    await vi.waitFor(() =>
+      expect(harness.completions.at(-1)).toMatchObject({ session_id: conversation.id, state: 'error' })
+    );
+    expect(harness.responses).toEqual(expect.arrayContaining([expect.objectContaining({ type: 'error' })]));
+    expect(await harness.service.get(conversation.id)).toMatchObject({ status: 'finished' });
   });
 
   it('removes messages with the conversation and returns cursor pagination', async () => {

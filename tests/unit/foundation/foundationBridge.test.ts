@@ -7,6 +7,7 @@ vi.mock('electron', () => ({
 }));
 
 import {
+  createFoundationConversationRuntime,
   createFoundationHubTargets,
   executeFoundationHubRun,
   foundationTrustedOrigin,
@@ -108,5 +109,59 @@ describe('Foundation bridge payload validation', () => {
         }),
       })
     );
+  });
+
+  it('routes native conversations through Foundation while preserving the selected Core execution input', async () => {
+    const coreRuntime = {
+      listTargets: vi.fn().mockResolvedValue([{ id: 'local-engine', kind: 'local', available: true }]),
+      executeToCompletion: vi.fn().mockResolvedValue({ text: 'offline answer', evidenceRefs: ['core-receipt'] }),
+      cancel: vi.fn().mockResolvedValue(false),
+    };
+    const runtime = createFoundationConversationRuntime(coreRuntime as never, { kernel: new RunKernel() });
+
+    const started = runtime.start(
+      'conversation-request',
+      'local-engine',
+      'work offline',
+      'C:/workspace',
+      'local-model',
+      'read-only',
+      'conversation-session'
+    );
+
+    await expect(started.terminal).resolves.toBeUndefined();
+    expect(coreRuntime.executeToCompletion).toHaveBeenCalledWith(
+      expect.objectContaining({
+        requestId: 'conversation-request',
+        targetId: 'local-engine',
+        prompt: 'work offline',
+        workspace: 'C:/workspace',
+        modelKey: 'local-model',
+        permissionMode: 'read-only',
+        sessionId: 'conversation-session',
+      })
+    );
+  });
+
+  it('returns a terminal error when Foundation rejects a native conversation before Core starts', async () => {
+    const coreRuntime = {
+      listTargets: vi.fn().mockResolvedValue([{ id: 'available-local', kind: 'local', available: true }]),
+      executeToCompletion: vi.fn(),
+      cancel: vi.fn().mockResolvedValue(false),
+    };
+    const runtime = createFoundationConversationRuntime(coreRuntime as never, { kernel: new RunKernel() });
+
+    const started = runtime.start(
+      'rejected-request',
+      'missing-target',
+      'do not start Core',
+      'C:/workspace',
+      undefined,
+      'read-only',
+      'conversation-session'
+    );
+
+    await expect(started.terminal).resolves.toMatchObject({ type: 'error' });
+    expect(coreRuntime.executeToCompletion).not.toHaveBeenCalled();
   });
 });

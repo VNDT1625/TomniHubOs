@@ -19,6 +19,7 @@ import { app } from 'electron';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 
+import { createFoundationConversationRuntime } from '@process/bridge/foundationBridge';
 import { registerNativeConversationBridge } from '@process/services/database/nativeConversation';
 import type { TChatConversation } from '@/common/config/storage';
 import {
@@ -515,7 +516,7 @@ export const registerExperimentalCoreBridge = (agentMeshService: AgentMeshServic
     filePath: path.join(app.getPath('userData'), 'tomny-core', 'conversations.json'),
 
     legacyDatabasePath: discoverLegacyDatabasePaths(),
-    runtime,
+    runtime: createFoundationConversationRuntime(runtime),
     workspaceProvisioner: async (conversation: TChatConversation) => {
       const candidate = (conversation.extra as Record<string, unknown>).surface;
       const surface = typeof candidate === 'string' && candidate.trim() ? candidate.trim() : 'chat';

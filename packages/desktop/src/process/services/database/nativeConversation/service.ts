@@ -37,6 +37,8 @@ import {
   type ActionEvidenceLedger,
 } from './actionContext';
 
+export type NativeConversationStartTerminal = { type: 'error' | 'cancelled'; text: string };
+
 export type NativeConversationRuntime = {
   start: (
     requestId: string,
@@ -48,7 +50,7 @@ export type NativeConversationRuntime = {
     sessionId: string,
     companyId?: string,
     contextIdentity?: ExperimentalCoreContextIdentity
-  ) => { requestId: string; sessionId: string };
+  ) => { requestId: string; sessionId: string; terminal?: Promise<NativeConversationStartTerminal | undefined> };
   cancel: (requestId: string) => Promise<boolean>;
   inspectContext: (input: {
     sessionId: string;
@@ -878,7 +880,7 @@ export class NativeConversationService {
       : modelPrompt;
     const prompt = [effectivePrompt, ...(params.files ?? []).map((file) => `\n[Attached file: ${file}]`)].join('');
     try {
-      this.runtime.start(
+      const started = this.runtime.start(
         requestId,
         targetFor(conversation),
         prompt,
@@ -890,6 +892,18 @@ export class NativeConversationService {
         undefined,
         contextIdentityFor(conversation, savedMemoryContextFor(conversation, this.memory, prompt))
       );
+      void started.terminal?.then((terminal) => {
+        if (!terminal) return;
+        this.handleCoreEvent({
+          requestId,
+          sessionId: started.sessionId,
+          targetId: targetFor(conversation),
+          type: terminal.type,
+          timestamp: Date.now(),
+          sequence: -1,
+          text: terminal.text,
+        });
+      });
     } catch (error) {
       this.activeByConversation.delete(conversation.id);
       this.activeByRequest.delete(requestId);

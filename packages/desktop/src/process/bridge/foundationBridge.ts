@@ -14,6 +14,10 @@ import { ResourceAdapter } from '../foundation/resourceAdapter';
 import { RunKernel } from '../foundation/runKernel';
 import { TrustBroker } from '../foundation/trustBroker';
 import { getResourceCoordinator } from '../resource/resourceCoordinator';
+import type {
+  NativeConversationRuntime,
+  NativeConversationStartTerminal,
+} from '../services/database/nativeConversation/service';
 
 let globalKernel: RunKernel | undefined;
 
@@ -35,6 +39,7 @@ export type FoundationCoreRuntime = {
     workspace: string;
     modelKey?: string;
     permissionMode: 'read-only' | 'workspace-write' | 'full-access';
+    sessionId?: string;
     contextIdentity?: {
       surface?: string;
       agentId?: string;
@@ -46,6 +51,26 @@ export type FoundationCoreRuntime = {
   }) => Promise<{ text: string; evidenceRefs: readonly string[] }>;
 };
 export type FoundationBridgeOptions = { coreRuntime: FoundationCoreRuntime };
+export type FoundationExecutionOverrides = {
+  requestId?: string;
+  modelKey?: string;
+  permissionMode?: 'read-only' | 'workspace-write' | 'full-access';
+  sessionId?: string;
+  contextIdentity?: {
+    surface?: string;
+    agentId?: string;
+    personalId?: string;
+    permissionScopes?: string[];
+    capabilityGrants?: string[];
+  };
+  onCoreExecutionStarted?: () => void;
+};
+
+export type FoundationConversationCoreRuntime = FoundationCoreRuntime &
+  Omit<NativeConversationRuntime, 'start' | 'cancel'> & {
+    cancel: (requestId: string) => Promise<boolean>;
+  };
+export type FoundationConversationRuntimeOptions = { kernel?: RunKernel };
 type FoundationSenderEvent = {
   sender: { mainFrame?: unknown; isDestroyed?: () => boolean };
   senderFrame?: { url?: string };
@@ -101,7 +126,8 @@ const priorityForCoreTarget = (kind: HubExecutionTarget['kind']): number =>
 
 /** Builds target candidates exclusively from Main-process runtime discovery. */
 export const createFoundationHubTargets = async (
-  runtime: FoundationCoreRuntime
+  runtime: FoundationCoreRuntime,
+  overrides: FoundationExecutionOverrides = {}
 ): Promise<readonly HubExecutionTarget[]> =>
   (await runtime.listTargets())
     .filter((target) => target.available)
@@ -114,19 +140,23 @@ export const createFoundationHubTargets = async (
         requestedCapabilities: ['target.execute'],
         execute: ({ intent, signal }) =>
           runtime.executeToCompletion({
-            requestId: intent.runId,
+            requestId: overrides.requestId ?? intent.runId,
             targetId: target.id,
             prompt: intent.goal,
             workspace: intent.workspaceScope,
-            modelKey: target.defaultModelKey,
-            permissionMode: 'workspace-write',
-            contextIdentity: {
+            modelKey: overrides.modelKey ?? target.defaultModelKey,
+            permissionMode: overrides.permissionMode ?? 'workspace-write',
+            sessionId: overrides.sessionId,
+            contextIdentity: overrides.contextIdentity ?? {
               surface: intent.surface,
               agentId: 'tomny',
               personalId: intent.userId,
               capabilityGrants: intent.capabilityGrant ? [...intent.capabilityGrant] : undefined,
             },
-            signal,
+            signal: (() => {
+              overrides.onCoreExecutionStarted?.();
+              return signal;
+            })(),
           }),
       };
       if (target.networkHost) hubTarget.networkHost = target.networkHost;
@@ -139,15 +169,99 @@ export const executeFoundationHubRun = async (
   runtime: FoundationCoreRuntime,
   intent: RunIntent,
   origin: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  overrides?: FoundationExecutionOverrides
 ) => {
-  const targets = await createFoundationHubTargets(runtime);
+  const targets = await createFoundationHubTargets(runtime, overrides);
   const trustBroker = new TrustBroker({
     allowedCapabilities: ['target.execute'],
     allowedOrigins: [origin],
     allowedNetworkHosts: targets.flatMap((target) => (target.networkHost ? [target.networkHost] : [])),
   });
   return new HubExecutionAdapter(kernel, targets, { trustBroker, origin }).execute(intent, signal);
+};
+
+const FOUNDATION_CONVERSATION_ORIGIN = 'tomny://native-conversation';
+
+/**
+ * Routes ordinary native conversations through the Foundation policy sequence
+ * while retaining the ExperimentalCore event stream consumed by the existing
+ * conversation UI. A terminal is returned only when policy rejects before the
+ * Core runtime starts, preventing a pending conversation from being stranded.
+ */
+export const createFoundationConversationRuntime = (
+  coreRuntime: FoundationConversationCoreRuntime,
+  options: FoundationConversationRuntimeOptions = {}
+): NativeConversationRuntime => {
+  const active = new Map<string, AbortController>();
+  return {
+    start(requestId, targetId, prompt, workspace, modelKey, permissionMode, sessionId, _companyId, contextIdentity) {
+      const controller = new AbortController();
+      active.set(requestId, controller);
+      let coreExecutionStarted = false;
+      const intent: RunIntent = {
+        runId: requestId,
+        rootTaskId: `conversation:${sessionId}`,
+        surface: contextIdentity?.surface ?? 'chat',
+        goal: prompt,
+        constraints: [`target:${targetId}`],
+        successCriteria: ['conversation response'],
+        workspaceScope: workspace,
+        userId: contextIdentity?.personalId ?? 'local-user',
+        createdAt: Date.now(),
+        correlationId: requestId,
+        policyVersion: 'foundation-v1',
+        capabilityGrant: ['target.execute'],
+      };
+      const terminal = executeFoundationHubRun(
+        options.kernel ?? getGlobalKernel(),
+        coreRuntime,
+        intent,
+        FOUNDATION_CONVERSATION_ORIGIN,
+        controller.signal,
+        {
+          requestId,
+          modelKey,
+          permissionMode,
+          sessionId,
+          contextIdentity,
+          onCoreExecutionStarted: () => {
+            coreExecutionStarted = true;
+          },
+        }
+      )
+        .then((result): NativeConversationStartTerminal | undefined => {
+          if (coreExecutionStarted || result.receipt.status === 'verified') return undefined;
+          return {
+            type: controller.signal.aborted ? 'cancelled' : 'error',
+            text: `Foundation run ${result.receipt.status}.`,
+          };
+        })
+        .catch((error: unknown): NativeConversationStartTerminal | undefined => {
+          if (coreExecutionStarted) return undefined;
+          return {
+            type: controller.signal.aborted ? 'cancelled' : 'error',
+            text: error instanceof Error ? error.message : 'Foundation execution failed.',
+          };
+        })
+        .finally(() => active.delete(requestId));
+      return { requestId, sessionId, terminal };
+    },
+    cancel: async (requestId) => {
+      const controller = active.get(requestId);
+      controller?.abort();
+      const cancelledCore = await coreRuntime.cancel(requestId);
+      return Boolean(controller) || cancelledCore;
+    },
+    inspectContext: (input) => coreRuntime.inspectContext(input),
+    resolvePermission: (permissionId, approved, lifetime) =>
+      coreRuntime.resolvePermission(permissionId, approved, lifetime),
+    resolveOrchestrationProposal: (proposalId, approved) =>
+      coreRuntime.resolveOrchestrationProposal(proposalId, approved),
+    getSession: (sessionId) => coreRuntime.getSession(sessionId),
+    updateSessionConfig: (sessionId, config) => coreRuntime.updateSessionConfig(sessionId, config),
+    listModels: (targetId, workspace) => coreRuntime.listModels(targetId, workspace),
+  };
 };
 
 const getGlobalKernel = (): RunKernel => {
