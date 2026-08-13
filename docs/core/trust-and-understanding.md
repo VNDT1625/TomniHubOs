@@ -12,7 +12,7 @@ Trust and user understanding form one product core because useful autonomy requi
 
 **BLOCKED:** learnPersonalFact exists as a context-store method but has no production caller. Therefore automatic user learning is not CURRENT.
 
-**BLOCKED:** process/userUnderstanding/preferenceManager.ts is an in-memory map and must not become a second canonical store.
+**CURRENT:** the unused in-memory PreferenceManager was removed. ContextStore is the sole personal-context source; base UI still needs to expose the explicit learning lifecycle rather than only direct profile save.
 
 **CURRENT:** tomnyProviderStore fails closed when protected storage is unavailable, persists provider secrets only through OS-backed encryption, and renderer-facing provider responses reduce credentials to metadata. A selected provider credential may still be reconstructed in the main process for its supervised child only; exact HTTP egress enforcement inside that child remains a separate partial boundary.
 
