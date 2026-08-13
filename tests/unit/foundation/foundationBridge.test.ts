@@ -64,14 +64,14 @@ describe('Foundation bridge payload validation', () => {
 
     await expect(createFoundationHubTargets(coreRuntime)).resolves.toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ id: 'local-core', kind: 'local', priority: 40 }),
+        expect.objectContaining({ id: 'local-core', kind: 'cli', priority: 20 }),
         expect.objectContaining({ id: 'remote-core', kind: 'cloud', priority: 30 }),
       ])
     );
     const result = await executeFoundationHubRun(new RunKernel(), coreRuntime, intent);
-    expect(result).toMatchObject({ targetId: 'local-core', text: 'local answer', receipt: { status: 'verified' } });
+    expect(result).toMatchObject({ targetId: 'remote-core', text: 'local answer', receipt: { status: 'verified' } });
     expect(coreRuntime.executeToCompletion).toHaveBeenCalledWith(
-      expect.objectContaining({ targetId: 'local-core', requestId: intent.runId, prompt: intent.goal })
+      expect.objectContaining({ targetId: 'remote-core', requestId: intent.runId, prompt: intent.goal })
     );
   });
 });

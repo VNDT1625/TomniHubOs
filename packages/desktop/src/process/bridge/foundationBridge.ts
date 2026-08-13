@@ -55,7 +55,7 @@ export const parseFoundationRunPayload = (value: unknown): FoundationRunPayload 
 };
 
 const kindForCoreTarget = (kind: 'builtin' | 'acp' | 'cli' | 'remote'): HubExecutionTarget['kind'] =>
-  kind === 'builtin' ? 'local' : kind === 'remote' ? 'cloud' : 'cli';
+  kind === 'remote' ? 'cloud' : 'cli';
 
 const priorityForCoreTarget = (kind: HubExecutionTarget['kind']): number =>
   kind === 'local' ? 40 : kind === 'cloud' ? 30 : kind === 'cli' ? 20 : 10;
