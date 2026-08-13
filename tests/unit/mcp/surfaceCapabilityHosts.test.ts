@@ -16,7 +16,6 @@ const registryMocks = vi.hoisted(() => ({
 const AGENT_DESCRIPTION =
   'Built-in Tomny Core subagent orchestration: bounded parallel jobs, durable result tracking, messaging, cancellation and multi-turn resume.';
 
-vi.mock('electron', () => ({ BrowserWindow: { getFocusedWindow: vi.fn(), getAllWindows: vi.fn(() => []) } }));
 vi.mock('@process/agentRuntime/agentMesh/mcp/host', () => ({
   startAgentOrchestratorMcpHost: vi.fn(async () => ({
     url: 'http://127.0.0.1:64000/sse',
@@ -29,11 +28,6 @@ vi.mock('@process/agentRuntime/agentMesh/mcp/secret-context/host', () => ({
     headers: [{ name: 'Authorization', value: 'Bearer secret-token' }],
   })),
 }));
-vi.mock('@process/browser/browserControlWiring', () => ({ startBrowserControl: vi.fn() }));
-vi.mock('@process/editor/officeEditorMcpWiring', () => ({ startOfficeEditor: vi.fn() }));
-vi.mock('@process/ide/mcp/ideMcpWiring', () => ({ buildIdeServer: vi.fn() }));
-vi.mock('@process/ide/mcp/ideMcpHost', () => ({ startIdeMcpHost: vi.fn() }));
-vi.mock('@process/music/musicMcpWiring', () => ({ startMusic: vi.fn() }));
 vi.mock('@process/resources/mcpRegistry', () => ({ getMcpRegistry: () => registryMocks }));
 vi.mock('@process/bridge/applicationBridge', () => ({ getApplicationMainWindow: vi.fn() }));
 vi.mock('@process/testing/testingMcpHost', () => ({
@@ -56,6 +50,15 @@ import { startTestingMcpHost } from '@process/testing/testingMcpHost';
 import { ensureTestingMcpRegistered } from '@process/testing/registerTestingMcp';
 
 describe('surface capability host restoration', () => {
+  it('keeps optional surface hosts out of the base Core registry', () => {
+    const hosts = createElectronSurfaceCapabilityHosts();
+
+    expect(hosts.names()).toEqual(expect.arrayContaining(['tomny-tool-selector', 'tomny-agent-orchestrator']));
+    expect(hosts.names()).not.toEqual(
+      expect.arrayContaining(['tomny-ide', 'tomny-browser-control', 'tomny-office-editor', 'tomny-music'])
+    );
+  });
+
   it('keeps the live bearer token out of the durable MCP catalog', async () => {
     registryMocks.list.mockResolvedValueOnce([]);
 

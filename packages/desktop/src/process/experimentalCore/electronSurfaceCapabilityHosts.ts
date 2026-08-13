@@ -4,16 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { BrowserWindow } from 'electron';
 import { BUILTIN_AGENT_ORCHESTRATOR_NAME } from '@process/agentRuntime/agentMesh/mcp/server';
 import { BUILTIN_SECRET_CONTEXT_NAME } from '@process/agentRuntime/agentMesh/mcp/secret-context/server';
 import { configureSecretContextVault } from '@process/agentRuntime/agentMesh/mcp/secret-context/wiring';
-import { configureBrowserPersonalSecretVault, startBrowserControl } from '@process/browser/browserControlWiring';
 import type { SecretVault } from '@process/agentRuntime/secretVault';
-import { startOfficeEditor } from '@process/editor/officeEditorMcpWiring';
-import { buildIdeServer } from '@process/ide/mcp/ideMcpWiring';
-import { startIdeMcpHost } from '@process/ide/mcp/ideMcpHost';
-import { startMusic } from '@process/music/musicMcpWiring';
 import { BUILTIN_TESTING_NAME } from '@process/resources/builtinMcp/testingServer';
 import { BUILTIN_TOOL_SELECTOR_NAME } from '@process/resources/builtinMcp/toolSelectorServer';
 
@@ -25,8 +19,6 @@ type SurfaceCapabilityHostRegistration = {
   factory: SurfaceCapabilityHostFactory;
   cache: boolean;
 };
-
-const SUPER_CAPABILITY_SERVER_NAME = 'tomny-browser-control';
 
 /** Dynamic host registry: adding a future surface does not require adapter changes. */
 export class ElectronSurfaceCapabilityHosts {
@@ -52,10 +44,7 @@ export class ElectronSurfaceCapabilityHosts {
     context?: CoreCapabilityHostContext
   ): Promise<CoreMcpServer[]> {
     const requestedNames = serverNames.map((name) => name.trim()).filter(Boolean);
-    const allowedManagedNames = new Set([
-      ...requestedNames.map((name) => name.toLowerCase()),
-      SUPER_CAPABILITY_SERVER_NAME,
-    ]);
+    const allowedManagedNames = new Set(requestedNames.map((name) => name.toLowerCase()));
     const attachedManagedNames = sessionServers
       .map((server) => server.name.trim())
       .filter((name) => this.factories.has(name) && allowedManagedNames.has(name.toLowerCase()));
@@ -92,7 +81,6 @@ export class ElectronSurfaceCapabilityHosts {
 /** Built-in Main-process capability providers; plugins may register additional names later. */
 export const createElectronSurfaceCapabilityHosts = (vault?: SecretVault): ElectronSurfaceCapabilityHosts => {
   if (vault) {
-    configureBrowserPersonalSecretVault(vault);
     configureSecretContextVault(vault);
   }
   const registry = new ElectronSurfaceCapabilityHosts();
@@ -153,22 +141,5 @@ export const createElectronSurfaceCapabilityHosts = (vault?: SecretVault): Elect
     false,
     false
   );
-  registry.register('tomny-ide', async () => {
-    const host = await startIdeMcpHost({ buildServer: buildIdeServer });
-
-    return { name: 'tomny-ide', transport: 'streamable_http', url: host.mcpUrl };
-  });
-  registry.register('tomny-browser-control', async () => {
-    const host = await startBrowserControl(() => BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]);
-    return { name: 'tomny-browser-control', url: host.url };
-  });
-  registry.register('tomny-office-editor', async () => {
-    const host = await startOfficeEditor();
-    return { name: 'tomny-office-editor', url: host.url };
-  });
-  registry.register('tomny-music', async () => {
-    const host = await startMusic();
-    return { name: 'tomny-music', url: host.url };
-  });
   return registry;
 };
