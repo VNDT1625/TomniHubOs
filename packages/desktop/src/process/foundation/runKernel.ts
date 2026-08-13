@@ -21,6 +21,11 @@ export type RunKernelOptions = {
   resourceAdapter?: ResourceAdapter;
 };
 
+export type DelegatedRunResult = {
+  parentReceipt: OutcomeReceipt;
+  childReceipt: OutcomeReceipt;
+};
+
 export class RunKernel {
   public readonly eventStore: EventStore;
   public readonly securityAdapter: SecurityAdapter;
@@ -387,5 +392,45 @@ export class RunKernel {
     signal?: AbortSignal
   ): Promise<OutcomeReceipt> {
     return this.executeRun(assertDelegatedRunIntent(parentIntent, childIntent), candidates, executor, signal);
+  }
+
+  /**
+   * Executes a bounded child while the parent Run is still active, then records
+   * the immutable child receipt as parent evidence before the parent terminal event.
+   */
+  public async executeRunWithChild(
+    parentIntent: RunIntent,
+    parentCandidates: readonly SelectionCandidate[],
+    childIntent: RunIntent,
+    childCandidates: readonly SelectionCandidate[],
+    childExecutor: (
+      leaseId?: string,
+      signal?: AbortSignal,
+      targetId?: string
+    ) => Promise<{ evidenceRefs: readonly string[] }>,
+    parentEvidence: readonly string[] = [],
+    signal?: AbortSignal
+  ): Promise<DelegatedRunResult> {
+    let childReceipt: OutcomeReceipt | undefined;
+    const parentReceipt = await this.executeRun(
+      parentIntent,
+      parentCandidates,
+      async () => {
+        childReceipt = await this.executeDelegatedRun(
+          parentIntent,
+          childIntent,
+          childCandidates,
+          childExecutor,
+          signal
+        );
+        if (childReceipt.status !== 'verified') throw new Error('Delegated child did not verify.');
+        return {
+          evidenceRefs: [...parentEvidence, `child-receipt:${childReceipt.receiptId}`, ...childReceipt.evidenceRefs],
+        };
+      },
+      signal
+    );
+    if (childReceipt === undefined) throw new Error('Parent execution did not create a delegated child receipt.');
+    return { parentReceipt, childReceipt };
   }
 }

@@ -246,6 +246,41 @@ describe('RunKernel Foundation Integration', () => {
     expect(kernel.eventStore.getEventsByRunId(child.runId).at(-1)?.eventType).toBe('run.cancelled');
   });
 
+  it('keeps the parent active until it aggregates verified bounded child evidence', async () => {
+    const kernel = new RunKernel();
+    const parent = createTestIntent({
+      runId: 'run_parent_multistep',
+      capabilityGrant: ['workspace.read'],
+      budget: { maxEstimatedCostMB: 256, maxSteps: 2 },
+    });
+    const child = createTestIntent({
+      runId: 'run_child_multistep',
+      parentRunId: parent.runId,
+      capabilityGrant: ['workspace.read'],
+      budget: { maxEstimatedCostMB: 128, maxSteps: 1 },
+    });
+
+    const result = await kernel.executeRunWithChild(
+      parent,
+      [{ id: 'parent_target', factors: { score: 1 } }],
+      child,
+      [{ id: 'child_target', factors: { score: 1 } }],
+      async () => ({ evidenceRefs: ['child_evidence'] }),
+      ['parent_evidence']
+    );
+
+    expect(result.childReceipt.status).toBe('verified');
+    expect(result.parentReceipt.status).toBe('verified');
+    expect(result.parentReceipt.evidenceRefs).toEqual([
+      'parent_evidence',
+      `child-receipt:${result.childReceipt.receiptId}`,
+      'child_evidence',
+    ]);
+    const parentEvents = kernel.eventStore.getEventsByRunId(parent.runId);
+    expect(parentEvents.at(-1)?.eventType).toBe('outcome.verified');
+    expect(parentEvents.some((event) => event.eventType === 'outcome.verified')).toBe(true);
+  });
+
   it('should handle empty candidates by returning failed receipt', async () => {
     const kernel = new RunKernel();
     const intent = createTestIntent({ runId: 'run_test_empty' });
