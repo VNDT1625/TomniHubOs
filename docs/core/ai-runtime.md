@@ -16,7 +16,7 @@ The AI runtime makes provider choice replaceable while keeping execution policy 
 
 **PARTIAL:** Tomny Core uses a neutral, per-run workspace MCP server for bounded file read/search/glob/write/edit and user-approved shell commands. It resolves every operation under the granted workspace and does not import the IDE MCP server. IDE-specific navigation, memory, browser, and secret-context capabilities require their own activated package path.
 
-**PARTIAL:** Foundation Run Kernel and ExperimentalCoreRuntime overlap. Foundation now delegates Hub runs through the existing runtime, but the production runtime still needs one named, consolidated ownership boundary rather than a third orchestrator.
+**PARTIAL:** Foundation Run Kernel and ExperimentalCoreRuntime overlap. Foundation now delegates Hub runs through the existing runtime and verifies canonical ContextStore provenance without journaling model-visible personal text, but the production runtime still needs one named, consolidated ownership boundary rather than a third orchestrator.
 
 **CURRENT:** Provider secrets are encrypted only through OS secure storage and renderer-facing bridge responses reduce providers to metadata. The store fails closed when secure storage is unavailable.
 

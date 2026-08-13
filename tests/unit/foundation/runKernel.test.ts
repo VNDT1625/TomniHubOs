@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { ExecutionPlan, PolicyDecision } from '../../../packages/desktop/src/common/foundation/decisionTypes';
 import type { RunIntent } from '../../../packages/desktop/src/common/foundation/runTypes';
 import { ChoiceAdapter } from '../../../packages/desktop/src/process/foundation/choiceAdapter';
@@ -113,6 +113,23 @@ describe('RunKernel Foundation Integration', () => {
     expect(events.length).toBeGreaterThanOrEqual(9);
     expect(events[0].eventType).toBe('run.created');
     expect(events[events.length - 1].eventType).toBe('outcome.verified');
+  });
+
+  it('uses the canonical personal-context composer for governed projection without copying plaintext into the receipt projection', async () => {
+    const inspectContext = vi.fn().mockResolvedValue({ agent: 'agent guidance', personal: 'personal guidance' });
+    const adapter = new ContextAdapter({ composer: { composePrompt: vi.fn(), inspectContext } });
+    const intent = createTestIntent({ userId: 'personal_1', surface: 'hub' });
+
+    const projection = await adapter.projectContext(intent);
+
+    expect(inspectContext).toHaveBeenCalledWith({
+      agentId: 'tomny',
+      personalId: 'personal_1',
+      surface: 'hub',
+      secretContextPolicy: { includeOpaqueSecretHandles: false },
+    });
+    expect(projection.sourceRefs).toEqual(['C:/test/workspace', 'context-agent:tomny', 'context-personal:personal_1']);
+    expect(projection.text).not.toContain('personal guidance');
   });
 
   it('executes a child run only within its parent grant and links its receipt', async () => {

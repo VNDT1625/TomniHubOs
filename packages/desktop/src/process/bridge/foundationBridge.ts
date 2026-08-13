@@ -8,6 +8,8 @@ import { fileURLToPath } from 'node:url';
 import type { RunIntent } from '../../common/foundation/runTypes';
 import { assertRunIntent } from '../../common/foundation/runTypes';
 import { JsonlDurableEventStore } from '../services/agentChat/durability';
+import { createElectronContextServices } from '../agentRuntime/electronContext';
+import { ContextAdapter } from '../foundation/contextAdapter';
 import { EventStore } from '../foundation/eventStore';
 import { HubExecutionAdapter, type HubExecutionTarget } from '../foundation/hubExecutionAdapter';
 import { ResourceAdapter } from '../foundation/resourceAdapter';
@@ -316,6 +318,7 @@ const getGlobalKernel = (): RunKernel => {
     eventStore: new EventStore({
       journal: new JsonlDurableEventStore(path.join(app.getPath('userData'), 'tomny-core', 'runs', 'foundation.jsonl')),
     }),
+    contextAdapter: new ContextAdapter({ composer: createElectronContextServices().composer }),
     resourceAdapter: new ResourceAdapter(getResourceCoordinator()),
   });
   return globalKernel;
