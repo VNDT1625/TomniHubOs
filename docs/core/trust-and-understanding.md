@@ -18,7 +18,7 @@ Trust and user understanding form one product core because useful autonomy requi
 
 **BLOCKED:** generic IPC registrations are not uniformly proven to validate sender identity and payload schema.
 
-**BLOCKED:** normal conversation recovery depends on IDE memory paths in parts of the current system. Core context and restart recovery must work when the IDE package is absent.
+**PARTIAL:** the Hub/ExperimentalCore context bridge no longer imports IDE memory and validates learning-control input before persistence. An ordinary conversation restart with the IDE package absent still needs end-to-end evidence.
 
 ## Threat model
 

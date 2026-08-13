@@ -304,6 +304,8 @@ Move context recovery, workspace/file primitives, generic terminal/process needs
 
 Gate: zero core-to-IDE implementation imports and ordinary conversation restart with com.tomni.ide absent.
 
+Progress: the Tomny Core execution path now uses a neutral, workspace-scoped MCP server instead of `buildIdeServer`; it does not dispatch IDE memory or navigation tools. The complete gate remains open until all base runtime imports, clean-install startup, and restart evidence pass.
+
 ### Wave 5C - Extract IDE
 
 Move IDE routes, UI, services, preload calls, assets, translations, workers, dependencies, and package data into com.tomni.ide. Build base and IDE independently.

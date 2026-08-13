@@ -16,7 +16,6 @@ import {
   isTomnyControlPlaneTool,
   normalizeTomnyStreamEvent,
   preflightSkillWorkflowTool,
-  preflightWorkspaceIdeTool,
   parseTomnyContextSnapshot,
   parseTomnyModelCatalog,
   sanitizeTomnyToolDetail,
@@ -27,7 +26,6 @@ import {
   tomnyShouldInitializeMcpServers,
   tomnySurfaceSystemPrompt,
   tomnyToolRequestInput,
-  translateHostBoundTomnyTool,
   translateNativeTomnyTool,
   tomnyStrictProjectArgs,
   tomnyStrictToolsConfig,
@@ -568,7 +566,7 @@ model = "qwen3:30b"
     expect(tomnyToolAccessForPermission('read-only', 'test_run', 'mcp')).toBe('deny');
     expect(tomnyToolAccessForPermission('read-only', 'browser_screenshot', 'mcp')).toBe('approve');
     expect(tomnyToolAccessForPermission('read-only', 'browser_secret_type', 'mcp')).toBe('deny');
-    expect(tomnyToolAccessForPermission('read-only', 'tomny_team_edit', 'mcp')).toBe('deny');
+    expect(tomnyToolAccessForPermission('read-only', 'tomny_edit', 'mcp')).toBe('deny');
     expect(tomnyToolAccessForPermission('read-only', 'tomny_command', 'mcp')).toBe('deny');
 
     expect(tomnyToolAccessForPermission('read-only', 'ide_memory_set_secret', 'mcp')).toBe('deny');
@@ -576,7 +574,7 @@ model = "qwen3:30b"
   });
 
   it('prompts for workspace writes and auto-approves full-access Tomny requests', () => {
-    expect(tomnyToolAccessForPermission('workspace-write', 'tomny_team_edit', 'mcp')).toBe('prompt');
+    expect(tomnyToolAccessForPermission('workspace-write', 'tomny_edit', 'mcp')).toBe('prompt');
     expect(tomnyToolAccessForPermission('full-access', 'tomny_command', 'mcp')).toBe('approve');
   });
 
@@ -587,7 +585,7 @@ model = "qwen3:30b"
     }
     expect(tomnyNativeToolDenialReason('Read')).toContain('tomny_read');
     expect(tomnyNativeToolDenialReason('ExecCommand')).toContain('tomny_command');
-    expect(tomnyNativeToolDenialReason('Edit')).toContain('tomny_team_edit');
+    expect(tomnyNativeToolDenialReason('Edit')).toContain('tomny_edit');
   });
 
   it('translates safe native tool schemas into Tomny MCP calls', () => {
@@ -603,7 +601,7 @@ model = "qwen3:30b"
         rootPath: expect.stringMatching(/C:[\\/]repo[\\/]src/u),
         pattern: 'hello',
         glob: '*.ts',
-        regex: true,
+        regex: false,
       },
     });
     expect(translateNativeTomnyTool('Glob', { pattern: '**/*.ts' }, 'C:/repo')).toEqual({
@@ -614,109 +612,16 @@ model = "qwen3:30b"
       name: 'tomny_command',
       arguments: { rootPath: 'C:/repo', command: 'bun test', cwd: 'C:/repo', timeoutMs: 5000 },
     });
-  });
-
-  it('binds IDE memory calls to the active Tomny session instead of trusting model arguments', () => {
-    expect(translateHostBoundTomnyTool('ide_memory_recall', { query: 'sandbox' }, 'session-active')).toEqual({
-      name: 'ide_memory_recall',
-      arguments: { query: 'sandbox', sessionId: 'session-active' },
+    expect(translateNativeTomnyTool('Write', { file_path: 'C:/repo/a.ts', content: 'x' }, 'C:/repo')).toEqual({
+      name: 'tomny_write',
+      arguments: { filePath: 'C:/repo/a.ts', content: 'x' },
     });
     expect(
-      translateHostBoundTomnyTool('IDE_MEMORY_STATUS', { sessionId: 'session-selected-by-model' }, 'session-active')
+      translateNativeTomnyTool('Edit', { file_path: 'C:/repo/a.ts', old_string: 'x', new_string: 'y' }, 'C:/repo')
     ).toEqual({
-      name: 'ide_memory_status',
-      arguments: { sessionId: 'session-active' },
+      name: 'tomny_edit',
+      arguments: { filePath: 'C:/repo/a.ts', oldText: 'x', newText: 'y' },
     });
-    expect(translateHostBoundTomnyTool('ide_read_file', {}, 'session-active')).toBeNull();
-  });
-
-  it('preflights workspace IDE arguments before an MCP request is sent', () => {
-    expect(preflightWorkspaceIdeTool('ide_map', {}, 'C:/repo')).toEqual({
-      kind: 'execute',
-      translation: { name: 'ide_map', arguments: { rootPath: 'C:/repo' } },
-    });
-    expect(preflightWorkspaceIdeTool('ide_scan_repo', undefined, 'C:/repo')).toEqual({
-      kind: 'execute',
-      translation: { name: 'ide_scan_repo', arguments: { rootPath: 'C:/repo' } },
-    });
-    expect(preflightWorkspaceIdeTool('ide_search', { query: 'needle' }, 'C:/repo')).toEqual({
-      kind: 'execute',
-      translation: { name: 'ide_search', arguments: { query: 'needle', rootPath: 'C:/repo' } },
-    });
-    expect(preflightWorkspaceIdeTool('ide_research', { intent: 'trace message flow' }, 'C:/repo')).toEqual({
-      kind: 'execute',
-      translation: { name: 'ide_research', arguments: { intent: 'trace message flow', rootPath: 'C:/repo' } },
-    });
-    expect(
-      preflightWorkspaceIdeTool(
-        'ide_research',
-        {
-          intent: 'diagnose failed login',
-          mode: 'bug',
-          target: 'src/auth/session.ts',
-          errorText: 'token expired',
-        },
-        'C:/repo'
-      )
-    ).toEqual({
-      kind: 'execute',
-      translation: {
-        name: 'ide_research',
-        arguments: {
-          intent: 'diagnose failed login',
-          mode: 'bug',
-          target: 'src/auth/session.ts',
-          errorText: 'token expired',
-          rootPath: 'C:/repo',
-        },
-      },
-    });
-    expect(preflightWorkspaceIdeTool('ide_research', {}, 'C:/repo')).toEqual({
-      kind: 'error',
-      message: expect.stringContaining('intent is required'),
-    });
-    expect(
-      preflightWorkspaceIdeTool('ide_test_script', { script: 'assert True', phase: 'reproduce' }, 'C:/repo')
-    ).toEqual({
-      kind: 'execute',
-      translation: {
-        name: 'ide_test_script',
-        arguments: { script: 'assert True', phase: 'reproduce', rootPath: 'C:/repo' },
-      },
-    });
-    expect(preflightWorkspaceIdeTool('ide_test_script', { phase: 'reproduce' }, 'C:/repo')).toEqual({
-      kind: 'error',
-      message: expect.stringContaining('script is required'),
-    });
-    expect(preflightWorkspaceIdeTool('ide_search', {}, 'C:/repo')).toEqual({
-      kind: 'error',
-      message: expect.stringContaining('query is required'),
-    });
-    expect(preflightWorkspaceIdeTool('ide_analyze', {}, 'C:/repo')).toEqual({
-      kind: 'execute',
-      translation: { name: 'ide_analyze', arguments: { rootPath: 'C:/repo' } },
-    });
-    expect(preflightWorkspaceIdeTool('ide_compass', {}, 'C:/repo')).toEqual({
-      kind: 'error',
-      message: expect.stringContaining('filePath is required'),
-    });
-    expect(preflightWorkspaceIdeTool('team_status', {}, 'C:/repo')).toEqual({
-      kind: 'execute',
-      translation: { name: 'team_status', arguments: { rootPath: 'C:/repo' } },
-    });
-    expect(preflightWorkspaceIdeTool('ide_command', {}, 'C:/repo')).toEqual({
-      kind: 'error',
-      message: expect.stringContaining('command is required'),
-    });
-    expect(preflightWorkspaceIdeTool('ide_command', { command: 'bun test' }, 'C:/repo')).toEqual({
-      kind: 'error',
-      message: expect.stringContaining('rootPath is required'),
-    });
-    expect(
-      preflightWorkspaceIdeTool('ide_command', { rootPath: 'C:/repo', command: 'bun test' }, 'C:/repo')
-    ).toBeNull();
-    expect(preflightWorkspaceIdeTool('ide_map', { rootPath: 'D:/other' }, 'C:/repo')).toBeNull();
-    expect(preflightWorkspaceIdeTool('ide_read_file', {}, 'C:/repo')).toBeNull();
   });
 
   it('preserves arguments from every supported Tomny tool-request envelope', () => {
@@ -752,8 +657,8 @@ model = "qwen3:30b"
     expect(preflightSkillWorkflowTool('ide_map', {})).toBeNull();
   });
 
-  it('does not auto-translate sensitive or semantically incompatible native tools', () => {
-    expect(translateNativeTomnyTool('Write', { file_path: 'C:/repo/a.ts', content: 'x' }, 'C:/repo')).toBeNull();
+  it('does not auto-translate incomplete or incompatible native tools', () => {
+    expect(translateNativeTomnyTool('Write', { file_path: 'C:/repo/a.ts' }, 'C:/repo')).toBeNull();
     expect(translateNativeTomnyTool('Edit', {}, 'C:/repo')).toBeNull();
     expect(translateNativeTomnyTool('Spawn', {}, 'C:/repo')).toBeNull();
     expect(translateNativeTomnyTool('ExecCommand', { cmd: 'dir', shell: 'cmd' }, 'C:/repo')).toBeNull();

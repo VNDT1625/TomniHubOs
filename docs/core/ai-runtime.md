@@ -12,7 +12,9 @@ The AI runtime makes provider choice replaceable while keeping execution policy 
 
 **PARTIAL:** Native conversation and other feature-specific provider clients exist outside ExperimentalCoreRuntime.
 
-**BLOCKED:** Foundation Run Kernel and ExperimentalCoreRuntime overlap. The production runtime must be renamed and merged behind one Run Kernel rather than creating a third orchestrator.
+**PARTIAL:** Tomny Core uses a neutral, per-run workspace MCP server for bounded file read/search/glob/write/edit and user-approved shell commands. It resolves every operation under the granted workspace and does not import the IDE MCP server. IDE-specific navigation, memory, browser, and secret-context capabilities require their own activated package path.
+
+**PARTIAL:** Foundation Run Kernel and ExperimentalCoreRuntime overlap. Foundation now delegates Hub runs through the existing runtime, but the production runtime still needs one named, consolidated ownership boundary rather than a third orchestrator.
 
 **BLOCKED:** ProviderStore can return usable API keys through renderer-facing contracts and uses a reversible Base64 fallback. Credential handling must be fixed before calling cloud adapters trusted.
 

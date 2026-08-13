@@ -42,7 +42,7 @@ import { withPersistentAgentRetry } from '@process/agentRuntime/retryPolicy';
 
 import { promptWithAttachmentToolNotice } from './attachmentPayload';
 
-import { buildIdeServer } from '@process/ide/mcp/ideMcpWiring';
+import { createCoreWorkspaceServer } from '@process/agentRuntime/agentMesh/mcp/coreWorkspaceServer';
 
 import { BoundedSessionPool } from '../sessionPool';
 import { redactCheckpointText } from '../sessionCheckpointStore';
@@ -617,8 +617,8 @@ type TomnyToolAccess = 'approve' | 'prompt' | 'deny';
 
 const NATIVE_TOOL_REPLACEMENTS = new Map([
   ['read', 'tomny_read'],
-  ['write', 'tomny_team_write'],
-  ['edit', 'tomny_team_edit'],
+  ['write', 'tomny_write'],
+  ['edit', 'tomny_edit'],
   ['execcommand', 'tomny_command'],
   ['grep', 'tomny_search'],
   ['glob', 'tomny_glob'],
@@ -633,63 +633,10 @@ export const tomnyNativeToolDenialReason = (toolName: string): string => {
   return `Native tool ${toolName} is disabled. Retry this operation with ${replacement}.`;
 };
 
-const HOST_BOUND_SESSION_TOOLS = [
-  'ide_memory_recall',
-  'ide_memory_remember',
-  'ide_memory_status',
-  'ide_memory_forget',
-  'ide_memory_set_secret',
-] as const;
-
-type HostBoundSessionToolName = (typeof HOST_BOUND_SESSION_TOOLS)[number];
-
-const WORKSPACE_BOUND_IDE_TOOLS = [
-  'ide_map',
-  'ide_scan_repo',
-  'ide_search',
-  'ide_grep',
-  'ide_find_definition',
-  'ide_find_references',
-  'ide_summary',
-  'ide_info',
-  'ide_compass',
-  'ide_context',
-  'ide_research',
-  'ide_test_script',
-  'ide_analyze',
-  'ide_compact',
-  'team_status',
-] as const;
-type WorkspaceBoundIdeToolName = (typeof WORKSPACE_BOUND_IDE_TOOLS)[number];
-
-const WORKSPACE_TOOL_REQUIRED_STRINGS: Partial<Record<WorkspaceBoundIdeToolName, readonly string[]>> = {
-  ide_search: ['query'],
-  ide_grep: ['pattern'],
-  ide_find_definition: ['name'],
-  ide_find_references: ['name'],
-  ide_summary: ['target'],
-  ide_info: ['target'],
-  ide_compass: ['filePath'],
-  ide_context: ['intent'],
-  ide_research: ['intent'],
-  ide_test_script: ['script', 'phase'],
-  ide_compact: ['input'],
-};
-
 export type TomnyToolTranslation = {
-  name:
-    | 'tomny_read'
-    | 'tomny_search'
-    | 'tomny_glob'
-    | 'tomny_command'
-    | HostBoundSessionToolName
-    | WorkspaceBoundIdeToolName;
+  name: 'tomny_read' | 'tomny_search' | 'tomny_glob' | 'tomny_command' | 'tomny_write' | 'tomny_edit';
   arguments: Record<string, unknown>;
 };
-
-export type WorkspaceIdeToolPreflight =
-  | { kind: 'execute'; translation: TomnyToolTranslation }
-  | { kind: 'error'; message: string };
 
 export type SkillWorkflowToolPreflight = { kind: 'error'; message: string };
 
@@ -701,7 +648,7 @@ const resolveToolPath = (cwd: string, value: unknown): string => {
   return !candidate ? cwd : isAbsolute(candidate) ? candidate : resolvePath(cwd, candidate);
 };
 
-/** Translate only native calls whose semantics can be preserved exactly. */
+/** Translate native calls into the bounded Core workspace capability vocabulary. */
 export const translateNativeTomnyTool = (
   toolName: string,
   input: unknown,
@@ -734,7 +681,7 @@ export const translateNativeTomnyTool = (
         rootPath: resolveToolPath(cwd, args.path),
         pattern,
         ...(stringValue(args.glob) ? { glob: stringValue(args.glob) } : {}),
-        regex: true,
+        regex: false,
         ...(typeof args.case_insensitive === 'boolean' ? { caseSensitive: !args.case_insensitive } : {}),
       },
     };
@@ -761,62 +708,21 @@ export const translateNativeTomnyTool = (
       },
     };
   }
+  if (normalized === 'write') {
+    const filePath = stringValue(args.file_path ?? args.filePath);
+    const content = typeof args.content === 'string' ? args.content : undefined;
+    if (!filePath || content === undefined) return null;
+    return { name: 'tomny_write', arguments: { filePath, content } };
+  }
+  if (normalized === 'edit') {
+    const filePath = stringValue(args.file_path ?? args.filePath);
+    const oldText = stringValue(args.old_string ?? args.oldText);
+    const newText =
+      typeof (args.new_string ?? args.newText) === 'string' ? (args.new_string ?? args.newText) : undefined;
+    if (!filePath || !oldText || typeof newText !== 'string') return null;
+    return { name: 'tomny_edit', arguments: { filePath, oldText, newText } };
+  }
   return null;
-};
-
-/** Bind session-scoped IDE memory tools to the active Tomny conversation.
- * The model must never invent, omit, or select another memory session id. */
-export const translateHostBoundTomnyTool = (
-  toolName: string,
-  input: unknown,
-  sessionId: string
-): TomnyToolTranslation | null => {
-  const normalized = normalizedToolName(toolName);
-  const canonical = HOST_BOUND_SESSION_TOOLS.find((name) => name === normalized);
-  if (!canonical) return null;
-  return {
-    name: canonical,
-    arguments: { ...objectRecord(input), sessionId },
-  };
-};
-
-/**
- * Bind project-scoped IDE navigation calls to the active workspace before the
- * Tomny child sends them to MCP. This prevents an omitted `rootPath` from
- * becoming a protocol-level -32602. Tool-specific values cannot be inferred
- * safely, so missing values are returned as real failed tool results.
- */
-export const preflightWorkspaceIdeTool = (
-  toolName: string,
-  input: unknown,
-  cwd: string
-): WorkspaceIdeToolPreflight | null => {
-  const normalized = normalizedToolName(toolName);
-  if (normalized === 'ide_command') {
-    const args = objectRecord(input);
-    const missing = !stringValue(args.command) ? 'command' : !stringValue(args.rootPath) ? 'rootPath' : '';
-    return missing
-      ? {
-          kind: 'error',
-          message: `Invalid IDE tool arguments for ide_command: ${missing} is required. Retry with { rootPath, command }; do not send an empty argument object.`,
-        }
-      : null;
-  }
-  const canonical = WORKSPACE_BOUND_IDE_TOOLS.find((name) => name === normalized);
-  if (!canonical) return null;
-  const args = objectRecord(input);
-  const missing = (WORKSPACE_TOOL_REQUIRED_STRINGS[canonical] ?? []).find((field) => !stringValue(args[field]));
-  if (missing) {
-    return {
-      kind: 'error',
-      message: `Invalid IDE tool arguments for ${canonical}: ${missing} is required. Retry with { rootPath, ${missing} }; do not send an empty argument object.`,
-    };
-  }
-  if (stringValue(args.rootPath)) return null;
-  return {
-    kind: 'execute',
-    translation: { name: canonical, arguments: { ...args, rootPath: cwd } },
-  };
 };
 
 const invalidSkillWorkflowArguments = (toolName: string, field: string, retry: string): SkillWorkflowToolPreflight => ({
@@ -1494,7 +1400,7 @@ export class TomnyCoreAdapter implements CoreAdapter {
     const environment = await appProviderEnvironment(modelKey, this.providerSource);
     const strictProjectDirectory = await ensureTomnyStrictProject();
     const pendingMcpServers = new Set(mcpServers.map((server) => server.name));
-    const toolServer = buildIdeServer();
+    const toolServer = createCoreWorkspaceServer({ workspace: cwd });
     const toolClient = new Client({ name: 'tomny-core-translator', version: '1.0.0' });
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     await Promise.all([toolServer.connect(serverTransport), toolClient.connect(clientTransport)]);
@@ -1612,56 +1518,6 @@ export class TomnyCoreAdapter implements CoreAdapter {
               }
             }
           );
-          return;
-        }
-        const workspacePreflight = preflightWorkspaceIdeTool(request.name, request.input, cwd);
-        if (workspacePreflight?.kind === 'error') {
-          writeCommand(runtime, tomnyProvidedToolResultCommand(callId, workspacePreflight.message, true, request.name));
-          return;
-        }
-        if (workspacePreflight?.kind === 'execute') {
-          void provideTranslatedToolResult(
-            runtime,
-            pending,
-            callId,
-            request.name,
-            workspacePreflight.translation
-          ).catch(() => {
-            if (runtime.pending !== pending) return;
-            try {
-              writeCommand(
-                runtime,
-                tomnyProvidedToolResultCommand(
-                  callId,
-                  'Workspace-bound IDE tool execution failed before dispatch.',
-                  true,
-                  workspacePreflight.translation.name
-                )
-              );
-            } catch {
-              this.processes.invalidate(key, runtime);
-            }
-          });
-          return;
-        }
-        const hostBoundTranslation = translateHostBoundTomnyTool(request.name, request.input, runtime.sessionId);
-        if (hostBoundTranslation) {
-          void provideTranslatedToolResult(runtime, pending, callId, request.name, hostBoundTranslation).catch(() => {
-            if (runtime.pending !== pending) return;
-            try {
-              writeCommand(
-                runtime,
-                tomnyProvidedToolResultCommand(
-                  callId,
-                  'Host-bound Tomny tool translation failed before execution.',
-                  true,
-                  hostBoundTranslation.name
-                )
-              );
-            } catch {
-              this.processes.invalidate(key, runtime);
-            }
-          });
           return;
         }
         const translation = translateNativeTomnyTool(request.name, request.input, cwd);
