@@ -8,7 +8,9 @@ The AI runtime makes provider choice replaceable while keeping execution policy 
 
 **CURRENT:** ExperimentalCoreRuntime is used by production code despite its name. The repository has ACP, Codex app-server, Tomny core, remote, and sidecar adapter implementations under packages/desktop/src/process/experimentalCore.
 
-**PARTIAL:** LocalInferenceBroker, sidecar lifecycle, model catalogs, signature verification, and registry components exist. Local model download, activation, Model Manager, routing, and ordinary conversation execution are not one production-wired offline path.
+**CURRENT:** The production bridge detects a user-run OpenAI-compatible engine only on explicit loopback and registers `LoopbackOpenAiAdapter` as a local target. Its output goes through ExperimentalCoreRuntime and Foundation; it cannot fall back to a cloud endpoint.
+
+**PARTIAL:** LocalInferenceBroker, sidecar lifecycle, model catalogs, signature verification, and registry components exist. Local model download, activation, Model Manager, and managed model lifecycle are not one production-wired offline path.
 
 **PARTIAL:** Native conversation and other feature-specific provider clients exist outside ExperimentalCoreRuntime.
 
@@ -89,7 +91,7 @@ Model weights are never required in the base installer. A catalog entry is not e
 
 The offline MVP test starts from a machine with a previously installed local model, blocks network access, starts TomniHubOS, creates a normal Hub conversation, executes a tool-free task through the shared Run Kernel, streams output, cancels a second run, restarts, and reads both receipts. No IDE or Browser package may be installed.
 
-A mocked broker or test-only ModelPack path does not satisfy this gate.
+A mocked broker or test-only ModelPack path does not satisfy this gate. Until the managed model path is wired, the user-owned loopback engine and model must be provisioned explicitly before this clean-machine journey can pass.
 
 ## Cloud APIs
 

@@ -27,7 +27,7 @@ The package manager provides substantial download, verification, transaction, re
 
 **BLOCKED:** Some package entrypoints reference source still compiled with the base, so a separate package artifact can remain coupled to base output.
 
-**BLOCKED:** The package runtime does not yet expose a complete native capability ABI with main-process leases, cancellation, resource accounting, and receipt evidence.
+**PARTIAL:** Version 1 exposes the narrow `host.runtime.info` syscall through a main-process lease, invocation receipt, and cancellation path. A tiny sandboxed pilot can be built as a signed `.tomny` artifact. Broader native capabilities, production release signing, and end-to-end release evidence remain incomplete.
 
 **BLOCKED:** trusted-react loads code into a privileged renderer context. It cannot be the default for community code.
 
