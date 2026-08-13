@@ -489,6 +489,24 @@ describe('package manager service', () => {
     expect((await service.status('com.tomni.studio')).state).toBe('available');
   });
 
+  it('disables and re-enables an installed optional package without removing its durable installation', async () => {
+    const rootDir = await tempRoot();
+    const entry = bundledCatalog()[0]!;
+    const service = createPackageManagerService({ rootDir, appVersion: '1.2.0', catalog: [entry] });
+    await service.initialize();
+    await service.install(entry.manifest.id);
+
+    await expect(service.disable(entry.manifest.id)).resolves.toMatchObject({
+      state: 'installed',
+      enabled: false,
+    });
+    await expect(service.enable(entry.manifest.id)).resolves.toMatchObject({
+      state: 'installed',
+      enabled: true,
+    });
+    expect((await service.status(entry.manifest.id)).installedVersion).toBe(entry.manifest.version);
+  });
+
   it('refuses to remove core packages or packages with an active sandbox', async () => {
     const rootDir = await tempRoot();
     const baseManifest = bundledCatalog()[0]!.manifest;

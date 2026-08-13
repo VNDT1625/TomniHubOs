@@ -74,6 +74,9 @@ export type PackageManagerService = {
   search: (request: PackageSearchRequest) => Promise<PackageListing[]>;
   status: (id: string) => Promise<PackageListing>;
   install: (id: string) => Promise<PackageListing>;
+  enable: (id: string) => Promise<PackageListing>;
+  disable: (id: string) => Promise<PackageListing>;
+  rollback: (id: string) => Promise<PackageListing>;
   uninstall: (id: string) => Promise<PackageListing>;
   contributions: () => Promise<PackageContributionState>;
   readAsset: (id: string, assetPath: string) => Promise<PackageAsset>;
@@ -81,7 +84,7 @@ export type PackageManagerService = {
   onContributionsChanged: (listener: (event: PackageContributionChangedEvent) => void) => () => void;
 };
 
-type OperationKind = 'installing' | 'uninstalling';
+type OperationKind = 'installing' | 'enabling' | 'disabling' | 'rolling-back' | 'uninstalling';
 type RunningOperation = { kind: OperationKind; promise: Promise<PackageListing> };
 type AssetReadLeaseState = {
   activeReaders: number;
@@ -163,7 +166,7 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
   const now = deps.now ?? Date.now;
   const randomId = deps.randomId ?? randomUUID;
   const readAssetFile = deps.readAssetFile ?? ((assetPath: string): Promise<string> => readFile(assetPath, 'utf8'));
-  const transientStates = new Map<string, OperationKind>();
+  const transientStates = new Map<string, PackageLifecycleState>();
   const operations = new Map<string, RunningOperation>();
   const assetReadLeases = new Map<string, AssetReadLeaseState>();
   const inFlightAssetReads = new Map<string, Promise<PackageAsset>>();
@@ -1008,6 +1011,109 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
     }
   };
 
+  const reserveInactiveSandboxMutation = async (
+    record: InstalledPackageRecord,
+    action: 'disable' | 'rollback'
+  ): Promise<PackageSandboxMutationLease | undefined> => {
+    if (record.manifest?.modules.every((module) => module.runtime !== 'sandboxed-web')) return undefined;
+    if (!deps.isPackageSandboxActive || !deps.reservePackageSandboxMutation) {
+      throw new Error(`Cannot ${action} ${record.id} because sandbox activity state is unavailable.`);
+    }
+    if (await deps.isPackageSandboxActive(record.id)) {
+      throw new Error(`Cannot ${action} ${record.id} while its sandbox is active.`);
+    }
+    const lease = deps.reservePackageSandboxMutation(record.id);
+    if (!lease) throw new Error(`Cannot ${action} ${record.id} while its sandbox is active.`);
+    return lease;
+  };
+
+  const performEnable = async (id: string): Promise<PackageListing> => {
+    const entry = entryFor(id);
+    const installed = stateStore.get(id);
+    if (!installed || installed.state !== 'installed') throw new Error(`Package ${id} is not installed.`);
+    if (installed.enabled) return listingFor(entry);
+    const manifest = installed.manifest;
+    if (!manifest || manifest.id !== id || manifest.version !== installed.version) {
+      throw new Error(`Package ${id} has no valid installed manifest.`);
+    }
+    if (!isPackageCompatible(manifest, deps.appVersion))
+      throw new Error(`Package ${id} is not compatible with this Tomni version.`);
+    const dependencies = resolvePackageDependencyResult(manifest, dependencyCandidateFor, 'activation');
+    if (dependencies.ok === false) throw new PackageOperationError(dependencies.error);
+    const next: InstalledPackageRecord = { ...installed, enabled: true, updatedAt: now(), lastError: undefined };
+    contributionRegistry.validate(next);
+    await stateStore.save(next);
+    contributionRegistry.register(next);
+    clearContributionDiagnostic(id);
+    emitContributionChanged();
+    emit(id, 'installed');
+    return listingFor(entry);
+  };
+
+  const performDisable = async (id: string): Promise<PackageListing> => {
+    const entry = entryFor(id);
+    const installed = stateStore.get(id);
+    if (!installed || installed.state !== 'installed') throw new Error(`Package ${id} is not installed.`);
+    if (!installed.enabled) return listingFor(entry);
+    const dependent = stateStore
+      .list()
+      .find(
+        (record) =>
+          record.id !== id &&
+          record.state === 'installed' &&
+          record.enabled &&
+          record.manifest?.dependencies.some((dependency) => dependency.id === id)
+      );
+    if (dependent) throw new Error(`Package ${id} is required by enabled package ${dependent.id}.`);
+    const lease = await reserveInactiveSandboxMutation(installed, 'disable');
+    try {
+      const next = { ...installed, enabled: false, updatedAt: now() };
+      await stateStore.save(next);
+      contributionRegistry.remove(id);
+      clearContributionDiagnostic(id);
+      emitContributionChanged();
+      emit(id, 'installed');
+      return listingFor(entry);
+    } finally {
+      lease?.release();
+    }
+  };
+
+  const performRollback = async (id: string): Promise<PackageListing> => {
+    const entry = entryFor(id);
+    const installed = stateStore.get(id);
+    if (!installed || installed.state !== 'installed') throw new Error(`Package ${id} is not installed.`);
+    if (!installed.previousVersion) throw new Error(`Package ${id} has no rollback version.`);
+    const lease = await reserveInactiveSandboxMutation(installed, 'rollback');
+    try {
+      const previous = await reconcileOwnedPayload(installed, installed.previousVersion);
+      const next: InstalledPackageRecord = {
+        ...installed,
+        version: installed.previousVersion,
+        previousVersion: installed.version,
+        manifest: previous.manifest,
+        trust: previous.trust,
+        provenance: previous.provenance,
+        updatedAt: now(),
+        lastError: undefined,
+      };
+      if (next.enabled) {
+        const dependencies = resolvePackageDependencyResult(next.manifest!, dependencyCandidateFor, 'activation');
+        if (dependencies.ok === false) throw new PackageOperationError(dependencies.error);
+        contributionRegistry.validate(next);
+      }
+      await stateStore.save(next);
+      if (next.enabled) contributionRegistry.register(next);
+      else contributionRegistry.remove(id);
+      clearContributionDiagnostic(id);
+      emitContributionChanged();
+      emit(id, 'installed');
+      return listingFor(entry);
+    } finally {
+      lease?.release();
+    }
+  };
+
   const performUninstall = async (id: string): Promise<PackageListing> => {
     const entry = entryFor(id);
     const installed = stateStore.get(id);
@@ -1197,6 +1303,9 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
     search,
     status,
     install: (id) => runOperation(id, 'installing', () => performInstall(id)),
+    enable: (id) => runOperation(id, 'enabling', () => performEnable(id)),
+    disable: (id) => runOperation(id, 'disabling', () => performDisable(id)),
+    rollback: (id) => runOperation(id, 'rolling-back', () => performRollback(id)),
     uninstall: (id) => runOperation(id, 'uninstalling', () => performUninstall(id)),
     contributions: async () => contributionState(),
     readAsset,
