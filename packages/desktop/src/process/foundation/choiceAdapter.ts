@@ -4,7 +4,7 @@ import type { RunIntent } from '../../common/foundation/runTypes';
 export class ChoiceAdapter {
   public async selectCandidate(
     intent: RunIntent,
-    candidates: readonly SelectionCandidate[],
+    candidates: readonly SelectionCandidate[]
   ): Promise<SelectionDecision> {
     if (candidates.length === 0) {
       return {
@@ -18,11 +18,12 @@ export class ChoiceAdapter {
       };
     }
 
-    // Rank candidates by total factors score
+    // Rank candidates by declared factors. Equal scores use the immutable target
+    // id so selection is reproducible regardless of discovery iteration order.
     const ranked = [...candidates].sort((a, b) => {
       const scoreA = Object.values(a.factors).reduce((sum, v) => sum + v, 0);
       const scoreB = Object.values(b.factors).reduce((sum, v) => sum + v, 0);
-      return scoreB - scoreA;
+      return scoreB - scoreA || a.id.localeCompare(b.id);
     });
 
     const selected = ranked[0];

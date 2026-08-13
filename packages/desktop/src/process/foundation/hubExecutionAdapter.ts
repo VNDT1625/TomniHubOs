@@ -12,6 +12,8 @@ export type HubExecutionTarget = {
   health?: 'healthy' | 'unavailable';
   requestedCapabilities?: readonly string[];
   networkHost?: string;
+  /** Main-discovered upper-bound lease estimate used for the Run budget gate. */
+  estimatedCostMB?: number;
   execute: (request: {
     intent: RunIntent;
     signal?: AbortSignal;
@@ -36,6 +38,13 @@ const targetMatchesIntent = (target: HubExecutionTarget, intent: RunIntent): boo
   if (target.health === 'unavailable') return false;
   if (intent.constraints.includes('offline_only') && target.kind !== 'local') return false;
   if (intent.constraints.includes('private_only') && target.kind === 'cloud') return false;
+  if (
+    intent.capabilityGrant !== undefined &&
+    (target.requestedCapabilities ?? []).some((capability) => !intent.capabilityGrant?.includes(capability))
+  ) {
+    return false;
+  }
+  if (intent.budget !== undefined && (target.estimatedCostMB ?? 128) > intent.budget.maxEstimatedCostMB) return false;
   const pin = intent.constraints.find((constraint) => constraint.startsWith('target:'));
   return pin === undefined || pin === `target:${target.id}`;
 };
@@ -62,7 +71,13 @@ export class HubExecutionAdapter {
         .filter((target) => targetMatchesIntent(target, intent))
         .map((target) => ({
           id: target.id,
-          factors: { priority: target.priority },
+          factors: {
+            priority: target.priority,
+            privacy: intent.constraints.includes('private_only') && target.kind === 'local' ? 1 : 0,
+            offline: intent.constraints.includes('offline_only') && target.kind === 'local' ? 1 : 0,
+          },
+          estimatedCostMB: target.estimatedCostMB ?? 128,
+          priority: target.priority,
         })),
       async (_leaseId, executorSignal, targetId) => {
         if (targetId === undefined) throw new Error('Run Kernel did not select an execution target.');

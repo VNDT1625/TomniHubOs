@@ -30,7 +30,16 @@ export type WorkGraphProjection = {
 };
 
 export type CandidateFactor = Readonly<Record<string, number>>;
-export type SelectionCandidate = { id: string; factors: CandidateFactor };
+/**
+ * A target candidate carries its declared bounded resource cost into selection.
+ * These values are supplied by Main-process discovery, never by a renderer.
+ */
+export type SelectionCandidate = {
+  id: string;
+  factors: CandidateFactor;
+  estimatedCostMB?: number;
+  priority?: number;
+};
 export type SelectionDecision = {
   runId: string;
   taskId: string;

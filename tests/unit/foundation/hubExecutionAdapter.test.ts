@@ -112,4 +112,55 @@ describe('HubExecutionAdapter', () => {
     expect(offline).toMatchObject({ targetId: 'local_ready', text: 'local' });
     expect(pinned).toMatchObject({ targetId: 'local_ready', text: 'local' });
   });
+
+  it('honors explicit capability grants and target resource budgets before selection', async () => {
+    const hub = new HubExecutionAdapter(new RunKernel(), [
+      {
+        id: 'cloud_write',
+        kind: 'cloud',
+        priority: 100,
+        requestedCapabilities: ['workspace.write'],
+        estimatedCostMB: 32,
+        execute: async () => ({ text: 'cloud', evidenceRefs: [] }),
+      },
+      {
+        id: 'local_bounded',
+        kind: 'local',
+        priority: 1,
+        requestedCapabilities: ['workspace.read'],
+        estimatedCostMB: 16,
+        execute: async () => ({ text: 'local', evidenceRefs: [] }),
+      },
+    ]);
+
+    const result = await hub.execute({
+      ...intent('run_capability_budget'),
+      capabilityGrant: ['workspace.read'],
+      budget: { maxEstimatedCostMB: 16, maxSteps: 2 },
+    });
+
+    expect(result).toMatchObject({ targetId: 'local_bounded', text: 'local', receipt: { status: 'verified' } });
+  });
+
+  it('breaks equal target priorities by immutable id rather than discovery order', async () => {
+    const hub = new HubExecutionAdapter(new RunKernel(), [
+      {
+        id: 'zulu',
+        kind: 'local',
+        priority: 1,
+        execute: async () => ({ text: 'zulu', evidenceRefs: [] }),
+      },
+      {
+        id: 'alpha',
+        kind: 'local',
+        priority: 1,
+        execute: async () => ({ text: 'alpha', evidenceRefs: [] }),
+      },
+    ]);
+
+    await expect(hub.execute(intent('run_stable_tiebreak'))).resolves.toMatchObject({
+      targetId: 'alpha',
+      text: 'alpha',
+    });
+  });
 });

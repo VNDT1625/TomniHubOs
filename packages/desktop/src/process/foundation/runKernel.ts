@@ -220,6 +220,9 @@ export class RunKernel {
         createdAt: Date.now(),
       };
     }
+    const selectedCandidate = candidates.find((candidate) => candidate.id === selection.selectedId);
+    const estimatedCostMB = selectedCandidate?.estimatedCostMB ?? 128;
+    const executionPriority = selectedCandidate?.priority ?? 1;
 
     // 5. Target Security Preflight
     let targetPolicy: PolicyDecision;
@@ -274,7 +277,7 @@ export class RunKernel {
       };
     }
 
-    if (intent.budget !== undefined && intent.budget.maxEstimatedCostMB < 128) {
+    if (intent.budget !== undefined && intent.budget.maxEstimatedCostMB < estimatedCostMB) {
       await this.emit(intent, 'run.failed', { reason: 'RUN_BUDGET_EXCEEDED' });
       return {
         receiptId: `rcpt_fail_${intent.runId}_${Date.now()}`,
@@ -311,8 +314,8 @@ export class RunKernel {
           taskId: intent.rootTaskId,
           candidateId: selection.selectedId,
           resourceKind: 'agent.execution',
-          estimatedCostMB: 128,
-          priority: 1,
+          estimatedCostMB,
+          priority: executionPriority,
         },
         signal
       );
