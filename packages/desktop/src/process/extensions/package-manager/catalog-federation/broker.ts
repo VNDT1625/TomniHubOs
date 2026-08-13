@@ -389,9 +389,15 @@ export const createCatalogFederationBroker = ({
         ? provider.install !== undefined
         : action === 'uninstall'
           ? provider.uninstall !== undefined
-          : action === 'launch'
-            ? provider.launch !== undefined
-            : provider.openStorePage !== undefined;
+          : action === 'enable'
+            ? provider.enable !== undefined
+            : action === 'disable'
+              ? provider.disable !== undefined
+              : action === 'rollback'
+                ? provider.rollback !== undefined
+                : action === 'launch'
+                  ? provider.launch !== undefined
+                  : provider.openStorePage !== undefined;
     if (!supportsAction) {
       throw new CatalogFederationError('CATALOG_ACTION_UNSUPPORTED', 'Catalog source does not support this action.');
     }
@@ -435,6 +441,21 @@ export const createCatalogFederationBroker = ({
             );
           }
           return provider.uninstall(request.sourceItemId, normalizedRegion ?? 'ZZ', context);
+        case 'enable':
+          if (!provider.enable) {
+            throw new CatalogFederationError('CATALOG_ACTION_UNSUPPORTED', 'Catalog source does not support enable.');
+          }
+          return provider.enable(request.sourceItemId, normalizedRegion ?? 'ZZ', context);
+        case 'disable':
+          if (!provider.disable) {
+            throw new CatalogFederationError('CATALOG_ACTION_UNSUPPORTED', 'Catalog source does not support disable.');
+          }
+          return provider.disable(request.sourceItemId, normalizedRegion ?? 'ZZ', context);
+        case 'rollback':
+          if (!provider.rollback) {
+            throw new CatalogFederationError('CATALOG_ACTION_UNSUPPORTED', 'Catalog source does not support rollback.');
+          }
+          return provider.rollback(request.sourceItemId, normalizedRegion ?? 'ZZ', context);
         case 'launch':
           if (!provider.launch) {
             throw new CatalogFederationError('CATALOG_ACTION_UNSUPPORTED', 'Catalog source does not support launch.');
@@ -477,6 +498,9 @@ export const createCatalogFederationBroker = ({
     recoverPendingActions,
     install: (request) => runAction('install', request, request.region),
     uninstall: (request) => runAction('uninstall', request, request.region),
+    enable: (request) => runAction('enable', request, request.region),
+    disable: (request) => runAction('disable', request, request.region),
+    rollback: (request) => runAction('rollback', request, request.region),
     launch: (request) => runAction('launch', request, request.region),
     openStorePage: (request) => runAction('open-store-page', request, undefined),
   };

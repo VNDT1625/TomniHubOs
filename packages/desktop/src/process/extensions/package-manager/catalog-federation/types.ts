@@ -188,6 +188,21 @@ export type CatalogProvider = {
     region: string,
     context: CatalogProviderActionContext
   ) => Promise<CatalogProviderActionResult>;
+  enable?: (
+    sourceItemId: string,
+    region: string,
+    context: CatalogProviderActionContext
+  ) => Promise<CatalogProviderActionResult>;
+  disable?: (
+    sourceItemId: string,
+    region: string,
+    context: CatalogProviderActionContext
+  ) => Promise<CatalogProviderActionResult>;
+  rollback?: (
+    sourceItemId: string,
+    region: string,
+    context: CatalogProviderActionContext
+  ) => Promise<CatalogProviderActionResult>;
   launch?: (
     sourceItemId: string,
     region: string,
@@ -202,6 +217,9 @@ export type CatalogFederationBroker = {
   recoverPendingActions: () => Promise<CatalogActionRecoveryReport>;
   install: (request: CatalogDurableActionRequest & { region: string }) => Promise<CatalogActionReceipt>;
   uninstall: (request: CatalogDurableActionRequest & { region: string }) => Promise<CatalogActionReceipt>;
+  enable: (request: CatalogDurableActionRequest & { region: string }) => Promise<CatalogActionReceipt>;
+  disable: (request: CatalogDurableActionRequest & { region: string }) => Promise<CatalogActionReceipt>;
+  rollback: (request: CatalogDurableActionRequest & { region: string }) => Promise<CatalogActionReceipt>;
   launch: (request: CatalogDurableActionRequest & { region: string }) => Promise<CatalogActionReceipt>;
   openStorePage: (request: CatalogActionRequest) => Promise<CatalogActionReceipt>;
 };

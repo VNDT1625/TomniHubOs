@@ -100,6 +100,9 @@ const parseAuthorization = (value: unknown) => {
     !isRecord(value) ||
     (value.action !== 'install' &&
       value.action !== 'uninstall' &&
+      value.action !== 'enable' &&
+      value.action !== 'disable' &&
+      value.action !== 'rollback' &&
       value.action !== 'launch' &&
       value.action !== 'open-store-page')
   ) {

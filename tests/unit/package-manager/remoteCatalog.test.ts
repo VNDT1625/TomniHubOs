@@ -18,6 +18,7 @@ import {
   createDurableFederatedCatalogCache,
   createMicrosoftStoreCatalogProvider,
   createMicrosoftStoreNativeRuntime,
+  createTomniCatalogProvider,
   createWindowsMicrosoftStoreAdapter,
   parseLinkedMicrosoftAppRecord,
   registerTrustedMicrosoftStoreNativeIpcBridge,
@@ -29,6 +30,7 @@ import {
   parseRemotePackageCatalog,
   signRemotePackageCatalog,
 } from '@process/extensions/package-manager/remoteCatalog';
+import type { PackageManagerService } from '@process/extensions/package-manager/PackageManagerService';
 
 const roots: string[] = [];
 afterEach(async () => {
@@ -882,6 +884,22 @@ describe('catalog action consent, policy and receipts', () => {
     ]);
     expect(install).not.toHaveBeenCalled();
     expect(persisted).toMatchObject({ state: 'completed', receipt: { verification: 'verified' } });
+  });
+
+  it('does not falsely recover an interrupted rollback without a target revision', async () => {
+    const service = {
+      status: vi.fn(),
+    } as unknown as PackageManagerService;
+    const provider = createTomniCatalogProvider(service);
+    if (!provider.reconcile) throw new Error('Expected the Tomni provider to support reconciliation.');
+
+    await expect(
+      provider.reconcile({
+        authorization: { action: 'rollback', source: 'tomni-store', sourceItemId: 'com.example.notes' },
+        idempotencyKey: 'recover-rollback-notes-1',
+      })
+    ).resolves.toEqual({ state: 'unknown' });
+    expect(service.status).not.toHaveBeenCalled();
   });
 });
 

@@ -53,7 +53,10 @@ export const createTomniCatalogProvider = (
   uninstall: async (sourceItemId) => {
     const listing = await service.uninstall(sourceItemId);
     if (listing.state !== 'available') {
-      throw new CatalogFederationError('CATALOG_SOURCE_UNAVAILABLE', 'Tomni package uninstall did not become available.');
+      throw new CatalogFederationError(
+        'CATALOG_SOURCE_UNAVAILABLE',
+        'Tomni package uninstall did not become available.'
+      );
     }
     return {
       provider: 'tomni-package-manager',
@@ -61,12 +64,60 @@ export const createTomniCatalogProvider = (
       verification: 'verified',
     };
   },
+  enable: async (sourceItemId) => {
+    const listing = await service.enable(sourceItemId);
+    if (listing.state !== 'installed' || !listing.enabled || !listing.installedVersion) {
+      throw new CatalogFederationError('CATALOG_SOURCE_UNAVAILABLE', 'Tomni package enable did not become active.');
+    }
+    return {
+      provider: 'tomni-package-manager',
+      status: 'completed',
+      verification: 'verified',
+      installedVersion: listing.installedVersion,
+    };
+  },
+  disable: async (sourceItemId) => {
+    const listing = await service.disable(sourceItemId);
+    if (listing.state !== 'installed' || listing.enabled) {
+      throw new CatalogFederationError('CATALOG_SOURCE_UNAVAILABLE', 'Tomni package disable did not become inactive.');
+    }
+    return {
+      provider: 'tomni-package-manager',
+      status: 'completed',
+      verification: 'verified',
+      installedVersion: listing.installedVersion,
+    };
+  },
+  rollback: async (sourceItemId) => {
+    const listing = await service.rollback(sourceItemId);
+    if (listing.state !== 'installed' || !listing.installedVersion) {
+      throw new CatalogFederationError(
+        'CATALOG_SOURCE_UNAVAILABLE',
+        'Tomni package rollback did not restore an installed version.'
+      );
+    }
+    return {
+      provider: 'tomni-package-manager',
+      status: 'completed',
+      verification: 'verified',
+      installedVersion: listing.installedVersion,
+    };
+  },
   reconcile: async ({ authorization }) => {
-    if (authorization.action !== 'install' && authorization.action !== 'uninstall') {
+    if (
+      authorization.action !== 'install' &&
+      authorization.action !== 'uninstall' &&
+      authorization.action !== 'enable' &&
+      authorization.action !== 'disable' &&
+      authorization.action !== 'rollback'
+    ) {
       return { state: 'unknown' };
     }
+    // A rollback has no target revision in the durable authorization record, so current installation state
+    // cannot prove that the interrupted mutation actually restored the previous version.
+    if (authorization.action === 'rollback') return { state: 'unknown' };
     const listing = await service.status(authorization.sourceItemId);
-    if (authorization.action === 'install') {
+    if (authorization.action === 'install' || authorization.action === 'enable') {
       if (listing.state !== 'installed' || !listing.installedVersion) return { state: 'not-satisfied' };
       return {
         state: 'satisfied',
@@ -78,7 +129,9 @@ export const createTomniCatalogProvider = (
         },
       };
     }
-    if (listing.state !== 'available') return { state: 'not-satisfied' };
+    if (authorization.action === 'disable') {
+      if (listing.state !== 'installed' || listing.enabled) return { state: 'not-satisfied' };
+    } else if (listing.state !== 'available') return { state: 'not-satisfied' };
     return {
       state: 'satisfied',
       result: {

@@ -17,6 +17,7 @@ import type {
   PackageContributionState,
   PackageListFilter,
   PackageListing,
+  PackageMutationAction,
   PackageMutationConsentGrant,
   PackageSearchRequest,
   PackageUpdatePermissionConsentGrant,
@@ -87,7 +88,7 @@ const mutationRegion = (): string => {
 };
 
 const mutatePackageOverDesktop = async (
-  action: 'install' | 'uninstall',
+  action: PackageMutationAction,
   id: string,
   permissionConsentId?: string
 ): Promise<PackageListing> => {
@@ -107,7 +108,7 @@ const mutatePackageOverDesktop = async (
 };
 
 const mutatePackageOverHttp = async (
-  action: 'install' | 'uninstall',
+  action: PackageMutationAction,
   id: string,
   permissionConsentId?: string
 ): Promise<PackageListing> => {
@@ -207,6 +208,12 @@ export const packageClient = {
       : mutatePackageOverHttp('install', id, permissionConsentId),
   uninstall: (id: string): Promise<PackageListing> =>
     isElectronDesktop() ? mutatePackageOverDesktop('uninstall', id) : mutatePackageOverHttp('uninstall', id),
+  enable: (id: string): Promise<PackageListing> =>
+    isElectronDesktop() ? mutatePackageOverDesktop('enable', id) : mutatePackageOverHttp('enable', id),
+  disable: (id: string): Promise<PackageListing> =>
+    isElectronDesktop() ? mutatePackageOverDesktop('disable', id) : mutatePackageOverHttp('disable', id),
+  rollback: (id: string): Promise<PackageListing> =>
+    isElectronDesktop() ? mutatePackageOverDesktop('rollback', id) : mutatePackageOverHttp('rollback', id),
   openRuntime: async (packageId: string, runtimeId: string): Promise<void> => {
     if (!isElectronDesktop()) {
       await request(`/api/packages/${encodeURIComponent(packageId)}/runtime/open`, {

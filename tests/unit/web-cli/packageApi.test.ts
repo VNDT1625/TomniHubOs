@@ -11,7 +11,11 @@ import os from 'node:os';
 import path from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { startStaticServer, type StaticServerHandle } from '@tomny/web-host';
-import { FIRST_PARTY_PACKAGE_CATALOG, type PackageListing } from '../../../packages/desktop/src/common/packages';
+import {
+  FIRST_PARTY_PACKAGE_CATALOG,
+  type PackageListing,
+  type PackageMutationAction,
+} from '../../../packages/desktop/src/common/packages';
 import { PACKAGE_MUTATION_NATIVE_CHANNELS } from '../../../packages/desktop/src/common/types/platform/electron';
 import {
   createLocalPackageMutationRuntime,
@@ -133,11 +137,7 @@ describe('released Web CLI Package API', () => {
     }>;
   };
 
-  const grantMutation = async (
-    action: 'install' | 'uninstall',
-    idempotencyKey: string,
-    cookie = ''
-  ): Promise<string> => {
+  const grantMutation = async (action: PackageMutationAction, idempotencyKey: string, cookie = ''): Promise<string> => {
     const response = await fetch(`${handle!.localUrl}/api/packages/${encodeURIComponent(PACKAGE_ID)}/consent`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', origin: handle!.localUrl, ...(cookie ? { cookie } : {}) },
@@ -149,7 +149,7 @@ describe('released Web CLI Package API', () => {
   };
 
   const mutatePackage = async (
-    action: 'install' | 'uninstall',
+    action: PackageMutationAction,
     idempotencyKey: string,
     cookie = ''
   ): Promise<Response> => {
@@ -230,6 +230,19 @@ describe('released Web CLI Package API', () => {
 
     const uninstall = await mutatePackage('uninstall', 'uninstall-runtime-lease-released-1');
     expect(uninstall.status).toBe(200);
+  });
+
+  it('governs enable and disable through the same consent-bound HTTP mutation path', async () => {
+    await startHost();
+    expect((await mutatePackage('install', 'install-lifecycle-route-1')).status).toBe(200);
+
+    const disabled = await mutatePackage('disable', 'disable-lifecycle-route-1');
+    expect(disabled.status).toBe(200);
+    await expect(disabled.json()).resolves.toMatchObject({ data: { state: 'installed', enabled: false } });
+
+    const enabled = await mutatePackage('enable', 'enable-lifecycle-route-1');
+    expect(enabled.status).toBe(200);
+    await expect(enabled.json()).resolves.toMatchObject({ data: { state: 'installed', enabled: true } });
   });
 
   it('returns the current revision when a bounded contribution wait times out', async () => {

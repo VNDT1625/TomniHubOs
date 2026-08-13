@@ -331,7 +331,7 @@ export type PackageUninstallRequest = {
   id: string;
 };
 
-export type PackageMutationAction = 'install' | 'uninstall';
+export type PackageMutationAction = 'install' | 'uninstall' | 'enable' | 'disable' | 'rollback';
 
 export type PackageMutationConsentRequest = {
   id: string;

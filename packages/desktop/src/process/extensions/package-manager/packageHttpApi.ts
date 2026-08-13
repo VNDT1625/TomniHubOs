@@ -14,6 +14,7 @@ import type {
   PackageManifest,
   PackageMutationConsentGrant,
   PackageMutationConsentRequest,
+  PackageMutationAction,
   PackageMutationExecuteRequest,
   PackagePermissionChange,
   PackageUpdatePermissionConsentApproveRequest,
@@ -496,12 +497,15 @@ export const parsePackageMutationConsentRequest = (value: unknown): PackageMutat
     throw new PackageMutationRequestError('PACKAGE_MUTATION_REQUEST_INVALID', 400);
   }
   const raw = value as Record<string, unknown>;
-  if ((raw.action !== 'install' && raw.action !== 'uninstall') || raw.confirmed !== true) {
+  if (
+    !['install', 'uninstall', 'enable', 'disable', 'rollback'].includes(String(raw.action)) ||
+    raw.confirmed !== true
+  ) {
     throw new PackageMutationRequestError('PACKAGE_MUTATION_CONSENT_REQUIRED', 403);
   }
   return {
     id: parseActionText(raw.id, 'ID', PACKAGE_ID),
-    action: raw.action,
+    action: raw.action as PackageMutationAction,
     idempotencyKey: parseActionText(raw.idempotencyKey, 'IDEMPOTENCY_KEY'),
     region: parseActionText(raw.region, 'REGION', REGION).toUpperCase(),
     confirmed: true,
@@ -522,12 +526,12 @@ export const parsePackageMutationExecuteRequest = (value: unknown): PackageMutat
       throw new PackageMutationRequestError('PACKAGE_MUTATION_REQUEST_INVALID', 400);
     }
   }
-  if (raw.action !== 'install' && raw.action !== 'uninstall') {
+  if (!['install', 'uninstall', 'enable', 'disable', 'rollback'].includes(String(raw.action))) {
     throw new PackageMutationRequestError('PACKAGE_MUTATION_ACTION_INVALID', 400);
   }
   return {
     id: parseActionText(raw.id, 'ID', PACKAGE_ID),
-    action: raw.action,
+    action: raw.action as PackageMutationAction,
     idempotencyKey: parseActionText(raw.idempotencyKey, 'IDEMPOTENCY_KEY'),
     region: parseActionText(raw.region, 'REGION', REGION).toUpperCase(),
     consentId: parseActionText(raw.consentId, 'CONSENT_ID'),
@@ -570,12 +574,15 @@ export const parsePackageUpdatePermissionConsentApproveRequest = (
 /** Converts internal mutation failures to a stable error that is safe to cross trusted IPC. */
 const redactTrustedMutationIpcError = (
   error: unknown,
-  phase: 'install' | 'uninstall'
+  phase: 'install' | 'activation' | 'uninstall'
 ): PackageMutationRequestError | PackageOperationError => {
   if (error instanceof PackageMutationRequestError || error instanceof PackageOperationError) return error;
   if (error instanceof CatalogFederationError) return new PackageMutationRequestError(error.code, 400);
   return new PackageOperationError(toPackageOperationFailure(error, phase));
 };
+
+const mutationPhase = (action: PackageMutationExecuteRequest['action']): 'install' | 'activation' | 'uninstall' =>
+  action === 'install' ? 'install' : action === 'uninstall' ? 'uninstall' : 'activation';
 
 /** Register the authority-bearing mutation IPC surface. Generic renderer IPC must never call mutations directly. */
 export const registerTrustedPackageMutationIpcBridge = <Sender>({
@@ -614,7 +621,7 @@ export const registerTrustedPackageMutationIpcBridge = <Sender>({
       try {
         return await runtime.requestConsent(request);
       } catch (error) {
-        throw redactTrustedMutationIpcError(error, request.action);
+        throw redactTrustedMutationIpcError(error, mutationPhase(request.action));
       }
     });
   const preparePermissionConsent = (
@@ -641,7 +648,7 @@ export const registerTrustedPackageMutationIpcBridge = <Sender>({
       try {
         return await runtime.execute(request);
       } catch (error) {
-        throw redactTrustedMutationIpcError(error, request.action);
+        throw redactTrustedMutationIpcError(error, mutationPhase(request.action));
       }
     });
 
@@ -676,7 +683,7 @@ export const registerTrustedPackageMutationIpcBridge = <Sender>({
   };
 };
 
-/** Build the only mutation path allowed to call PackageManagerService install/uninstall. */
+/** Build the only consent-governed path allowed to change package state. */
 export const createLocalPackageMutationRuntime = ({
   service,
   ledgerRootDir,
@@ -689,7 +696,11 @@ export const createLocalPackageMutationRuntime = ({
     ledger: createCatalogActionLedger({ rootDir: ledgerRootDir, now, randomId }),
     authorize: (authorization) =>
       authorization.source === 'tomni-store' &&
-      (authorization.action === 'install' || authorization.action === 'uninstall'),
+      (authorization.action === 'install' ||
+        authorization.action === 'uninstall' ||
+        authorization.action === 'enable' ||
+        authorization.action === 'disable' ||
+        authorization.action === 'rollback'),
     consent,
     now,
     randomId,
@@ -750,7 +761,10 @@ export const createLocalPackageMutationRuntime = ({
         ownerId: rawRequest.ownerId,
       };
       if (request.action === 'install') await broker.install(actionRequest);
-      else await broker.uninstall(actionRequest);
+      else if (request.action === 'uninstall') await broker.uninstall(actionRequest);
+      else if (request.action === 'enable') await broker.enable(actionRequest);
+      else if (request.action === 'disable') await broker.disable(actionRequest);
+      else await broker.rollback(actionRequest);
       return service.status(request.id);
     })();
     inFlightMutations.set(key, operation);
@@ -903,7 +917,7 @@ const waitForContributionRevision = async (
 
 const packageIdFromPath = (pathname: string): string | undefined => {
   const match =
-    /^\/api\/packages\/([^/]+)(?:\/(?:consent|install|uninstall|permission-consent(?:\/approve)?|runtime\/(?:open|close)))?$/.exec(
+    /^\/api\/packages\/([^/]+)(?:\/(?:consent|install|uninstall|enable|disable|rollback|permission-consent(?:\/approve)?|runtime\/(?:open|close)))?$/.exec(
       pathname
     );
   return match?.[1] ? decodeURIComponent(match[1]) : undefined;
@@ -1090,7 +1104,13 @@ export const createPackageHttpApi = ({
           ? 'install'
           : url.pathname.endsWith('/uninstall')
             ? 'uninstall'
-            : undefined;
+            : url.pathname.endsWith('/enable')
+              ? 'enable'
+              : url.pathname.endsWith('/disable')
+                ? 'disable'
+                : url.pathname.endsWith('/rollback')
+                  ? 'rollback'
+                  : undefined;
         if (action) {
           const baseExecuteKeys = ['consentId', 'idempotencyKey', 'region'];
           const permissionExecuteKeys = [...baseExecuteKeys, 'permissionConsentId'];

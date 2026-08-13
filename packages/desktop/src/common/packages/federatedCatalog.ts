@@ -94,7 +94,7 @@ export type LinkedMicrosoftAppRecord = {
 };
 
 export type CatalogActionAuthorization = {
-  action: 'install' | 'uninstall' | 'launch' | 'open-store-page';
+  action: 'install' | 'uninstall' | 'enable' | 'disable' | 'rollback' | 'launch' | 'open-store-page';
   source: CatalogSource;
   sourceItemId: string;
 };
