@@ -44,6 +44,9 @@ describe('Foundation EventStore durability', () => {
 
     expect(reader.getEventsByRunId('run-1')).toEqual([createEvent(0), createEvent(1)]);
     expect(() => writer.append(createEvent(1), 'run-1:verified')).toThrow('Duplicate event idempotency key');
+    await expect(reader.appendDurably(createEvent(1), 'run-1:verified')).rejects.toThrow(
+      'Duplicate event idempotency key'
+    );
   });
 
   it('rejects any event after a run reaches a terminal state', () => {

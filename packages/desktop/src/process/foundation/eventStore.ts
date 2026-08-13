@@ -37,9 +37,12 @@ export class EventStore {
     const entries = await this.options.journal.query({ sessionId: FOUNDATION_DURABLE_SESSION_ID, limit: 10_000 });
     const recovered = entries
       .map((entry) => foundationEventFromDurablePayload(entry.payload))
-      .filter((event): event is FoundationEvent => event !== undefined);
-    this.events = recovered.toSorted(
-      (left, right) => left.occurredAt - right.occurredAt || left.sequence - right.sequence
+      .filter((entry): entry is RecoveredFoundationEvent => entry !== undefined);
+    this.events = recovered
+      .map((entry) => entry.event)
+      .toSorted((left, right) => left.occurredAt - right.occurredAt || left.sequence - right.sequence);
+    this.idempotencyKeys = new Set(
+      recovered.flatMap((entry) => (entry.idempotencyKey === undefined ? [] : [entry.idempotencyKey]))
     );
     this.terminalRunIds = new Set(
       this.events.filter((event) => TERMINAL_EVENT_TYPES.has(event.eventType)).map((event) => event.runId)
@@ -61,7 +64,10 @@ export class EventStore {
         requestId: validated.runId,
         kind: 'custom',
         visibility: 'private',
-        payload: { foundationEvent: validated as unknown as DurableEventPayload },
+        payload: {
+          foundationEvent: validated as unknown as DurableEventPayload,
+          ...(idempotencyKey ? { idempotencyKey } : {}),
+        },
       });
     }
     this.commit(validated, idempotencyKey);
@@ -102,7 +108,9 @@ export class EventStore {
   }
 }
 
-const foundationEventFromDurablePayload = (payload: DurableEventPayload): FoundationEvent | undefined => {
+type RecoveredFoundationEvent = { event: FoundationEvent; idempotencyKey?: string };
+
+const foundationEventFromDurablePayload = (payload: DurableEventPayload): RecoveredFoundationEvent | undefined => {
   if (!isRecord(payload) || !isRecord(payload.foundationEvent)) return undefined;
   const value = payload.foundationEvent;
   const sequence = value.sequence;
@@ -126,7 +134,7 @@ const foundationEventFromDurablePayload = (payload: DurableEventPayload): Founda
   }
 
   try {
-    return createEvent({
+    const event = createEvent({
       eventId: value.eventId,
       eventType: value.eventType as FoundationEvent['eventType'],
       aggregateId: value.aggregateId,
@@ -139,6 +147,12 @@ const foundationEventFromDurablePayload = (payload: DurableEventPayload): Founda
       schemaVersion,
       payload: value.payload as FoundationEvent['payload'],
     });
+    return {
+      event,
+      ...(typeof payload.idempotencyKey === 'string' && payload.idempotencyKey
+        ? { idempotencyKey: payload.idempotencyKey }
+        : {}),
+    };
   } catch {
     return undefined;
   }
