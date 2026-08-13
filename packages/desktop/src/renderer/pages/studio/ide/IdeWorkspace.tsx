@@ -93,16 +93,12 @@ import IdeChatPanel from './components/IdeChatPanel';
 import IdeHooksPanel from './components/IdeHooksPanel';
 import CommandPalette, { type PaletteCommand } from './palette/CommandPalette';
 import NavResultsPanel from './components/NavResultsPanel';
-import { buildTestCommand } from '@process/ide/testrun/testCommand';
-import { terminalClient } from '@renderer/pages/terminal/terminalBridgeClient';
 import { useIdeHooks } from './hooks/useIdeHooks';
 import { emitter, useAddEventListener } from '@renderer/utils/emitter';
 import type { NavHit } from './ideClient';
 import DiffReviewPanel from './components/DiffReviewPanel';
 import SearchPanel from './components/SearchPanel';
 import GitPage from '@renderer/pages/git/GitPage';
-import QuickTestPanel from './components/QuickTestPanel';
-import { useQuickRun } from './components/useQuickRun';
 import DatabasePanel from './db/DatabasePanel';
 import SpecManagerPanel from './components/SpecManagerPanel';
 import LspServersPanel from './components/LspServersPanel';
@@ -113,7 +109,6 @@ import { useTeamCollab } from './teamEdit/useTeamCollab';
 import PeerWorkspace from './teamEdit/PeerWorkspace';
 import { cloudWorkspaceClient, type CloudWorkspacePublishProgress } from './teamEdit/cloud/cloudWorkspaceClient';
 import { useCloudWorkspace } from './teamEdit/cloud/useCloudWorkspace';
-import IdeTerminalPanel from './terminal/IdeTerminalPanel';
 import { getReadFileText, ideClient } from './ideClient';
 import { lspClient } from './lspClient';
 import { buildQuickCommands, cwdForNode, parseScripts, sepOf, type QuickCommand } from './quickCommands';
@@ -179,7 +174,6 @@ const IdeWorkspace: React.FC<IdeWorkspaceProps> = ({ onBack, initialMode = 'file
   const ide = useIdeWorkspace();
   // Keep Quick Test services alive across IDE mode switches. The embedded
   // browser remains panel-owned and is destroyed while the tab is hidden.
-  const quickRun = useQuickRun(ide.rootPath);
   const wiki = useRepoWiki();
   const changes = useRepoChanges(ide.rootPath);
   const collab = useTeamCollab(ide.rootPath);
@@ -188,7 +182,6 @@ const IdeWorkspace: React.FC<IdeWorkspaceProps> = ({ onBack, initialMode = 'file
   const [activityRailVisible, setActivityRailVisible] = useState(true);
   const [joinCollabOpen, setJoinCollabOpen] = useState(false);
   const [connectCloudOpen, setConnectCloudOpen] = useState(false);
-  const [quickTestCompact, setQuickTestCompact] = useState(false);
   const [cloudBootstrapPublishing, setCloudBootstrapPublishing] = useState(false);
   const [cloudBootstrapProgress, setCloudBootstrapProgress] = useState<CloudWorkspacePublishProgress | null>(null);
   const cloudMountingPathRef = useRef<string | null>(null);
@@ -486,46 +479,6 @@ const IdeWorkspace: React.FC<IdeWorkspaceProps> = ({ onBack, initialMode = 'file
     [ide.rootPath]
   );
 
-  // Run-test-at-cursor (Ctrl/Cmd+F10): build the runner command from the
-  // project's package.json + the nearest test name, then send it to a fresh
-  // terminal session at the workspace root. Reuses the terminal manager — no
-  // bespoke test-runner infra.
-  useAddEventListener(
-    'ide.test.runAtCursor',
-    (payload) => {
-      const root = ide.rootPath;
-      if (!root) return;
-      const sep = root.includes('\\') && !root.includes('/') ? '\\' : '/';
-      const pkgPath = `${root.replace(/[/\\]+$/, '')}${sep}package.json`;
-      void (async () => {
-        const pkgRes = await ideClient
-          .readFile({ path: pkgPath, all: true, lineNumbers: false })
-          .catch((): null => null);
-        const packageJson = pkgRes && pkgRes.ok ? getReadFileText(pkgRes.data) || null : null;
-        const built = buildTestCommand({
-          filePath: payload.filePath,
-          content: payload.content,
-          line: payload.line,
-          packageJson,
-        });
-        if (!built.command) {
-          Message.warning(t('ide.testrun.unknownRunner'));
-          return;
-        }
-        const created = await terminalClient.create({ options: { cwd: root } }).catch((): null => null);
-        if (!created || !created.ok) {
-          Message.error(t('ide.testrun.terminalError'));
-          return;
-        }
-        void terminalClient.write({ id: created.data.id, data: `${built.command}\r` }).catch(() => {});
-        Message.info(
-          built.testName ? t('ide.testrun.runningTest', { name: built.testName }) : t('ide.testrun.runningFile')
-        );
-      })();
-    },
-    [ide.rootPath, t]
-  );
-
   // Command-palette commands (Ctrl/Cmd+Shift+P). Localised here; the palette
   // fuzzy-matches their labels.
   const paletteCommands = useMemo<PaletteCommand[]>(() => {
@@ -746,7 +699,7 @@ const IdeWorkspace: React.FC<IdeWorkspaceProps> = ({ onBack, initialMode = 'file
       <div className='flex-1 min-h-0 flex relative'>
         <nav
           className={
-            mode === 'viu' || !activityRailVisible || (mode === 'quicktest' && quickTestCompact)
+            mode === 'viu' || !activityRailVisible
               ? 'w-0 overflow-hidden shrink-0 flex flex-col items-center gap-6px py-12px border-r-0 border-b-1'
               : 'w-60px shrink-0 flex flex-col items-center gap-6px py-12px border-r border-b-1'
           }
@@ -924,62 +877,7 @@ const IdeWorkspace: React.FC<IdeWorkspaceProps> = ({ onBack, initialMode = 'file
           ) : null}
 
           {mode === 'quicktest' ? (
-            <div className='absolute inset-0'>
-              <QuickTestPanel
-                rootPath={ide.rootPath}
-                quickRun={quickRun}
-                onCompactChange={setQuickTestCompact}
-                onFixWithAgent={(pack, errorSummary, hasError) => {
-                  const root = ide.rootPath;
-                  if (!root) return;
-                  // Switch to Chat FIRST so IdeChatPanel is mounted and listening
-                  // for `ide.hook.askAgent` (it opens a tab + fills the composer).
-                  setMode('chat');
-                  // Build the agent prompt from the trace context pack: the
-                  // rendered brief already lists the interaction path, any error,
-                  // the code that actually ran (V8 coverage), and the suspected
-                  // files. The framing adapts to whether a runtime error was
-                  // actually captured — we must NOT tell the agent to "fix a
-                  // problem" when the trace is clean (that contradicts the trace
-                  // and sends the agent chasing a non-existent bug).
-                  const intro = hasError
-                    ? [
-                        `Quick Test caught a problem while I was testing the app: ${errorSummary}`,
-                        '',
-                        'Here is the runtime trace captured from the live app. Use it to find and fix the root cause, then explain the fix.',
-                      ]
-                    : [
-                        'I recorded a Quick Test session of the live app. No runtime error was captured — the trace below shows the interaction path I took.',
-                        '',
-                        'Review the trace and the relevant code: confirm the flows I exercised behave correctly, and flag any latent issues (missing handlers, dead ends, accessibility or state bugs). Do not invent an error that is not there.',
-                      ];
-                  const prompt = [...intro, '', pack.renderedContext].join('\n');
-                  // Defer so the Chat panel has mounted and registered its
-                  // `ide.hook.askAgent` listener before the event fires (the
-                  // mode switch triggers an async re-render + effect setup).
-                  setTimeout(() => {
-                    emitter.emit('ide.hook.askAgent', { rootPath: root, prompt, hookName: 'Quick Test' });
-                  }, 250);
-                }}
-                onAskAboutElement={(prompt, filePaths) => {
-                  const root = ide.rootPath;
-                  if (!root) return;
-                  // Inspect → design/change request. The brief (renderElementBrief)
-                  // already carries the picked element's component, file:line, box
-                  // and styles + the user's request, so it is sent verbatim to a
-                  // new Chat tab via the same askAgent event the trace flow uses.
-                  setMode('chat');
-                  setTimeout(() => {
-                    emitter.emit('ide.hook.askAgent', {
-                      rootPath: root,
-                      prompt,
-                      hookName: 'Inspect Element',
-                      filePaths,
-                    });
-                  }, 250);
-                }}
-              />
-            </div>
+            <Empty className='absolute inset-0 flex-center' description={t('ide.mode.quicktest')} />
           ) : null}
 
           {mode === 'database' ? (
@@ -1021,23 +919,6 @@ const IdeWorkspace: React.FC<IdeWorkspaceProps> = ({ onBack, initialMode = 'file
           ) : null}
         </div>
       </div>
-
-      <IdeTerminalPanel
-        defaultCwd={ide.rootPath}
-        onOpenPath={(path, line, column) => {
-          // Resolve a terminal file link against the open folder when relative,
-          // open it in the editor, then ask the Monaco adapter to reveal the
-          // line:col (the editor for this path listens via editorGoto).
-          const root = ide.rootPath;
-          const isAbsolute = /^([a-zA-Z]:[\\/]|[\\/])/.test(path);
-          const abs =
-            !isAbsolute && root
-              ? `${root.replace(/[/\\]+$/, '')}${root.includes('\\') && !root.includes('/') ? '\\' : '/'}${path.replace(/^[/\\]+/, '')}`
-              : path;
-          openFile(abs);
-          if (line) emitEditorGoto(abs, line, column);
-        }}
-      />
 
       <DiffReviewPanel
         rootPath={ide.rootPath}
