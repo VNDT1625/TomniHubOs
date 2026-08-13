@@ -6,7 +6,7 @@ import type {
 } from '../../common/foundation/decisionTypes';
 import type { FoundationEvent, OutcomeReceipt } from '../../common/foundation/receiptTypes';
 import type { RunIntent } from '../../common/foundation/runTypes';
-import { assertRunIntent } from '../../common/foundation/runTypes';
+import { assertDelegatedRunIntent, assertRunIntent } from '../../common/foundation/runTypes';
 import { ChoiceAdapter } from './choiceAdapter';
 import { ContextAdapter } from './contextAdapter';
 import { EventStore } from './eventStore';
@@ -72,6 +72,7 @@ export class RunKernel {
       goal: intent.goal,
       surface: intent.surface,
       workspaceScope: intent.workspaceScope,
+      parentRunId: intent.parentRunId,
     });
 
     // 2. Security Preflight
@@ -83,6 +84,7 @@ export class RunKernel {
       return {
         receiptId: `rcpt_fail_${intent.runId}_${Date.now()}`,
         runId: intent.runId,
+        parentRunId: intent.parentRunId,
         taskId: intent.rootTaskId,
         selectionReceiptId: '',
         status: 'failed',
@@ -113,6 +115,7 @@ export class RunKernel {
       return {
         receiptId: `rcpt_approval_${intent.runId}_${Date.now()}`,
         runId: intent.runId,
+        parentRunId: intent.parentRunId,
         taskId: intent.rootTaskId,
         selectionReceiptId: policyDecision.receiptId,
         status: 'approval_required',
@@ -127,6 +130,7 @@ export class RunKernel {
       return {
         receiptId: `rcpt_fail_${intent.runId}_${Date.now()}`,
         runId: intent.runId,
+        parentRunId: intent.parentRunId,
         taskId: intent.rootTaskId,
         selectionReceiptId: policyDecision.receiptId,
         status: 'failed',
@@ -144,6 +148,7 @@ export class RunKernel {
       return {
         receiptId: `rcpt_fail_${intent.runId}_${Date.now()}`,
         runId: intent.runId,
+        parentRunId: intent.parentRunId,
         taskId: intent.rootTaskId,
         selectionReceiptId: '',
         status: 'failed',
@@ -165,6 +170,7 @@ export class RunKernel {
       return {
         receiptId: `rcpt_fail_${intent.runId}_${Date.now()}`,
         runId: intent.runId,
+        parentRunId: intent.parentRunId,
         taskId: intent.rootTaskId,
         selectionReceiptId: '',
         status: 'failed',
@@ -183,6 +189,7 @@ export class RunKernel {
       return {
         receiptId: `rcpt_fail_${intent.runId}_${Date.now()}`,
         runId: intent.runId,
+        parentRunId: intent.parentRunId,
         taskId: intent.rootTaskId,
         selectionReceiptId: selection.receiptId,
         status: 'failed',
@@ -220,6 +227,7 @@ export class RunKernel {
       return {
         receiptId: `rcpt_approval_${intent.runId}_${Date.now()}`,
         runId: intent.runId,
+        parentRunId: intent.parentRunId,
         taskId: intent.rootTaskId,
         selectionReceiptId: selection.receiptId,
         status: 'approval_required',
@@ -234,6 +242,21 @@ export class RunKernel {
       return {
         receiptId: `rcpt_fail_${intent.runId}_${Date.now()}`,
         runId: intent.runId,
+        parentRunId: intent.parentRunId,
+        taskId: intent.rootTaskId,
+        selectionReceiptId: selection.receiptId,
+        status: 'failed',
+        evidenceRefs: [],
+        createdAt: Date.now(),
+      };
+    }
+
+    if (intent.budget !== undefined && intent.budget.maxEstimatedCostMB < 128) {
+      await this.emit(intent, 'run.failed', { reason: 'RUN_BUDGET_EXCEEDED' });
+      return {
+        receiptId: `rcpt_fail_${intent.runId}_${Date.now()}`,
+        runId: intent.runId,
+        parentRunId: intent.parentRunId,
         taskId: intent.rootTaskId,
         selectionReceiptId: selection.receiptId,
         status: 'failed',
@@ -259,6 +282,7 @@ export class RunKernel {
       return {
         receiptId: `rcpt_fail_${intent.runId}_${Date.now()}`,
         runId: intent.runId,
+        parentRunId: intent.parentRunId,
         taskId: intent.rootTaskId,
         selectionReceiptId: selection.receiptId,
         status: 'failed',
@@ -306,6 +330,7 @@ export class RunKernel {
     return {
       receiptId: `rcpt_${intent.runId}_${Date.now()}`,
       runId: intent.runId,
+      parentRunId: intent.parentRunId,
       taskId: intent.rootTaskId,
       selectionReceiptId: selection.receiptId,
       leaseId: lease.leaseId,
@@ -313,5 +338,15 @@ export class RunKernel {
       evidenceRefs,
       createdAt: Date.now(),
     };
+  }
+
+  /** Executes a child run only after proving it cannot exceed the parent's grant. */
+  public async executeDelegatedRun(
+    parentIntent: RunIntent,
+    childIntent: RunIntent,
+    candidates: readonly SelectionCandidate[],
+    executor: (leaseId?: string) => Promise<{ evidenceRefs: readonly string[] }>
+  ): Promise<OutcomeReceipt> {
+    return this.executeRun(assertDelegatedRunIntent(parentIntent, childIntent), candidates, executor);
   }
 }

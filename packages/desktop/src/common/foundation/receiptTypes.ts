@@ -39,6 +39,7 @@ export type ApprovalRequirement = {
 export type OutcomeReceipt = {
   receiptId: string;
   runId: string;
+  parentRunId?: string;
   taskId: string;
   selectionReceiptId: string;
   leaseId?: string;

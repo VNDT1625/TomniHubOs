@@ -12,6 +12,14 @@ export type RunIntent = {
   createdAt: number;
   correlationId: string;
   policyVersion: string;
+  parentRunId?: string;
+  capabilityGrant?: readonly string[];
+  budget?: RunBudget;
+};
+
+export type RunBudget = {
+  maxEstimatedCostMB: number;
+  maxSteps: number;
 };
 
 export type TaskRef = {
@@ -47,7 +55,48 @@ export const assertRunIntent = (intent: RunIntent): RunIntent => {
   if (!Number.isSafeInteger(intent.createdAt) || intent.createdAt < 0) {
     throw new Error('Invalid RunIntent createdAt.');
   }
+  if (intent.parentRunId !== undefined && !NON_EMPTY.test(intent.parentRunId)) {
+    throw new Error('Invalid RunIntent parentRunId.');
+  }
+  if (
+    intent.capabilityGrant !== undefined &&
+    intent.capabilityGrant.some((capability) => !NON_EMPTY.test(capability))
+  ) {
+    throw new Error('Invalid RunIntent capabilityGrant.');
+  }
+  if (intent.budget !== undefined) {
+    if (!Number.isSafeInteger(intent.budget.maxEstimatedCostMB) || intent.budget.maxEstimatedCostMB < 1) {
+      throw new Error('Invalid RunIntent budget maxEstimatedCostMB.');
+    }
+    if (!Number.isSafeInteger(intent.budget.maxSteps) || intent.budget.maxSteps < 1) {
+      throw new Error('Invalid RunIntent budget maxSteps.');
+    }
+  }
   return intent;
+};
+
+/** Rejects a child run that could expand its parent's authority or budget. */
+export const assertDelegatedRunIntent = (parent: RunIntent, child: RunIntent): RunIntent => {
+  assertRunIntent(parent);
+  assertRunIntent(child);
+  if (child.parentRunId !== parent.runId) throw new Error('Delegated run must identify its parent run.');
+  if (parent.capabilityGrant === undefined || child.capabilityGrant === undefined) {
+    throw new Error('Delegated runs require explicit capability grants.');
+  }
+  if (parent.budget === undefined || child.budget === undefined) {
+    throw new Error('Delegated runs require explicit budgets.');
+  }
+  const parentCapabilities = new Set(parent.capabilityGrant);
+  if (child.capabilityGrant.some((capability) => !parentCapabilities.has(capability))) {
+    throw new Error('Delegated run cannot amplify capabilities.');
+  }
+  if (
+    child.budget.maxEstimatedCostMB > parent.budget.maxEstimatedCostMB ||
+    child.budget.maxSteps > parent.budget.maxSteps
+  ) {
+    throw new Error('Delegated run cannot amplify budget.');
+  }
+  return child;
 };
 
 export const createIdempotencyKey = (runId: string, taskId: string, ordinal: number): string => {

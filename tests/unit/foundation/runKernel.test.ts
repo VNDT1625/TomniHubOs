@@ -115,6 +115,79 @@ describe('RunKernel Foundation Integration', () => {
     expect(events[events.length - 1].eventType).toBe('outcome.verified');
   });
 
+  it('executes a child run only within its parent grant and links its receipt', async () => {
+    const kernel = new RunKernel();
+    const parent = createTestIntent({
+      runId: 'run_parent_1',
+      rootTaskId: 'task_parent_1',
+      capabilityGrant: ['workspace.read', 'agent.execute'],
+      budget: { maxEstimatedCostMB: 256, maxSteps: 3 },
+    });
+    const child = createTestIntent({
+      runId: 'run_child_1',
+      rootTaskId: 'task_child_1',
+      parentRunId: parent.runId,
+      capabilityGrant: ['workspace.read'],
+      budget: { maxEstimatedCostMB: 128, maxSteps: 1 },
+    });
+
+    const receipt = await kernel.executeDelegatedRun(
+      parent,
+      child,
+      [{ id: 'candidate_a', factors: { score: 1 } }],
+      async () => ({
+        evidenceRefs: ['evidence_child_1'],
+      })
+    );
+
+    expect(receipt.status).toBe('verified');
+    expect(receipt.parentRunId).toBe(parent.runId);
+    expect(kernel.eventStore.getEventsByRunId(child.runId)[0]).toMatchObject({
+      eventType: 'run.created',
+      payload: expect.objectContaining({ parentRunId: parent.runId }),
+    });
+  });
+
+  it('rejects child delegation that amplifies capability or budget', async () => {
+    const kernel = new RunKernel();
+    const parent = createTestIntent({
+      runId: 'run_parent_restricted',
+      capabilityGrant: ['workspace.read'],
+      budget: { maxEstimatedCostMB: 128, maxSteps: 1 },
+    });
+    const expandedChild = createTestIntent({
+      runId: 'run_child_expanded',
+      parentRunId: parent.runId,
+      capabilityGrant: ['workspace.write'],
+      budget: { maxEstimatedCostMB: 256, maxSteps: 2 },
+    });
+
+    await expect(
+      kernel.executeDelegatedRun(parent, expandedChild, [{ id: 'candidate_a', factors: { score: 1 } }], async () => ({
+        evidenceRefs: [],
+      }))
+    ).rejects.toThrow('Delegated run cannot amplify capabilities.');
+    expect(kernel.eventStore.getEventsByRunId(expandedChild.runId)).toHaveLength(0);
+  });
+
+  it('fails a run before leasing when its explicit resource budget is insufficient', async () => {
+    const kernel = new RunKernel();
+    const intent = createTestIntent({
+      runId: 'run_budget_too_small',
+      budget: { maxEstimatedCostMB: 127, maxSteps: 1 },
+    });
+
+    const receipt = await kernel.executeRun(intent, [{ id: 'candidate_a', factors: { score: 1 } }], async () => ({
+      evidenceRefs: [],
+    }));
+
+    expect(receipt.status).toBe('failed');
+    expect(kernel.resourceAdapter.getActiveLeases()).toHaveLength(0);
+    expect(kernel.eventStore.getEventsByRunId(intent.runId)).toContainEqual(
+      expect.objectContaining({ eventType: 'run.failed', payload: { reason: 'RUN_BUDGET_EXCEEDED' } })
+    );
+  });
+
   it('should handle empty candidates by returning failed receipt', async () => {
     const kernel = new RunKernel();
     const intent = createTestIntent({ runId: 'run_test_empty' });
