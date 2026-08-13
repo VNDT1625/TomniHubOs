@@ -145,7 +145,7 @@ Efficiency optimization must not trade away privacy or outcome quality. For MVP,
 
 The first contract suite must cover:
 
-- one fully offline local target;
+- one local-only OpenAI-compatible target on an explicit loopback engine (for example Ollama or LM Studio), with no Hub egress or cloud fallback;
 - one cloud API adapter using write-only credentials;
 - one supervised provider or coding CLI;
 - one MCP tool path.

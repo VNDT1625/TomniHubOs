@@ -39,7 +39,7 @@ Wave 0 -> Wave 1 -> Wave 2A
 
 After Wave 2A passes, Waves 2B, 3, 4, and 5A may progress concurrently when the ownership matrix proves that they do not write the same contracts, bootstrap, IPC registry, or schema. Wave 5B additionally depends on the Wave 3 context/recovery boundary; 5C depends on 5A and 5B; 5D depends on the generated ownership inventory and 5C. Wave 6 starts only after every P0 branch converges at one revision.
 
-The fastest-MVP scope guard is strict: one cloud adapter, one offline local target, one CLI, one MCP path, one signed pilot, and one extracted IDE are enough. Additional providers, legacy executors, autonomous learning, learned routing, Browser packaging, and optional-app polish are disabled or deferred instead of extending the critical path.
+The fastest-MVP scope guard is strict: one cloud adapter, one local-only loopback target backed by a user-run offline engine, one CLI, one MCP path, one signed pilot, and one extracted IDE are enough. The local target must fail closed when no loopback engine/model is available and must never fall back to cloud. Additional providers, legacy executors, autonomous learning, learned routing, Browser packaging, and optional-app polish are disabled or deferred instead of extending the critical path.
 
 ## Mandatory orchestration protocol
 
