@@ -9,6 +9,7 @@ export type HubExecutionTarget = {
   id: string;
   kind: HubTargetKind;
   priority: number;
+  health?: 'healthy' | 'unavailable';
   requestedCapabilities?: readonly string[];
   networkHost?: string;
   execute: (request: {
@@ -31,6 +32,14 @@ export type HubExecutionAdapterOptions = {
 const operationFor = (kind: HubTargetKind): TrustOperation =>
   kind === 'cloud' ? 'network' : kind === 'local' ? 'provider' : kind;
 
+const targetMatchesIntent = (target: HubExecutionTarget, intent: RunIntent): boolean => {
+  if (target.health === 'unavailable') return false;
+  if (intent.constraints.includes('offline_only') && target.kind !== 'local') return false;
+  if (intent.constraints.includes('private_only') && target.kind === 'cloud') return false;
+  const pin = intent.constraints.find((constraint) => constraint.startsWith('target:'));
+  return pin === undefined || pin === `target:${target.id}`;
+};
+
 /** Routes all supported execution target kinds through the same governed Run Kernel. */
 export class HubExecutionAdapter {
   private readonly targets: ReadonlyMap<string, HubExecutionTarget>;
@@ -49,10 +58,12 @@ export class HubExecutionAdapter {
     let output: { targetId: string; text: string } | undefined;
     const receipt = await this.kernel.executeRun(
       intent,
-      [...this.targets.values()].map((target) => ({
-        id: target.id,
-        factors: { priority: target.priority },
-      })),
+      [...this.targets.values()]
+        .filter((target) => targetMatchesIntent(target, intent))
+        .map((target) => ({
+          id: target.id,
+          factors: { priority: target.priority },
+        })),
       async (_leaseId, executorSignal, targetId) => {
         if (targetId === undefined) throw new Error('Run Kernel did not select an execution target.');
         const target = this.targets.get(targetId);

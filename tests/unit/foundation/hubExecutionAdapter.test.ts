@@ -92,4 +92,24 @@ describe('HubExecutionAdapter', () => {
 
     expect(result).toMatchObject({ targetId: 'cloud_governed', receipt: { status: 'verified' } });
   });
+
+  it('filters unavailable, cloud, and unpinned targets before deterministic selection', async () => {
+    const hub = new HubExecutionAdapter(new RunKernel(), [
+      { id: 'cloud_fast', kind: 'cloud', priority: 10, execute: async () => ({ text: 'cloud', evidenceRefs: [] }) },
+      { id: 'local_ready', kind: 'local', priority: 1, execute: async () => ({ text: 'local', evidenceRefs: [] }) },
+      {
+        id: 'local_unavailable',
+        kind: 'local',
+        priority: 20,
+        health: 'unavailable',
+        execute: async () => ({ text: 'unavailable', evidenceRefs: [] }),
+      },
+    ]);
+
+    const offline = await hub.execute({ ...intent('run_offline'), constraints: ['offline_only'] });
+    const pinned = await hub.execute({ ...intent('run_pinned'), constraints: ['target:local_ready'] });
+
+    expect(offline).toMatchObject({ targetId: 'local_ready', text: 'local' });
+    expect(pinned).toMatchObject({ targetId: 'local_ready', text: 'local' });
+  });
 });
