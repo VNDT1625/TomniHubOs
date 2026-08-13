@@ -62,7 +62,8 @@ export class RunKernel {
   public async executeRun(
     rawIntent: RunIntent,
     candidates: readonly SelectionCandidate[],
-    executor: (leaseId?: string) => Promise<{ evidenceRefs: readonly string[] }>
+    executor: (leaseId?: string, signal?: AbortSignal) => Promise<{ evidenceRefs: readonly string[] }>,
+    signal?: AbortSignal
   ): Promise<OutcomeReceipt> {
     const intent = assertRunIntent(rawIntent);
     await this.eventStore.initialize();
@@ -74,6 +75,19 @@ export class RunKernel {
       workspaceScope: intent.workspaceScope,
       parentRunId: intent.parentRunId,
     });
+    if (signal?.aborted) {
+      await this.emit(intent, 'run.cancelled', { reason: 'RUN_ABORTED' }, createdEvt.eventId);
+      return {
+        receiptId: `rcpt_cancelled_${intent.runId}_${Date.now()}`,
+        runId: intent.runId,
+        parentRunId: intent.parentRunId,
+        taskId: intent.rootTaskId,
+        selectionReceiptId: '',
+        status: 'cancelled',
+        evidenceRefs: [],
+        createdAt: Date.now(),
+      };
+    }
 
     // 2. Security Preflight
     let policyDecision: PolicyDecision;
@@ -264,6 +278,19 @@ export class RunKernel {
         createdAt: Date.now(),
       };
     }
+    if (signal?.aborted) {
+      await this.emit(intent, 'run.cancelled', { reason: 'RUN_ABORTED' });
+      return {
+        receiptId: `rcpt_cancelled_${intent.runId}_${Date.now()}`,
+        runId: intent.runId,
+        parentRunId: intent.parentRunId,
+        taskId: intent.rootTaskId,
+        selectionReceiptId: selection.receiptId,
+        status: 'cancelled',
+        evidenceRefs: [],
+        createdAt: Date.now(),
+      };
+    }
 
     // 6. Resource Lease Request & Grant
     await this.emit(intent, 'lease.requested', { candidateId: selection.selectedId });
@@ -300,7 +327,7 @@ export class RunKernel {
 
     try {
       await this.emit(intent, 'execution.started', { leaseId: lease.leaseId });
-      const result = await executor(lease.leaseId);
+      const result = await executor(lease.leaseId, signal);
       evidenceRefs = result.evidenceRefs;
       await this.emit(intent, 'evidence.recorded', { count: evidenceRefs.length });
     } catch {
@@ -321,7 +348,10 @@ export class RunKernel {
       }
     }
 
-    if (status === 'verified') {
+    if (signal?.aborted) {
+      status = 'cancelled';
+      await this.emit(intent, 'run.cancelled', { reason: 'RUN_ABORTED' });
+    } else if (status === 'verified') {
       await this.emit(intent, 'outcome.verified', { status: 'verified' });
     } else {
       await this.emit(intent, 'run.failed', { reason: failureReason ?? 'EXECUTION_FAILED' });
@@ -345,8 +375,9 @@ export class RunKernel {
     parentIntent: RunIntent,
     childIntent: RunIntent,
     candidates: readonly SelectionCandidate[],
-    executor: (leaseId?: string) => Promise<{ evidenceRefs: readonly string[] }>
+    executor: (leaseId?: string, signal?: AbortSignal) => Promise<{ evidenceRefs: readonly string[] }>,
+    signal?: AbortSignal
   ): Promise<OutcomeReceipt> {
-    return this.executeRun(assertDelegatedRunIntent(parentIntent, childIntent), candidates, executor);
+    return this.executeRun(assertDelegatedRunIntent(parentIntent, childIntent), candidates, executor, signal);
   }
 }

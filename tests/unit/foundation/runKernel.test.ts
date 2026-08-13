@@ -188,6 +188,64 @@ describe('RunKernel Foundation Integration', () => {
     );
   });
 
+  it('cancels before leasing and records a single terminal cancellation receipt', async () => {
+    const kernel = new RunKernel();
+    const controller = new AbortController();
+    controller.abort();
+    const intent = createTestIntent({ runId: 'run_cancelled_before_start' });
+    let executorCalled = false;
+
+    const receipt = await kernel.executeRun(
+      intent,
+      [{ id: 'candidate_a', factors: { score: 1 } }],
+      async () => {
+        executorCalled = true;
+        return { evidenceRefs: [] };
+      },
+      controller.signal
+    );
+
+    expect(receipt.status).toBe('cancelled');
+    expect(executorCalled).toBe(false);
+    expect(kernel.resourceAdapter.getActiveLeases()).toHaveLength(0);
+    expect(kernel.eventStore.getEventsByRunId(intent.runId).map((event) => event.eventType)).toEqual([
+      'run.created',
+      'run.cancelled',
+    ]);
+  });
+
+  it('propagates a parent cancellation signal to the delegated executor', async () => {
+    const kernel = new RunKernel();
+    const controller = new AbortController();
+    const parent = createTestIntent({
+      runId: 'run_parent_cancelled',
+      capabilityGrant: ['workspace.read'],
+      budget: { maxEstimatedCostMB: 128, maxSteps: 1 },
+    });
+    const child = createTestIntent({
+      runId: 'run_child_cancelled',
+      parentRunId: parent.runId,
+      capabilityGrant: ['workspace.read'],
+      budget: { maxEstimatedCostMB: 128, maxSteps: 1 },
+    });
+
+    const receipt = await kernel.executeDelegatedRun(
+      parent,
+      child,
+      [{ id: 'candidate_a', factors: { score: 1 } }],
+      async (_leaseId, signal) => {
+        expect(signal).toBe(controller.signal);
+        controller.abort();
+        return { evidenceRefs: [] };
+      },
+      controller.signal
+    );
+
+    expect(receipt.status).toBe('cancelled');
+    expect(kernel.resourceAdapter.getActiveLeases()).toHaveLength(0);
+    expect(kernel.eventStore.getEventsByRunId(child.runId).at(-1)?.eventType).toBe('run.cancelled');
+  });
+
   it('should handle empty candidates by returning failed receipt', async () => {
     const kernel = new RunKernel();
     const intent = createTestIntent({ runId: 'run_test_empty' });
