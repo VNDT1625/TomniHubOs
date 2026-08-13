@@ -9,7 +9,12 @@ import {
   setLastStudioView,
   type StudioFileEntry,
 } from '@/renderer/pages/studio/studioStorage';
-import type { CatalogSourceState, FederatedCatalogItem, PackageListing } from '@/common/packages';
+import type {
+  CatalogSourceState,
+  FederatedCatalogItem,
+  FederatedCatalogSearchResult,
+  PackageListing,
+} from '@/common/packages';
 import {
   createStudioCompatibilityLegacyFallbackDestination,
   isStudioPackageGateNavigationState,
@@ -319,7 +324,7 @@ const StoreContent: React.FC<{ query: string }> = ({ query }) => {
       const normalizedQuery = query.trim();
       const regionPart = navigator.language.split('-')[1]?.toUpperCase();
       const region = regionPart && /^[A-Z]{2}$/.test(regionPart) ? regionPart : 'ZZ';
-      const [listings, federated] = await Promise.all([
+      const [listings, federated]: [PackageListing[], FederatedCatalogSearchResult | undefined] = await Promise.all([
         normalizedQuery ? packageClient.search({ query: normalizedQuery }) : packageClient.list(),
         normalizedQuery
           ? packageClient

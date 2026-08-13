@@ -137,7 +137,7 @@ const approvePermissionUpdateOverHttp = (
   });
 
 const unwrapMicrosoftStoreResult = <T>(result: MicrosoftStoreNativeResult<T>): T => {
-  if (!result.ok) throw new Error(result.code);
+  if (result.ok === false) throw new Error(result.code);
   return result.data;
 };
 
