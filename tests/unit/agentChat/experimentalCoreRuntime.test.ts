@@ -201,6 +201,47 @@ describe('experimental direct core runtime', () => {
     expect(adapter.listModels).toHaveBeenCalledWith(target, undefined);
   });
 
+  it('awaits a direct target terminal result with opaque execution evidence', async () => {
+    const result = await runtime.executeToCompletion({
+      requestId: 'hub-run-1',
+      targetId: 'codex',
+      prompt: 'answer the bounded goal',
+      workspace: 'C:/workspace',
+      permissionMode: 'read-only',
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        requestId: 'hub-run-1',
+        targetId: 'codex',
+        text: 'reply:answer the bounded goal',
+        evidenceRefs: expect.arrayContaining(['experimental-core:request:hub-run-1', 'experimental-core:target:codex']),
+      })
+    );
+  });
+
+  it('forwards Hub cancellation to the active direct-core request', async () => {
+    vi.mocked(adapter.run).mockImplementationOnce(
+      (input) =>
+        new Promise<void>((_resolve, reject) => {
+          input.signal.addEventListener('abort', () => reject(new Error('cancelled by Hub')), { once: true });
+        })
+    );
+    const controller = new AbortController();
+    const completion = runtime.executeToCompletion({
+      requestId: 'hub-cancel-1',
+      targetId: 'codex',
+      prompt: 'cancel me',
+      workspace: 'C:/workspace',
+      signal: controller.signal,
+    });
+
+    controller.abort();
+
+    await expect(completion).rejects.toThrow('CORE_REQUEST_CANCELLED');
+    expect(events).toContainEqual(expect.objectContaining({ requestId: 'hub-cancel-1', type: 'cancelled' }));
+  });
+
   it('returns the target list when one model catalog never responds', async () => {
     vi.mocked(adapter.listModels).mockImplementationOnce(() => new Promise(() => {}));
     const stalledRuntime = new ExperimentalCoreRuntime((event) => events.push(event), {

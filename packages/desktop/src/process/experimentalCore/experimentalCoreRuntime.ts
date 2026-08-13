@@ -71,6 +71,27 @@ export type ExperimentalCoreTarget = {
   defaultModelKey?: string;
 };
 
+/** Main-process request used by Hub to await a direct-core target to a terminal receipt. */
+export type ExperimentalCoreCompletionRequest = {
+  requestId: string;
+  targetId: string;
+  prompt: string;
+  workspace: string;
+  modelKey?: string;
+  permissionMode?: ExperimentalPermissionMode;
+  sessionId?: string;
+  contextIdentity?: ExperimentalCoreContextIdentity;
+  signal?: AbortSignal;
+};
+
+export type ExperimentalCoreCompletionResult = {
+  requestId: string;
+  sessionId: string;
+  targetId: string;
+  text: string;
+  evidenceRefs: readonly string[];
+};
+
 export type ExperimentalCoreEvent = {
   requestId: string;
   sessionId: string;
@@ -485,6 +506,7 @@ const transportKey = (
 export class ExperimentalCoreRuntime {
   private readonly active = new Map<string, ActiveRequest>();
   private readonly runEvents = new Map<string, ExperimentalCoreEvent[]>();
+  private readonly eventListeners = new Set<(event: ExperimentalCoreEvent) => void>();
   private readonly permissions = new Map<string, PendingPermission>();
   private readonly orchestrationProposals = new Map<string, PendingOrchestrationProposal>();
   private readonly deps: ExperimentalCoreRuntimeDeps;
@@ -595,6 +617,84 @@ export class ExperimentalCoreRuntime {
     return events.map((event) => {
       const payload = event.payload as unknown as ExperimentalCoreEvent;
       return { ...payload, sequence: event.sequence, timestamp: event.timestamp };
+    });
+  }
+
+  /** Subscribe to live Main-process events without exposing a renderer transport. */
+  public subscribe(listener: (event: ExperimentalCoreEvent) => void): () => void {
+    this.eventListeners.add(listener);
+    return () => this.eventListeners.delete(listener);
+  }
+
+  /**
+   * Runs one direct-core turn and resolves only after its terminal event. This is
+   * the Hub-facing boundary: cancellation is forwarded to the existing runtime,
+   * while evidence stays as opaque run/tool references rather than model payloads.
+   */
+  public executeToCompletion(input: ExperimentalCoreCompletionRequest): Promise<ExperimentalCoreCompletionResult> {
+    if (this.active.has(input.requestId)) return Promise.reject(new Error('CORE_REQUEST_ALREADY_ACTIVE'));
+    if (input.signal?.aborted) return Promise.reject(new Error('CORE_REQUEST_CANCELLED'));
+
+    return new Promise((resolve, reject) => {
+      let text = '';
+      let settled = false;
+      const evidenceRefs = new Set<string>([
+        `experimental-core:request:${input.requestId}`,
+        `experimental-core:target:${input.targetId}`,
+      ]);
+      const finish = (result: ExperimentalCoreCompletionResult | Error): void => {
+        if (settled) return;
+        settled = true;
+        unsubscribe();
+        input.signal?.removeEventListener('abort', cancel);
+        if (result instanceof Error) reject(result);
+        else resolve(result);
+      };
+      const cancel = (): void => {
+        void this.cancel(input.requestId);
+      };
+      const unsubscribe = this.subscribe((event) => {
+        if (event.requestId !== input.requestId) return;
+        if (event.type === 'delta' && event.text !== undefined) {
+          text = event.mode === 'replace' ? event.text : text + event.text;
+        }
+        if ((event.type === 'tool-call' || event.type === 'tool-result') && event.callId) {
+          evidenceRefs.add(`experimental-core:tool:${event.callId}`);
+        }
+        if (event.type === 'completed') {
+          if (!text.trim()) {
+            finish(new Error('CORE_OUTPUT_EMPTY'));
+            return;
+          }
+          evidenceRefs.add(`experimental-core:session:${event.sessionId}`);
+          finish({
+            requestId: input.requestId,
+            sessionId: event.sessionId,
+            targetId: input.targetId,
+            text,
+            evidenceRefs: [...evidenceRefs].toSorted(),
+          });
+          return;
+        }
+        if (event.type === 'cancelled') finish(new Error('CORE_REQUEST_CANCELLED'));
+        if (event.type === 'error') finish(new Error(event.text || 'CORE_REQUEST_FAILED'));
+      });
+      input.signal?.addEventListener('abort', cancel, { once: true });
+      try {
+        this.start(
+          input.requestId,
+          input.targetId,
+          input.prompt,
+          input.workspace,
+          input.modelKey,
+          input.permissionMode,
+          input.sessionId,
+          undefined,
+          input.contextIdentity
+        );
+      } catch (error) {
+        finish(error instanceof Error ? error : new Error(String(error)));
+      }
     });
   }
   /** Snapshot active Main-process turns so a recreated renderer can reattach without restarting them. */
@@ -1399,6 +1499,13 @@ export class ExperimentalCoreRuntime {
       })
       .catch((error) => console.warn('[TomnyCore] Event journal append failed:', errorMessage(error)));
     this.emit(complete);
+    for (const listener of this.eventListeners) {
+      try {
+        listener(complete);
+      } catch (error) {
+        console.error('[TomnyCore] Event listener failed:', errorMessage(error));
+      }
+    }
   }
 
   private observeAdapterTelemetry(requestId: string, event: CoreAdapterEvent): void {

@@ -364,12 +364,11 @@ const channels = {
   event: bridge.buildEmitter<ExperimentalCoreEvent>(EXPERIMENTAL_CORE_CHANNELS.event),
 };
 
-let registered = false;
+let registeredRuntime: ExperimentalCoreRuntime | undefined;
 
 /** Register the temporary parallel-core IPC surface. */
-export const registerExperimentalCoreBridge = (agentMeshService: AgentMeshService): void => {
-  if (registered) return;
-  registered = true;
+export const registerExperimentalCoreBridge = (agentMeshService: AgentMeshService): ExperimentalCoreRuntime => {
+  if (registeredRuntime) return registeredRuntime;
   const sessionStore = new JsonCoreSessionStore(
     path.join(app.getPath('userData'), 'tomny-core', 'session-checkpoints.json')
   );
@@ -461,6 +460,7 @@ export const registerExperimentalCoreBridge = (agentMeshService: AgentMeshServic
       capabilityHosts.resolve(serverNames, sessionServers, context),
     availableCapabilityHostNames: () => capabilityHosts.names(),
   });
+  registeredRuntime = runtime;
   const benchmarkService = new BenchmarkService({
     store: new BenchmarkStore(path.join(app.getPath('userData'), 'testing', 'benchmarks', 'catalog.json')),
     tomny: {
@@ -793,4 +793,5 @@ export const registerExperimentalCoreBridge = (agentMeshService: AgentMeshServic
       };
     }
   });
+  return runtime;
 };

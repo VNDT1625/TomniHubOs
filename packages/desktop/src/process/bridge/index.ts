@@ -184,16 +184,6 @@ export function initAllBridges(deps: BridgeDependencies = {}): void {
     console.error('[Bridge] Failed to register native platform drivers:', error);
   }
 
-  // Tomny native bridges (Task 15.1 wiring). Each registration is isolated
-  // so a failure in one cannot silently prevent the others from registering
-  // (which would leave a renderer page hanging on an unanswered invoke).
-  try {
-    registerFoundationBridge();
-    console.log('[Bridge] Foundation RunKernel bridge registered.');
-  } catch (error) {
-    console.error('[Bridge] Failed to register Foundation bridge:', error);
-  }
-
   try {
     registerResourceBridge();
     getResourceCoordinator()
@@ -781,10 +771,12 @@ export function initAllBridges(deps: BridgeDependencies = {}): void {
   const meshService = getSharedAgentMeshService();
 
   try {
-    registerExperimentalCoreBridge(meshService);
+    const coreRuntime = registerExperimentalCoreBridge(meshService);
     console.log('[Bridge] Experimental core bridge registered.');
+    registerFoundationBridge({ coreRuntime });
+    console.log('[Bridge] Foundation RunKernel bridge registered.');
   } catch (error) {
-    console.error('[Bridge] Failed to register experimental core bridge:', error);
+    console.error('[Bridge] Failed to register experimental core or Foundation bridge:', error);
   }
 
   try {

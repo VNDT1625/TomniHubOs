@@ -4,18 +4,38 @@
 
 import { app, ipcMain } from 'electron';
 import path from 'node:path';
-import type { SelectionCandidate } from '../../common/foundation/decisionTypes';
 import type { RunIntent } from '../../common/foundation/runTypes';
 import { assertRunIntent } from '../../common/foundation/runTypes';
 import { JsonlDurableEventStore } from '../services/agentChat/durability';
 import { EventStore } from '../foundation/eventStore';
+import { HubExecutionAdapter, type HubExecutionTarget } from '../foundation/hubExecutionAdapter';
 import { ResourceAdapter } from '../foundation/resourceAdapter';
 import { RunKernel } from '../foundation/runKernel';
 import { getResourceCoordinator } from '../resource/resourceCoordinator';
 
 let globalKernel: RunKernel | undefined;
 
-export type FoundationRunPayload = { intent: RunIntent; candidates: readonly SelectionCandidate[] };
+export type FoundationRunPayload = { intent: RunIntent };
+export type FoundationCoreRuntime = {
+  listTargets: () => Promise<
+    ReadonlyArray<{
+      id: string;
+      kind: 'builtin' | 'acp' | 'cli' | 'remote';
+      available: boolean;
+      defaultModelKey?: string;
+    }>
+  >;
+  executeToCompletion: (input: {
+    requestId: string;
+    targetId: string;
+    prompt: string;
+    workspace: string;
+    modelKey?: string;
+    permissionMode: 'read-only' | 'workspace-write' | 'full-access';
+    signal?: AbortSignal;
+  }) => Promise<{ text: string; evidenceRefs: readonly string[] }>;
+};
+export type FoundationBridgeOptions = { coreRuntime: FoundationCoreRuntime };
 type FoundationSenderEvent = { sender: { mainFrame?: unknown }; senderFrame?: unknown };
 
 export const isFoundationMainFrame = (event: FoundationSenderEvent): boolean =>
@@ -31,25 +51,48 @@ export const parseFoundationRunId = (value: unknown): string => {
 export const parseFoundationRunPayload = (value: unknown): FoundationRunPayload => {
   if (!value || typeof value !== 'object') throw new Error('INVALID_FOUNDATION_REQUEST');
   const payload = value as Partial<FoundationRunPayload>;
-  if (!Array.isArray(payload.candidates) || payload.candidates.length > 16)
-    throw new Error('INVALID_FOUNDATION_CANDIDATES');
-  const candidates = payload.candidates.map((candidate) => {
-    if (
-      !candidate ||
-      typeof candidate.id !== 'string' ||
-      candidate.id.length === 0 ||
-      candidate.id.length > 200 ||
-      !candidate.factors ||
-      typeof candidate.factors !== 'object' ||
-      Object.keys(candidate.factors).length > 16 ||
-      Object.values(candidate.factors).some((score) => !Number.isFinite(score))
-    ) {
-      throw new Error('INVALID_FOUNDATION_CANDIDATES');
-    }
-    return { id: candidate.id, factors: { ...candidate.factors } };
-  });
-  return { intent: assertRunIntent(payload.intent as RunIntent), candidates };
+  return { intent: assertRunIntent(payload.intent as RunIntent) };
 };
+
+const kindForCoreTarget = (kind: 'builtin' | 'acp' | 'cli' | 'remote'): HubExecutionTarget['kind'] =>
+  kind === 'builtin' ? 'local' : kind === 'remote' ? 'cloud' : 'cli';
+
+const priorityForCoreTarget = (kind: HubExecutionTarget['kind']): number =>
+  kind === 'local' ? 40 : kind === 'cloud' ? 30 : kind === 'cli' ? 20 : 10;
+
+/** Builds target candidates exclusively from Main-process runtime discovery. */
+export const createFoundationHubTargets = async (
+  runtime: FoundationCoreRuntime
+): Promise<readonly HubExecutionTarget[]> =>
+  (await runtime.listTargets())
+    .filter((target) => target.available)
+    .map((target) => {
+      const kind = kindForCoreTarget(target.kind);
+      return {
+        id: target.id,
+        kind,
+        priority: priorityForCoreTarget(kind),
+        requestedCapabilities: ['target.execute'],
+        execute: ({ intent, signal }) =>
+          runtime.executeToCompletion({
+            requestId: intent.runId,
+            targetId: target.id,
+            prompt: intent.goal,
+            workspace: intent.workspaceScope,
+            modelKey: target.defaultModelKey,
+            permissionMode: 'workspace-write',
+            signal,
+          }),
+      };
+    });
+
+/** Executes a Hub run using only Main-discovered direct-core targets. */
+export const executeFoundationHubRun = async (
+  kernel: RunKernel,
+  runtime: FoundationCoreRuntime,
+  intent: RunIntent,
+  signal?: AbortSignal
+) => new HubExecutionAdapter(kernel, await createFoundationHubTargets(runtime)).execute(intent, signal);
 
 const getGlobalKernel = (): RunKernel => {
   globalKernel ??= new RunKernel({
@@ -61,15 +104,21 @@ const getGlobalKernel = (): RunKernel => {
   return globalKernel;
 };
 
-export const registerFoundationBridge = (): void => {
+export const registerFoundationBridge = ({ coreRuntime }: FoundationBridgeOptions): void => {
   ipcMain.handle('foundation:execute-run', async (event, rawPayload: unknown) => {
     try {
       if (!isFoundationMainFrame(event)) throw new Error('FOUNDATION_SENDER_REJECTED');
       const payload = parseFoundationRunPayload(rawPayload);
-      const receipt = await getGlobalKernel().executeRun(payload.intent, payload.candidates ?? [], async () => {
-        return { evidenceRefs: [`ev_gui_${Date.now()}`] };
-      });
-      return { success: true, receipt };
+      const result = await executeFoundationHubRun(getGlobalKernel(), coreRuntime, payload.intent);
+      return {
+        success: result.receipt.status === 'verified',
+        receipt: result.receipt,
+        targetId: result.targetId,
+        text: result.text,
+        ...(result.receipt.status === 'verified'
+          ? {}
+          : { error: `FOUNDATION_RUN_${result.receipt.status.toUpperCase()}` }),
+      };
     } catch (error) {
       console.error('[foundationBridge] Error executing run:', error);
       return { success: false, error: 'FOUNDATION_EXECUTION_REJECTED' };
