@@ -105,15 +105,21 @@ export class EventStore {
 const foundationEventFromDurablePayload = (payload: DurableEventPayload): FoundationEvent | undefined => {
   if (!isRecord(payload) || !isRecord(payload.foundationEvent)) return undefined;
   const value = payload.foundationEvent;
+  const sequence = value.sequence;
+  const occurredAt = value.occurredAt;
+  const schemaVersion = value.schemaVersion;
   if (
     typeof value.eventId !== 'string' ||
     typeof value.eventType !== 'string' ||
     typeof value.aggregateId !== 'string' ||
     typeof value.runId !== 'string' ||
-    !Number.isSafeInteger(value.sequence) ||
+    typeof sequence !== 'number' ||
+    !Number.isSafeInteger(sequence) ||
     typeof value.correlationId !== 'string' ||
-    !Number.isFinite(value.occurredAt) ||
-    !Number.isSafeInteger(value.schemaVersion) ||
+    typeof occurredAt !== 'number' ||
+    !Number.isFinite(occurredAt) ||
+    typeof schemaVersion !== 'number' ||
+    !Number.isSafeInteger(schemaVersion) ||
     !isRecord(value.payload)
   ) {
     return undefined;
@@ -126,11 +132,11 @@ const foundationEventFromDurablePayload = (payload: DurableEventPayload): Founda
       aggregateId: value.aggregateId,
       runId: value.runId,
       taskId: typeof value.taskId === 'string' ? value.taskId : undefined,
-      sequence: value.sequence,
+      sequence,
       causationId: typeof value.causationId === 'string' ? value.causationId : undefined,
       correlationId: value.correlationId,
-      occurredAt: value.occurredAt,
-      schemaVersion: value.schemaVersion,
+      occurredAt,
+      schemaVersion,
       payload: value.payload as FoundationEvent['payload'],
     });
   } catch {

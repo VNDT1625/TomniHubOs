@@ -5,6 +5,7 @@
  */
 
 import { randomUUID } from 'node:crypto';
+import type { RunIntent } from '../../../../common/foundation/runTypes';
 import type { CoreModelPurpose, ModelPackRegistryRecord } from '../../catalog/modelPackTypes';
 import type { CoreModelOutputValidationErrorCode, CoreModelOutputValidationResult } from './outputContractValidator';
 import {
@@ -98,6 +99,7 @@ export type CoreModelResponse = {
     | 'adapter-incompatible'
     | 'base-binding-mismatch'
     | 'base-switch-failed'
+    | 'cancelled'
     | 'provider-failed'
     | 'output-invalid'
     | 'fallback-unavailable'
@@ -145,12 +147,12 @@ export class LocalInferenceBroker {
     this.resolveOutputSchema = options.resolveOutputSchema ?? (() => undefined);
   }
 
-  public async infer(request: CoreModelRequest): Promise<CoreModelResponse> {
+  public async infer(request: CoreModelRequest, signal?: AbortSignal): Promise<CoreModelResponse> {
     const startedAt = this.now();
     const receiptId = this.createReceiptId(request.requestId);
     let record: ModelPackRegistryRecord | undefined;
     try {
-      this.assertRequest(request);
+      this.assertRequest(request, signal);
       if (!this.validator) throw new BrokerFailure('fallback-unavailable', 'Output validator is unavailable.');
       record = await this.registry.getActive(request.purpose);
       if (!record || record.status !== 'active') {
@@ -159,18 +161,21 @@ export class LocalInferenceBroker {
       if (record.manifest.contracts.inputSchema !== request.contractVersion) {
         throw new BrokerFailure('contract-mismatch', 'Request contract does not match the active adapter.');
       }
-      const route = await this.withDeadline(request, (signal) =>
-        this.router.execute(request.purpose, record!.manifest.baseModel, signal, async (base) => {
-          const preparation = await this.provider.prepareAdapter(record!, base, signal);
-          if (preparation.compatible === false) {
-            throw new BrokerFailure('adapter-incompatible', preparation.reason);
-          }
-          if (preparation.poolId !== base.poolId || preparation.baseSha256 !== base.binding.sha256) {
-            throw new BrokerFailure('adapter-incompatible', 'Prepared adapter slot is bound to a different base.');
-          }
-          const providerOutput = await this.provider.infer(request, record!, preparation, signal);
-          return { providerOutput, preparation };
-        })
+      const route = await this.withDeadline(
+        request,
+        (deadlineSignal) =>
+          this.router.execute(request.purpose, record!.manifest.baseModel, deadlineSignal, async (base) => {
+            const preparation = await this.provider.prepareAdapter(record!, base, deadlineSignal);
+            if (preparation.compatible === false) {
+              throw new BrokerFailure('adapter-incompatible', preparation.reason);
+            }
+            if (preparation.poolId !== base.poolId || preparation.baseSha256 !== base.binding.sha256) {
+              throw new BrokerFailure('adapter-incompatible', 'Prepared adapter slot is bound to a different base.');
+            }
+            const providerOutput = await this.provider.infer(request, record!, preparation, deadlineSignal);
+            return { providerOutput, preparation };
+          }),
+        signal
       );
       const output = route.value;
       const outputSchema = record.manifest.contracts.outputSchema;
@@ -210,7 +215,8 @@ export class LocalInferenceBroker {
     }
   }
 
-  private assertRequest(request: CoreModelRequest): void {
+  private assertRequest(request: CoreModelRequest, signal?: AbortSignal): void {
+    if (signal?.aborted) throw new BrokerFailure('cancelled', 'Core model request was cancelled.');
     if (
       !request.requestId ||
       !request.contractVersion ||
@@ -222,21 +228,40 @@ export class LocalInferenceBroker {
     }
   }
 
-  private async withDeadline<T>(request: CoreModelRequest, operation: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  private async withDeadline<T>(
+    request: CoreModelRequest,
+    operation: (signal: AbortSignal) => Promise<T>,
+    parentSignal?: AbortSignal
+  ): Promise<T> {
     const remaining = request.deadlineMs - this.now();
     if (remaining <= 0) throw new BrokerFailure('deadline-exceeded', 'Core model deadline expired.');
+    if (parentSignal?.aborted) throw new BrokerFailure('cancelled', 'Core model request was cancelled.');
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let onAbort: (() => void) | undefined;
     const timeout = new Promise<never>((_resolve, reject) => {
       timer = setTimeout(() => {
         controller.abort();
         reject(new BrokerFailure('deadline-exceeded', 'Core model deadline expired.'));
       }, remaining);
     });
+    const cancellation =
+      parentSignal === undefined
+        ? undefined
+        : new Promise<never>((_resolve, reject) => {
+            onAbort = () => {
+              controller.abort();
+              reject(new BrokerFailure('cancelled', 'Core model request was cancelled.'));
+            };
+            parentSignal.addEventListener('abort', onAbort, { once: true });
+            if (parentSignal.aborted) onAbort();
+          });
     try {
-      return await Promise.race([operation(controller.signal), timeout]);
+      if (controller.signal.aborted) throw new BrokerFailure('cancelled', 'Core model request was cancelled.');
+      return await Promise.race([operation(controller.signal), timeout, ...(cancellation ? [cancellation] : [])]);
     } finally {
       if (timer) clearTimeout(timer);
+      if (parentSignal && onAbort) parentSignal.removeEventListener('abort', onAbort);
     }
   }
 
@@ -257,7 +282,13 @@ export class LocalInferenceBroker {
       failureCode: failure.code,
       ...(failure.outputValidationError ? { outputValidationError: failure.outputValidationError } : {}),
     } as const;
-    if (!this.validator || request.fallback === 'abstain' || failure.code === 'invalid-request') {
+    if (
+      !this.validator ||
+      request.fallback === 'abstain' ||
+      failure.code === 'invalid-request' ||
+      failure.code === 'deadline-exceeded' ||
+      failure.code === 'cancelled'
+    ) {
       return { ...base, source: 'abstain', validation: this.validator ? 'not-run' : 'validator-missing' };
     }
     const schemaId =
@@ -304,6 +335,109 @@ export class LocalInferenceBroker {
   }
 }
 
+export type LocalInferenceHubExecutionRequest = {
+  intent: RunIntent;
+  signal?: AbortSignal;
+};
+
+export type LocalInferenceHubExecutionResult = {
+  text: string;
+  evidenceRefs: readonly string[];
+};
+
+export type LocalInferenceHubTargetExecutor = {
+  execute(request: LocalInferenceHubExecutionRequest): Promise<LocalInferenceHubExecutionResult>;
+};
+
+export type LocalInferenceHubTargetAdapterOptions = {
+  contractVersion: string;
+  deadlineMs(intent: RunIntent): number;
+  purpose?: CoreModelPurpose;
+  priority?: CoreModelRequest['priority'];
+  payload?(intent: RunIntent): unknown;
+  serializeOutput?(value: unknown, response: CoreModelResponse): string;
+};
+
+export class LocalInferenceHubTargetError extends Error {
+  public constructor(
+    public readonly code:
+      | 'LOCAL_INFERENCE_CANCELLED'
+      | 'LOCAL_INFERENCE_DEADLINE_EXCEEDED'
+      | 'LOCAL_INFERENCE_DEADLINE_INVALID'
+      | 'LOCAL_INFERENCE_FAILED'
+  ) {
+    super(code);
+    this.name = 'LocalInferenceHubTargetError';
+  }
+}
+
+const defaultHubPayload = (intent: RunIntent): Record<string, unknown> => ({
+  goal: intent.goal,
+  successCriteria: intent.successCriteria,
+  constraints: intent.constraints,
+  workspaceScope: intent.workspaceScope,
+});
+
+const defaultHubOutputSerializer = (value: unknown): string => {
+  if (typeof value === 'string' && value.length > 0) return value;
+  try {
+    const serialized = JSON.stringify(value);
+    if (serialized && serialized.length > 0) return serialized;
+  } catch {
+    // A provider result that cannot be safely serialized is not Hub output.
+  }
+  throw new LocalInferenceHubTargetError('LOCAL_INFERENCE_FAILED');
+};
+
+/**
+ * Adapts a verified local model response to the structural target contract consumed by HubExecutionAdapter.
+ * Fallbacks are deliberately disabled: a local target can only report success after adapter-backed inference.
+ */
+export const createLocalInferenceHubTargetExecutor = (
+  broker: LocalInferenceBroker,
+  options: LocalInferenceHubTargetAdapterOptions
+): LocalInferenceHubTargetExecutor => ({
+  async execute({ intent, signal }): Promise<LocalInferenceHubExecutionResult> {
+    if (signal?.aborted) throw new LocalInferenceHubTargetError('LOCAL_INFERENCE_CANCELLED');
+    const deadlineMs = options.deadlineMs(intent);
+    if (!Number.isFinite(deadlineMs)) throw new LocalInferenceHubTargetError('LOCAL_INFERENCE_DEADLINE_INVALID');
+    const response = await broker.infer(
+      {
+        requestId: intent.runId,
+        purpose: options.purpose ?? 'assistant',
+        contractVersion: options.contractVersion,
+        priority: options.priority ?? 'P1',
+        deadlineMs,
+        payload: options.payload?.(intent) ?? defaultHubPayload(intent),
+        fallback: 'abstain',
+      },
+      signal
+    );
+    if (response.failureCode === 'cancelled') throw new LocalInferenceHubTargetError('LOCAL_INFERENCE_CANCELLED');
+    if (response.failureCode === 'deadline-exceeded') {
+      throw new LocalInferenceHubTargetError('LOCAL_INFERENCE_DEADLINE_EXCEEDED');
+    }
+    if (response.source !== 'adapter' || response.value === undefined || !response.adapter || !response.baseModel) {
+      throw new LocalInferenceHubTargetError('LOCAL_INFERENCE_FAILED');
+    }
+    let text: string;
+    try {
+      text = (options.serializeOutput ?? defaultHubOutputSerializer)(response.value, response);
+    } catch {
+      throw new LocalInferenceHubTargetError('LOCAL_INFERENCE_FAILED');
+    }
+    if (text.length === 0) throw new LocalInferenceHubTargetError('LOCAL_INFERENCE_FAILED');
+    return {
+      text,
+      evidenceRefs: [
+        `local-inference:${response.receiptId}`,
+        `local-inference:adapter:${response.adapter.key}`,
+        `local-inference:base:${response.baseModel.sha256}`,
+      ],
+    };
+  },
+});
+
 export class InMemoryInferenceProvider implements LocalInferenceProvider {
   public readonly calls: Array<{ requestId: string; adapterKey: string }> = [];
   public readonly lifecycleCalls: Array<{ operation: 'load' | 'unload'; poolId: LoadedBase['poolId'] }> = [];
@@ -321,7 +455,7 @@ export class InMemoryInferenceProvider implements LocalInferenceProvider {
 
   private unloadFailure: Error | undefined;
   private loadedBase: LoadedBase | undefined;
-  private inferHook: (() => Promise<void>) | undefined;
+  private inferHook: ((signal: AbortSignal) => Promise<void>) | undefined;
 
   public setPreparation(preparation: AdapterSlotPreparation): void {
     this.preparation = preparation;
@@ -344,7 +478,7 @@ export class InMemoryInferenceProvider implements LocalInferenceProvider {
     this.unloadFailure = error;
   }
 
-  public setInferHook(hook: (() => Promise<void>) | undefined): void {
+  public setInferHook(hook: ((signal: AbortSignal) => Promise<void>) | undefined): void {
     this.inferHook = hook;
   }
 
@@ -378,10 +512,10 @@ export class InMemoryInferenceProvider implements LocalInferenceProvider {
     request: CoreModelRequest,
     record: ModelPackRegistryRecord,
     _slot: Extract<AdapterSlotPreparation, { compatible: true }>,
-    _signal: AbortSignal
+    signal: AbortSignal
   ): Promise<CoreModelProviderOutput> {
     this.calls.push({ requestId: request.requestId, adapterKey: record.key });
-    await this.inferHook?.();
+    await this.inferHook?.(signal);
     if (this.failure) throw this.failure;
     return structuredClone(this.output);
   }

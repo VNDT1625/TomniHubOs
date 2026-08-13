@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  createLocalInferenceHubTargetExecutor,
   InMemoryInferenceProvider,
   LocalInferenceBroker,
   type CoreModelRequest,
@@ -7,6 +8,7 @@ import {
 } from '../../../packages/desktop/src/process/experimentalCore/adapters/sidecar/localInferenceBroker';
 import { BoundedCoreModelOutputValidator } from '../../../packages/desktop/src/process/experimentalCore/adapters/sidecar/outputContractValidator';
 import type { ModelPackRegistryRecord } from '../../../packages/desktop/src/process/experimentalCore/catalog/modelPackTypes';
+import type { RunIntent } from '../../../packages/desktop/src/common/foundation/runTypes';
 
 const now = 1_800_000_000_000;
 const sha = 'a'.repeat(64);
@@ -99,6 +101,20 @@ const options = {
   now: () => now,
   createReceiptId: () => 'receipt-1',
   resolveOutputSchema: () => 'tomny.assistant.output.v1',
+};
+
+const hubIntent: RunIntent = {
+  runId: 'run-local-1',
+  rootTaskId: 'task-local-1',
+  surface: 'hub',
+  goal: 'Summarize local notes.',
+  constraints: ['offline_only'],
+  successCriteria: ['A concise summary is returned.'],
+  workspaceScope: 'workspace:local',
+  userId: 'user-1',
+  createdAt: now,
+  correlationId: 'correlation-local-1',
+  policyVersion: 'policy-v1',
 };
 
 describe('Local Inference Broker', () => {
@@ -365,6 +381,73 @@ describe('Local Inference Broker', () => {
     const broker = new LocalInferenceBroker(registry(activeRecord), provider, validator, {}, options);
     const response = await broker.infer(request({ deadlineMs: now - 1, fallback: 'abstain' }));
     expect(response.failureCode).toBe('deadline-exceeded');
+    expect(provider.calls).toHaveLength(0);
+  });
+
+  it('adapts verified local output to Hub target text and bounded evidence references', async () => {
+    const provider = new InMemoryInferenceProvider();
+    provider.setOutput({ ok: true, answer: 'Local result' });
+    const broker = new LocalInferenceBroker(registry(activeRecord), provider, validator, {}, options);
+    const target = createLocalInferenceHubTargetExecutor(broker, {
+      contractVersion: 'tomny.assistant.input.v1',
+      deadlineMs: () => now + 1_000,
+      serializeOutput: (value) => (value as { answer: string }).answer,
+    });
+    await expect(target.execute({ intent: hubIntent })).resolves.toEqual({
+      text: 'Local result',
+      evidenceRefs: [
+        'local-inference:receipt-1',
+        'local-inference:adapter:com.tomny.core.assistant@0.1.0#weights',
+        `local-inference:base:${sha}`,
+      ],
+    });
+  });
+
+  it('propagates Hub cancellation to the local provider and does not report fallback output', async () => {
+    const provider = new InMemoryInferenceProvider();
+    provider.setOutput({ ok: true });
+    let onProviderStarted: (() => void) | undefined;
+    const providerStarted = new Promise<void>((resolve) => {
+      onProviderStarted = resolve;
+    });
+    let providerWasCancelled = false;
+    provider.setInferHook(
+      async (signal) =>
+        new Promise<void>((resolve) => {
+          onProviderStarted?.();
+          signal.addEventListener(
+            'abort',
+            () => {
+              providerWasCancelled = true;
+              resolve();
+            },
+            { once: true }
+          );
+        })
+    );
+    const broker = new LocalInferenceBroker(registry(activeRecord), provider, validator, {}, options);
+    const target = createLocalInferenceHubTargetExecutor(broker, {
+      contractVersion: 'tomny.assistant.input.v1',
+      deadlineMs: () => now + 1_000,
+    });
+    const controller = new AbortController();
+    const execution = target.execute({ intent: hubIntent, signal: controller.signal });
+    await providerStarted;
+    controller.abort();
+    await expect(execution).rejects.toMatchObject({ code: 'LOCAL_INFERENCE_CANCELLED' });
+    expect(providerWasCancelled).toBe(true);
+  });
+
+  it('passes the Hub execution deadline to the broker before provider work begins', async () => {
+    const provider = new InMemoryInferenceProvider();
+    const broker = new LocalInferenceBroker(registry(activeRecord), provider, validator, {}, options);
+    const target = createLocalInferenceHubTargetExecutor(broker, {
+      contractVersion: 'tomny.assistant.input.v1',
+      deadlineMs: () => now - 1,
+    });
+    await expect(target.execute({ intent: hubIntent })).rejects.toMatchObject({
+      code: 'LOCAL_INFERENCE_DEADLINE_EXCEEDED',
+    });
     expect(provider.calls).toHaveLength(0);
   });
 });
