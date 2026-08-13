@@ -41,10 +41,10 @@ export class RunKernel {
     eventType: FoundationEvent['eventType'],
     payload: FoundationEvent['payload'],
     causationId?: string
-  ): FoundationEvent {
+  ): Promise<FoundationEvent> {
     const seq = this.eventStore.getNextSequence(intent.runId);
     const eventId = `evt_${intent.runId}_${seq}_${Date.now()}`;
-    return this.eventStore.append({
+    return this.eventStore.appendDurably({
       eventId,
       eventType,
       aggregateId: intent.runId,
@@ -65,9 +65,10 @@ export class RunKernel {
     executor: (leaseId?: string) => Promise<{ evidenceRefs: readonly string[] }>
   ): Promise<OutcomeReceipt> {
     const intent = assertRunIntent(rawIntent);
+    await this.eventStore.initialize();
 
     // 1. Run Created
-    const createdEvt = this.emit(intent, 'run.created', {
+    const createdEvt = await this.emit(intent, 'run.created', {
       goal: intent.goal,
       surface: intent.surface,
       workspaceScope: intent.workspaceScope,
@@ -78,7 +79,7 @@ export class RunKernel {
     try {
       policyDecision = await this.securityAdapter.preflightCheck(intent);
     } catch {
-      this.emit(intent, 'run.failed', { reason: 'SECURITY_PREFLIGHT_FAILED' });
+      await this.emit(intent, 'run.failed', { reason: 'SECURITY_PREFLIGHT_FAILED' });
       return {
         receiptId: `rcpt_fail_${intent.runId}_${Date.now()}`,
         runId: intent.runId,
@@ -89,7 +90,7 @@ export class RunKernel {
         createdAt: Date.now(),
       };
     }
-    this.emit(
+    await this.emit(
       intent,
       'policy.decided',
       {
@@ -108,7 +109,7 @@ export class RunKernel {
         capabilities: policyDecision.capabilities,
         expiresAt: policyDecision.expiresAt,
       };
-      this.emit(intent, 'approval.required', approval);
+      await this.emit(intent, 'approval.required', approval);
       return {
         receiptId: `rcpt_approval_${intent.runId}_${Date.now()}`,
         runId: intent.runId,
@@ -122,7 +123,7 @@ export class RunKernel {
     }
 
     if (policyDecision.decision === 'deny') {
-      this.emit(intent, 'run.failed', { reason: 'SECURITY_DENIED' });
+      await this.emit(intent, 'run.failed', { reason: 'SECURITY_DENIED' });
       return {
         receiptId: `rcpt_fail_${intent.runId}_${Date.now()}`,
         runId: intent.runId,
@@ -139,7 +140,7 @@ export class RunKernel {
     try {
       contextProj = await this.contextAdapter.projectContext(intent);
     } catch {
-      this.emit(intent, 'run.failed', { reason: 'CONTEXT_PROJECTION_FAILED' });
+      await this.emit(intent, 'run.failed', { reason: 'CONTEXT_PROJECTION_FAILED' });
       return {
         receiptId: `rcpt_fail_${intent.runId}_${Date.now()}`,
         runId: intent.runId,
@@ -150,7 +151,7 @@ export class RunKernel {
         createdAt: Date.now(),
       };
     }
-    this.emit(intent, 'context.projected', {
+    await this.emit(intent, 'context.projected', {
       maxChars: contextProj.maxChars,
       sensitivity: contextProj.sensitivity,
     });
@@ -160,7 +161,7 @@ export class RunKernel {
     try {
       selection = await this.choiceAdapter.selectCandidate(intent, candidates);
     } catch {
-      this.emit(intent, 'run.failed', { reason: 'CANDIDATE_SELECTION_FAILED' });
+      await this.emit(intent, 'run.failed', { reason: 'CANDIDATE_SELECTION_FAILED' });
       return {
         receiptId: `rcpt_fail_${intent.runId}_${Date.now()}`,
         runId: intent.runId,
@@ -171,14 +172,14 @@ export class RunKernel {
         createdAt: Date.now(),
       };
     }
-    this.emit(intent, 'selection.decided', {
+    await this.emit(intent, 'selection.decided', {
       selectedId: selection.selectedId ?? 'none',
       explanation: selection.explanation,
       receiptId: selection.receiptId,
     });
 
     if (!selection.selectedId) {
-      this.emit(intent, 'run.failed', { reason: 'NO_CANDIDATE_SELECTED' });
+      await this.emit(intent, 'run.failed', { reason: 'NO_CANDIDATE_SELECTED' });
       return {
         receiptId: `rcpt_fail_${intent.runId}_${Date.now()}`,
         runId: intent.runId,
@@ -195,7 +196,7 @@ export class RunKernel {
     try {
       targetPolicy = await this.securityAdapter.targetPreflight(intent, selection.selectedId);
     } catch {
-      this.emit(intent, 'run.failed', { reason: 'TARGET_SECURITY_PREFLIGHT_FAILED' });
+      await this.emit(intent, 'run.failed', { reason: 'TARGET_SECURITY_PREFLIGHT_FAILED' });
       return {
         receiptId: `rcpt_fail_${intent.runId}_${Date.now()}`,
         runId: intent.runId,
@@ -215,7 +216,7 @@ export class RunKernel {
         capabilities: targetPolicy.capabilities,
         expiresAt: targetPolicy.expiresAt,
       };
-      this.emit(intent, 'approval.required', approval);
+      await this.emit(intent, 'approval.required', approval);
       return {
         receiptId: `rcpt_approval_${intent.runId}_${Date.now()}`,
         runId: intent.runId,
@@ -229,7 +230,7 @@ export class RunKernel {
     }
 
     if (targetPolicy.decision === 'deny') {
-      this.emit(intent, 'run.failed', { reason: 'TARGET_SECURITY_DENIED' });
+      await this.emit(intent, 'run.failed', { reason: 'TARGET_SECURITY_DENIED' });
       return {
         receiptId: `rcpt_fail_${intent.runId}_${Date.now()}`,
         runId: intent.runId,
@@ -242,7 +243,7 @@ export class RunKernel {
     }
 
     // 6. Resource Lease Request & Grant
-    this.emit(intent, 'lease.requested', { candidateId: selection.selectedId });
+    await this.emit(intent, 'lease.requested', { candidateId: selection.selectedId });
     let lease: ResourceLease;
     try {
       lease = await this.resourceAdapter.requestLease({
@@ -254,7 +255,7 @@ export class RunKernel {
         priority: 1,
       });
     } catch {
-      this.emit(intent, 'run.failed', { reason: 'RESOURCE_LEASE_REJECTED' });
+      await this.emit(intent, 'run.failed', { reason: 'RESOURCE_LEASE_REJECTED' });
       return {
         receiptId: `rcpt_fail_${intent.runId}_${Date.now()}`,
         runId: intent.runId,
@@ -265,34 +266,41 @@ export class RunKernel {
         createdAt: Date.now(),
       };
     }
-    this.emit(intent, 'lease.granted', { leaseId: lease.leaseId });
+    await this.emit(intent, 'lease.granted', { leaseId: lease.leaseId });
 
-    // 7. Execution & Outcome Verification
+    // 7. Execution and lease cleanup. A terminal event is emitted only after
+    // every lease is released, so replay never observes activity after a terminal state.
     let evidenceRefs: readonly string[] = [];
     let status: OutcomeReceipt['status'] = 'verified';
+    let failureReason: string | undefined;
 
     try {
-      this.emit(intent, 'execution.started', { leaseId: lease.leaseId });
+      await this.emit(intent, 'execution.started', { leaseId: lease.leaseId });
       const result = await executor(lease.leaseId);
       evidenceRefs = result.evidenceRefs;
-      this.emit(intent, 'evidence.recorded', { count: evidenceRefs.length });
-      this.emit(intent, 'outcome.verified', { status: 'verified' });
+      await this.emit(intent, 'evidence.recorded', { count: evidenceRefs.length });
     } catch {
       status = 'failed';
-      this.emit(intent, 'run.failed', { reason: 'EXECUTION_THREW_ERROR' });
+      failureReason = 'EXECUTION_THREW_ERROR';
     } finally {
       try {
         const released = await this.resourceAdapter.releaseLease(lease.leaseId);
         if (released) {
-          this.emit(intent, 'lease.released', { leaseId: lease.leaseId });
+          await this.emit(intent, 'lease.released', { leaseId: lease.leaseId });
         } else {
           status = 'failed';
-          this.emit(intent, 'run.failed', { reason: 'LEASE_RELEASE_FAILED' });
+          failureReason = 'LEASE_RELEASE_FAILED';
         }
       } catch {
         status = 'failed';
-        this.emit(intent, 'run.failed', { reason: 'LEASE_RELEASE_FAILED' });
+        failureReason = 'LEASE_RELEASE_FAILED';
       }
+    }
+
+    if (status === 'verified') {
+      await this.emit(intent, 'outcome.verified', { status: 'verified' });
+    } else {
+      await this.emit(intent, 'run.failed', { reason: failureReason ?? 'EXECUTION_FAILED' });
     }
 
     return {

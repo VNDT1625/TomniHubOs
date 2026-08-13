@@ -112,7 +112,7 @@ describe('RunKernel Foundation Integration', () => {
     const events = kernel.eventStore.getEventsByRunId(intent.runId);
     expect(events.length).toBeGreaterThanOrEqual(9);
     expect(events[0].eventType).toBe('run.created');
-    expect(events[events.length - 1].eventType).toBe('lease.released');
+    expect(events[events.length - 1].eventType).toBe('outcome.verified');
   });
 
   it('should handle empty candidates by returning failed receipt', async () => {
