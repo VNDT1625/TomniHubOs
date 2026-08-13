@@ -30,7 +30,7 @@ describe('Tomny direct model discovery', () => {
     );
   });
 
-  it('normalizes Gemini model names and verifies the protocol without AionCore', async () => {
+  it('normalizes Gemini model names and verifies the protocol without TomnyCore', async () => {
     const fetchImpl = vi.fn(
       async () =>
         new Response(

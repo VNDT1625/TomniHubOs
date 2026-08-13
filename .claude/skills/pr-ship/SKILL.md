@@ -151,7 +151,7 @@ done
 
 ```bash
 REPO_ROOT=$(git rev-parse --show-toplevel)
-WORKTREE_DIR="/tmp/aionui-ship-${PR_NUMBER}"
+WORKTREE_DIR="/tmp/tomni-ship-${PR_NUMBER}"
 HEAD_BRANCH=$(gh pr view $PR_NUMBER --json headRefName --jq '.headRefName')
 
 # Clean up stale worktree
@@ -328,7 +328,7 @@ ScheduleWakeup(
 - **No label pollution** — pr-ship does not set any `bot:*` labels
 - **ScheduleWakeup only for CI wait** — never during review or fix execution
 - **REPO detection at runtime** — `gh repo view --json nameWithOwner --jq '.nameWithOwner'`
-- **Worktree path** — always `/tmp/aionui-ship-<PR_NUMBER>` (distinct from pr-automation's `/tmp/aionui-pr-*` and pr-verify's `/tmp/aionui-verify-*`)
+- **Worktree path** — always `/tmp/tomni-ship-<PR_NUMBER>` (distinct from pr-automation's `/tmp/tomni-pr-*` and pr-verify's `/tmp/tomni-verify-*`)
 - **Worktree cleanup** — always remove worktree after CI fix, even on failure
 
 ## Quick Reference

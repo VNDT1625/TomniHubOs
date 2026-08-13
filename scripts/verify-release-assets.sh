@@ -65,7 +65,7 @@ for f in latest-win-arm64.yml latest-arm64-mac.yml; do
   fi
 done
 
-for f in AionUi-1.0.0-win-x64.exe AionUi-1.0.0-win-arm64.exe AionUi-1.0.0-mac-x64.dmg AionUi-1.0.0-mac-arm64.dmg AionUi-1.0.0.deb AionUi-1.0.0-arm64.deb; do
+for f in Tomny-1.0.0-win-x64.exe Tomny-1.0.0-win-arm64.exe Tomny-1.0.0-mac-x64.dmg Tomny-1.0.0-mac-arm64.dmg Tomny-1.0.0.deb Tomny-1.0.0-arm64.deb; do
   if [ ! -f "$OUTPUT_DIR/$f" ]; then
     echo "FAIL: missing distributable: $f"
     ERRORS=$((ERRORS + 1))
@@ -74,7 +74,7 @@ for f in AionUi-1.0.0-win-x64.exe AionUi-1.0.0-win-arm64.exe AionUi-1.0.0-mac-x6
   fi
 done
 
-for f in AionUi-1.0.0-win-x64.exe.blockmap AionUi-1.0.0-win-arm64.exe.blockmap; do
+for f in Tomny-1.0.0-win-x64.exe.blockmap Tomny-1.0.0-win-arm64.exe.blockmap; do
   if [ ! -f "$OUTPUT_DIR/$f" ]; then
     echo "FAIL: missing differential update blockmap: $f"
     ERRORS=$((ERRORS + 1))
@@ -85,7 +85,7 @@ done
 
 # Web-CLI tarballs + checksums
 for plat in darwin-arm64 darwin-x86_64 linux-arm64 linux-x86_64 win-x86_64; do
-  tarball="aionui-web-1.0.0-${plat}.tar.gz"
+  tarball="tomny-web-1.0.0-${plat}.tar.gz"
   for f in "$tarball" "${tarball}.sha256"; do
     if [ ! -f "$OUTPUT_DIR/$f" ]; then
       echo "FAIL: missing web-cli asset: $f"

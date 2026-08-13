@@ -28,7 +28,7 @@ type StreamRegistry = {
   >;
 };
 
-const ENABLED_CONVERSATION_KEY = 'aionui:e2e-message-stream-conversation-id';
+const ENABLED_CONVERSATION_KEY = 'tomny:e2e-message-stream-conversation-id';
 const BACKGROUND_STREAM_PROMISE_KEY = '__messageListStreamRunPromise';
 
 function createFakeClaudeConversation(id: string) {
@@ -193,9 +193,9 @@ async function waitForStreamController(page: Page, targetConversationId: string)
     (id) => {
       const registry = (
         window as typeof window & {
-          __AIONUI_E2E_MESSAGE_STREAM__?: StreamRegistry;
+          __TOMNY_E2E_MESSAGE_STREAM__?: StreamRegistry;
         }
-      ).__AIONUI_E2E_MESSAGE_STREAM__;
+      ).__TOMNY_E2E_MESSAGE_STREAM__;
       return Boolean(registry?.controllers[id]);
     },
     targetConversationId,
@@ -216,9 +216,9 @@ async function runScenario(
     async ({ currentConversationId, scenarioOptions }) => {
       const registry = (
         window as typeof window & {
-          __AIONUI_E2E_MESSAGE_STREAM__?: StreamRegistry;
+          __TOMNY_E2E_MESSAGE_STREAM__?: StreamRegistry;
         }
-      ).__AIONUI_E2E_MESSAGE_STREAM__;
+      ).__TOMNY_E2E_MESSAGE_STREAM__;
       const controller = registry?.controllers[currentConversationId];
       if (!controller) {
         throw new Error(`No E2E stream controller registered for conversation ${currentConversationId}`);
@@ -242,10 +242,10 @@ async function startScenarioInBackground(
     ({ currentConversationId, promiseKey, scenarioOptions }) => {
       const registry = (
         window as typeof window & {
-          __AIONUI_E2E_MESSAGE_STREAM__?: StreamRegistry;
+          __TOMNY_E2E_MESSAGE_STREAM__?: StreamRegistry;
           [BACKGROUND_STREAM_PROMISE_KEY]?: Promise<void>;
         }
-      ).__AIONUI_E2E_MESSAGE_STREAM__;
+      ).__TOMNY_E2E_MESSAGE_STREAM__;
       const controller = registry?.controllers[currentConversationId];
       if (!controller) {
         throw new Error(`No E2E stream controller registered for conversation ${currentConversationId}`);

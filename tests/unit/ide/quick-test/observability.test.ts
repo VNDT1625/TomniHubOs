@@ -39,7 +39,7 @@ describe('Quick Test network inspection', () => {
         url: 'https://user:pass@app.test/data?token=top-secret&ok=1',
         requestHeaders: { Authorization: 'Bearer abc', Accept: 'application/json' },
         responseHeaders: { 'Set-Cookie': 'sid=abc', Server: 'test' },
-        requestBody: JSON.stringify({ profile: { password: 'pw', name: 'Aion' } }),
+        requestBody: JSON.stringify({ profile: { password: 'pw', name: 'Tomny' } }),
         responseBody: 'token=raw-token',
         error: 'Bearer private-token failed',
       }),

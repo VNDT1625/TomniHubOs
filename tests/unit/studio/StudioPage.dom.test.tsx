@@ -1,10 +1,10 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -29,9 +29,6 @@ vi.mock('@/renderer/pages/studio/components/StudioPeerView', () => ({ default: (
 vi.mock('@/renderer/pages/studio/automation/AutomationView', () => ({ default: () => null }));
 vi.mock('@/renderer/pages/studio/makevideo/MakeVideoView', () => ({ default: () => null }));
 vi.mock('@renderer/pages/music', () => ({ default: () => null }));
-vi.mock('@/renderer/pages/studio/ide/IdeWorkspace', () => ({
-  default: () => <div data-testid='ide-workspace' />,
-}));
 
 import StudioPage from '@/renderer/pages/studio/StudioPage';
 
@@ -49,17 +46,14 @@ beforeEach(() => {
 
 afterEach(() => cleanup());
 
-describe('StudioPage view persistence', () => {
-  it('returns to the IDE after Studio is unmounted and mounted again', async () => {
-    const firstMount = render(<StudioPage />);
+describe('StudioPage package navigation', () => {
+  it('delegates IDE launch to the installed IDE package', () => {
+    const onOpenIde = vi.fn();
+    render(<StudioPage onOpenIde={onOpenIde} />);
 
     fireEvent.click(screen.getByTestId('open-ide'));
-    expect(await screen.findByTestId('ide-workspace')).toBeInTheDocument();
-    await waitFor(() => expect(store.get('studio.lastView')).toBe(JSON.stringify({ mode: 'ide' })));
 
-    firstMount.unmount();
-    render(<StudioPage />);
-
-    expect(await screen.findByTestId('ide-workspace')).toBeInTheDocument();
+    expect(onOpenIde).toHaveBeenCalledTimes(1);
+    expect(onOpenIde).toHaveBeenCalledWith('files');
   });
 });

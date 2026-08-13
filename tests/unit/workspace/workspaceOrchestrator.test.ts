@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  *
  * Unit tests for process/workspace/workspaceOrchestrator — the engine that runs
@@ -19,10 +19,13 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
+import { createBrowserSurfaceRunner } from '@/process/workspace/browserSurfaceRunner';
 import { createWorkspaceOrchestrator } from '@/process/workspace/workspaceOrchestrator';
 import type { ISurfaceRunner, SurfaceSpec, WorkspaceEvent } from '@/process/workspace/surfaceTypes';
 import type { IResourceCoordinator } from '@/process/resource/resourceCoordinator';
 import type { Lease, LeaseRequest } from '@/process/resource/leaseTypes';
+import type { IBrowserViewManager } from '@/process/browser/browserViewManager';
+import type { IWebAgentRunner } from '@/process/browser/webAgentRunner';
 
 // ---------------------------------------------------------------------------
 // Fakes
@@ -105,6 +108,29 @@ const ids = (): (() => string) => () => `s${counter++}`;
 // ---------------------------------------------------------------------------
 
 describe('workspaceOrchestrator', () => {
+  it('preserves a browser agent stop reported independently of the workspace signal', async () => {
+    const viewManager = {
+      createTab: vi.fn(() => 'tab-1'),
+      destroyTab: vi.fn(),
+    } as unknown as IBrowserViewManager;
+    const agentRunner = {
+      run: vi.fn().mockResolvedValue({ answer: '', status: 'stopped', steps: 3 }),
+      cancel: vi.fn(),
+    } as unknown as IWebAgentRunner;
+    const runner = createBrowserSurfaceRunner({ viewManager, agentRunner });
+    const controller = new AbortController();
+    const spec = browserSpec();
+    const prepared = await runner.prepare(spec);
+
+    const outcome = await runner.run(spec, prepared, {
+      surfaceId: 's-browser',
+      signal: controller.signal,
+      emit: () => {},
+    });
+
+    expect(outcome.status).toBe('stopped');
+  });
+
   it('announces every surface up-front and runs each runner', async () => {
     const calls: string[] = [];
     const { coordinator } = immediateCoordinator();
@@ -169,6 +195,47 @@ describe('workspaceOrchestrator', () => {
     expect(active).toBe(0);
     expect(result.surfaces.find((s) => s.kind === 'editor')?.status).toBe('done');
     expect(result.surfaces.find((s) => s.kind === 'browser')?.status).toBe('error');
+  });
+
+  it('disposes a prepared browser surface when its runner fails', async () => {
+    const { coordinator } = immediateCoordinator();
+    const dispose = vi.fn();
+    const failingBrowserRunner: ISurfaceRunner = {
+      prepare: () => Promise.resolve({ title: 'browser', tabId: 'tab-1' }),
+      run: () => Promise.reject(new Error('runner failed')),
+      dispose,
+    };
+    const orchestrator = createWorkspaceOrchestrator({
+      runners: { browser: failingBrowserRunner, editor: okRunner([]) },
+      coordinator,
+      generateId: ids(),
+    });
+
+    const result = await orchestrator.run({ runId: 'r2-cleanup', surfaces: [browserSpec()] }, () => {});
+
+    expect(result.surfaces[0]?.status).toBe('error');
+    expect(dispose).toHaveBeenCalledOnce();
+  });
+
+  it('preserves a runner-reported stop instead of publishing a final answer', async () => {
+    const { coordinator } = immediateCoordinator();
+    const stoppedRunner: ISurfaceRunner = {
+      prepare: () => Promise.resolve({ title: 'browser', tabId: 'tab-1' }),
+      run: () => Promise.resolve({ answer: '', steps: 2, status: 'stopped' }),
+    };
+    const events: WorkspaceEvent[] = [];
+    const orchestrator = createWorkspaceOrchestrator({
+      runners: { browser: stoppedRunner, editor: okRunner([]) },
+      coordinator,
+      generateId: ids(),
+    });
+
+    const result = await orchestrator.run({ runId: 'r2-stopped', surfaces: [browserSpec()] }, (event) =>
+      events.push(event)
+    );
+
+    expect(result.surfaces[0]?.status).toBe('stopped');
+    expect(events.some((event) => event.type === 'surface-final')).toBe(false);
   });
 
   it('limits concurrency to the coordinator budget (gate)', async () => {

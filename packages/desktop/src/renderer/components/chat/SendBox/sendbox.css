@@ -1,31 +1,47 @@
 /* Sendbox component styles */
 
-/* Send button disabled state - override Arco Design default disabled styles */
-.send-button-custom:disabled,
-.send-button-custom.arco-btn:disabled,
-.send-button-custom.arco-btn-primary:disabled {
-  background-color: #d3d4d9 !important;
-  border-color: #d3d4d9 !important;
+.sendbox-panel {
+  background: var(--surface-glass-raised) !important;
+  backdrop-filter: var(--surface-glass-filter) !important;
+  -webkit-backdrop-filter: var(--surface-glass-filter) !important;
+  transition:
+    box-shadow 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 0.25s ease,
+    background-color 0.25s ease !important;
+}
+
+/* Send button custom styling - Vibrant Gradient Purple */
+.send-button-custom,
+.send-button-custom.arco-btn,
+.send-button-custom.arco-btn-primary,
+[data-theme='dark'] .send-button-custom:not(:disabled) {
+  width: 36px !important;
+  height: 36px !important;
+  min-width: 36px !important;
+  border-radius: 50% !important;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6) !important;
+  border: none !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.45) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
   opacity: 1 !important;
 }
 
-/* Make arrow icon thicker */
-.send-button-custom .arco-icon > svg {
+.send-button-custom .arco-icon,
+.send-button-custom svg {
+  color: #ffffff !important;
+  fill: #ffffff !important;
   stroke-width: 5 !important;
-  filter: drop-shadow(0 0 0.5px currentColor);
 }
 
-/* Dark mode: adjust send button brightness */
-[data-theme='dark'] .send-button-custom:not(:disabled) {
-  background-color: var(--aou-4) !important;
-  border-color: var(--aou-4) !important;
-}
-
-[data-theme='dark'] .send-button-custom:disabled,
-[data-theme='dark'] .send-button-custom.arco-btn:disabled,
-[data-theme='dark'] .send-button-custom.arco-btn-primary:disabled {
-  background-color: color-mix(in srgb, var(--color-fill-4) 82%, var(--color-bg-2)) !important;
-  border-color: color-mix(in srgb, var(--color-fill-4) 88%, var(--color-bg-2)) !important;
+.send-button-custom:disabled,
+.send-button-custom.arco-btn:disabled,
+.send-button-custom.arco-btn-primary:disabled {
+  background: color-mix(in srgb, #6366f1 40%, transparent) !important;
+  border: none !important;
+  opacity: 0.6 !important;
 }
 
 .sendbox-stop-button,
@@ -329,6 +345,24 @@
   flex-basis: 0 !important;
   flex-grow: 1 !important;
   max-width: max-content !important;
+}
+
+/* Mode selector compact pill - Vibrant Gradient Purple */
+[data-testid='mode-selector'] .arco-btn,
+.agent-mode-compact-pill,
+.sendbox-tools .agent-mode-compact-pill,
+.sendbox-actions .agent-mode-compact-pill {
+  background: linear-gradient(135deg, #6366f1, #8b5cf6) !important;
+  color: #ffffff !important;
+  border: none !important;
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.45) !important;
+}
+
+[data-testid='mode-selector'] .arco-btn *,
+.agent-mode-compact-pill *,
+.sendbox-tools .agent-mode-compact-pill *,
+.sendbox-actions .agent-mode-compact-pill * {
+  color: #ffffff !important;
 }
 
 .sendbox-tools .agent-mode-compact-pill .arco-btn-content,

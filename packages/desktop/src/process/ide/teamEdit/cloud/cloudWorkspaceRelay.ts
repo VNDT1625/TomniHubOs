@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -332,14 +332,14 @@ export const createCloudWorkspaceRelayClient = (
         name: config.displayName,
         intent,
       }),
-      headers: { 'x-aion-client-id': config.clientId },
+      headers: { 'x-tomny-client-id': config.clientId },
     });
 
   const releaseLease = async (relPath: string): Promise<boolean> => {
     const res = await requestJson<{ ok: boolean }>(fetchImpl, urls.leases, config.token, requestTimeoutMs, {
       method: 'DELETE',
       body: JSON.stringify({ relPath: normalizeCloudPath(relPath), clientId: config.clientId }),
-      headers: { 'x-aion-client-id': config.clientId },
+      headers: { 'x-tomny-client-id': config.clientId },
     });
     return res.ok;
   };

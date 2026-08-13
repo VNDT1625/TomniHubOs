@@ -37,8 +37,8 @@ import {
   type ConversationCommandQueueItem,
 } from '@/renderer/pages/conversation/platforms/useConversationCommandQueue';
 import { usePreviewContext } from '@/renderer/pages/conversation/Preview';
-import { ideClient } from '@/renderer/pages/studio/ide/ideClient';
-import { buildPlanningGuard } from '@/renderer/pages/studio/ide/planningGuard';
+import { coreIdeClient } from '@/renderer/services/coreIdeClient';
+import { buildPlanningGuard } from '@/renderer/services/planningGuard';
 import { expandGoalCommand, isGoalOffCommand, parseGoalCommand } from '@/common/chat/slash/goalCommand';
 import { expandBuild0Command } from '@/common/chat/slash/build0Command';
 import { clearGoalMode, setGoalMode, withGoalSteeringDirective } from '@/renderer/utils/chat/goalMode';
@@ -82,8 +82,8 @@ const buildSendFailureError = (error: unknown, message: string): AgentStreamErro
 
   return {
     message,
-    code: 'AIONUI_INTERNAL_ERROR',
-    ownership: 'aionui',
+    code: 'TOMNY_INTERNAL_ERROR',
+    ownership: 'tomny',
     detail: message,
     retryable: true,
     feedback_recommended: true,
@@ -290,7 +290,7 @@ const AcpSendBox: React.FC<{
         let outgoingMessage = modelBase;
         if (workspacePath && !messageListLoading && messages.length === 0) {
           const contextIntent = buildTeamTaskContextIntent(input, conversation_id);
-          const contextResult = await ideClient
+          const contextResult = await coreIdeClient
             .kgContext(workspacePath, contextIntent, [], true)
             .catch((): null => null);
           const pack = contextResult?.ok ? contextResult.data : null;

@@ -1,12 +1,12 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
 /**
  * Registers the Testing MCP server (Agent plane, Yêu cầu 2b — Task 15.1) into
- * the MCP catalog so aioncore's agent can reach it.
+ * the MCP catalog so tomnycore's agent can reach it.
  *
  * Because the Testing capability drives a live Main-process singleton, it is
  * hosted **in-process** over a loopback SSE endpoint (`testingMcpHost.ts`)

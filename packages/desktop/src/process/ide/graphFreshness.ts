@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -32,7 +32,7 @@ type StaleMarker = {
 const readStaleMarker = async (rootPath: string): Promise<StaleMarker | null> => {
   try {
     let text: string | null = null;
-    for (const metaDir of ['.tomni', '.omni', '.aionui']) {
+    for (const metaDir of ['.tomni', '.omni', '.tomny']) {
       try {
         text = await fs.readFile(path.join(rootPath, metaDir, 'understand', 'stale.json'), 'utf-8');
         break;

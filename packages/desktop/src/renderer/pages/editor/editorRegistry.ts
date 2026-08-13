@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -11,7 +11,7 @@
  * It classifies a file (by extension and/or MIME type) into an {@link EditorAdapterKind},
  * which the {@link UniversalEditor} (task 8.3) maps to a concrete adapter component.
  *
- * Design goals (see `.kiro/specs/aionui-enhancements/design.md`, "Yêu cầu 2a"):
+ * Design goals (see `.kiro/specs/tomny-enhancements/design.md`, "Yêu cầu 2a"):
  * - **Never stuck (criterion 2.9):** every file resolves to *some* adapter kind. When no
  *   specific adapter matches, classification falls back to `'raw-text'` so a file can always
  *   be opened, even if only as plain text.

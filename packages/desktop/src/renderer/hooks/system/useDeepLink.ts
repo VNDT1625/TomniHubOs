@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -44,10 +44,10 @@ export const consumePendingDeepLink = (): DeepLinkAddProviderDetail | null => {
 const ALLOWED_NAVIGATE_PATTERNS = [/^\/team\/[^/]+$/, /^\/conversation\/[^/]+$/];
 
 /**
- * Hook to listen for aionui:// deep link events from main process.
+ * Hook to listen for tomny:// deep link events from main process.
  * Routes 'add-provider' action to the model settings page.
  * Routes 'navigate' action to the specified route (whitelist-validated).
- * Routes 'open-url' action (http/https handed to AionUi as the default browser)
+ * Routes 'open-url' action (http/https handed to Tomny as the default browser)
  * to the built-in Browser tab.
  * The pre-fill data is stored in a module-level variable and consumed
  * by ModelModalContent on mount via consumePendingDeepLink().
@@ -71,7 +71,7 @@ export const useDeepLink = () => {
         return;
       }
 
-      // Web URL handed to AionUi by the OS (default browser) → open in a tab.
+      // Web URL handed to Tomny by the OS (default browser) → open in a tab.
       if (payload.action === 'open-url') {
         const url = payload.params.url;
         if (!url || !/^https?:\/\//i.test(url)) {

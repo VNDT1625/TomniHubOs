@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -78,7 +78,7 @@ export type BuildContextInput = {
   request: string;
   /** The repo's knowledge graph. */
   graph: KnowledgeGraph;
-  /** Project rules (from `.aionrules` etc.) to prepend. Optional. */
+  /** Project rules (from `.tomnyrules` etc.) to prepend. Optional. */
   rules?: string[];
   /** A recent graph diff (regression context). Optional — boosts changed files. */
   diff?: GraphDiff | null;

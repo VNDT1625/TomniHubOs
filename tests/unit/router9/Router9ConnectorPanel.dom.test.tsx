@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -41,10 +41,10 @@ vi.mock('@arco-design/web-react', () => {
   };
 });
 
-vi.mock('@/renderer/components/base/AionSelect', () => {
+vi.mock('@/renderer/components/base/TomnySelect', () => {
   // Keep this mock factory-local for the same hoisting reason.
   // eslint-disable-next-line unicorn/consistent-function-scoping
-  const AionSelect = ({
+  const TomnySelect = ({
     children,
     value,
     onChange,
@@ -67,10 +67,10 @@ vi.mock('@/renderer/components/base/AionSelect', () => {
       {children}
     </select>
   );
-  AionSelect.Option = ({ children, value }: React.PropsWithChildren<{ value?: string }>) => (
+  TomnySelect.Option = ({ children, value }: React.PropsWithChildren<{ value?: string }>) => (
     <option value={value}>{children}</option>
   );
-  return { default: AionSelect };
+  return { default: TomnySelect };
 });
 
 const router9ClientMocks = vi.hoisted(() => ({
@@ -130,7 +130,7 @@ describe('Router9ConnectorPanel CLI selector', () => {
     });
     router9ClientMocks.ensureClient.mockResolvedValue({
       ok: true,
-      data: { id: 'client-1', key: 'sk-restored', name: 'Tomni · Claude Code' },
+      data: { id: 'client-1', key: 'sk-restored', name: 'Tomny · Claude Code' },
     });
     router9ClientMocks.listProviders.mockResolvedValue({ ok: true, data: { connections: [] } });
     router9ClientMocks.listUsageLogs.mockResolvedValue({ ok: true, data: [] });
@@ -146,7 +146,7 @@ describe('Router9ConnectorPanel CLI selector', () => {
     render(<Router9ConnectorPanel />);
 
     await waitFor(() => {
-      expect(router9ClientMocks.ensureClient).toHaveBeenCalledWith('Tomni · Claude Code');
+      expect(router9ClientMocks.ensureClient).toHaveBeenCalledWith('Tomny · Claude Code');
       expect(router9ClientMocks.listModels).toHaveBeenCalledWith('sk-restored');
       expect(screen.getByRole('option', { name: 'cx/gpt-5.6-luna' })).toBeTruthy();
     });
@@ -167,6 +167,18 @@ describe('Router9ConnectorPanel CLI selector', () => {
     expect(selector.value).toBe('codex');
     expect(localStorage.getItem('tomni.modelGateway.target')).toBe('codex');
     expect(screen.getByText('settings.router9.target.codex')).toBeTruthy();
+  });
+
+  it('keeps auto-start available only through the explicit toggle', async () => {
+    router9ClientMocks.setAutoStart.mockResolvedValue({
+      ok: true,
+      data: { state: 'running', baseUrl: 'http://127.0.0.1:20129/v1', runtimeReady: true, autoStart: true },
+    });
+
+    render(<Router9ConnectorPanel />);
+    fireEvent.click(screen.getByText('switch'));
+
+    await waitFor(() => expect(router9ClientMocks.setAutoStart).toHaveBeenCalledWith(true));
   });
 
   it('starts and configures the selected standalone CLI in one action', async () => {
@@ -197,6 +209,7 @@ describe('Router9ConnectorPanel CLI selector', () => {
         apiKey: 'sk-test',
       });
     });
+    expect(router9ClientMocks.setAutoStart).not.toHaveBeenCalled();
   });
 
   it('applies reasoning independently from the model for a standalone CLI', async () => {
@@ -235,7 +248,7 @@ describe('Router9ConnectorPanel CLI selector', () => {
     ['claude-code', 'claude'],
     ['codex', 'codex'],
     ['openclaw', 'openclaw-gateway'],
-  ])('persists the selected 9Router model for the matching %s Tomni chat agent', async (targetId, agentKey) => {
+  ])('persists the selected 9Router model for the matching %s Tomny chat agent', async (targetId, agentKey) => {
     router9ClientMocks.start.mockResolvedValue({
       ok: true,
       data: { state: 'running', baseUrl: 'http://127.0.0.1:20129/v1', runtimeReady: true },
@@ -281,7 +294,7 @@ describe('Router9ConnectorPanel CLI selector', () => {
     ['antigravity', 'antigravity'],
     ['cursor', 'cursor'],
   ])(
-    'syncs manual %s model selection to Tomni without claiming the external CLI was configured',
+    'syncs manual %s model selection to Tomny without claiming the external CLI was configured',
     async (targetId, agentKey) => {
       router9ClientMocks.start.mockResolvedValue({
         ok: true,
@@ -305,7 +318,7 @@ describe('Router9ConnectorPanel CLI selector', () => {
 
       await waitFor(() => expect(screen.getByRole('option', { name: 'cx/gpt-5.6-luna' })).toBeTruthy());
       fireEvent.change(screen.getByLabelText('settings.router9.modelLabel'), { target: { value: 'cx/gpt-5.6-luna' } });
-      fireEvent.click(screen.getByText('settings.router9.useInTomniChat'));
+      fireEvent.click(screen.getByText('settings.router9.useInTomnyChat'));
 
       await waitFor(() => expect(savePreferredModelIdMock).toHaveBeenCalledWith(agentKey, 'cx/gpt-5.6-luna'));
       expect(router9ClientMocks.applyPlan).not.toHaveBeenCalled();

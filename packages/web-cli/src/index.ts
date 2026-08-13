@@ -1,5 +1,5 @@
-import { startWebHost, startStaticServer } from '@aionui/web-host';
-import type { WebHostHandle, StaticServerHandle } from '@aionui/web-host';
+import { startWebHost, startStaticServer } from '@tomny/web-host';
+import type { WebHostHandle, StaticServerHandle } from '@tomny/web-host';
 import { setTimeout as delay } from 'node:timers/promises';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -8,9 +8,11 @@ import { fileURLToPath } from 'node:url';
 import { openBrowserUrl, shouldAutoOpenBrowser } from './browser.js';
 import { ensureAdminPassword } from './ensureAdminPassword.js';
 
+import { createWebCliPackageApiHandler, resolveWebCliPackageArtifactUrl } from './packageApi.js';
+
 // tarball layout:
-//   aionui-web/
-//   ├── aionui-web              ← bun-compiled standalone binary (process.execPath)
+//   tomny-web/
+//   ├── tomny-web              ← bun-compiled standalone binary (process.execPath)
 //   ├── package.json             ← for runtime version lookup
 //   ├── bundled-tomny-core/<plat-arch>/tomny-core[.exe]
 //   └── static/                  ← SPA assets
@@ -20,11 +22,11 @@ import { ensureAdminPassword } from './ensureAdminPassword.js';
 // sibling files. In dev (tsx/node), process.execPath is the node/bun binary,
 // so fall back to import.meta.url there.
 function resolveCliRoot(): string {
-  // Heuristic: if the executable path ends in "aionui-web" or "aionui-web.exe",
+  // Heuristic: if the executable path ends in "tomny-web" or "tomny-web.exe",
   // treat it as the packaged single-file binary and return its directory.
   const exe = process.execPath;
   const exeName = path.basename(exe).toLowerCase();
-  if (exeName === 'aionui-web' || exeName === 'aionui-web.exe') {
+  if (exeName === 'tomny-web' || exeName === 'tomny-web.exe') {
     return path.dirname(exe);
   }
   // Dev mode (tsx/node/bun running from source): use import.meta.url
@@ -46,12 +48,12 @@ const cliRoot = resolveCliRoot();
 // binary itself can do about first-launch quarantine.
 const isPackaged = (() => {
   const exeName = path.basename(process.execPath).toLowerCase();
-  return exeName === 'aionui-web' || exeName === 'aionui-web.exe';
+  return exeName === 'tomny-web' || exeName === 'tomny-web.exe';
 })();
 
 const BACKEND_BINARY = process.platform === 'win32' ? 'tomny-core.exe' : 'tomny-core';
 const DEFAULT_PORT = 25808;
-const RESET_COMMAND = isPackaged ? 'aionui-web resetpass' : 'bun run resetpass';
+const RESET_COMMAND = isPackaged ? 'tomny-web resetpass' : 'bun run resetpass';
 
 let currentHandle: WebHostHandle | StaticServerHandle | null = null;
 
@@ -76,7 +78,7 @@ function parseArgs(argv: string[]): { command: string; flags: Map<string, string
 function resolveBackendBinary(flags: Map<string, string | true>): string {
   const override = flags.get('backend-bin');
   if (typeof override === 'string') return path.resolve(override);
-  const envOverride = process.env.AIONUI_BACKEND_BIN;
+  const envOverride = process.env.TOMNY_BACKEND_BIN;
   if (envOverride) return path.resolve(envOverride);
   const platArch = `${process.platform}-${process.arch}`;
   const bundled = path.join(cliRoot, 'bundled-tomny-core', platArch, BACKEND_BINARY);
@@ -92,15 +94,15 @@ function resolveStaticDir(flags: Map<string, string | true>): string {
 function resolveDataDir(flags: Map<string, string | true>): string {
   const override = flags.get('data-dir');
   if (typeof override === 'string') return path.resolve(override);
-  const envOverride = process.env.AIONUI_DATA_DIR;
+  const envOverride = process.env.TOMNY_DATA_DIR;
   if (envOverride) return path.resolve(envOverride);
-  return path.join(os.homedir(), '.aionui-web');
+  return path.join(os.homedir(), '.tomny-web');
 }
 
 function resolveLogDir(flags: Map<string, string | true>, dataDir: string): string {
   const override = flags.get('log-dir');
   if (typeof override === 'string') return path.resolve(override);
-  const envOverride = process.env.AIONUI_LOG_DIR;
+  const envOverride = process.env.TOMNY_LOG_DIR;
   if (envOverride) return path.resolve(envOverride);
   return path.join(dataDir, 'logs');
 }
@@ -108,14 +110,14 @@ function resolveLogDir(flags: Map<string, string | true>, dataDir: string): stri
 function resolvePort(flags: Map<string, string | true>): number {
   const cli = flags.get('port');
   if (typeof cli === 'string' && /^\d+$/.test(cli)) return Number(cli);
-  const env = process.env.AIONUI_PORT ?? process.env.PORT;
+  const env = process.env.TOMNY_PORT ?? process.env.PORT;
   if (env && /^\d+$/.test(env)) return Number(env);
   return DEFAULT_PORT;
 }
 
 function resolveAllowRemote(flags: Map<string, string | true>): boolean {
   if (flags.has('remote')) return true;
-  const env = process.env.AIONUI_ALLOW_REMOTE ?? process.env.AIONUI_REMOTE;
+  const env = process.env.TOMNY_ALLOW_REMOTE ?? process.env.TOMNY_REMOTE;
   if (!env) return false;
   return ['1', 'true', 'yes', 'on'].includes(env.trim().toLowerCase());
 }
@@ -148,17 +150,17 @@ async function runStart(flags: Map<string, string | true>): Promise<void> {
   });
 
   if (!fs.existsSync(staticDir)) {
-    console.error(`[aionui-web] static dir not found: ${staticDir}`);
+    console.error(`[tomny-web] static dir not found: ${staticDir}`);
     console.error(`  hint: pass --static-dir <path> pointing to the SPA build output`);
     process.exit(1);
   }
 
-  console.log(`[aionui-web] version    : ${version}`);
-  console.log(`[aionui-web] data dir   : ${dataDir}`);
-  console.log(`[aionui-web] log dir    : ${logDir}`);
-  console.log(`[aionui-web] static dir : ${staticDir}`);
-  console.log(`[aionui-web] backend bin: ${backendBin}`);
-  console.log(`[aionui-web] launching  : port=${port} allowRemote=${allowRemote}`);
+  console.log(`[tomny-web] version    : ${version}`);
+  console.log(`[tomny-web] data dir   : ${dataDir}`);
+  console.log(`[tomny-web] log dir    : ${logDir}`);
+  console.log(`[tomny-web] static dir : ${staticDir}`);
+  console.log(`[tomny-web] backend bin: ${backendBin}`);
+  console.log(`[tomny-web] launching  : port=${port} allowRemote=${allowRemote}`);
 
   const backendAvailable = fs.existsSync(backendBin);
 
@@ -170,7 +172,7 @@ async function runStart(flags: Map<string, string | true>): Promise<void> {
     console.warn('⚠️  Backend binary not found — starting in FRONTEND-ONLY mode.');
     console.warn(`   Missing: ${backendBin}`);
     console.warn('   The web UI will load but API calls will fail until a backend is available.');
-    console.warn('   To enable backend: build or install Tomny Core and set AIONUI_BACKEND_BIN.');
+    console.warn('   To enable backend: build or install Tomny Core and set TOMNY_BACKEND_BIN.');
     console.warn('');
 
     const handle = await startStaticServer({
@@ -182,15 +184,15 @@ async function runStart(flags: Map<string, string | true>): Promise<void> {
     currentHandle = handle;
 
     console.log('');
-    console.log('AionUi WebUI (frontend only) is ready');
+    console.log('Tomny WebUI (frontend only) is ready');
     console.log(`  Local  : ${handle.localUrl}`);
     if (handle.networkUrl) console.log(`  Network: ${handle.networkUrl}`);
     if (autoOpenBrowser) {
       const openResult = openBrowserUrl(handle.localUrl);
       if (openResult.ok) {
-        console.log(`[aionui-web] opened ${handle.localUrl} in your browser.`);
+        console.log(`[tomny-web] opened ${handle.localUrl} in your browser.`);
       } else {
-        console.warn(`[aionui-web] could not open the browser automatically: ${openResult.reason}`);
+        console.warn(`[tomny-web] could not open the browser automatically: ${openResult.reason}`);
       }
     }
     console.log('');
@@ -213,6 +215,13 @@ async function runStart(flags: Map<string, string | true>): Promise<void> {
         workDir: dataDir,
         logDir,
       },
+      createLocalApiHandler: (backendPort) =>
+        createWebCliPackageApiHandler({
+          dataDir,
+          appVersion: version,
+          backendPort,
+          resolveArtifactUrl: (url) => resolveWebCliPackageArtifactUrl(url),
+        }),
       backend: {
         kind: 'ownBackend',
         resolveBackend: () => backendBin,
@@ -222,7 +231,7 @@ async function runStart(flags: Map<string, string | true>): Promise<void> {
     currentHandle = handle;
 
     console.log('');
-    console.log('AionUi WebUI is ready');
+    console.log('Tomny WebUI is ready');
     console.log(`  Local  : ${handle.localUrl}`);
     if (handle.networkUrl) console.log(`  Network: ${handle.networkUrl}`);
 
@@ -243,9 +252,9 @@ async function runStart(flags: Map<string, string | true>): Promise<void> {
     if (autoOpenBrowser) {
       const openResult = openBrowserUrl(handle.localUrl);
       if (openResult.ok) {
-        console.log(`[aionui-web] opened ${handle.localUrl} in your browser.`);
+        console.log(`[tomny-web] opened ${handle.localUrl} in your browser.`);
       } else {
-        console.warn(`[aionui-web] could not open the browser automatically: ${openResult.reason}`);
+        console.warn(`[tomny-web] could not open the browser automatically: ${openResult.reason}`);
       }
     }
 
@@ -257,11 +266,11 @@ async function runStart(flags: Map<string, string | true>): Promise<void> {
   const shutdown = async (signal: string): Promise<void> => {
     if (shuttingDown) return;
     shuttingDown = true;
-    console.log(`\n[aionui-web] received ${signal}, stopping...`);
+    console.log(`\n[tomny-web] received ${signal}, stopping...`);
     try {
       if (currentHandle) await currentHandle.stop();
     } catch (err) {
-      console.error('[aionui-web] stop failed:', err);
+      console.error('[tomny-web] stop failed:', err);
     }
     process.exit(0);
   };
@@ -270,7 +279,7 @@ async function runStart(flags: Map<string, string | true>): Promise<void> {
 }
 
 /**
- * `aionui-web resetpass` — spin up the backend just long enough to POST
+ * `tomny-web resetpass` — spin up the backend just long enough to POST
  * /api/webui/reset-password, print the new plaintext password, then tear down.
  * Uses the same data-dir resolution as `start`, so the reset targets whichever
  * DB the user normally runs against.
@@ -278,8 +287,8 @@ async function runStart(flags: Map<string, string | true>): Promise<void> {
 async function runResetPassword(flags: Map<string, string | true>): Promise<void> {
   const backendBin = resolveBackendBinary(flags);
   if (!fs.existsSync(backendBin)) {
-    console.error(`[aionui-web] backend binary not found: ${backendBin}`);
-    console.error('  hint: pass --backend-bin <path> or set AIONUI_BACKEND_BIN');
+    console.error(`[tomny-web] backend binary not found: ${backendBin}`);
+    console.error('  hint: pass --backend-bin <path> or set TOMNY_BACKEND_BIN');
     process.exit(1);
   }
   const dataDir = resolveDataDir(flags);
@@ -289,7 +298,7 @@ async function runResetPassword(flags: Map<string, string | true>): Promise<void
   const staticDir = resolveStaticDir(flags);
   const version = readPackageVersion();
 
-  console.log(`[aionui-web] resetting admin password in ${dataDir}`);
+  console.log(`[tomny-web] resetting admin password in ${dataDir}`);
 
   const handle = await startWebHost({
     app: {
@@ -328,7 +337,7 @@ async function runResetPassword(flags: Map<string, string | true>): Promise<void
       await delay(500);
     }
     if (!ready) {
-      console.error('[aionui-web] backend did not become ready within 15s');
+      console.error('[tomny-web] backend did not become ready within 15s');
       process.exit(1);
     }
 
@@ -336,7 +345,7 @@ async function runResetPassword(flags: Map<string, string | true>): Promise<void
       method: 'POST',
     });
     if (!res.ok) {
-      console.error(`[aionui-web] /api/webui/reset-password returned ${res.status}`);
+      console.error(`[tomny-web] /api/webui/reset-password returned ${res.status}`);
       process.exit(1);
     }
     const payload = (await res.json()) as {
@@ -347,12 +356,12 @@ async function runResetPassword(flags: Map<string, string | true>): Promise<void
     const newPassword = payload.data?.new_password ?? payload.new_password;
     const username = payload.data?.username ?? payload.username ?? 'admin';
     if (!newPassword) {
-      console.error('[aionui-web] reset-password response missing new_password');
+      console.error('[tomny-web] reset-password response missing new_password');
       process.exit(1);
     }
-    console.log(`[aionui-web] username: ${username}`);
-    console.log(`[aionui-web] new password: ${newPassword}`);
-    console.log('[aionui-web] existing sessions have been invalidated.');
+    console.log(`[tomny-web] username: ${username}`);
+    console.log(`[tomny-web] new password: ${newPassword}`);
+    console.log('[tomny-web] existing sessions have been invalidated.');
   } finally {
     try {
       await handle.stop();
@@ -372,7 +381,7 @@ async function main(): Promise<void> {
   }
 
   if (command === '--help' || command === 'help' || command === '-h') {
-    console.log(`Usage: aionui-web <command> [options]
+    console.log(`Usage: tomny-web <command> [options]
 
 Commands:
   start              Start the WebUI (default)
@@ -385,18 +394,19 @@ Options for start:
   --remote                Bind 0.0.0.0 instead of 127.0.0.1
   --open                  Force opening the local URL in a browser
   --no-open               Disable automatic browser opening
-  --data-dir <path>       Override data dir (default: ~/.aionui-web)
+  --data-dir <path>       Override data dir (default: ~/.tomny-web)
   --log-dir <path>        Override log dir (default: <data-dir>/logs)
   --static-dir <path>     Override static assets dir
   --backend-bin <path>    Override backend binary path
 
 Options for resetpass:
-  --data-dir <path>       Which data dir to reset (default: ~/.aionui-web)
+  --data-dir <path>       Which data dir to reset (default: ~/.tomny-web)
   --backend-bin <path>    Override backend binary path
 
 Environment variables:
-  AIONUI_PORT, AIONUI_ALLOW_REMOTE, AIONUI_DATA_DIR, AIONUI_LOG_DIR,
-  AIONUI_BACKEND_BIN, AIONUI_OPEN_BROWSER
+  TOMNY_PORT, TOMNY_ALLOW_REMOTE, TOMNY_DATA_DIR, TOMNY_LOG_DIR,
+  TOMNY_BACKEND_BIN, TOMNY_OPEN_BROWSER,
+  TOMNI_PACKAGE_ARTIFACT_URL, TOMNI_PACKAGE_ARTIFACT_BASE_URL
 `);
     return;
   }
@@ -408,7 +418,7 @@ Environment variables:
 
   if (command !== 'start') {
     console.error(`Unknown command: ${command}`);
-    console.error('Usage: aionui-web [start|resetpass|version|help]');
+    console.error('Usage: tomny-web [start|resetpass|version|help]');
     process.exit(1);
   }
 
@@ -416,7 +426,7 @@ Environment variables:
 }
 
 main().catch((err: Error) => {
-  console.error('[aionui-web] fatal:', err.message);
+  console.error('[tomny-web] fatal:', err.message);
   if (currentHandle) void currentHandle.stop().catch(() => undefined);
   process.exit(1);
 });

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -13,8 +13,8 @@ import { ipcBridge } from '@/common';
 import { emitter, useAddEventListener } from '@renderer/utils/emitter.ts';
 import { iconColors } from '@renderer/styles/colors';
 
-const MONITOR_URL_STORAGE_KEY = 'aionui.openclaw.monitorUrl';
-const STAR_OFFICE_URL_KEY = 'aionui.starOffice.url';
+const MONITOR_URL_STORAGE_KEY = 'tomny.openclaw.monitorUrl';
+const STAR_OFFICE_URL_KEY = 'tomny.starOffice.url';
 const DEFAULT_MONITOR_URL = 'http://127.0.0.1:19000';
 const STAR_OFFICE_DETECT_TIMEOUT_DEFAULT = 1200;
 const STAR_OFFICE_DETECT_TIMEOUT_RETRY = 2400;

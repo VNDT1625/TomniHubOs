@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -81,7 +81,7 @@ const TelegramConfigForm: React.FC<TelegramConfigFormProps> = ({
     backend?: string;
     name?: string;
     id?: string;
-  }>({ agent_type: 'aionrs' });
+  }>({ agent_type: 'tomnyagentic' });
 
   const [permissionMode, setPermissionMode] = useState('yolo');
 
@@ -147,7 +147,7 @@ const TelegramConfigForm: React.FC<TelegramConfigFormProps> = ({
           const backend = typeof s.backend === 'string' ? s.backend : undefined;
 
           if (!agentType && backend) {
-            agentType = ['aionrs', 'tomni-cli', 'openclaw-gateway', 'nanobot', 'remote'].includes(backend)
+            agentType = ['tomnyagentic', 'tomni-cli', 'openclaw-gateway', 'nanobot', 'remote'].includes(backend)
               ? backend
               : 'acp';
           }
@@ -167,7 +167,7 @@ const TelegramConfigForm: React.FC<TelegramConfigFormProps> = ({
           // Very old legacy rows store just the backend/agent-type
           // string. Top-level AgentTypes pass through verbatim; any
           // other value is an ACP vendor label.
-          const agentType = ['aionrs', 'tomni-cli', 'openclaw-gateway', 'nanobot', 'remote'].includes(saved)
+          const agentType = ['tomnyagentic', 'tomni-cli', 'openclaw-gateway', 'nanobot', 'remote'].includes(saved)
             ? saved
             : 'acp';
           setSelectedAgent({ agent_type: agentType, backend: saved });
@@ -369,7 +369,7 @@ const TelegramConfigForm: React.FC<TelegramConfigFormProps> = ({
     return `${remaining} min`;
   };
 
-  const showModelSelector = selectedAgent.agent_type === 'aionrs';
+  const showModelSelector = selectedAgent.agent_type === 'tomnyagentic';
 
   const permissionOptions = getAgentModes(selectedAgent.backend ?? selectedAgent.agent_type);
   const activePermissionMode = permissionOptions.some((option) => option.value === permissionMode)
@@ -380,7 +380,7 @@ const TelegramConfigForm: React.FC<TelegramConfigFormProps> = ({
     backend?: string;
     name: string;
     id?: string;
-  }> = availableAgents.length > 0 ? availableAgents : [{ agent_type: 'aionrs', name: 'Tomny Agentic' }];
+  }> = availableAgents.length > 0 ? availableAgents : [{ agent_type: 'tomnyagentic', name: 'Tomny Agentic' }];
 
   return (
     <div className='flex flex-col gap-24px'>
@@ -491,7 +491,7 @@ const TelegramConfigForm: React.FC<TelegramConfigFormProps> = ({
                         setSelectedAgent(next);
                         void persistSelectedAgent(next);
 
-                        if (next.agent_type === 'aionrs') {
+                        if (next.agent_type === 'tomnyagentic') {
                           const savedModel = configService.get('assistant.telegram.defaultModel');
                           const providers = modelSelection.providers;
                           const savedProviderExists = savedModel?.id && providers.some((p) => p.id === savedModel.id);

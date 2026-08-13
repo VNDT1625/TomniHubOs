@@ -5,7 +5,7 @@
 set -euo pipefail
 
 VERSION="0.1.0"
-REPO="AionUi/MTUI"
+REPO="Tomny/MTUI"
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 ARCH=$(uname -m)
 case "$ARCH" in

@@ -105,8 +105,8 @@
       "selectFolder": "[Select Folder]",
       "clearFolder": "[Clear]",
       "model": "[Model]",
-      "aionrsModelRequired": "Выберите модель для Tomny Agentic",
-      "aionrsNoProvider": "Нет доступных моделей"
+      "tomnyagenticModelRequired": "Выберите модель для Tomny Agentic",
+      "tomnyagenticNoProvider": "Нет доступных моделей"
     },
     "freq": {
       "manual": "Вручную",

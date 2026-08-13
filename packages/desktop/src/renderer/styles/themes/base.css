@@ -3,10 +3,62 @@
 :root {
   --app-min-width: 360px;
   --titlebar-height: 36px;
+  --surface-radius: 12px;
+  --popup-radius: 14px;
+  --motion-duration-fast: 140ms;
+  --motion-duration-standard: 200ms;
+  --motion-duration-slow: 300ms;
+  --motion-ease-standard: cubic-bezier(0.16, 1, 0.3, 1);
+  --motion-ease-emphasized: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --motion-lift-distance: -2px;
+  --surface-glass-filter: blur(20px) saturate(150%);
+  --surface-glass-filter-compact: blur(14px) saturate(135%);
+  --control-height: 32px;
+  --control-height-compact: 30px;
+  --control-icon-gap: 8px;
+  --control-inline-gap: 6px;
+  --control-section-gap: 12px;
+  --popup-content-padding: 16px;
+  --page-section-gap: 16px;
 }
 
 .app-shell {
   min-height: 0;
+}
+
+/* Shared opt-in surfaces for non-Arco panels. */
+.tomni-glass-surface,
+.tomni-glass-surface-raised {
+  border: 1px solid var(--surface-glass-border);
+  background: var(--surface-glass);
+  box-shadow: var(--surface-glass-shadow-soft);
+  backdrop-filter: var(--surface-glass-filter-compact);
+  -webkit-backdrop-filter: var(--surface-glass-filter-compact);
+}
+
+.tomni-glass-surface {
+  border-radius: var(--surface-radius);
+}
+
+.tomni-glass-surface-raised {
+  border-radius: var(--popup-radius);
+  background: var(--surface-glass-raised);
+  box-shadow: var(--surface-glass-shadow-raised);
+  backdrop-filter: var(--surface-glass-filter);
+  -webkit-backdrop-filter: var(--surface-glass-filter);
+}
+
+.tomni-glass-interactive {
+  transition:
+    transform var(--motion-duration-standard) var(--motion-ease-emphasized),
+    border-color var(--motion-duration-standard) var(--motion-ease-standard),
+    box-shadow var(--motion-duration-standard) var(--motion-ease-standard);
+}
+
+.tomni-glass-interactive:hover {
+  transform: translateY(var(--motion-lift-distance));
+  border-color: var(--surface-glass-border-strong);
+  box-shadow: var(--surface-glass-shadow-raised);
 }
 
 html,
@@ -127,4 +179,13 @@ body,
 
 [data-theme='dark'] *:hover::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-duration-fast: 0.01ms;
+    --motion-duration-standard: 0.01ms;
+    --motion-duration-slow: 0.01ms;
+    --motion-lift-distance: 0px;
+  }
 }

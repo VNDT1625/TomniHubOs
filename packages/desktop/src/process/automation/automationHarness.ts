@@ -14,20 +14,32 @@ const CAPABILITIES: readonly AutomationCapability[] = [
   { kind: 'action.set', purpose: 'Build a structured object', configHint: '{ keepInput?, fields }' },
   { kind: 'action.code', purpose: 'Render a safe template', configHint: '{ template, parseJson? }' },
   { kind: 'action.filesystem', purpose: 'Read or write local files', configHint: '{ operation, path, content? }' },
-  { kind: 'action.n8n', purpose: 'Execute an n8n webhook workflow', configHint: '{ webhookUrl, method?, headers?, payload?, timeoutMs? }' },
+  {
+    kind: 'action.n8n',
+    purpose: 'Execute an n8n webhook workflow',
+    configHint: '{ webhookUrl, method?, headers?, payload?, timeoutMs? }',
+  },
   { kind: 'action.notify', purpose: 'Show a desktop notification', configHint: '{ title, body }' },
   { kind: 'action.manager', purpose: 'Create a task, note, or event', configHint: '{ entity, title, detail?, at? }' },
   { kind: 'action.browser', purpose: 'Delegate a browser task', configHint: '{ task, url?, model? }' },
   { kind: 'action.conversation', purpose: 'Ask an agent and await its reply', configHint: '{ message, model? }' },
-  { kind: 'action.subworkflow', purpose: 'Run another AionUi workflow', configHint: '{ workflowId }' },
+  { kind: 'action.subworkflow', purpose: 'Run another Tomny workflow', configHint: '{ workflowId }' },
   { kind: 'action.company', purpose: 'Delegate to an Agent Company', configHint: '{ mode, companyId?, goal?, task? }' },
   { kind: 'action.email.send', purpose: 'Send email', configHint: '{ credentialId?, from, to, subject, body }' },
-  { kind: 'action.cloud.upload', purpose: 'Upload an artifact', configHint: '{ credentialId?, provider, destination? }' },
+  {
+    kind: 'action.cloud.upload',
+    purpose: 'Upload an artifact',
+    configHint: '{ credentialId?, provider, destination? }',
+  },
   { kind: 'control.if', purpose: 'Choose a branch', configHint: '{ condition } + then/else branches' },
   { kind: 'control.loop', purpose: 'Repeat a branch', configHint: '{ mode, times?, itemsPath? } + body branch' },
   { kind: 'control.parallel', purpose: 'Run branches concurrently', configHint: '{} + branch:*' },
   { kind: 'control.tryCatch', purpose: 'Recover from branch failure', configHint: '{} + try/catch branches' },
-  { kind: 'control.approval', purpose: 'Pause for a human decision before a sensitive action', configHint: '{ message, timeoutMs? }' },
+  {
+    kind: 'control.approval',
+    purpose: 'Pause for a human decision before a sensitive action',
+    configHint: '{ message, timeoutMs? }',
+  },
   { kind: 'control.stop', purpose: 'Stop the run', configHint: '{ message? }' },
 ];
 
@@ -40,7 +52,8 @@ export const buildWorkflowPlan = (goal: string, nodes: WorkflowNode[]): Workflow
   const trimmedGoal = goal.trim();
   if (!trimmedGoal) warnings.push('The workflow goal is empty.');
   if (nodes.length === 0) warnings.push('The workflow has no nodes.');
-  if (nodes.length > MAX_PLANNED_NODES) warnings.push(`The workflow exceeds the lightweight limit of ${MAX_PLANNED_NODES} nodes.`);
+  if (nodes.length > MAX_PLANNED_NODES)
+    warnings.push(`The workflow exceeds the lightweight limit of ${MAX_PLANNED_NODES} nodes.`);
   const ids = new Set<string>();
   for (const node of nodes) {
     if (!node.id.trim()) warnings.push('Every node needs a non-empty id.');

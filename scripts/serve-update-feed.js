@@ -12,8 +12,8 @@ const http = require('node:http');
 const os = require('node:os');
 const path = require('node:path');
 
-const root = path.resolve(process.argv[2] || process.env.AIONUI_UPDATE_ARTIFACT_DIR || 'out');
-const port = Number(process.argv[3] || process.env.AIONUI_UPDATE_FEED_PORT || 5077);
+const root = path.resolve(process.argv[2] || process.env.TOMNY_UPDATE_ARTIFACT_DIR || 'out');
+const port = Number(process.argv[3] || process.env.TOMNY_UPDATE_FEED_PORT || 5077);
 
 const contentTypes = new Map([
   ['.yml', 'text/yaml; charset=utf-8'],
@@ -129,5 +129,5 @@ server.listen(port, '0.0.0.0', () => {
   }
   console.log('');
   console.log('Point the old app at this feed with:');
-  console.log(`AIONUI_UPDATE_FEED_URL=http://<this-machine-ip>:${port}/`);
+  console.log(`TOMNY_UPDATE_FEED_URL=http://<this-machine-ip>:${port}/`);
 });

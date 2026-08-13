@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -13,7 +13,7 @@ import { collectFiles, grepRepo } from '@/process/ide/search/ideSearchBridge';
 const tempRoots: string[] = [];
 
 const makeRepo = async (): Promise<string> => {
-  const root = await mkdtemp(path.join(os.tmpdir(), 'aionui-ide-search-'));
+  const root = await mkdtemp(path.join(os.tmpdir(), 'tomny-ide-search-'));
   tempRoots.push(root);
   return root;
 };

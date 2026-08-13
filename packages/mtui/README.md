@@ -114,7 +114,7 @@ mtui wiki "api" --json
 mtui wiki "how many processes are required to run the complete web app" --limit 3 --json
 ```
 
-`wiki` reads the durable repository export at `.omni/wiki/wiki.json`. Build or rebuild the Wiki from AionUi Studio first. The command is read-only and returns authored section content, build metadata, and the key files used as evidence, so agents share the same project knowledge without rescanning the repository.
+`wiki` reads the durable repository export at `.omni/wiki/wiki.json`. Build or rebuild the Wiki from TomniHubOS Studio first. The command is read-only and returns authored section content, build metadata, and the key files used as evidence, so agents share the same project knowledge without rescanning the repository.
 
 ### Diff / Undo
 

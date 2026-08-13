@@ -13,7 +13,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('Tomni speech transcription', () => {
+describe('Tomny speech transcription', () => {
   it('calls an OpenAI-compatible transcription endpoint without legacy core', async () => {
     const fetchMock = vi.fn(
       async () => new Response(JSON.stringify({ text: 'hello', language: 'en' }), { status: 200 })

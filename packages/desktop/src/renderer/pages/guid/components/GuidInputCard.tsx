@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -14,6 +14,7 @@ import styles from '../index.module.css';
 import GuidWorkspaceFootnote from './GuidWorkspaceFootnote';
 
 type GuidInputCardProps = {
+  variant?: 'default' | 'hub';
   // Input state
   input: string;
   onInputChange: (value: string) => void;
@@ -50,6 +51,7 @@ type GuidInputCardProps = {
 };
 
 const GuidInputCard: React.FC<GuidInputCardProps> = ({
+  variant = 'default',
   input,
   onInputChange,
   onKeyDown,
@@ -76,7 +78,12 @@ const GuidInputCard: React.FC<GuidInputCardProps> = ({
   const layout = useLayoutContext();
   const isMobile = layout?.isMobile ?? false;
   const { compositionHandlers, isComposing } = useCompositionInput();
-  const textareaAutoSize = isMobile ? { minRows: 2, maxRows: 8 } : { minRows: 2, maxRows: 20 };
+  const textareaAutoSize =
+    variant === 'hub'
+      ? { minRows: 1, maxRows: 6 }
+      : isMobile
+        ? { minRows: 2, maxRows: 8 }
+        : { minRows: 2, maxRows: 20 };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (isComposing.current) return;
@@ -91,7 +98,7 @@ const GuidInputCard: React.FC<GuidInputCardProps> = ({
 
   return (
     <div
-      className={`${styles.guidInputCardWrap} guid-input-card-shell relative rd-24px flex flex-col ${mentionOpen ? 'overflow-visible' : 'overflow-hidden'} transition-all duration-200 ${isFileDragging ? 'b b-solid border-dashed guid-input-card-shell--dragging' : ''}`}
+      className={`${styles.guidInputCardWrap} ${variant === 'hub' ? styles.guidInputCardHub : ''} guid-input-card-shell relative rd-24px flex flex-col ${mentionOpen ? 'overflow-visible' : 'overflow-hidden'} transition-all duration-200 ${isFileDragging ? 'b b-solid border-dashed guid-input-card-shell--dragging' : ''}`}
       style={{
         zIndex: 1,
         transition: 'box-shadow 0.25s ease',
@@ -112,7 +119,7 @@ const GuidInputCard: React.FC<GuidInputCardProps> = ({
     >
       {/* inner white card — narrower than outer wrap */}
       <div
-        className={`${styles.guidInputInner} p-12px flex flex-col bg-dialog-fill-0`}
+        className={`${styles.guidInputInner} ${variant === 'hub' ? styles.guidInputInnerHub : ''} p-12px flex flex-col bg-dialog-fill-0`}
         style={{
           transition: 'box-shadow 0.25s ease, border-color 0.25s ease',
           borderColor: isFileDragging ? 'rgb(var(--primary-3))' : borderColor,
@@ -124,7 +131,7 @@ const GuidInputCard: React.FC<GuidInputCardProps> = ({
           autoSize={textareaAutoSize}
           placeholder={placeholder}
           spellCheck={false}
-          className={`text-14px focus:b-none rounded-xl !bg-transparent !b-none !resize-none !py-0 !pr-0 !pl-7px ${styles.lightPlaceholder}`}
+          className={`text-14px focus:b-none rounded-xl !bg-transparent !b-none !resize-none !py-0 !pr-0 !pl-7px ${styles.lightPlaceholder} ${variant === 'hub' ? styles.guidInputTextAreaHub : ''}`}
           value={input}
           onChange={onInputChange}
           onPaste={onPaste}
@@ -134,7 +141,7 @@ const GuidInputCard: React.FC<GuidInputCardProps> = ({
           onKeyDown={handleKeyDown}
           data-testid='guid-input'
         />
-        <div style={{ height: 12, flexShrink: 0 }} aria-hidden='true' />
+        <div style={{ height: variant === 'hub' ? 4 : 12, flexShrink: 0 }} aria-hidden='true' />
         {mentionOpen && (
           <div className='absolute z-50' style={{ left: 16, top: 44 }}>
             {mentionDropdown}
@@ -150,11 +157,13 @@ const GuidInputCard: React.FC<GuidInputCardProps> = ({
         <UploadProgressBar source='sendbox' />
         {actionRow}
       </div>
-      <GuidWorkspaceFootnote
-        workspaceDir={workspaceDir}
-        onSelectWorkspace={onSelectWorkspace}
-        onClearWorkspace={onClearWorkspace}
-      />
+      {variant === 'default' && (
+        <GuidWorkspaceFootnote
+          workspaceDir={workspaceDir}
+          onSelectWorkspace={onSelectWorkspace}
+          onClearWorkspace={onClearWorkspace}
+        />
+      )}
     </div>
   );
 };

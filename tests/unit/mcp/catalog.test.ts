@@ -6,7 +6,7 @@ describe('mergeBrowserControlSessionServer', () => {
     const custom = { id: 'custom', name: 'my-tools', transport: { type: 'sse' as const, url: 'http://custom' } };
     const stale = {
       id: 'browser',
-      name: 'aionui-browser-control',
+      name: 'tomny-browser-control',
       transport: { type: 'sse' as const, url: 'http://old' },
     };
     const fresh = { ...stale, transport: { type: 'sse' as const, url: 'http://new' } };
@@ -16,7 +16,7 @@ describe('mergeBrowserControlSessionServer', () => {
   it('does not duplicate browser entries when the snapshot is already current', () => {
     const browser = {
       id: 'browser',
-      name: 'aionui-browser-control',
+      name: 'tomny-browser-control',
       transport: { type: 'sse' as const, url: 'http://live' },
     };
     expect(mergeBrowserControlSessionServer([browser], browser)).toEqual([browser]);
@@ -26,7 +26,7 @@ describe('mergeBrowserControlSessionServer', () => {
     const custom = { id: 'custom', name: 'my-tools', transport: { type: 'sse' as const, url: 'http://custom' } };
     const browser = {
       id: 'browser',
-      name: 'aionui-browser-control',
+      name: 'tomny-browser-control',
       transport: { type: 'sse' as const, url: 'http://live' },
     };
     expect(buildBrowserControlSessionUpdate([custom], browser)).toBeNull();
@@ -37,7 +37,7 @@ describe('mergeBrowserControlSessionServer', () => {
     const custom = { id: 'custom', name: 'my-tools', transport: { type: 'sse' as const, url: 'http://custom' } };
     const stale = {
       id: 'browser',
-      name: 'aionui-browser-control',
+      name: 'tomny-browser-control',
       transport: { type: 'sse' as const, url: 'http://old' },
     };
     const fresh = { ...stale, transport: { type: 'sse' as const, url: 'http://new' } };

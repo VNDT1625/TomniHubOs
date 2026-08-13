@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -14,6 +14,8 @@ import {
 import * as path from 'path';
 import { ipcBridge } from '@/common';
 import i18n from '@process/services/i18n';
+
+import { requestAppRestart } from '@process/startup/appTermination';
 
 let tray: TrayInstance | null = null;
 let closeToTrayEnabled = false;
@@ -217,8 +219,7 @@ const buildTrayContextMenu = async (): Promise<Electron.Menu> => {
     label: i18n.t('common.tray.restart'),
     click: () => {
       isQuitting = true;
-      app.relaunch();
-      app.exit(0);
+      requestAppRestart();
     },
   });
   template.push({ type: 'separator' });
@@ -243,7 +244,7 @@ export const createOrUpdateTray = (): void => {
   try {
     const icon = getTrayIcon();
     tray = new Tray(icon);
-    tray.setToolTip('Tomni');
+    tray.setToolTip('Tomny');
     void buildTrayContextMenu().then((menu) => tray?.setContextMenu(menu));
 
     tray.on('double-click', () => {

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -539,28 +539,28 @@ type PageRedactionScan = {
 };
 
 const redactionPrelude = (context: PageRedactionContext, screenshotMode?: 'viewport' | 'fullPage'): string => `
-  const __aionExpectedHostname = ${JSON.stringify(context.expectedHostname ?? '')};
-  const __aionRegisteredSelectors = ${JSON.stringify(context.snapshot.selectors.map((rule) => rule.selector))};
-  const __aionSensitiveMode = ${JSON.stringify(context.snapshot.sensitiveMode)};
-  const __aionScreenshotMode = ${JSON.stringify(screenshotMode ?? '')};
-  const __aionHostname = String(location.hostname || '').toLowerCase();
-  if (__aionExpectedHostname && __aionHostname !== __aionExpectedHostname) {
-    return { __aionRedactionError: 'origin-changed' };
+  const __tomnyExpectedHostname = ${JSON.stringify(context.expectedHostname ?? '')};
+  const __tomnyRegisteredSelectors = ${JSON.stringify(context.snapshot.selectors.map((rule) => rule.selector))};
+  const __tomnySensitiveMode = ${JSON.stringify(context.snapshot.sensitiveMode)};
+  const __tomnyScreenshotMode = ${JSON.stringify(screenshotMode ?? '')};
+  const __tomnyHostname = String(location.hostname || '').toLowerCase();
+  if (__tomnyExpectedHostname && __tomnyHostname !== __tomnyExpectedHostname) {
+    return { __tomnyRedactionError: 'origin-changed' };
   }
-  const __aionSecretLabel = /(?:password|passphrase|secret|api[_ .-]?key|access[_ .-]?token|refresh[_ .-]?token|private[_ .-]?key|client[_ .-]?secret|authorization|credential)/i;
-  const __aionKnownToken = /(?:-----BEGIN [^-\\n]*PRIVATE KEY-----|\\bsk-(?:proj-)?[A-Za-z0-9_-]{16,}|\\bgh[pousr]_[A-Za-z0-9_]{20,}|\\bgithub_pat_[A-Za-z0-9_]{20,}|\\bAIza[0-9A-Za-z_-]{20,}|\\bGOCSPX-[0-9A-Za-z_-]{12,}|\\bAKIA[0-9A-Z]{16}|\\beyJ[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,})/i;
-  const __aionAlreadyMasked = (value) => /^(?:\\*{3,}|[•●xX]{3,}|\\[?redacted(?::[^\\]]+)?\\]?|<redacted>)$/i.test(String(value || '').trim());
-  const __aionOwnText = (element) => Array.from(element.childNodes || [])
+  const __tomnySecretLabel = /(?:password|passphrase|secret|api[_ .-]?key|access[_ .-]?token|refresh[_ .-]?token|private[_ .-]?key|client[_ .-]?secret|authorization|credential)/i;
+  const __tomnyKnownToken = /(?:-----BEGIN [^-\\n]*PRIVATE KEY-----|\\bsk-(?:proj-)?[A-Za-z0-9_-]{16,}|\\bgh[pousr]_[A-Za-z0-9_]{20,}|\\bgithub_pat_[A-Za-z0-9_]{20,}|\\bAIza[0-9A-Za-z_-]{20,}|\\bGOCSPX-[0-9A-Za-z_-]{12,}|\\bAKIA[0-9A-Z]{16}|\\beyJ[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,})/i;
+  const __tomnyAlreadyMasked = (value) => /^(?:\\*{3,}|[•●xX]{3,}|\\[?redacted(?::[^\\]]+)?\\]?|<redacted>)$/i.test(String(value || '').trim());
+  const __tomnyOwnText = (element) => Array.from(element.childNodes || [])
     .filter((node) => node.nodeType === 3)
     .map((node) => String(node.textContent || '').trim())
     .join(' ')
     .trim();
-  const __aionAttributeText = (element) => [
+  const __tomnyAttributeText = (element) => [
     'type', 'name', 'id', 'placeholder', 'aria-label', 'title', 'autocomplete',
-    'data-aion-secret', 'data-secret', 'data-testid'
+    'data-tomny-secret', 'data-secret', 'data-testid'
   ].map((name) => String(element.getAttribute && element.getAttribute(name) || '')).join(' ');
-  const __aionDetectedName = (element) => {
-    const ownText = __aionOwnText(element);
+  const __tomnyDetectedName = (element) => {
+    const ownText = __tomnyOwnText(element);
     const assignment = ownText.match(/(?:^|\\s)([A-Za-z_][A-Za-z0-9_.-]{1,127})\\s*[:=]/);
     const semantic = [
       element.getAttribute && element.getAttribute('name'),
@@ -568,21 +568,21 @@ const redactionPrelude = (context: PageRedactionContext, screenshotMode?: 'viewp
       element.getAttribute && element.getAttribute('aria-label'),
       element.getAttribute && element.getAttribute('autocomplete'),
     ].filter(Boolean).join(' ');
-    const label = semantic.match(__aionSecretLabel);
+    const label = semantic.match(__tomnySecretLabel);
     const raw = assignment && assignment[1] || label && label[0] || 'DETECTED_SECRET';
     const normalized = String(raw).trim().replace(/[^A-Za-z0-9_.-]+/g, '_').slice(0, 128);
     return /^[A-Za-z_][A-Za-z0-9_.-]{0,127}$/.test(normalized) ? normalized : 'DETECTED_SECRET';
   };
-  const __aionFindById = (root, id) => {
+  const __tomnyFindById = (root, id) => {
     if (!id) return null;
     for (const element of Array.from(root.querySelectorAll('[id]'))) {
       if (element.id === id) return element;
     }
     return null;
   };
-  const __aionAddLabelTarget = (root, label, targets) => {
+  const __tomnyAddLabelTarget = (root, label, targets) => {
     const htmlFor = String(label.getAttribute && label.getAttribute('for') || '');
-    const control = htmlFor ? __aionFindById(root, htmlFor) : label.querySelector && label.querySelector('input, textarea, select');
+    const control = htmlFor ? __tomnyFindById(root, htmlFor) : label.querySelector && label.querySelector('input, textarea, select');
     if (control) targets.add(control);
     const sibling = label.nextElementSibling;
     if (sibling && String(sibling.textContent || '').trim().length <= 4096) targets.add(sibling);
@@ -593,11 +593,11 @@ const redactionPrelude = (context: PageRedactionContext, screenshotMode?: 'viewp
       }
     }
   };
-  const __aionCollectTargets = (root) => {
+  const __tomnyCollectTargets = (root) => {
     const targets = new Set();
     const matchedSelectors = [];
     let invalidSelector = false;
-    for (const selector of __aionRegisteredSelectors) {
+    for (const selector of __tomnyRegisteredSelectors) {
       try {
         const matches = [];
         if (root.matches && root.matches(selector)) matches.push(root);
@@ -613,27 +613,27 @@ const redactionPrelude = (context: PageRedactionContext, screenshotMode?: 'viewp
       'input[autocomplete="current-password"]',
       'input[autocomplete="new-password"]',
       'input[autocomplete="one-time-code"]',
-      '[data-aion-secret]',
+      '[data-tomny-secret]',
       '[data-secret-redact]'
     ].join(',');
     for (const element of Array.from(root.querySelectorAll(genericSelector))) targets.add(element);
     for (const element of Array.from(root.querySelectorAll('*'))) {
-      const attributes = __aionAttributeText(element);
-      const ownText = __aionOwnText(element);
+      const attributes = __tomnyAttributeText(element);
+      const ownText = __tomnyOwnText(element);
       const tag = String(element.tagName || '').toUpperCase();
-      if (__aionSecretLabel.test(attributes)) {
-        if (tag === 'LABEL') __aionAddLabelTarget(root, element, targets);
+      if (__tomnySecretLabel.test(attributes)) {
+        if (tag === 'LABEL') __tomnyAddLabelTarget(root, element, targets);
         else targets.add(element);
       }
-      if (__aionSecretLabel.test(ownText) && ownText.length <= 160) {
-        if (/[:=]/.test(ownText) || __aionKnownToken.test(ownText)) targets.add(element);
-        __aionAddLabelTarget(root, element, targets);
+      if (__tomnySecretLabel.test(ownText) && ownText.length <= 160) {
+        if (/[:=]/.test(ownText) || __tomnyKnownToken.test(ownText)) targets.add(element);
+        __tomnyAddLabelTarget(root, element, targets);
       }
-      if ((tag === 'CODE' || tag === 'PRE' || tag === 'SAMP') && __aionKnownToken.test(String(element.textContent || ''))) {
+      if ((tag === 'CODE' || tag === 'PRE' || tag === 'SAMP') && __tomnyKnownToken.test(String(element.textContent || ''))) {
         targets.add(element);
       }
     }
-    if (__aionSensitiveMode && __aionScreenshotMode) {
+    if (__tomnySensitiveMode && __tomnyScreenshotMode) {
       for (const element of Array.from(root.querySelectorAll('iframe, frame, canvas, video, object, embed'))) {
         targets.add(element);
       }
@@ -651,17 +651,17 @@ const buildReadTextScript = (selector: string | undefined, context: PageRedactio
   try {
     source = selector ? document.querySelector(selector) : document.body;
   } catch {
-    return { __aionRedactionError: 'invalid-read-selector' };
+    return { __tomnyRedactionError: 'invalid-read-selector' };
   }
   if (!source) return { text: '', matchedSelectors: [] };
   const root = source.cloneNode(true);
-  const collected = __aionCollectTargets(root);
-  if (collected.invalidSelector) return { __aionRedactionError: 'invalid-secret-selector' };
+  const collected = __tomnyCollectTargets(root);
+  if (collected.invalidSelector) return { __tomnyRedactionError: 'invalid-secret-selector' };
   for (const element of collected.targets) {
     const current = element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement
       ? element.value
       : String(element.textContent || '').trim();
-    if (__aionAlreadyMasked(current)) continue;
+    if (__tomnyAlreadyMasked(current)) continue;
     if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement || element instanceof HTMLSelectElement) {
       element.value = '${REDACTED_TEXT}';
       element.setAttribute('value', '${REDACTED_TEXT}');
@@ -692,8 +692,8 @@ const buildAccessibilityScript = (maxDepth: number, context: PageRedactionContex
     if (style.display === 'none' || style.visibility === 'hidden') return true;
     return el.getAttribute('aria-hidden') === 'true';
   };
-  const collected = __aionCollectTargets(document.documentElement);
-  if (collected.invalidSelector) return { __aionRedactionError: 'invalid-secret-selector' };
+  const collected = __tomnyCollectTargets(document.documentElement);
+  if (collected.invalidSelector) return { __tomnyRedactionError: 'invalid-secret-selector' };
   const nameOf = (el) => {
     if (collected.targets.has(el)) {
       const current = [
@@ -702,7 +702,7 @@ const buildAccessibilityScript = (maxDepth: number, context: PageRedactionContex
         el.getAttribute('title'),
         String(el.textContent || '').trim(),
       ].filter(Boolean).join(' ');
-      if (current && !__aionAlreadyMasked(current)) return '${REDACTED_TEXT}';
+      if (current && !__tomnyAlreadyMasked(current)) return '${REDACTED_TEXT}';
     }
     const aria = el.getAttribute('aria-label');
     if (aria) return aria.trim();
@@ -719,7 +719,7 @@ const buildAccessibilityScript = (maxDepth: number, context: PageRedactionContex
   };
   const valueOf = (el) => {
     if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement) {
-      if (collected.targets.has(el) && !__aionAlreadyMasked(el.value)) return '${REDACTED_TEXT}';
+      if (collected.targets.has(el) && !__tomnyAlreadyMasked(el.value)) return '${REDACTED_TEXT}';
       return el.value || undefined;
     }
     return undefined;
@@ -747,9 +747,9 @@ const buildAccessibilityScript = (maxDepth: number, context: PageRedactionContex
 const buildScreenshotScanScript = (context: PageRedactionContext, mode: 'viewport' | 'fullPage'): string => `(() => {
   ${redactionPrelude(context, mode)}
   const root = document.documentElement;
-  if (!root) return { __aionRedactionError: 'missing-document' };
-  const collected = __aionCollectTargets(root);
-  if (collected.invalidSelector) return { __aionRedactionError: 'invalid-secret-selector' };
+  if (!root) return { __tomnyRedactionError: 'missing-document' };
+  const collected = __tomnyCollectTargets(root);
+  if (collected.invalidSelector) return { __tomnyRedactionError: 'invalid-secret-selector' };
   const viewportWidth = Math.max(0, Number(window.innerWidth) || 0);
   const viewportHeight = Math.max(0, Number(window.innerHeight) || 0);
   const documentWidth = Math.max(viewportWidth, root.scrollWidth || 0, document.body && document.body.scrollWidth || 0);
@@ -760,7 +760,7 @@ const buildScreenshotScanScript = (context: PageRedactionContext, mode: 'viewpor
     const visualValue = element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement
       ? element.value
       : String(element.textContent || '').trim();
-    if (__aionAlreadyMasked(visualValue)) continue;
+    if (__tomnyAlreadyMasked(visualValue)) continue;
     let detected = false;
     for (const rawRect of Array.from(element.getClientRects ? element.getClientRects() : [])) {
       if (!rawRect || rawRect.width <= 0 || rawRect.height <= 0) continue;
@@ -768,7 +768,7 @@ const buildScreenshotScanScript = (context: PageRedactionContext, mode: 'viewpor
       let y = rawRect.top;
       let width = rawRect.width;
       let height = rawRect.height;
-      if (__aionScreenshotMode === 'fullPage') {
+      if (__tomnyScreenshotMode === 'fullPage') {
         x += window.scrollX || 0;
         y += window.scrollY || 0;
       } else {
@@ -782,7 +782,7 @@ const buildScreenshotScanScript = (context: PageRedactionContext, mode: 'viewpor
       if (width > 0 && height > 0) {
         rects.push({ x, y, width, height });
         if (!detected) {
-          detectedNames.push(__aionDetectedName(element));
+          detectedNames.push(__tomnyDetectedName(element));
           detected = true;
         }
       }
@@ -791,7 +791,7 @@ const buildScreenshotScanScript = (context: PageRedactionContext, mode: 'viewpor
     if (rects.length >= 256) break;
   }
   return {
-    hostname: __aionHostname,
+    hostname: __tomnyHostname,
     viewportWidth,
     viewportHeight,
     documentWidth,
@@ -824,7 +824,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
 const assertSafeScriptResult = (value: unknown): Record<string, unknown> => {
-  if (!isRecord(value) || typeof value.__aionRedactionError === 'string') {
+  if (!isRecord(value) || typeof value.__tomnyRedactionError === 'string') {
     throw new Error('[PagePerception] Secret redaction could not be guaranteed.');
   }
   return value;
@@ -981,13 +981,11 @@ const protectPng = async (
 
   const detected = context.snapshot.selectors
     .filter((rule) => matchedSelectors.has(rule.selector))
-    .map(
-      (rule): SecretRedactionReference => ({
-        name: rule.name,
-        ...(rule.reference ? { reference: rule.reference } : {}),
-        status: 'redacted',
-      })
-    )
+    .map((rule): SecretRedactionReference => {
+      const item: SecretRedactionReference = { name: rule.name, status: 'redacted' };
+      if (rule.reference) item.reference = rule.reference;
+      return item;
+    })
     .filter(
       (item, index, all) =>
         all.findIndex((candidate) => candidate.name === item.name && candidate.reference === item.reference) === index

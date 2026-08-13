@@ -1,12 +1,12 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { RotatingApiClient } from '@/common/api/RotatingApiClient';
-import { AuthType } from '@office-ai/aioncli-core';
+import { AuthType } from '@/common/utils/platformAuthType';
 
 // Do not globally mock ApiKeyManager - we'll test integration with real ApiKeyManager
 // Only mock it selectively in specific tests that need custom behavior

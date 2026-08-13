@@ -7,7 +7,7 @@ import enUS from './locales/en-US.json';
 import zhCN from './locales/zh-CN.json';
 import ruRU from './locales/ru-RU.json';
 
-const LANGUAGE_KEY = 'aionui_language';
+const LANGUAGE_KEY = 'tomny_language';
 
 const resources = {
   'en-US': { translation: enUS },

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -55,7 +55,8 @@ const AgentCard: React.FC<AgentCardProps> = (props) => {
 
   if (props.type === 'detected') {
     const { agent, onGoToChat } = props;
-    const displayName = agent.agent_type === 'aionrs' || agent.backend === 'aionrs' ? 'Tomny Agentic' : agent.name;
+    const displayName =
+      agent.agent_type === 'tomnyagentic' || agent.backend === 'tomnyagentic' ? 'Tomny Agentic' : agent.name;
     const extensionAvatar = resolveExtensionAssetUrl(agent.isExtension ? agent.avatar : undefined);
     const logo =
       extensionAvatar ||

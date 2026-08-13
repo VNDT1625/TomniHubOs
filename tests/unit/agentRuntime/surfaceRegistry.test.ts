@@ -170,15 +170,15 @@ describe('surface resolution and fallback', () => {
         expect.arrayContaining([
           expect.objectContaining({
             id: 'core.skill-workflow',
-            serverName: 'aionui-tool-selector',
+            serverName: 'tomny-tool-selector',
             toolPatterns: expect.arrayContaining(['tools_search', 'skills_*']),
           }),
           expect.objectContaining({
             id: 'core.agent-orchestrator',
-            serverName: 'aionui-agent-orchestrator',
+            serverName: 'tomny-agent-orchestrator',
             toolPatterns: expect.arrayContaining(['agent_spawn', 'agent_resume', 'agent_close']),
           }),
-          expect.objectContaining({ id: 'core.testing', serverName: 'aionui-testing', toolPatterns: ['test_*'] }),
+          expect.objectContaining({ id: 'core.testing', serverName: 'tomny-testing', toolPatterns: ['test_*'] }),
         ])
       );
     }
@@ -249,7 +249,7 @@ describe('surface resolution and fallback', () => {
     if (result.ok) {
       expect(result.value.manifest.id).toBe('ide');
       const ideCapability = result.value.capabilities.find((capability) => capability.id === 'surface.ide');
-      expect(ideCapability?.serverName).toBe('aionui-ide');
+      expect(ideCapability?.serverName).toBe('tomny-ide');
       expect(ideCapability?.toolPatterns).toEqual(expect.arrayContaining(['ide_*', 'tomny_*', 'terminal_*', 'git_*']));
     }
   });

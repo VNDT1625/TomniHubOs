@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -40,8 +40,8 @@
  *   side effects and avoids an import cycle with `resourceCoordinator.ts` — this
  *   module depends only on the shared types and the policy constants.
  * - **The agent call is injected** (`askAgent`) rather than hard-wiring a
- *   specific aioncore conversation. That keeps the module trivially mockable and
- *   lets the real wiring (a temporary aioncore conversation, a cheap model, …)
+ *   specific tomnycore conversation. That keeps the module trivially mockable and
+ *   lets the real wiring (a temporary tomnycore conversation, a cheap model, …)
  *   be plugged in later by the integration task without touching this file.
  * - **The model call is heavy and must itself be lease-gated.** Because the
  *   advisor deliberately does not import the coordinator, **the caller
@@ -307,7 +307,7 @@ const budgetsEqual = (a: ResourceBudget, b: ResourceBudget): boolean => {
 /**
  * The single heavy dependency of the advisor: a function that sends the prompt
  * to an agent / model and resolves its raw text reply. Injected so the real
- * wiring (an aioncore conversation, a cheap model, …) can be supplied later and
+ * wiring (an tomnycore conversation, a cheap model, …) can be supplied later and
  * so tests can mock it. The caller is responsible for lease-gating this call.
  */
 export type AskAgent = (prompt: string) => Promise<string>;

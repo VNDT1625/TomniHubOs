@@ -1,16 +1,16 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  *
  * Desktop IPC bridge for WebUI lifecycle (start/stop/getStatus).
  *
  * WebUI credential operations (change-password / change-username / reset-password /
- * generate-qr-token) are NOT handled here — those are HTTP routes on aioncore's
+ * generate-qr-token) are NOT handled here — those are HTTP routes on tomnycore's
  * local-only /api/webui/*, called directly by the renderer via ipcBridge HTTP.
  *
  * This bridge owns only the lifecycle + status snapshot, because spawning a
- * WebUI instance requires Electron's app.* / Node child_process — aioncore
+ * WebUI instance requires Electron's app.* / Node child_process — tomnycore
  * has no way to start a WebUI wrapper around itself.
  */
 

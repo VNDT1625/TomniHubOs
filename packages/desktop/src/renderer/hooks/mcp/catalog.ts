@@ -1,6 +1,5 @@
 import { ipcBridge } from '@/common';
 
-
 import { mcpService } from '@/common/adapter/ipcBridge';
 import { configService } from '@/common/config/configService';
 import type { IMcpServer, IMcpServerTransport, ISessionMcpServer } from '@/common/config/storage';
@@ -41,7 +40,6 @@ const dedupeServers = (servers: IMcpServer[]) => {
   return deduped;
 };
 
-
 export const toBackendMcpPayload = (
   server: Pick<IMcpServer, 'name' | 'description' | 'transport' | 'original_json' | 'builtin'>
 ): McpCatalogPayload => ({
@@ -57,7 +55,6 @@ export const toSessionMcpServer = (server: Pick<IMcpServer, 'id' | 'name' | 'tra
   name: server.name,
   transport: server.transport,
 });
-
 
 /** Merge the live Browser-Control server into a conversation session snapshot. */
 export const mergeBrowserControlSessionServer = (
@@ -90,7 +87,7 @@ export const ensureBrowserControlSession = async (
     ensureBackendMcpCatalog(),
     ipcBridge.conversation.get.invoke({ id: conversationId }),
   ]);
-  const live = allServers.find((server) => server.name === 'aionui-browser-control');
+  const live = allServers.find((server) => server.name === 'tomny-browser-control');
   if (!live || !conversation) return false;
   const extra = (conversation.extra ?? {}) as { session_mcp_servers?: ISessionMcpServer[] };
   const existing = Array.isArray(extra.session_mcp_servers) ? extra.session_mcp_servers : [];
@@ -116,5 +113,5 @@ export const ensureNativeMcpCatalog = async (): Promise<{
   return { userServers, builtinServers, allServers };
 };
 
-/** @deprecated Compatibility name; the catalog is owned by the native Tomni registry. */
+/** @deprecated Compatibility name; the catalog is owned by the native Tomny registry. */
 export const ensureBackendMcpCatalog = ensureNativeMcpCatalog;

@@ -1,7 +1,7 @@
 {
-  "name": "Tomni",
-  "short_name": "Tomni",
-  "description": "Tomni personal agentic operating system.",
+  "name": "Tomny",
+  "short_name": "Tomny",
+  "description": "Tomny personal agentic operating system.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -380,7 +380,7 @@ export type ContextPack = {
   request: string;
   /** Selected slices, most-relevant first. */
   slices: ContextSlice[];
-  /** Project rules (from `.aionrules` etc.) prepended to the agent brief. */
+  /** Project rules (from `.tomnyrules` etc.) prepended to the agent brief. */
   rules: string[];
   /** A ready-to-inject Markdown brief composed from the slices + rules. */
   renderedContext: string;

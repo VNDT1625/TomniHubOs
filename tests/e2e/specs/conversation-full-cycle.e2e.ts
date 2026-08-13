@@ -49,7 +49,7 @@ async function pickAvailableBackend(page: import('@playwright/test').Page): Prom
       const backends = await page
         .locator(AGENT_PILL)
         .evaluateAll((els) => els.map((el) => el.getAttribute('data-agent-backend')).filter(Boolean));
-      const found = ['gemini', 'claude', 'codex', 'aionrs'].find((b) => backends.includes(b));
+      const found = ['gemini', 'claude', 'codex', 'tomnyagentic'].find((b) => backends.includes(b));
       if (found) return found;
     }
     if (attempt === 0) {
@@ -109,7 +109,7 @@ async function selectPreferredCronDialogAgent(
 async function selectCronDialogAgentByPattern(
   page: import('@playwright/test').Page,
   dialog: import('@playwright/test').Locator,
-  preferredPatterns = [/Gemini/i, /Claude/i, /Codex/i, /Aion/i]
+  preferredPatterns = [/Gemini/i, /Claude/i, /Codex/i, /Tomny/i]
 ): Promise<string | null> {
   const agentFormItem = dialog.locator('.arco-form-item').filter({ has: page.locator('#agent') });
   const agentSelect = agentFormItem.locator('.arco-select').first();
@@ -769,7 +769,7 @@ test.describe('Conversation Full Cycle', () => {
     await agentSelect.click();
 
     // CLI agents appear in OptGroup "CLI Agents"; pick the first one
-    const cliOptions = page.locator('.arco-select-option').filter({ hasText: /Claude|Codex|Gemini|Aion/ });
+    const cliOptions = page.locator('.arco-select-option').filter({ hasText: /Claude|Codex|Gemini|Tomny/ });
     if ((await cliOptions.count()) === 0) {
       await page.keyboard.press('Escape');
       await page.keyboard.press('Escape');
@@ -1096,7 +1096,7 @@ test.describe('Conversation Full Cycle', () => {
     stopAutoApprove?.();
   });
 
-  const cronConversationAgents = ['claude', 'codex', 'gemini', 'aionrs'] as const;
+  const cronConversationAgents = ['claude', 'codex', 'gemini', 'tomnyagentic'] as const;
 
   for (const backend of cronConversationAgents) {
     test(`cron -- ${backend} conversation skill creates task with full-auto job mode`, async ({ page }) => {
@@ -1153,8 +1153,8 @@ test.describe('Conversation Full Cycle', () => {
 
         expect(job.name).toContain(taskName);
         expect(job.metadata?.created_by).toBe('agent');
-        if (backend === 'aionrs') {
-          expect(job.metadata?.agent_type).toBe('aionrs');
+        if (backend === 'tomnyagentic') {
+          expect(job.metadata?.agent_type).toBe('tomnyagentic');
         } else {
           expect(job.metadata?.agent_config?.backend).toBe(backend);
         }

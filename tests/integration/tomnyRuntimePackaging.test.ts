@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -87,12 +87,12 @@ describe('Tomny Runtime packaging', () => {
     expect(isReusableArtifact(input)).toBe(false);
   });
 
-  it('packages the workspace Rust runtime without importing AionCore source', () => {
+  it('packages the workspace Rust runtime without importing TomnyCore source', () => {
     const builder = readFileSync(join(repoRoot, 'packages/shared-scripts/src/prepare-tomny-runtime.js'), 'utf8');
     const cargo = readFileSync(join(repoRoot, 'packages/tomny-runtime/Cargo.toml'), 'utf8');
     const electronConfig = readFileSync(join(repoRoot, 'packages/desktop/electron-builder.yml'), 'utf8');
 
-    expect(`${builder}\n${cargo}`).not.toMatch(/aioncore|aion-core/iu);
+    expect(`${builder}\n${cargo}`).not.toMatch(/tomnycore|tomny-core/iu);
     expect(builder).toContain("'packages', 'tomny-runtime'");
     expect(electronConfig).toContain('resources/bundled-tomny-runtime');
   });

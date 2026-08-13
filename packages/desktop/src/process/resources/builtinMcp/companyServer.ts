@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -21,7 +21,7 @@
  * - `company_set_rules`     — replace a company's rules (criterion 3.10).
  *
  * `design.md` refers to these capabilities with dotted names (`company.create`,
- * `company.getStructure`, ...); like the image-gen tool (`aionui_image_generation`)
+ * `company.getStructure`, ...); like the image-gen tool (`tomny_image_generation`)
  * we use snake_case here while preserving the intent.
  *
  * ## Process boundary & shared state
@@ -74,7 +74,7 @@ import { createCallTemplateManager, createFileCallTemplateStore } from '@process
 export const BUILTIN_COMPANY_ID = 'builtin-company';
 
 /** Canonical name of the built-in Company MCP server (consumed by Task 15.1). */
-export const BUILTIN_COMPANY_NAME = 'aionui-company';
+export const BUILTIN_COMPANY_NAME = 'tomny-company';
 
 /**
  * Environment variables the spawning code (Task 15.1) injects into this
@@ -87,17 +87,17 @@ export const BUILTIN_COMPANY_NAME = 'aionui-company';
  */
 export const COMPANY_ENV_KEYS = {
   /** Directory holding the per-company `company.json` / memory tree. */
-  dataDir: 'AIONUI_COMPANY_DATA_DIR',
+  dataDir: 'TOMNY_COMPANY_DATA_DIR',
   /** Provider platform of the role-chart generator (e.g. `openai`, `anthropic`). */
-  platform: 'AIONUI_COMPANY_PLATFORM',
+  platform: 'TOMNY_COMPANY_PLATFORM',
   /** Base URL of the role-chart generator provider. */
-  baseUrl: 'AIONUI_COMPANY_BASE_URL',
+  baseUrl: 'TOMNY_COMPANY_BASE_URL',
   /** API key of the role-chart generator provider. */
-  apiKey: 'AIONUI_COMPANY_API_KEY',
+  apiKey: 'TOMNY_COMPANY_API_KEY',
   /** Model id used to design the role chart. */
-  model: 'AIONUI_COMPANY_MODEL',
+  model: 'TOMNY_COMPANY_MODEL',
   /** Optional outbound proxy for the generator provider. */
-  proxy: 'AIONUI_COMPANY_PROXY',
+  proxy: 'TOMNY_COMPANY_PROXY',
 } as const;
 
 /**

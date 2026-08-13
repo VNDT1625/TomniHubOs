@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  *
  * Integration tests for the SQLite driver against a REAL better-sqlite3 file
@@ -37,7 +37,7 @@ d('sqliteDriver (real better-sqlite3)', () => {
   let dbPath: string;
 
   beforeAll(() => {
-    dir = mkdtempSync(join(tmpdir(), 'aionui-db-'));
+    dir = mkdtempSync(join(tmpdir(), 'tomny-db-'));
     dbPath = join(dir, 'seed.db');
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const Database = require('better-sqlite3') as new (p: string) => {

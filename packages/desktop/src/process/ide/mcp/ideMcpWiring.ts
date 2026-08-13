@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -93,7 +93,7 @@ const SKIP_DIRS = new Set([
   '.cache',
   'target',
   '.mtui',
-  '.aionui',
+  '.tomny',
   '.turbo',
   '.tmp',
 ]);
@@ -889,7 +889,7 @@ export const getQuickTestRunner = (): QuickTestRunner => {
           .filter((entry) => entry.isFile() && /^quick-test-\d+\.png$/.test(entry.name))
           .map((entry) => entry.name)
           .toSorted()
-          .reverse();
+          .toReversed();
         await Promise.all(
           screenshots
             .slice(20)
@@ -969,7 +969,7 @@ const experienceAgentService: ExperienceAgentService = {
     await service.drainInbox();
     const workflow = await getExperienceWorkflowForRoot(projectRoot);
     const result = await workflow.onVerifyOutcome(episode, service.projectId, outcome);
-    // Keep the first failure only in the bounded AionRS session ExpBase. Once
+    // Keep the first failure only in the bounded Tomny CLI session ExpBase. Once
     // the same verification fails again, persist a compact repo lesson. The
     // capture service deduplicates close matches, preventing log/data growth.
     if (outcome === 'failed' && result.decision.failureCount >= 2) {

@@ -62,10 +62,10 @@
 #### Bug Fixes
 
 - **model-selector:** trust backend current model and persist preferences (#3084)
-- **build:** align bundled aioncore target arch (#3092)
+- **build:** align bundled tomnicore target arch (#3092)
 - **settings:** use provider health check probe (#3090)
 - **settings:** use health check error message (#3080)
-- **backend:** handle incomplete bundled aioncore installs (#3078)
+- **backend:** handle incomplete bundled tomnicore installs (#3078)
 
 #### Performance
 
@@ -105,7 +105,7 @@
 - **tools:** use Form.Item tooltip prop for image model help icon
 - **tools:** align help icon vertically with image model label
 - **sendbox:** map workspace file paths for mentions (#3060)
-- **settings:** route provider health check via aionrs (#3058)
+- **settings:** route provider health check via tomnirs (#3058)
 - **settings:** localize sentence terminator on builtin readonly banner
 - **electron:** tolerate pending backend startup (#3057)
 - recover pending permission prompts (#3059)

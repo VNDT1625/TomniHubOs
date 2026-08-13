@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -17,10 +17,10 @@ export type ReplyQuote = {
 };
 
 interface EventTypes {
-  'aionrs.selected.file': [Array<string | FileOrFolderItem>];
-  'aionrs.selected.file.append': [Array<string | FileOrFolderItem>];
-  'aionrs.selected.file.clear': void;
-  'aionrs.workspace.refresh': void;
+  'tomnyagentic.selected.file': [Array<string | FileOrFolderItem>];
+  'tomnyagentic.selected.file.append': [Array<string | FileOrFolderItem>];
+  'tomnyagentic.selected.file.clear': void;
+  'tomnyagentic.workspace.refresh': void;
   'acp.selected.file': [Array<string | FileOrFolderItem>];
   'acp.selected.file.append': [Array<string | FileOrFolderItem>];
   'acp.selected.file.clear': void;

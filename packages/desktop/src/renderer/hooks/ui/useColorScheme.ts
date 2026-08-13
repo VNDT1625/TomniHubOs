@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -12,7 +12,7 @@ import { useCallback, useEffect, useState } from 'react';
 export type ColorScheme = 'default';
 
 const DEFAULT_COLOR_SCHEME: ColorScheme = 'default';
-const COLOR_SCHEME_CACHE_KEY = '__aionui_colorScheme';
+const COLOR_SCHEME_CACHE_KEY = '__tomny_colorScheme';
 
 const applyColorSchemeToDom = (value: ColorScheme) => {
   document.documentElement.setAttribute('data-color-scheme', value);

@@ -366,7 +366,7 @@ export const createQuickTestLifecycleService = (deps: QuickTestLifecycleDeps): Q
       }
       if (cleanupErrors.length > 0) {
         const message = error instanceof Error ? error.message : String(error);
-        throw new AggregateError([error, ...cleanupErrors], `Quick Test startup failed: ${message}`);
+        throw new AggregateError([error, ...cleanupErrors], `Quick Test startup failed: ${message}`, { cause: error });
       }
       throw error;
     }

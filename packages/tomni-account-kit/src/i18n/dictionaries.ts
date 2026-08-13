@@ -2,9 +2,9 @@ import type { AccountLocale } from '../types';
 
 export const accountMessages = {
   'vi-VN': {
-    brand: 'Tomni Account',
+    brand: 'Tomny Account',
     prototypeBadge: 'Bản độc lập • chưa tích hợp',
-    authWelcome: 'Một danh tính cho mọi bề mặt Tomni',
+    authWelcome: 'Một danh tính cho mọi bề mặt Tomny',
     authDescription: 'Dùng cục bộ vẫn luôn khả dụng. Tài khoản chỉ mở khóa đồng bộ, thiết bị, gói và cộng tác.',
     signIn: 'Đăng nhập',
     signUp: 'Tạo tài khoản',
@@ -37,7 +37,7 @@ export const accountMessages = {
     signOut: 'Đăng xuất',
     resetPrototype: 'Xóa dữ liệu prototype',
     overviewGreeting: 'Chào mừng trở lại, {{name}}',
-    overviewSubtitle: 'Tài khoản của bạn đang hoạt động độc lập với ứng dụng Tomni chính.',
+    overviewSubtitle: 'Tài khoản của bạn đang hoạt động độc lập với ứng dụng Tomny chính.',
     plan: 'Gói hiện tại',
     credits: 'Tín dụng còn lại',
     activeDevices: 'Thiết bị hoạt động',
@@ -140,9 +140,9 @@ export const accountMessages = {
     prototypeNotice: 'Mọi thao tác chỉ dùng mock service và localStorage riêng của package.',
   },
   'en-US': {
-    brand: 'Tomni Account',
+    brand: 'Tomny Account',
     prototypeBadge: 'Standalone • not integrated',
-    authWelcome: 'One identity across every Tomni surface',
+    authWelcome: 'One identity across every Tomny surface',
     authDescription:
       'Local use always stays available. An account only unlocks sync, devices, plans, and collaboration.',
     signIn: 'Sign in',
@@ -177,7 +177,7 @@ export const accountMessages = {
     signOut: 'Sign out',
     resetPrototype: 'Clear prototype data',
     overviewGreeting: 'Welcome back, {{name}}',
-    overviewSubtitle: 'Your account is running independently from the main Tomni application.',
+    overviewSubtitle: 'Your account is running independently from the main Tomny application.',
     plan: 'Current plan',
     credits: 'Credits remaining',
     activeDevices: 'Active devices',

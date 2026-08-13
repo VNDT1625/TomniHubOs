@@ -37,7 +37,7 @@ CRITICAL_PATH_PATTERN: env var — pattern to detect critical file paths
 REPO=$(gh repo view --json nameWithOwner --jq '.nameWithOwner')
 ```
 
-**Worktree path:** always `/tmp/aionui-verify-<PR_NUMBER>` — never use `/tmp/aionui-pr-*` (reserved for pr-automation/pr-fix).
+**Worktree path:** always `/tmp/tomni-verify-<PR_NUMBER>` — never use `/tmp/tomni-pr-*` (reserved for pr-automation/pr-fix).
 
 ---
 
@@ -189,7 +189,7 @@ gh pr view $PR_NUMBER \
 
 ```bash
 REPO_ROOT=$(git rev-parse --show-toplevel)
-WORKTREE_DIR="/tmp/aionui-verify-${PR_NUMBER}"
+WORKTREE_DIR="/tmp/tomni-verify-${PR_NUMBER}"
 
 # Clean up any stale worktree
 git worktree remove "$WORKTREE_DIR" --force 2>/dev/null || true
@@ -377,11 +377,11 @@ And continue to Step 4.
 
 #### 4a — Worktree Setup
 
-Create worktree at `/tmp/aionui-verify-<PR_NUMBER>` (reuse if already created in Step 2):
+Create worktree at `/tmp/tomni-verify-<PR_NUMBER>` (reuse if already created in Step 2):
 
 ```bash
 REPO_ROOT=$(git rev-parse --show-toplevel)
-WORKTREE_DIR="/tmp/aionui-verify-${PR_NUMBER}"
+WORKTREE_DIR="/tmp/tomni-verify-${PR_NUMBER}"
 
 # Reuse existing worktree if present, otherwise create
 if [ ! -d "$WORKTREE_DIR" ]; then
@@ -621,7 +621,7 @@ Display the command for the user to run in another terminal:
 ```
 在另一个终端中运行以下命令启动应用进行验证：
 
-  cd /tmp/aionui-verify-<PR_NUMBER> && bun run start
+  cd /tmp/tomni-verify-<PR_NUMBER> && bun run start
 
 验证完成后，请在此选择：
   m  - 合并
@@ -696,7 +696,7 @@ When user inputs `q` at the PR list, or the PR list is empty, or all PRs have be
 **Clean up all verify worktrees:**
 
 ```bash
-for dir in /tmp/aionui-verify-*; do
+for dir in /tmp/tomni-verify-*; do
   [ -d "$dir" ] && git -C "$(git rev-parse --show-toplevel)" worktree remove "$dir" --force 2>/dev/null || true
 done
 ```
@@ -718,7 +718,7 @@ done
 
 ## Mandatory Rules
 
-- **Worktree path** — always `/tmp/aionui-verify-<PR_NUMBER>`; never use `/tmp/aionui-pr-*` (reserved for pr-automation/pr-fix)
+- **Worktree path** — always `/tmp/tomni-verify-<PR_NUMBER>`; never use `/tmp/tomni-pr-*` (reserved for pr-automation/pr-fix)
 - **No AI signature** — no `Co-Authored-By`, no `Generated with` in any commit or comment
 - **Merge strategy** — always `--squash`; never `--merge` or `--rebase`
 - **Comment marker** — use `<!-- pr-verify-bot -->` (distinct from `<!-- pr-review-bot -->` and `<!-- pr-automation-bot -->`)
@@ -744,7 +744,7 @@ done
     c. Mergeable? → MERGEABLE (continue) / UNKNOWN (skip) / CONFLICTING (auto-merge or prompt)
  3. Review summary → parse pr-review-bot comment, show concise summary, d for full report
  4. Impact analysis + test supplementation:
-    a. Create worktree at /tmp/aionui-verify-<PR> (reuse if from Step 2)
+    a. Create worktree at /tmp/tomni-verify-<PR> (reuse if from Step 2)
     b. Trace changed files → L1/L2 upstream deps → UI rendering impact
     c. Write supplemental tests in worktree (annotate [commit] vs [skip])
     d. bun run test in worktree
@@ -757,5 +757,5 @@ done
     r  → ask reason, remove bot:ready-to-merge + add bot:needs-human-review, post pr-verify-bot comment, cleanup
     s  → no label change, cleanup, back to list
     d  → show full review comment, re-show action menu
- 7. Cleanup all /tmp/aionui-verify-* worktrees → session summary (merged/auto-merge/rejected/skipped)
+ 7. Cleanup all /tmp/tomni-verify-* worktrees → session summary (merged/auto-merge/rejected/skipped)
 ```

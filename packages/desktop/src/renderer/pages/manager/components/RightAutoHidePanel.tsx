@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -19,7 +19,7 @@
  *
  * The panel is presentational: parents own the section state and pass `items`
  * (plus a `tools` slot rendered above the nav list). Persistence of the pinned
- * state is the panel's own concern, keyed under `aionui.manager.panelPinned`.
+ * state is the panel's own concern, keyed under `tomny.manager.panelPinned`.
  */
 
 import React, { useEffect, useState } from 'react';
@@ -28,7 +28,7 @@ import { Button, Tooltip } from '@arco-design/web-react';
 import { Pushpin, Schedule } from '@icon-park/react';
 import styles from '../manager.module.css';
 
-const PIN_STORAGE_KEY = 'aionui.manager.panelPinned';
+const PIN_STORAGE_KEY = 'tomny.manager.panelPinned';
 
 /** A single navigation row; child rows are visually indented by the panel. */
 export type PanelNavItem = {

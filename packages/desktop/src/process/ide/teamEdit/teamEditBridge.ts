@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -11,7 +11,7 @@
  * The IDE "Team" panel shows WHO (agents + the user) is working on the open
  * folder and WHICH files each one currently holds (an advisory lease), plus a
  * live activity feed. The same service backs the agent-facing MCP tools
- * (`team_*` on `aionui-ide`), so an agent claiming a file and the panel showing
+ * (`team_*` on `tomny-ide`), so an agent claiming a file and the panel showing
  * that claim hit ONE source of truth.
  *
  * Channels (always-resolving envelopes so a renderer await never hangs):

@@ -8,7 +8,7 @@ import {
 } from '../../../packages/desktop/src/process/agentRuntime/presentationRuntime';
 
 const strongPlan = (): PresentationPlan => ({
-  title: 'AionUI Presentation Runtime',
+  title: 'TOMNY Presentation Runtime',
   audience: 'Product leadership',
   objective: 'Approve the implementation roadmap',
   tone: 'Confident and evidence-led',

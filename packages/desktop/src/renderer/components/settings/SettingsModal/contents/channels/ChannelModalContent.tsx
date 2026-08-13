@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -13,7 +13,7 @@ import {
   type IWebUIStatus,
 } from '@/common/adapter/ipcBridge';
 import { configService } from '@/common/config/configService';
-import AionScrollArea from '@/renderer/components/base/AionScrollArea';
+import TomnyScrollArea from '@/renderer/components/base/TomnyScrollArea';
 import { useModelProviderList } from '@/renderer/hooks/agent/useModelProviderList';
 import { useConfig } from '@/renderer/hooks/config/useConfig';
 import type { GoogleModelSelection } from '@/renderer/pages/conversation/platforms/gemini/useGoogleModelSelection';
@@ -845,7 +845,7 @@ const ChannelModalContent: React.FC = () => {
   ];
 
   return (
-    <AionScrollArea className={isPageMode ? 'h-full' : ''}>
+    <TomnyScrollArea className={isPageMode ? 'h-full' : ''}>
       <div className='px-[12px] md:px-[28px]'>
         <h2 className='text-20px font-500 text-t-primary m-0'>{t('settings.channels.title', 'Channels')}</h2>
         <div className='space-y-8px mt-10px'>
@@ -875,7 +875,7 @@ const ChannelModalContent: React.FC = () => {
           ))}
         </div>
       </div>
-    </AionScrollArea>
+    </TomnyScrollArea>
   );
 };
 

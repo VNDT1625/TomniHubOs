@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -37,7 +37,7 @@ import type { FactSource, VolatilityClass } from '@process/knowledge/realtime/rt
 export const BUILTIN_REALTIME_KNOWLEDGE_ID = 'builtin-realtime-knowledge';
 
 /** Canonical name of the built-in Realtime Knowledge MCP server. */
-export const BUILTIN_REALTIME_KNOWLEDGE_NAME = 'aionui-realtime-knowledge';
+export const BUILTIN_REALTIME_KNOWLEDGE_NAME = 'tomny-realtime-knowledge';
 
 /** Dependencies for {@link createRealtimeKnowledgeServer}. */
 export type RealtimeKnowledgeServerDeps = {

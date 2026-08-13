@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  *
  * Unit tests for the YouTube cookie exporter (yt-dlp `--cookies` support). The
@@ -21,7 +21,7 @@ import {
 
 const tempDirs: string[] = [];
 const realTempDir = async (): Promise<string> => {
-  const dir = await mkdtemp(join(tmpdir(), 'aionui-ytcookie-test-'));
+  const dir = await mkdtemp(join(tmpdir(), 'tomny-ytcookie-test-'));
   tempDirs.push(dir);
   return dir;
 };

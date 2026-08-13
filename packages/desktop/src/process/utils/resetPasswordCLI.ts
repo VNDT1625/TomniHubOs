@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  *
  * Reset password CLI utility for packaged applications
@@ -38,10 +38,10 @@ export function resolveResetPasswordUsername(argv: string[]): string {
   return argsAfterCommand.find((arg) => !arg.startsWith('--')) || 'admin';
 }
 
-// Tomni Gateway starts for every application mode, including --resetpass.
+// Tomny Gateway starts for every application mode, including --resetpass.
 // The username argument is advisory because WebUI currently has one owner account.
 export async function resetPasswordCLI(username: string): Promise<void> {
-  log.info(`Target user: ${username} (Tomni WebUI owner)`);
+  log.info(`Target user: ${username} (Tomny WebUI owner)`);
   const endpoint = await getTomniGatewayEndpoint();
   try {
     const res = await fetch(`${endpoint.url}/api/webui/reset-password`, {
@@ -65,7 +65,8 @@ export async function resetPasswordCLI(username: string): Promise<void> {
     log.info('');
     log.warning('Please change this password after next login.');
   } catch (error) {
-    log.error(error instanceof Error ? error.message : 'Password reset failed');
-    process.exit(1);
+    const failure = error instanceof Error ? error : new Error('Password reset failed');
+    log.error(failure.message);
+    throw failure;
   }
 }

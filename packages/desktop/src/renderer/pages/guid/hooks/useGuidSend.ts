@@ -1,12 +1,12 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
 import { ipcBridge } from '@/common';
 import type { IMcpServer, TProviderWithModel } from '@/common/config/storage';
-import { buildAgentConversationParams, isTomniAgentBackend } from '@/common/utils/buildAgentConversationParams';
+import { buildAgentConversationParams, isTomnyAgentBackend } from '@/common/utils/buildAgentConversationParams';
 import { toSessionMcpServer } from '@/renderer/hooks/mcp/catalog';
 import { emitter } from '@/renderer/utils/emitter';
 import { buildDisplayMessage } from '@/renderer/utils/file/messageFiles';
@@ -271,15 +271,15 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
       return;
     }
 
-    // Aionrs path (direct selection or preset assistant with aionrs as main agent)
-    if (isTomniAgentBackend(selectedAgent) || (is_preset && isTomniAgentBackend(finalEffectiveAgentType))) {
+    // TomnyAgentic path (direct selection or preset assistant with tomnyagentic as main agent)
+    if (isTomnyAgentBackend(selectedAgent) || (is_preset && isTomnyAgentBackend(finalEffectiveAgentType))) {
       if (!current_model) {
         Message.warning(t('conversation.noModelConfigured'));
         return;
       }
       try {
         const conversation = await ipcBridge.conversation.create.invoke({
-          type: 'aionrs',
+          type: 'tomnyagentic',
           name: input,
           model: current_model,
           extra: {
@@ -290,7 +290,7 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
             preset_enabled_skills: enabled_skills_to_send,
             exclude_auto_inject_skills: excludeBuiltinSkills,
             selected_mcp_server_ids: selectedUserMcpServerIds,
-            // aionrs should consume the authoritative session snapshot, just
+            // tomnyagentic should consume the authoritative session snapshot, just
             // like team MCP does, instead of reloading only user servers from
             // the global MCP repository at runtime.
             selected_session_mcp_servers: selectedAllSessionMcpServers,
@@ -314,7 +314,7 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
           input,
           files: files.length > 0 ? files : undefined,
         };
-        sessionStorage.setItem(`aionrs_initial_message_${conversation.id}`, JSON.stringify(initialMessage));
+        sessionStorage.setItem(`tomnyagentic_initial_message_${conversation.id}`, JSON.stringify(initialMessage));
 
         await navigate(`/conversation/${conversation.id}`);
       } catch (error: unknown) {

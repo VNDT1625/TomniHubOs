@@ -45,35 +45,50 @@ const replaceIfPresent = (filePath, replacements) => {
 };
 
 const patchTomnyBranding = (sourceDir) => {
-  replaceIfPresent(path.join(sourceDir, 'crates', 'aionui-app', 'src', 'cli.rs'), [
-    [
-      '#[command(name = "aioncore", about = "AionUi Backend Server", version)]',
-      '#[command(name = "tomny-core", about = "Tomny Core Server", version)]',
-    ],
-    ['Cli::try_parse_from(["aioncore"', 'Cli::try_parse_from(["tomny-core"'],
-    ['rendered.contains("aioncore")', 'rendered.contains("tomny-core")'],
-  ]);
-  replaceIfPresent(path.join(sourceDir, 'crates', 'aionui-app', 'src', 'bootstrap', 'tracing_init.rs'), [
-    ['aioncore.log', 'tomny-core.log'],
-  ]);
-  replaceIfPresent(path.join(sourceDir, 'crates', 'aionui-app', 'Cargo.toml'), [
-    ['name = "aioncore"', 'name = "tomny-core"'],
-  ]);
+  for (const appCrate of ['aionui-app', 'tomny-app']) {
+    replaceIfPresent(path.join(sourceDir, 'crates', appCrate, 'src', 'cli.rs'), [
+      [
+        '#[command(name = "aioncore", about = "AionUi Backend Server", version)]',
+        '#[command(name = "tomny-core", about = "Tomny Core Server", version)]',
+      ],
+      [
+        '#[command(name = "tomnycore", about = "Tomny Backend Server", version)]',
+        '#[command(name = "tomny-core", about = "Tomny Core Server", version)]',
+      ],
+      ['Cli::try_parse_from(["aioncore"', 'Cli::try_parse_from(["tomny-core"'],
+      ['Cli::try_parse_from(["tomnycore"', 'Cli::try_parse_from(["tomny-core"'],
+      ['rendered.contains("aioncore")', 'rendered.contains("tomny-core")'],
+      ['rendered.contains("tomnycore")', 'rendered.contains("tomny-core")'],
+    ]);
+    replaceIfPresent(path.join(sourceDir, 'crates', appCrate, 'src', 'bootstrap', 'tracing_init.rs'), [
+      ['aioncore.log', 'tomny-core.log'],
+      ['tomnycore.log', 'tomny-core.log'],
+    ]);
+    replaceIfPresent(path.join(sourceDir, 'crates', appCrate, 'Cargo.toml'), [
+      ['name = "aioncore"', 'name = "tomny-core"'],
+      ['name = "tomnycore"', 'name = "tomny-core"'],
+    ]);
+  }
 };
 
 const patchTomnyCompatibility = (sourceDir) => {
-  replaceIfPresent(path.join(sourceDir, 'crates', 'aionui-file', 'src', 'service.rs'), [
-    [
-      'path.strip_prefix(root).unwrap_or(&path).to_string_lossy().into_owned()',
-      'path.strip_prefix(root).unwrap_or(&path).to_string_lossy().replace(\'\\\\\', "/")',
-    ],
-    [
-      'path.strip_prefix(root).unwrap_or(path).to_string_lossy().into_owned()',
-      'path.strip_prefix(root).unwrap_or(path).to_string_lossy().replace(\'\\\\\', "/")',
-    ],
-    ['.to_string_lossy()\r\n            .into_owned();', '.to_string_lossy()\r\n            .replace(\'\\\\\', "/");'],
-    ['.to_string_lossy()\n            .into_owned();', '.to_string_lossy()\n            .replace(\'\\\\\', "/");'],
-  ]);
+  for (const fileCrate of ['aionui-file', 'tomny-file']) {
+    replaceIfPresent(path.join(sourceDir, 'crates', fileCrate, 'src', 'service.rs'), [
+      [
+        'path.strip_prefix(root).unwrap_or(&path).to_string_lossy().into_owned()',
+        'path.strip_prefix(root).unwrap_or(&path).to_string_lossy().replace(\'\\\\\', "/")',
+      ],
+      [
+        'path.strip_prefix(root).unwrap_or(path).to_string_lossy().into_owned()',
+        'path.strip_prefix(root).unwrap_or(path).to_string_lossy().replace(\'\\\\\', "/")',
+      ],
+      [
+        '.to_string_lossy()\r\n            .into_owned();',
+        '.to_string_lossy()\r\n            .replace(\'\\\\\', "/");',
+      ],
+      ['.to_string_lossy()\n            .into_owned();', '.to_string_lossy()\n            .replace(\'\\\\\', "/");'],
+    ]);
+  }
 };
 const gitRepositoryArgs = (sourceDir) => [`--git-dir=${path.join(sourceDir, '.git')}`, `--work-tree=${sourceDir}`];
 

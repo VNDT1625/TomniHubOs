@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -193,7 +193,7 @@ export class RustSidecarClient {
           protocol: TOMNY_SIDECAR_PROTOCOL,
           minimumProtocolVersion: TOMNY_SIDECAR_PROTOCOL_VERSION,
           maximumProtocolVersion: TOMNY_SIDECAR_PROTOCOL_VERSION,
-          clientVersion: this.config.clientVersion ?? 'aionui-desktop',
+          clientVersion: this.config.clientVersion ?? 'tomny-desktop',
         },
         { timeoutMs: this.config.startupTimeoutMs ?? DEFAULT_STARTUP_TIMEOUT_MS }
       );

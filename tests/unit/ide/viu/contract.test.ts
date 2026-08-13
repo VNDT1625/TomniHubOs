@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -13,7 +13,7 @@ import { createPromptProject } from '@/process/ide/viu/design';
 
 describe('Viu immutable contract persistence', () => {
   it('content-addresses a contract, strips preview bytes, and safely reuses identical content', async () => {
-    const rootPath = await mkdtemp(join(tmpdir(), 'aionui-viu-contract-'));
+    const rootPath = await mkdtemp(join(tmpdir(), 'tomny-viu-contract-'));
     try {
       const project = {
         ...createPromptProject({ prompt: 'A traceable product page' }, new Date('2026-07-22T00:00:00.000Z')),
@@ -34,7 +34,7 @@ describe('Viu immutable contract persistence', () => {
   });
 
   it('detects tampering at an existing immutable digest path', async () => {
-    const rootPath = await mkdtemp(join(tmpdir(), 'aionui-viu-contract-'));
+    const rootPath = await mkdtemp(join(tmpdir(), 'tomny-viu-contract-'));
     try {
       const project = createPromptProject(
         { prompt: 'A protected visual contract' },

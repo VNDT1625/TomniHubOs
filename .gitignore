@@ -202,7 +202,7 @@ worktrees/
 .superpowers/
 docs/superpowers/
 resources/bundled-bun
-resources/bundled-aioncore
+resources/bundled-tomnycore
 resources/bundled-tomny-cli
 resources/bundled-tomny-core
 
@@ -230,13 +230,13 @@ packages/mtui/target/
 .mtui/
 
 # Local runtime and generated coverage artifacts
-.aionrs/
+.tomnyagentic/
 .tomny-runtime/
 
 # Omni workspace metadata (local specs, understand, wiki for the project)
 .omni/
 .tomni/
-.aionui/
+.tomny/
 .omni-sidecar/
 .tomny/
 data/*.db-shm
@@ -246,3 +246,8 @@ data/*.db-wal
 .kiro/steering/claude-ui-testing.md
 .claude/skills/test-with-computer/SKILL.md
 .kiro/status.md
+
+# Local model training artifacts (weights, synthetic datasets, checkpoints)
+.local-models/
+.training-data/
+.model-adapters/

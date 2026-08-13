@@ -1,24 +1,29 @@
-# Tomni Agentic Store — UX/UI đã chốt
+# Tomny Agentic Store — UX/UI đã chốt
+
+> **Design conformance:** [Tomny Hub OS Visual Design System](tomni-hub-visual-design.md) là nguồn
+> sự thật cho typography, glass, spacing, control, popup và responsive. Mock ASCII bên dưới
+> chỉ mô tả information architecture; không được dùng để tạo một visual system khác.
+
 
 > Trạng thái: Đã chốt định hướng UX cơ bản  
 > Ngày cập nhật: 2026-07-20
 
 ## 1. Mục tiêu
 
-Agentic Store là nơi người dùng khám phá, tìm kiếm, cài đặt, cập nhật và quản lý các thành phần mở rộng của Tomni.
+Agentic Store là nơi người dùng khám phá, tìm kiếm, cài đặt, cập nhật và quản lý các thành phần mở rộng của Tomny.
 
 Store không chỉ chứa ứng dụng. Store có hai nhóm nội dung cấp cao:
 
 1. **Apps** — ứng dụng hoàn chỉnh có giao diện và không gian làm việc riêng.
 2. **Packages** — gói mở rộng có thể được app, agent hoặc hệ thống sử dụng.
 
-Tên hiển thị trên giao diện phải là **Packages**, không dùng **Capability Packages** làm tên tab chung vì Store còn có **UI Packages**.
+Tên hiển thị trên giao diện phải là **Packages**, không dùng **Agent Capsules** làm tên tab chung vì Store còn có **UI Packages**.
 
 ## 2. Thuật ngữ Store
 
 ### 2.1 Apps
 
-App là một sản phẩm có trải nghiệm sử dụng riêng trong Tomni, ví dụ:
+App là một sản phẩm có trải nghiệm sử dụng riêng trong Tomny, ví dụ:
 
 - Chat;
 - IDE;
@@ -34,7 +39,7 @@ App sau khi cài có thể:
 - xuất hiện trong thư viện Apps ở Home;
 - được người dùng ghim vào sidebar trái;
 - mở thành workspace hoặc surface riêng;
-- dùng các dịch vụ dùng chung của Tomni như model, file, context, notification, permissions và secrets.
+- dùng các dịch vụ dùng chung của Tomny như model, file, context, notification, permissions và secrets.
 
 ### 2.2 Packages
 
@@ -42,7 +47,7 @@ App sau khi cài có thể:
 
 Packages hiện có ít nhất hai loại:
 
-#### Capability Package
+#### Agent Capsule
 
 Gói năng lực có thể cung cấp:
 
@@ -56,7 +61,7 @@ Gói năng lực có thể cung cấp:
 - automation;
 - secret alias hoặc tích hợp API an toàn.
 
-Capability Package có thể được cài để tăng năng lực cho agent, app hoặc workspace mà không nhất thiết tạo thêm một app độc lập ở sidebar.
+Agent Capsule có thể được cài để tăng năng lực cho agent, app hoặc workspace mà không nhất thiết tạo thêm một app độc lập ở sidebar.
 
 Ví dụ:
 
@@ -101,7 +106,7 @@ Trong thẻ hoặc trang chi tiết mới hiển thị loại cụ thể:
 
 ```text
 APP
-PACKAGE · CAPABILITY
+PACKAGE · CAPSULE
 PACKAGE · UI
 ```
 
@@ -111,7 +116,7 @@ Cách này cho phép bổ sung loại package mới trong tương lai mà không
 
 ```text
 ┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
-│ ◈ TOMNI                     🔍 Tìm ứng dụng, workspace, prompt, model...                         🔔 3        │
+│ ◈ TOMNY                     🔍 Tìm ứng dụng, workspace, prompt, model...                         🔔 3        │
 ├──────────────────────┬─────────────────────────────────────────────────────────────┬─────────────────────────┤
 │                  📌  │                                                             │ Trạng thái          📌 │
 │ ◉  Home              │  Agentic Store                                              │                         │
@@ -121,15 +126,15 @@ Cách này cho phép bổ sung loại package mới trong tương lai mà không
 │ ◷  Lịch sử           │  └───────────────────────────────────────────────────────┘  │ │ 1 chờ duyệt · 54% →│ │
 │ ⚙  Cài đặt           │                                                             │ └─────────────────────┘ │
 │ TEAM / COMPANY     ＋ │  Khám phá     Apps     Packages     Đã cài     Cập nhật 2  │                         │
-│ ▾ Tomni Company      │  ─────────                                                  │ ┌─────────────────────┐ │
+│ ▾ Tomny Company      │  ─────────                                                  │ ┌─────────────────────┐ │
 │   Product Team       │                                                             │ │ Thông báo          │ │
 │   Security Team      │  ┌─────────────────────────────────────────────────────────┐│ │ 4 chưa đọc         │ │
 │                      │  │ NỔI BẬT                                                ││ │ Browser · Chat    →│ │
 │ WORKSPACES         ＋ │  │                                                         ││ └─────────────────────┘ │
-│ ▾ AionUi             │  │ ◉ Browser Agent                                         ││                         │
+│ ▾ Tomny Hub OS             │  │ ◉ Browser Agent                                         ││                         │
 │   AI Security        │  │ Duyệt web, đăng nhập an toàn và thực hiện tác vụ đa bước││ ┌─────────────────────┐ │
-│   Tomni Design       │  │                                                         ││ │ Models             │ │
-│                      │  │ Tomni Labs · APP · 28 MB       [Xem chi tiết]   [Cài] ││ │ ● OpenAI           │ │
+│   Tomny Design       │  │                                                         ││ │ Models             │ │
+│                      │  │ Tomny Labs · APP · 28 MB       [Xem chi tiết]   [Cài] ││ │ ● OpenAI           │ │
 │ APPS               ＋ │  └─────────────────────────────────────────────────────────┘│ │ ● Anthropic        │ │
 │ ◇ Chat               │                                                             │ │ ◐ OpenRouter       │ │
 │ ◇ IDE                │  Danh mục                                                   │ │ 7 model khả dụng → │ │
@@ -144,10 +149,10 @@ Cách này cho phép bổ sung loại package mới trong tương lai mà không
 │                      │  │   Builder        │ │   Studio         │ │   Dashboard    ││                         │
 │                      │  │                  │ │                  │ │                ││                         │
 │                      │  │ PACKAGE          │ │ APP              │ │ PACKAGE        ││                         │
-│                      │  │ CAPABILITY       │ │                  │ │ UI             ││                         │
+│                      │  │ CAPSULE       │ │                  │ │ UI             ││                         │
 │                      │  │                  │ │                  │ │                ││                         │
 │                      │  │ ★ 4.9 · 36 MB    │ │ ★ 4.8 · 42 MB    │ │ ★ 4.7 · 12 MB  ││                         │
-│                      │  │ Tomni Labs       │ │ Tomni Labs       │ │ Interface Lab  ││                         │
+│                      │  │ Tomny Labs       │ │ Tomny Labs       │ │ Interface Lab  ││                         │
 │                      │  │           [Cài]  │ │            [Mở]  │ │         [Cài]  ││                         │
 │                      │  └──────────────────┘ └──────────────────┘ └────────────────┘│                         │
 │                      │                                                             │                         │
@@ -156,7 +161,7 @@ Cách này cho phép bổ sung loại package mới trong tương lai mà không
 │                      │  ┌──────────────────┐ ┌──────────────────┐ ┌────────────────┐│                         │
 │                      │  │ ◇ Research Agent │ │ ◇ Social Inbox   │ │ ◇ Data Layout  ││                         │
 │                      │  │ APP              │ │ PACKAGE          │ │ PACKAGE · UI   ││                         │
-│                      │  │ ★ 4.8      [Cài] │ │ CAPABILITY [Cài] │ │ ★ 4.9    [Cài] ││                         │
+│                      │  │ ★ 4.8      [Cài] │ │ CAPSULE [Cài] │ │ ★ 4.9    [Cài] ││                         │
 │                      │  └──────────────────┘ └──────────────────┘ └────────────────┘│                         │
 │ ┌──────────────────┐ │                                                             │                         │
 │ │ TD  Thuận Nguyễn │ │                                                             │                         │
@@ -170,7 +175,7 @@ Cách này cho phép bổ sung loại package mới trong tương lai mà không
 
 ### 4.1 Global Search ở header
 
-Global Search tìm trên toàn bộ Tomni:
+Global Search tìm trên toàn bộ Tomny:
 
 - app đã cài;
 - app và package trong Store;
@@ -219,7 +224,7 @@ Thứ tự tab đã chốt:
 4. **Đã cài**
 5. **Cập nhật**
 
-Không dùng tab tên **Capability Packages**.
+Không dùng tab tên **Agent Capsules**.
 
 ### Khám phá
 
@@ -253,7 +258,7 @@ Hiển thị tất cả package và cho phép lọc theo loại:
 
 ```text
 Tất cả
-Capability
+Capsule
 UI
 ```
 
@@ -331,20 +336,20 @@ Ví dụ App:
 │ Tạo slide và tài liệu      │
 │                            │
 │ ★ 4.8 · 42 MB              │
-│ Tomni Labs          [Cài]  │
+│ Tomny Labs          [Cài]  │
 └────────────────────────────┘
 ```
 
-Ví dụ Capability Package:
+Ví dụ Agent Capsule:
 
 ```text
 ┌────────────────────────────┐
 │ ◇ Full-stack Builder       │
-│ PACKAGE · CAPABILITY       │
+│ PACKAGE · CAPSULE       │
 │ Workflow xây ứng dụng      │
 │                            │
 │ ★ 4.9 · 36 MB              │
-│ Tomni Labs          [Cài]  │
+│ Tomny Labs          [Cài]  │
 └────────────────────────────┘
 ```
 
@@ -382,7 +387,7 @@ Cần có:
 - nút Cài/Mở/Cập nhật/Gỡ;
 - tùy chọn ghim vào sidebar sau khi cài.
 
-### 8.2 Trang chi tiết Capability Package
+### 8.2 Trang chi tiết Agent Capsule
 
 Cần có:
 
@@ -421,7 +426,7 @@ Sau khi cài app:
 - hiển thị tùy chọn **Ghim vào sidebar**;
 - app dùng được các dịch vụ chung theo manifest và quyền đã cấp.
 
-### Capability Package
+### Agent Capsule
 
 Sau khi cài:
 
@@ -439,39 +444,33 @@ Sau khi cài:
 - phải có khả năng hoàn tác về giao diện trước đó;
 - không tự thay đổi toàn bộ hệ thống khi chưa được xác nhận.
 
-## 10. Panel trái và phải
+## 10. Shell và panel responsive
 
-Trang Store dùng chung hành vi panel với Home Hub.
+Store dùng đúng shell hiện hành của Home Hub:
 
-### Panel được ghim
+- sidebar desktop rộng 220 px và thu gọn 64 px bằng nút đóng/mở;
+- dưới 760 px, sidebar mở bằng drawer/overlay và không đẩy nội dung;
+- status rail rộng 256 px chỉ hiển thị từ 1180 px;
+- dưới 1180 px, dữ liệu status được truy cập qua popup/shortcut tương đương;
+- trạng thái collapse của sidebar được lưu; rail không có cơ chế pin độc lập;
+- Store content mở rộng vào vùng trống nhưng không đổi information architecture.
 
-- luôn hiển thị;
-- chiếm không gian layout;
-- nút ghim luôn nhìn thấy.
-
-### Panel bỏ ghim
-
-- tự ẩn;
-- content Store mở rộng;
-- panel xuất hiện dạng overlay khi chuột tới gần mép trái hoặc phải;
-- không làm co hoặc đẩy nội dung Store;
-- nút ghim xuất hiện khi panel được mở hoặc khi chuột tới gần.
-
-Trạng thái ghim của panel trái và panel phải được lưu độc lập.
+Không triển khai vùng hover ở mép màn hình để tự mở panel vì xung đột thao tác cuộn, kéo và
+responsive của shell hiện tại.
 
 ## 11. Hành vi UX quan trọng
 
 - Store Search phải luôn dễ nhìn và nằm phía trên tabs hoặc ngay dưới tiêu đề Store.
 - Global Search và Store Search phải khác placeholder, phạm vi và trạng thái focus.
-- Store không được gọi mọi nội dung mở rộng là capability.
-- **Packages** là nhóm chung; **Capability** và **UI** là loại package.
+- Store không được gọi mọi nội dung mở rộng là Agent Capsule; App Package và UI Package vẫn có vai trò riêng.
+- **Packages** là nhóm chung; **Capsule** và **UI** là loại package.
 - Thẻ phải cho người dùng nhận ra ngay đây là App hay Package.
-- Với Package, phải nhận ra ngay là Capability hay UI.
+- Với Package, phải nhận ra ngay là Capsule hay UI.
 - Không tự động ghim app mới cài vào sidebar.
-- Không tự kích hoạt Capability Package có quyền nhạy cảm.
+- Không tự kích hoạt Agent Capsule có quyền nhạy cảm.
 - Không tự áp dụng UI Package lên toàn hệ thống.
 - Quyền mới trong bản cập nhật phải được nêu rõ trước khi cập nhật.
-- Store phải hoạt động tốt khi panel trái hoặc phải đang tự ẩn.
+- Store phải hoạt động tốt khi sidebar thu gọn/drawer hoặc status rail đang ẩn theo breakpoint.
 - Nội dung chính ưu tiên vừa màn hình desktop nhưng danh sách Store được phép cuộn dọc.
 
 ## 12. Quan hệ với Home Hub
@@ -480,7 +479,7 @@ Trạng thái ghim của panel trái và panel phải được lưu độc lập
 - Khu Apps ở Home là thư viện app theo category, không thay thế Store.
 - Store là nơi khám phá, cài đặt, cập nhật và quản lý App/Package.
 - App sau khi cài có thể xuất hiện ở Home.
-- Package sau khi cài chủ yếu xuất hiện trong app, workspace, capability manager hoặc phần giao diện phù hợp.
+- Package sau khi cài chủ yếu xuất hiện trong app, workspace, Capsule Manager hoặc phần giao diện phù hợp.
 
 Tài liệu liên quan:
 

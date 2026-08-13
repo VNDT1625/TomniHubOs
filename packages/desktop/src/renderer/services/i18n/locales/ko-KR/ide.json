@@ -39,9 +39,60 @@
     "hooks": "\uc5d0\uc774\uc804\ud2b8 \ud6c5",
     "spec": "\uc0ac\uc591",
     "lsp": "\uc5b8\uc5b4 \uc11c\ubc84",
+    "extensions": "확장",
     "expbase": "\uacbd\ud5d8 \ubca0\uc774\uc2a4",
     "team": "\ud300",
     "viu": "Viu \u00b7 Visual UI"
+  },
+  "extensions": {
+    "title": "확장",
+    "subtitle": "신뢰할 수 있는 패키지에서 설치된 IDE 기능입니다. 여기서는 메타데이터만 표시하며 선택 모듈은 실행하지 않습니다.",
+    "installedCount": "{{count}}개 설치됨",
+    "refresh": "새로 고침",
+    "browseStore": "스토어 둘러보기",
+    "activityGroups": "활동 그룹",
+    "installedSubtabs": "설치된 하위 탭",
+    "groupEmpty": "이 그룹에는 설치된 하위 탭이 없습니다.",
+    "findExtensions": "확장 찾기",
+    "emptyHint": "스토어에서 IDE 확장을 설치하면 여기에 기능이 추가됩니다.",
+    "loading": "확장 불러오는 중",
+    "loadFailed": "확장을 불러올 수 없습니다.",
+    "retry": "다시 시도",
+    "selected": "선택된 기여",
+    "selectedHint": "이 기여가 선택되었습니다. 실행에는 IDE 정책이 계속 적용됩니다.",
+    "openPackage": "패키지 열기",
+    "packageLabel": "패키지",
+    "moduleLabel": "모듈",
+    "activationLabel": "활성화",
+    "activation": {
+      "onOpen": "열 때",
+      "onStartup": "시작할 때"
+    },
+    "runtime": {
+      "open": "열기",
+      "back": "확장으로 돌아가기",
+      "title": "{{name}} 확장",
+      "policyHint": "여기서는 서명된 자사 trusted React 모듈만 실행할 수 있습니다. 다른 런타임은 계속 차단됩니다.",
+      "checking": "실행 정책 확인 중",
+      "blockedTitle": "실행 차단됨",
+      "sandboxedWebBlocked": "네트워크 격리가 아직 강제되지 않아 샌드박스 웹 모듈이 비활성화되었습니다.",
+      "unsupportedBlocked": "이 모듈은 IDE 실행 정책을 충족하지 않습니다."
+    },
+
+    "groups": {
+      "codebase": "코드베이스",
+      "agentOps": "에이전트 운영"
+    },
+    "diagnostics": {
+      "title": "기여 진단",
+      "redactedHint": "세부 정보는 숨겨졌으며 진단 범주와 총계만 표시됩니다.",
+      "invalidPackage": "잘못된 패키지",
+      "protectedNamespace": "보호된 네임스페이스",
+      "dependencyUnavailable": "종속성을 사용할 수 없음",
+      "hostApiIncompatible": "호스트 API 비호환",
+      "contributionCollision": "기여 충돌",
+      "danglingReference": "끊어진 참조"
+    }
   },
   "viu": {
     "open": "Viu \u00b7 Visual UI",
@@ -219,8 +270,35 @@
           "y": "Y"
         },
 
-
-"image":{"section":"\uc774\ubbf8\uc9c0","fit":"\ub9de\ucda4","fitCover":"\ucc44\uc6b0\uae30","fitContain":"\ub9de\ucd94\uae30","fitFill":"\ub298\uc774\uae30","fitNone":"\uc6d0\ubcf8\u0020\ud06c\uae30","fitScaleDown":"\ucd95\uc18c","crop":"\uc790\ub974\uae30","focalPoint":"\ucd08\uc810","flipHorizontal":"\uac00\ub85c\u0020\ub4a4\uc9d1\uae30","flipVertical":"\uc138\ub85c\u0020\ub4a4\uc9d1\uae30","reset":"\ud504\ub808\uc774\ubc0d\u0020\uc7ac\uc124\uc815"},"stroke":{"section":"\ud14c\ub450\ub9ac","add":"\ud14c\ub450\ub9ac\u0020\ucd94\uac00","dashPattern":"\ub300\uc2dc\u0020\ud328\ud134","dashOffset":"\ub300\uc2dc\u0020\uc624\ud504\uc14b"},"quality":{"section":"\ud488\uc9c8\u0020\uac80\uc0ac","issueCount":"\ubb38\uc81c\u0020{{count}}\uac1c","noIssues":"\ud488\uc9c8\u0020\ubb38\uc81c\uac00\u0020\uc5c6\uc2b5\ub2c8\ub2e4.","error":"\uc624\ub958","warning":"\uacbd\uace0","project":"\ud504\ub85c\uc81d\ud2b8","issue":"{{code}}\u0020\u00b7\u0020{{entityId}}"},
+        "image": {
+          "section": "\uc774\ubbf8\uc9c0",
+          "fit": "\ub9de\ucda4",
+          "fitCover": "\ucc44\uc6b0\uae30",
+          "fitContain": "\ub9de\ucd94\uae30",
+          "fitFill": "\ub298\uc774\uae30",
+          "fitNone": "\uc6d0\ubcf8\u0020\ud06c\uae30",
+          "fitScaleDown": "\ucd95\uc18c",
+          "crop": "\uc790\ub974\uae30",
+          "focalPoint": "\ucd08\uc810",
+          "flipHorizontal": "\uac00\ub85c\u0020\ub4a4\uc9d1\uae30",
+          "flipVertical": "\uc138\ub85c\u0020\ub4a4\uc9d1\uae30",
+          "reset": "\ud504\ub808\uc774\ubc0d\u0020\uc7ac\uc124\uc815"
+        },
+        "stroke": {
+          "section": "\ud14c\ub450\ub9ac",
+          "add": "\ud14c\ub450\ub9ac\u0020\ucd94\uac00",
+          "dashPattern": "\ub300\uc2dc\u0020\ud328\ud134",
+          "dashOffset": "\ub300\uc2dc\u0020\uc624\ud504\uc14b"
+        },
+        "quality": {
+          "section": "\ud488\uc9c8\u0020\uac80\uc0ac",
+          "issueCount": "\ubb38\uc81c\u0020{{count}}\uac1c",
+          "noIssues": "\ud488\uc9c8\u0020\ubb38\uc81c\uac00\u0020\uc5c6\uc2b5\ub2c8\ub2e4.",
+          "error": "\uc624\ub958",
+          "warning": "\uacbd\uace0",
+          "project": "\ud504\ub85c\uc81d\ud2b8",
+          "issue": "{{code}}\u0020\u00b7\u0020{{entityId}}"
+        },
         "layout": {
           "section": "Auto layout",
           "mode": "Direction",
@@ -433,7 +511,25 @@
           "timeline": "Timeline",
           "keyframes": "Keyframes",
           "position": "Position",
-    "presetSmartAnimate":"\uc2a4\ub9c8\ud2b8\u0020\uc560\ub2c8\uba54\uc774\uc158","createTimeline":"\ud0c0\uc784\ub77c\uc778\u0020\ub9cc\ub4e4\uae30","addTrack":"\ud2b8\ub799\u0020\ucd94\uac00","addKeyframe":"\ud0a4\ud504\ub808\uc784\u0020\ucd94\uac00","loop":"\ubc18\ubcf5","property":"\uc18d\uc131","start":"\uc2dc\uc791","end":"\ub05d","pin":"\uace0\uc815","parallax":"\ud328\ub7f4\ub799\uc2a4","scrollBinding":"\uc2a4\ud06c\ub864\u0020\ubc14\uc778\ub529","addScrollBinding":"\uc2a4\ud06c\ub864\u0020\ubc14\uc778\ub529\u0020\ucd94\uac00","noTimeline":"\ud0c0\uc784\ub77c\uc778\uc774\u0020\uc5c6\uc2b5\ub2c8\ub2e4","x":"X","y":"Y","opacity":"\ubd88\ud22c\uba85\ub3c4","scale":"\ud06c\uae30","rotate":"\ud68c\uc804","blur":"\ud750\ub9bc"
+          "presetSmartAnimate": "\uc2a4\ub9c8\ud2b8\u0020\uc560\ub2c8\uba54\uc774\uc158",
+          "createTimeline": "\ud0c0\uc784\ub77c\uc778\u0020\ub9cc\ub4e4\uae30",
+          "addTrack": "\ud2b8\ub799\u0020\ucd94\uac00",
+          "addKeyframe": "\ud0a4\ud504\ub808\uc784\u0020\ucd94\uac00",
+          "loop": "\ubc18\ubcf5",
+          "property": "\uc18d\uc131",
+          "start": "\uc2dc\uc791",
+          "end": "\ub05d",
+          "pin": "\uace0\uc815",
+          "parallax": "\ud328\ub7f4\ub799\uc2a4",
+          "scrollBinding": "\uc2a4\ud06c\ub864\u0020\ubc14\uc778\ub529",
+          "addScrollBinding": "\uc2a4\ud06c\ub864\u0020\ubc14\uc778\ub529\u0020\ucd94\uac00",
+          "noTimeline": "\ud0c0\uc784\ub77c\uc778\uc774\u0020\uc5c6\uc2b5\ub2c8\ub2e4",
+          "x": "X",
+          "y": "Y",
+          "opacity": "\ubd88\ud22c\uba85\ub3c4",
+          "scale": "\ud06c\uae30",
+          "rotate": "\ud68c\uc804",
+          "blur": "\ud750\ub9bc"
         }
       },
       "inspector": {
@@ -1213,17 +1309,17 @@
       "deleteComboKey": "\ud0a4 \uc81c\uac70"
     },
     "context": {
-      "loading": "AionRS \ucee8\ud14d\uc2a4\ud2b8 \ubd88\ub7ec\uc624\ub294 \uc911\u2026",
-      "loadFailed": "AionRS \ucee8\ud14d\uc2a4\ud2b8\ub97c \ubd88\ub7ec\uc62c \uc218 \uc5c6\uc2b5\ub2c8\ub2e4.",
-      "empty": "\uc544\uc9c1 AionRS \ucee8\ud14d\uc2a4\ud2b8\uac00 \uc5c6\uc2b5\ub2c8\ub2e4.",
-      "exactTitle": "\uc2e4\uc81c AionRS \uc694\uccad \ucee8\ud14d\uc2a4\ud2b8",
-      "exactHint": "\uc555\ucd95 \ud6c4 AionRS\uc5d0\uc11c \uc9c1\uc811 \uc77d\uc2b5\ub2c8\ub2e4. \ub0b4\ubd80 \ucee8\ud14d\uc2a4\ud2b8\ub294 \uc77d\uae30 \uc804\uc6a9\uc774\uba70 \uc0ac\uc6a9\uc790 \ucee8\ud14d\uc2a4\ud2b8\ub294 \ud3b8\uc9d1\ud560 \uc218 \uc788\uc2b5\ub2c8\ub2e4.",
+      "loading": "Tomny Agentic \ucee8\ud14d\uc2a4\ud2b8 \ubd88\ub7ec\uc624\ub294 \uc911\u2026",
+      "loadFailed": "Tomny Agentic \ucee8\ud14d\uc2a4\ud2b8\ub97c \ubd88\ub7ec\uc62c \uc218 \uc5c6\uc2b5\ub2c8\ub2e4.",
+      "empty": "\uc544\uc9c1 Tomny Agentic \ucee8\ud14d\uc2a4\ud2b8\uac00 \uc5c6\uc2b5\ub2c8\ub2e4.",
+      "exactTitle": "\uc2e4\uc81c Tomny Agentic \uc694\uccad \ucee8\ud14d\uc2a4\ud2b8",
+      "exactHint": "\uc555\ucd95 \ud6c4 Tomny Agentic\uc5d0\uc11c \uc9c1\uc811 \uc77d\uc2b5\ub2c8\ub2e4. \ub0b4\ubd80 \ucee8\ud14d\uc2a4\ud2b8\ub294 \uc77d\uae30 \uc804\uc6a9\uc774\uba70 \uc0ac\uc6a9\uc790 \ucee8\ud14d\uc2a4\ud2b8\ub294 \ud3b8\uc9d1\ud560 \uc218 \uc788\uc2b5\ub2c8\ub2e4.",
       "messageCount": "\uba54\uc2dc\uc9c0 {{count}}\uac1c",
       "messageWindow": "\ucd5c\uadfc AI \ub2f5\ubcc0 {{assistant}}\uac1c \u00b7 \uc694\uccad {{sent}}\uac1c, \uc138\uc158 \uc804\uccb4 {{total}}\uac1c",
       "toolCount": "\ub3c4\uad6c {{count}}\uac1c",
       "maxTokens": "\ucd5c\ub300 \ucd9c\ub825 {{count}}",
       "customTitle": "\uc0ac\uc6a9\uc790 \ucee8\ud14d\uc2a4\ud2b8",
-      "customHint": "\ubaa8\ub4e0 AionRS \ud134\uc758 \uc2dc\uc2a4\ud15c \ud504\ub86c\ud504\ud2b8\uc5d0 \ucd94\uac00\ub429\ub2c8\ub2e4.",
+      "customHint": "\ubaa8\ub4e0 Tomny Agentic \ud134\uc758 \uc2dc\uc2a4\ud15c \ud504\ub86c\ud504\ud2b8\uc5d0 \ucd94\uac00\ub429\ub2c8\ub2e4.",
       "customPlaceholder": "\uc774 \ub300\ud654\uc758 \uc9c0\uc18d\uc801\uc778 \uc9c0\uc2dc\ub098 \ucee8\ud14d\uc2a4\ud2b8 \ucd94\uac00\u2026",
       "save": "\ucee8\ud14d\uc2a4\ud2b8 \uc800\uc7a5",
       "saved": "\uc0ac\uc6a9\uc790 \ucee8\ud14d\uc2a4\ud2b8\ub97c \uc800\uc7a5\ud588\uc2b5\ub2c8\ub2e4.",

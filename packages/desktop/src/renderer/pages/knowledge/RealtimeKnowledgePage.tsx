@@ -1,10 +1,10 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import AionScrollArea from '@/renderer/components/base/AionScrollArea';
+import TomnyScrollArea from '@/renderer/components/base/TomnyScrollArea';
 import { isElectronDesktop } from '@/renderer/utils/platform';
 import { Button, Empty, Input, Spin } from '@arco-design/web-react';
 import { Refresh, Search } from '@icon-park/react';
@@ -88,7 +88,7 @@ const RealtimeKnowledgePage: React.FC = () => {
         onPressEnter={() => void runSearch(query)}
       />
 
-      <AionScrollArea className='flex-1 min-h-0'>
+      <TomnyScrollArea className='flex-1 min-h-0'>
         {status === 'error' ? (
           <div className='flex flex-col items-center justify-center gap-12px py-48px text-center'>
             <p className='m-0 max-w-420px text-13px text-t-secondary'>{t('realtimeKnowledge.loadError')}</p>
@@ -109,7 +109,7 @@ const RealtimeKnowledgePage: React.FC = () => {
             ))}
           </div>
         )}
-      </AionScrollArea>
+      </TomnyScrollArea>
     </div>
   );
 };

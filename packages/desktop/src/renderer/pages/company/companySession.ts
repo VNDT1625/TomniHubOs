@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -173,14 +173,14 @@ const firstAvailableCli = (agents: AgentMetadata[]): AgentMetadata | null => {
 
 /**
  * Best-effort, ACP-safe model override. The model assigned to a role is only
- * applied for the aionrs backend (whose `model.use_model` slot is a provider
+ * applied for the tomnyagentic backend (whose `model.use_model` slot is a provider
  * model id). For ACP/other backends the model is carried differently and the
  * executor default is correct, so we leave `params.model` untouched. The
  * override is also skipped unless the requested model actually exists in a
  * configured provider — otherwise the executor default is used.
  */
 const applyAssignmentModel = async (params: ICreateConversationParams, model?: string): Promise<void> => {
-  if (!model || params.type !== 'aionrs') return;
+  if (!model || params.type !== 'tomnyagentic') return;
   const current = params.model as { use_model?: string } | undefined;
   if (!current || typeof current.use_model !== 'string') return;
   try {
@@ -314,7 +314,7 @@ const buildParamsForRole = async (role: RoleNode, language: string): Promise<ICr
       // BUG FIX: an assistant only runs if its `preset_agent_type` resolves to a
       // real, installed engine. Drafts created from an LLM proposal may carry an
       // engine id that does not exist on this machine — the assistant is created
-      // but unrunnable, and aioncore rejects the chat with "ACP agent requires
+      // but unrunnable, and tomnycore rejects the chat with "ACP agent requires
       // either agent_id or backend in extra". Validate the engine against the
       // detected pool and, when it is missing, substitute a runnable one so the
       // conversation always has a valid backend.
@@ -364,7 +364,7 @@ const buildParamsForRole = async (role: RoleNode, language: string): Promise<ICr
  * so a chat opened from the Company page never looks like a plain general-purpose
  * assistant. Two delivery channels are used so it works regardless of backend:
  *
- * 1. `extra.preset_context` — picked up by aioncore for preset-aware backends
+ * 1. `extra.preset_context` — picked up by tomnycore for preset-aware backends
  *    (assistants and ACP sessions that read the slot).
  * 2. A primer turn sent immediately after create — the briefing is dispatched
  *    via `conversation.sendMessage` so the agent is told who it is even when
@@ -409,7 +409,7 @@ export const openRoleChat = async (input: OpenRoleChatInput): Promise<string | n
     // 6. Clear, human-readable conversation name.
     params.name = `${companyName} · ${role.name}`;
 
-    // 7. Apply the role's model (aionrs-only, provider-validated; ACP-safe).
+    // 7. Apply the role's model (tomnyagentic-only, provider-validated; ACP-safe).
     await applyAssignmentModel(params, role.assignment?.model);
 
     // 8. Create the conversation and remember the mapping.

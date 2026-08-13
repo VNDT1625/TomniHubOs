@@ -1,16 +1,16 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  *
- * Tomni Agentic surfaces — end-to-end wiring (Task 15.3, Requirements 1.2 / 2.5 and
+ * Tomny Agentic surfaces — end-to-end wiring (Task 15.3, Requirements 1.2 / 2.5 and
  * the global integration of Yêu cầu 1/2b/3/5/6).
  *
  * A true agent-driven browser + TestOrchestrator run requires a live model and
- * aioncore, which are not available on CI; per the testing steering, those heavy
+ * tomnycore, which are not available on CI; per the testing steering, those heavy
  * paths are exercised with simulated drivers in the unit/property suites. This
  * E2E instead verifies the END-TO-END WIRING that ties everything together: the
- * new Tomni Agentic settings pages (Resource, Company, Browser, Testing, Monitor) are
+ * new Tomny Agentic settings pages (Resource, Company, Browser, Testing, Monitor) are
  * registered, routable, and render their feature UI through the bootstrapped IPC
  * bridges — without leaking raw i18n keys or crashing.
  */
@@ -25,7 +25,7 @@ const TOMNI_AGENTIC_TABS: { tab: SettingsTab; name: string }[] = [
   { tab: 'monitor', name: 'Bug Monitor (Yêu cầu 6)' },
 ];
 
-test.describe('Tomni Agentic surfaces wiring', () => {
+test.describe('Tomny Agentic surfaces wiring', () => {
   for (const { tab, name } of TOMNI_AGENTIC_TABS) {
     test(`${name} page loads and renders content`, async ({ page }) => {
       await goToSettings(page, tab);
@@ -40,7 +40,7 @@ test.describe('Tomni Agentic surfaces wiring', () => {
     });
   }
 
-  test('can navigate across all Tomni Agentic surfaces without errors', async ({ page }) => {
+  test('can navigate across all Tomny Agentic surfaces without errors', async ({ page }) => {
     for (const { tab } of TOMNI_AGENTIC_TABS) {
       await goToSettings(page, tab);
       expect(page.url()).toContain(tab);

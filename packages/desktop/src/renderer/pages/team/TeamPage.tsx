@@ -12,9 +12,9 @@ import ChatLayout from '@/renderer/pages/conversation/components/ChatLayout';
 import ChatSlider from '@renderer/pages/conversation/components/ChatSlider.tsx';
 import { useTeamPendingPermissions } from './hooks/useTeamPendingPermissions';
 import AcpModelSelector from '@/renderer/components/agent/AcpModelSelector';
-import AionrsModelSelector from '@/renderer/pages/conversation/platforms/aionrs/AionrsModelSelector';
-import { useAionrsModelSelection } from '@/renderer/pages/conversation/platforms/aionrs/useAionrsModelSelection';
-import { saveAionrsDefaultModel } from '@/renderer/pages/guid/hooks/agentSelectionUtils';
+import TomnyAgenticModelSelector from '@/renderer/pages/conversation/platforms/tomnyagentic/TomnyAgenticModelSelector';
+import { useTomnyAgenticModelSelection } from '@/renderer/pages/conversation/platforms/tomnyagentic/useTomnyAgenticModelSelection';
+import { saveTomnyAgenticDefaultModel } from '@/renderer/pages/guid/hooks/agentSelectionUtils';
 import TeamTabs from './components/TeamTabs';
 import TeamChatView from './components/TeamChatView';
 import TeamAgentIdentity from './components/TeamAgentIdentity';
@@ -45,8 +45,8 @@ const TASK_ROLE_KEYS = {
 
 const taskRoleKey = (role: TeamTaskBinding['role']) => TASK_ROLE_KEYS[role];
 
-/** Compact aionrs model selector for the agent header */
-const AionrsHeaderModelSelector: React.FC<{ conversation_id: string; initialModel?: TProviderWithModel }> = ({
+/** Compact tomnyagentic model selector for the agent header */
+const TomnyAgenticHeaderModelSelector: React.FC<{ conversation_id: string; initialModel?: TProviderWithModel }> = ({
   conversation_id,
   initialModel,
 }) => {
@@ -58,13 +58,13 @@ const AionrsHeaderModelSelector: React.FC<{ conversation_id: string; initialMode
         ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
       } as TProviderWithModel;
       const ok = await ipcBridge.conversation.update.invoke({ id: conversation_id, updates: { model: selected } });
-      if (ok) void saveAionrsDefaultModel(_provider.id, modelName);
+      if (ok) void saveTomnyAgenticDefaultModel(_provider.id, modelName);
       return Boolean(ok);
     },
     [conversation_id]
   );
-  const modelSelection = useAionrsModelSelection({ initialModel, onSelectModel });
-  return <AionrsModelSelector selection={modelSelection} />;
+  const modelSelection = useTomnyAgenticModelSelection({ initialModel, onSelectModel });
+  return <TomnyAgenticModelSelector selection={modelSelection} />;
 };
 
 /** Fetches conversation for a single agent and renders TeamChatView */
@@ -97,7 +97,7 @@ const AgentChatSlot: React.FC<{
     () => getConversationOrNull(agent.conversation_id)
   );
 
-  const isAionrs = conversation?.type === 'aionrs';
+  const isTomnyAgentic = conversation?.type === 'tomnyagentic';
   const initialModelId = (conversation?.extra as { current_model_id?: string })?.current_model_id;
   const isAcpLike =
     agent.conversation_type === 'acp' || agent.conversation_type === 'codex' || conversation?.type === 'acp';
@@ -144,7 +144,7 @@ const AgentChatSlot: React.FC<{
           )}
         </div>
         <div className='flex items-center gap-8px shrink-0'>
-          {!isMobile && agent.conversation_id && !isAionrs && isAcpLike && (
+          {!isMobile && agent.conversation_id && !isTomnyAgentic && isAcpLike && (
             <div className='min-w-0 max-w-140px [&_button]:max-w-full [&_button_span]:truncate'>
               <AcpModelSelector
                 key={agent.conversation_id}
@@ -154,9 +154,9 @@ const AgentChatSlot: React.FC<{
               />
             </div>
           )}
-          {!isMobile && isAionrs && agent.conversation_id && (
+          {!isMobile && isTomnyAgentic && agent.conversation_id && (
             <div className='min-w-0 max-w-140px [&_button]:max-w-full [&_button_span]:truncate'>
-              <AionrsHeaderModelSelector
+              <TomnyAgenticHeaderModelSelector
                 key={agent.conversation_id}
                 conversation_id={agent.conversation_id}
                 initialModel={conversation?.model as TProviderWithModel | undefined}

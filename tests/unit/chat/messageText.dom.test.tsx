@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -111,7 +111,7 @@ describe('MessageText attachment paths', () => {
       position: 'right',
       createdAt: Date.now(),
       content: {
-        content: 'look at this\n\n[[AION_FILES]]\nuploads/photo.png',
+        content: 'look at this\n\n[[TOMNY_FILES]]\nuploads/photo.png',
       },
     };
 
@@ -133,7 +133,7 @@ describe('MessageText attachment paths', () => {
       position: 'right',
       createdAt: Date.now(),
       content: {
-        content: 'look at this\n\n[[AION_FILES]]\n/Users/demo/Desktop/photo.png',
+        content: 'look at this\n\n[[TOMNY_FILES]]\n/Users/demo/Desktop/photo.png',
       },
     };
 

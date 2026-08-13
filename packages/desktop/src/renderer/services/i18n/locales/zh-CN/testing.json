@@ -98,7 +98,7 @@
   "core": {
     "tab": "Core Test",
     "title": "Experimental AI response core",
-    "subtitle": "直接验证 Codex app-server 与兼容 ACP 的 CLI，不依赖 AionCore 可执行文件。",
+    "subtitle": "直接验证 Codex app-server 与兼容 ACP 的 CLI，不依赖 Tomny Core 可执行文件。",
     "transportNotice": "直连多 CLI Core",
     "loadFailed": "Could not load agents.",
     "selectTarget": "Select an AI target",

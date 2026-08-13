@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -29,10 +29,8 @@ import { useEditorToolsProvider } from './editorToolsProvider';
 import { useMakeVideoAgentHarness } from './makevideo/makeVideoAgentHarness';
 import type { CollabJoinData } from '@renderer/pages/editor/adapters/collabClient';
 import { MUSIC_STUDIO_ENABLED } from '@/common/config/constants';
-import AppLoader from '@renderer/components/layout/AppLoader';
 
 const AutomationView = React.lazy(() => import('./automation/AutomationView'));
-const IdeWorkspace = React.lazy(() => import('./ide/IdeWorkspace'));
 const MakeVideoView = React.lazy(() => import('./makevideo/MakeVideoView'));
 const MusicStudio = React.lazy(() => import('@renderer/pages/music'));
 
@@ -40,7 +38,6 @@ type StudioView =
   | { mode: 'dashboard' }
   | { mode: 'editor'; filePath: string }
   | { mode: 'peer'; join: CollabJoinData; hostBaseUrl: string }
-  | { mode: 'ide'; initialMode?: 'files' | 'viu' }
   | { mode: 'automation' }
   | { mode: 'makeVideo' }
   | { mode: 'music' };
@@ -49,7 +46,11 @@ type StudioRouteState = {
   studioView?: 'music';
 };
 
-const StudioPage: React.FC = () => {
+type StudioPageProps = {
+  onOpenIde?: (initialMode?: 'files' | 'viu') => void;
+};
+
+const StudioPage: React.FC<StudioPageProps> = ({ onOpenIde }) => {
   const location = useLocation();
   const routeState = location.state as StudioRouteState | null;
   // Register the Main→Renderer editor-tools provider once for the Studio app, so
@@ -61,6 +62,7 @@ const StudioPage: React.FC = () => {
     if (routeState?.studioView === 'music' && MUSIC_STUDIO_ENABLED) return { mode: 'music' };
 
     const lastView = getLastStudioView();
+    if (lastView.mode === 'ide') return { mode: 'dashboard' };
     return lastView.mode === 'music' && !MUSIC_STUDIO_ENABLED ? { mode: 'dashboard' } : lastView;
   });
   // Files with a live (kept-alive) editor. Order doesn't matter; presence does.
@@ -97,8 +99,8 @@ const StudioPage: React.FC = () => {
       <div className='size-full' style={{ display: showDashboard ? 'block' : 'none' }}>
         <StudioDashboard
           onOpenFile={openFile}
-          onOpenIde={() => setView({ mode: 'ide' })}
-          onOpenViu={() => setView({ mode: 'ide', initialMode: 'viu' })}
+          onOpenIde={() => onOpenIde?.('files')}
+          onOpenViu={() => onOpenIde?.('viu')}
           onJoinSession={(join, joinCode) => setView({ mode: 'peer', join, hostBaseUrl: `http://${joinCode}` })}
           onAutomation={() => setView({ mode: 'automation' })}
           onMakeVideo={() => setView({ mode: 'makeVideo' })}
@@ -122,14 +124,6 @@ const StudioPage: React.FC = () => {
           </div>
         );
       })}
-
-      {view.mode === 'ide' ? (
-        <div className='absolute inset-0'>
-          <Suspense fallback={<AppLoader />}>
-            <IdeWorkspace initialMode={view.initialMode} onBack={() => setView({ mode: 'dashboard' })} />
-          </Suspense>
-        </div>
-      ) : null}
 
       {view.mode === 'peer' ? (
         <div className='absolute inset-0'>

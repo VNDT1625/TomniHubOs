@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -152,7 +152,7 @@ describe('enforceStrictIdeModeOnPermission', () => {
 
     expect(result.denied).toBe(true);
     expect(result.reason).toContain('Strict IDE Mode');
-    expect(result.reason).toContain('ide_search');
+    expect(result.reason).toContain('tomny_search');
     expect(result.reason).toContain('Hãy dùng');
     expect(result.reason).toContain('không được chạy');
     // Simple auto-deny: we do call confirm with the reject option

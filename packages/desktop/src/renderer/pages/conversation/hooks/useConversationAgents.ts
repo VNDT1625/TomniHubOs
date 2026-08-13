@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -11,7 +11,7 @@ import { DETECTED_AGENTS_SWR_KEY, fetchDetectedAgents } from '@/renderer/utils/m
 import type { AgentMetadata } from '@/renderer/utils/model/agentTypes';
 
 export type UseConversationAgentsResult = {
-  /** Detected execution engines (acp, extension, remote, aionrs, gemini, etc.) */
+  /** Detected execution engines (acp, extension, remote, tomnyagentic, gemini, etc.) */
   cliAgents: AgentMetadata[];
   /** Preset assistants from `/api/assistants` — kept as-is, not re-shaped into agent form */
   presetAssistants: Assistant[];

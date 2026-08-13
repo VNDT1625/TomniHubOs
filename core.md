@@ -1,15 +1,15 @@
-# Báo cáo nghiên cứu AionCore và thiết kế core thế hệ mới
+# Báo cáo nghiên cứu TomniCore và thiết kế core thế hệ mới
 
-> Phạm vi: `resources/bundled-aioncore/win32-x64/aioncore.exe` trong AionUi 2.1.16.  
+> Phạm vi: `resources/bundled-tomnicore/win32-x64/tomnicore.exe` trong TomniHubOS 2.1.16.  
 > Ngày khảo sát: 2026-07-15.
 
 ## 1. Kết luận điều hành
 
-AionCore không chỉ là agent runner. Đây là backend Rust đảm nhiệm REST, WebSocket, SQLite, conversations, providers, MCP, cron, Team, file, shell, Office, channels và nhiều agent backend.
+TomniCore không chỉ là agent runner. Đây là backend Rust đảm nhiệm REST, WebSocket, SQLite, conversations, providers, MCP, cron, Team, file, shell, Office, channels và nhiều agent backend.
 
 Electron spawn core trên cổng loopback ngẫu nhiên, truyền data/work/log directories, chờ `GET /health`, rồi giao tiếp qua `/api/*` và `/ws`. Vì vậy core thay thế phải tương thích protocol, persistence và lifecycle, không chỉ vòng lặp model-tool.
 
-Source AionCore công khai tại [VNDT1625/OmniAgent](https://github.com/VNDT1625/OmniAgent). Binary cục bộ là `v0.1.16`, trong khi upstream mới nhất lúc khảo sát là [v0.1.47](https://github.com/VNDT1625/OmniAgent/releases/tag/v0.1.47).
+Source TomniCore công khai tại [VNDT1625/OmniAgent](https://github.com/VNDT1625/OmniAgent). Binary cục bộ là `v0.1.16`, trong khi upstream mới nhất lúc khảo sát là [v0.1.47](https://github.com/VNDT1625/OmniAgent/releases/tag/v0.1.47).
 
 Khuyến nghị là fork source, đóng băng contract, dựng compatibility shell, rồi thay dần nội bộ bằng event-sourced run kernel, durable inbox và capability broker. Team và Company nên trở thành hai cấu hình của cùng orchestration engine.
 
@@ -30,7 +30,7 @@ Kết luận dựa trên source đúng tag hoặc code gọi trực tiếp có �
 
 | Thuộc tính     | Kết quả                                                            |
 | -------------- | ------------------------------------------------------------------ |
-| Version        | `aioncore 0.1.16`                                                  |
+| Version        | `tomnicore 0.1.16`                                                 |
 | Kích thước x64 | 98.680.320 byte                                                    |
 | SHA-256 x64    | `960C8E4F2F8CA22E4D74E3B4AB7DD3F868CE4BC260B491134BF13D3FB20B2ADE` |
 | SHA-256 arm64  | `F1009155F1C1705EFD2C74176F572C5EC40D00D3F173EE64F0FA724D1966E2EE` |
@@ -46,7 +46,7 @@ CLI hỗ trợ server, `mcp-bridge`, `mcp-guide-stdio`, `mcp-team-stdio` và `do
 
 ```mermaid
 flowchart LR
-    UI["Electron / WebUI"] -->|"REST"| Core["AionCore"]
+    UI["Electron / WebUI"] -->|"REST"| Core["TomniCore"]
     UI <-->|"WebSocket"| Core
     Main["Electron Main"] -->|"spawn và health"| Core
     Core --> DB["SQLite và filesystem"]
@@ -63,11 +63,11 @@ flowchart LR
 
 [backend-launcher.ts](packages/web-host/src/backend-launcher.ts) spawn binary với port, data-dir, work-dir, log-dir, app-version và local mode. Launcher poll health mỗi 200 ms tối đa 30 giây, giữ tail stdout/stderr, kill process tree và giới hạn restart ba lần trong 60 giây.
 
-WebUI dùng `@aionui/web-host` reverse proxy `/api/*` và upgrade `/ws`.
+WebUI dùng `@tomni/web-host` reverse proxy `/api/*` và upgrade `/ws`.
 
 ### Model và agent runtime
 
-Core giữ providers trong SQLite và mã hóa API key. Source có adapter OpenAI-compatible, Anthropic, AWS Bedrock và Vertex. `aionui-ai-agent` quản lý ACP, Aionrs, OpenClaw, Nanobot, remote agent và custom CLI.
+Core giữ providers trong SQLite và mã hóa API key. Source có adapter OpenAI-compatible, Anthropic, AWS Bedrock và Vertex. `tomni-ai-agent` quản lý ACP, Tomnirs, OpenClaw, Nanobot, remote agent và custom CLI.
 
 Agent factory inject provider, skills, MCP snapshot, workspace và policy. ACP session được lưu để resume/reconcile. Stream từng backend được chuẩn hóa thành text, thought, tool use, permission, finish và error.
 
@@ -81,18 +81,18 @@ IDE không nằm trong Rust core. [registerIdeMcp.ts](packages/desktop/src/proce
 
 ## 5. Module và API
 
-| Nhóm          | Crate                                              |
-| ------------- | -------------------------------------------------- |
-| Bootstrap/API | `aionui-app`                                       |
-| Agent runtime | `aionui-ai-agent`, `aionrs`                        |
-| Conversation  | `aionui-conversation`                              |
-| Multi-agent   | `aionui-team`                                      |
-| Realtime      | `aionui-realtime`                                  |
-| Persistence   | `aionui-db`                                        |
-| Security      | `aionui-auth`                                      |
-| Tools         | `aionui-file`, `aionui-shell`, `aionui-office`     |
-| Integrations  | `aionui-mcp`, `aionui-channel`, `aionui-extension` |
-| Automation    | `aionui-cron`                                      |
+| Nhóm          | Crate                                           |
+| ------------- | ----------------------------------------------- |
+| Bootstrap/API | `tomni-app`                                     |
+| Agent runtime | `tomni-ai-agent`, `tomnirs`                     |
+| Conversation  | `tomni-conversation`                            |
+| Multi-agent   | `tomni-team`                                    |
+| Realtime      | `tomni-realtime`                                |
+| Persistence   | `tomni-db`                                      |
+| Security      | `tomni-auth`                                    |
+| Tools         | `tomni-file`, `tomni-shell`, `tomni-office`     |
+| Integrations  | `tomni-mcp`, `tomni-channel`, `tomni-extension` |
+| Automation    | `tomni-cron`                                    |
 
 API gồm auth, providers, agents, conversations, teams, MCP, filesystem, skills, extensions, cron, channels, Office, shell, STT và system.
 
@@ -124,7 +124,7 @@ Team có leader và agent slots; mỗi slot gắn conversation riêng. Session c
 
 User-to-agent đi qua conversation API. Agent-to-agent đi qua mailbox. Điểm mạnh là context độc lập, nhiều backend/model, dynamic spawn và MCP. Điểm yếu là durable delivery, in-memory state, task DAG và semantic progress.
 
-Company chủ yếu nằm trong AionUi TypeScript:
+Company chủ yếu nằm trong TomniHubOS TypeScript:
 
 - `packages/desktop/src/process/company/`;
 - `packages/desktop/src/renderer/pages/company/pipeline/`.
@@ -187,7 +187,7 @@ cancel(reason)
 checkpoint()
 ```
 
-Adapter ACP, Aionrs, OpenClaw, remote và CLI đứng ngoài kernel. Raw vendor event được normalize nhưng giữ raw reference để debug.
+Adapter ACP, Tomnirs, OpenClaw, remote và CLI đứng ngoài kernel. Raw vendor event được normalize nhưng giữ raw reference để debug.
 
 ### Capability Broker và IDE Bridge
 
@@ -275,7 +275,7 @@ Shadow comparison, feature flag, import/export, rollback và soak test trước 
 
 Mỗi nhóm sở hữu interface và contract test. Quyết định protocol, persistence và security cần Architectural Decision Record.
 
-## 12. Tiêu chí vượt AionCore
+## 12. Tiêu chí vượt TomniCore
 
 - Không mất message khi process chết giữa receive và ack.
 - Restart khôi phục run hoặc kết thúc với lý do rõ.
@@ -291,7 +291,7 @@ Mỗi nhóm sở hữu interface và contract test. Quyết định protocol, pe
 
 ## 13. Nguồn chính
 
-### Trong AionUi
+### Trong TomniHubOS
 
 - [Backend launcher](packages/web-host/src/backend-launcher.ts)
 - [Binary resolver](packages/desktop/src/process/backend/binaryResolver.ts)
@@ -300,15 +300,15 @@ Mỗi nhóm sở hữu interface và contract test. Quyết định protocol, pe
 - [IDE MCP registration](packages/desktop/src/process/ide/mcp/registerIdeMcp.ts)
 - [Company role executor](packages/desktop/src/renderer/pages/company/pipeline/roleExecutor.ts)
 
-### Source AionCore
+### Source TomniCore
 
 - [Cargo workspace](https://github.com/VNDT1625/OmniAgent/blob/v0.1.16/Cargo.toml)
-- [Top-level router](https://github.com/VNDT1625/OmniAgent/blob/v0.1.16/crates/aionui-app/src/router/routes.rs)
-- [App services](https://github.com/VNDT1625/OmniAgent/blob/v0.1.16/crates/aionui-app/src/services.rs)
-- [Server lifecycle](https://github.com/VNDT1625/OmniAgent/blob/v0.1.16/crates/aionui-app/src/commands/server.rs)
-- [Team internals](https://github.com/VNDT1625/OmniAgent/blob/v0.1.16/crates/aionui-team/docs/internals.md)
-- [Team API](https://github.com/VNDT1625/OmniAgent/blob/v0.1.16/crates/aionui-team/docs/api.md)
-- [Team MCP](https://github.com/VNDT1625/OmniAgent/blob/v0.1.16/crates/aionui-team/docs/mcp.md)
+- [Top-level router](https://github.com/VNDT1625/OmniAgent/blob/v0.1.16/crates/tomni-app/src/router/routes.rs)
+- [App services](https://github.com/VNDT1625/OmniAgent/blob/v0.1.16/crates/tomni-app/src/services.rs)
+- [Server lifecycle](https://github.com/VNDT1625/OmniAgent/blob/v0.1.16/crates/tomni-app/src/commands/server.rs)
+- [Team internals](https://github.com/VNDT1625/OmniAgent/blob/v0.1.16/crates/tomni-team/docs/internals.md)
+- [Team API](https://github.com/VNDT1625/OmniAgent/blob/v0.1.16/crates/tomni-team/docs/api.md)
+- [Team MCP](https://github.com/VNDT1625/OmniAgent/blob/v0.1.16/crates/tomni-team/docs/mcp.md)
 - [Release v0.1.16](https://github.com/VNDT1625/OmniAgent/releases/tag/v0.1.16)
 
 ## 14. Khuyến nghị cuối

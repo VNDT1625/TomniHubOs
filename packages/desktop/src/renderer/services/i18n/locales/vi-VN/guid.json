@@ -17,6 +17,204 @@
     "searchPlaceholder": "Tìm kiếm dự án…",
     "noProject": "Không có dự án"
   },
+  "hubHome": {
+    "title": "Hôm nay bạn muốn làm gì?",
+    "subtitle": "Tomny sẵn sàng hỗ trợ bạn với mọi công việc.",
+    "shell": {
+      "primaryNavigation": "Điều hướng chính",
+      "searchPlaceholder": "Tìm trong Tomny",
+      "pinnedApps": "Ứng dụng ghim",
+      "workspaces": "Workspaces",
+      "store": "Store",
+      "storeHint": "Khám phá app và package",
+      "more": "Thêm",
+      "version": "Tomny Hub v1.0.0",
+      "support": "Hỗ trợ",
+      "feedback": "Phản hồi",
+      "coreHealthy": "Tomny Core: Hoạt động tốt",
+      "nav": {
+        "home": "Home",
+        "manage": "Quản lý",
+        "products": "Sản phẩm",
+        "history": "Lịch sử",
+        "company": "Company",
+        "settings": "Cài đặt"
+      }
+    },
+    "quickPromptsLabel": "Gợi ý nhanh",
+    "quickPrompts": {
+      "plan": "Tạo kế hoạch",
+      "analyze": "Phân tích dữ liệu",
+      "write": "Viết tài liệu",
+      "build": "Tạo hình ảnh"
+    },
+    "appsTitle": "Ứng dụng",
+    "appsSubtitle": "Mở công cụ trực tiếp hoặc khám phá theo nhóm ứng dụng.",
+    "viewAll": "Xem tất cả",
+    "allApps": "Tất cả ứng dụng",
+    "openCategory": "Mở nhóm ứng dụng {{category}}",
+    "categories": {
+      "communication": {
+        "title": "Giao tiếp",
+        "description": "Kết nối và trao đổi hiệu quả"
+      },
+      "creative": {
+        "title": "Sáng tạo",
+        "description": "Tạo nội dung và thiết kế"
+      },
+      "developer": {
+        "title": "Công cụ phát triển",
+        "description": "Hỗ trợ lập trình và vận hành"
+      },
+      "productivity": {
+        "title": "Năng suất",
+        "description": "Tổ chức công việc và tri thức"
+      }
+    },
+    "apps": {
+      "chat": {
+        "title": "Chat",
+        "description": "Trò chuyện với các agent AI"
+      },
+      "browser": {
+        "title": "Browser",
+        "description": "Nghiên cứu và duyệt web"
+      },
+      "company": {
+        "title": "Company",
+        "description": "Điều phối đội ngũ và workspace"
+      },
+      "studio": {
+        "title": "Studio",
+        "description": "Sáng tạo với bộ công cụ đầy đủ"
+      },
+      "music": {
+        "title": "Music",
+        "description": "Tạo và tinh chỉnh âm thanh"
+      },
+      "realtime": {
+        "title": "Realtime",
+        "description": "Xây dựng trải nghiệm AI trực tiếp"
+      },
+      "ide": {
+        "title": "IDE",
+        "description": "Phát triển ứng dụng ngay trong Tomny"
+      },
+      "terminal": {
+        "title": "Terminal",
+        "description": "Chạy lệnh và công cụ cục bộ"
+      },
+      "git": {
+        "title": "Git",
+        "description": "Quản lý repository và thay đổi"
+      },
+      "manager": {
+        "title": "Quản lý",
+        "description": "Lập kế hoạch và theo dõi công việc"
+      },
+      "automation": {
+        "title": "Tự động hóa",
+        "description": "Lên lịch workflow lặp lại"
+      },
+      "knowledge": {
+        "title": "Tri thức",
+        "description": "Tổ chức ngữ cảnh tái sử dụng"
+      }
+    },
+    "recentTitle": "Tiếp tục",
+    "recentSubtitle": "Quay lại các ứng dụng bạn vừa sử dụng.",
+    "recentEmpty": "Ứng dụng bạn mở gần đây sẽ xuất hiện tại đây.",
+    "status": {
+      "title": "Trạng thái Tomny",
+      "workTitle": "Công việc",
+      "notificationsTitle": "Thông báo",
+      "modelsTitle": "Model",
+      "manage": "Quản lý",
+      "details": "Chi tiết",
+      "cpu": "CPU",
+      "ram": "RAM",
+      "workInProgress": "{{count}} đang thực hiện",
+      "workPending": "{{count}} chờ duyệt",
+      "workBlocked": "{{count}} gặp lỗi",
+      "notificationIdeUpdated": "IDE đã cập nhật phiên bản mới",
+      "notificationWorkspaceActivity": "Workspace Tomny có hoạt động mới",
+      "notificationApprovalRequested": "Yêu cầu phê duyệt từ SubAgent",
+      "primaryModelName": "Claude 3.5 Sonnet",
+      "secondaryModelName": "Gemini 1.5 Pro",
+      "active": "Đang hoạt động",
+      "storage": "Lưu trữ",
+      "connection": "Kết nối",
+      "connectionGood": "Tốt",
+      "runtimeTitle": "Agent runtime",
+      "ready": "Sẵn sàng",
+      "agents": "Agent",
+      "capabilities": "Năng lực",
+      "workspace": "Workspace",
+      "optional": "Tùy chọn",
+      "modelTitle": "Agent đang dùng",
+      "automatic": "Tự động",
+      "systemTitle": "Hệ thống",
+      "coreReady": "Tomny Core đã sẵn sàng",
+      "coreReadyHint": "Bộ điều phối cục bộ đang hoạt động",
+      "vaultProtected": "Security Vault đang bảo vệ",
+      "vaultProtectedHint": "Bí mật được cô lập khỏi agent",
+      "noWorkspace": "Chưa chọn workspace",
+      "workspaceHint": "Ngữ cảnh làm việc hiện tại"
+    },
+    "storeDetail": {
+      "back": "Quay lại Store",
+      "viewDetails": "Xem chi tiết {{name}}",
+      "app": "Ứng dụng",
+      "installed": "Đã cài đặt",
+      "available": "Có thể cài",
+      "microsoftStore": "Microsoft Store",
+      "microsoftCertified": "Được Microsoft chứng nhận",
+      "microsoftSummaryFallback": "Khám phá ứng dụng này qua Microsoft Store.",
+      "openMicrosoftStore": "Xem trong Microsoft Store",
+      "microsoftSourceStale": "Kết quả Microsoft Store có thể đã cũ.",
+      "microsoftSourceFailed": "Microsoft Store tạm thời không khả dụng.",
+      "availability": {
+        "available": "Có thể cài",
+        "installed": "Đã cài",
+        "unavailable": "Không khả dụng",
+        "unknown": "Chưa rõ"
+      },
+      "verified": "Package đã xác minh",
+      "install": "Cài đặt",
+      "update": "Cập nhật",
+      "reinstall": "Cài đặt lại",
+      "updateAvailable": "Có bản cập nhật",
+      "incompatible": "Không tương thích",
+      "quarantined": "Không vượt qua kiểm tra bảo mật",
+      "removeTitle": "Gỡ {{name}}?",
+      "removeDescription": "Package đã tải và các tệp cục bộ của nó sẽ bị xóa khỏi thiết bị này.",
+      "empty": "Không có package phù hợp. Hãy làm mới catalog hoặc thay đổi nội dung tìm kiếm.",
+      "moduleCount": "{{count}} module",
+      "size": "Dung lượng tải",
+      "compatibility": "Tương thích",
+      "previewLabel": "Xem trước năng lực",
+      "previewTitle": "Khám phá {{name}}",
+      "previewDescription": "Bản xem trước trung thực về các module và workspace có trong package.",
+      "previewImageAlt": "Ảnh xem trước {{index}} của {{name}}",
+      "about": "Giới thiệu ứng dụng",
+      "whatsInside": "Nội dung bên trong",
+      "releaseNotes": "Có gì mới",
+      "currentRelease": "Phiên bản {{version}}",
+      "releaseNotesBody": "Bản phát hành hiện tại đã được ký từ catalog Tomny Store.",
+      "developer": "Nhà phát triển và package",
+      "publisher": "Nhà phát hành",
+      "packageType": "Loại package",
+      "trust": "Độ tin cậy",
+      "firstParty": "Tomny xác minh",
+      "storeSigned": "Store đã ký",
+      "permissions": "Quyền yêu cầu",
+      "noPermissions": "Ứng dụng không yêu cầu thêm quyền.",
+      "dependencies": "Package phụ thuộc",
+      "noDependencies": "Không cần package bổ sung.",
+      "notFound": "Sản phẩm này hiện không có trên Store."
+    },
+    "launcherHint": "Chọn một ứng dụng để mở. Cài đặt và khám phá ứng dụng nằm trong Store."
+  },
   "scanning": {
     "initialMessage": "Tác nhân hiện tại không khả dụng, đang phát hiện các tác nhân khác...",
     "scanningMessage": "Đang quét các tác nhân cục bộ khả dụng...",

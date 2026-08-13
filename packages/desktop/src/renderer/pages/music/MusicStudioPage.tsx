@@ -1,11 +1,11 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
 /**
- * Music Studio — DAW canvas layout backed by @aionui/music-core.
+ * Music Studio — DAW canvas layout backed by @tomny/music-core.
  *
  * This intentionally follows the working shape of FL Studio / BandLab /
  * Cakewalk: persistent transport, browser, track headers, playlist, inspector,
@@ -53,7 +53,7 @@ import {
   type Sample,
   type Track,
   type TrackType,
-} from '@aionui/music-core';
+} from '@tomny/music-core';
 import { useMusicPlayer } from './useMusicPlayer';
 import { musicClient } from './musicClient';
 

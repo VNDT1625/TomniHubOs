@@ -21,13 +21,13 @@ vi.mock('@process/services/remoteGateway/registry', () => ({
 
 describe('Telegram remote startup', () => {
   const oldTomniSecret = process.env.TOMNI_TELEGRAM_REMOTE_SECRET;
-  const oldLegacySecret = process.env.AIONUI_TELEGRAM_REMOTE_SECRET;
+  const oldLegacySecret = process.env.TOMNY_TELEGRAM_REMOTE_SECRET;
 
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
     delete process.env.TOMNI_TELEGRAM_REMOTE_SECRET;
-    delete process.env.AIONUI_TELEGRAM_REMOTE_SECRET;
+    delete process.env.TOMNY_TELEGRAM_REMOTE_SECRET;
     mocks.startGateway.mockResolvedValue({
       localUrl: 'http://127.0.0.1:45678',
       configure: mocks.configureHost,
@@ -37,11 +37,11 @@ describe('Telegram remote startup', () => {
   afterEach(() => {
     if (oldTomniSecret === undefined) delete process.env.TOMNI_TELEGRAM_REMOTE_SECRET;
     else process.env.TOMNI_TELEGRAM_REMOTE_SECRET = oldTomniSecret;
-    if (oldLegacySecret === undefined) delete process.env.AIONUI_TELEGRAM_REMOTE_SECRET;
-    else process.env.AIONUI_TELEGRAM_REMOTE_SECRET = oldLegacySecret;
+    if (oldLegacySecret === undefined) delete process.env.TOMNY_TELEGRAM_REMOTE_SECRET;
+    else process.env.TOMNY_TELEGRAM_REMOTE_SECRET = oldLegacySecret;
   });
 
-  it('creates one Tomni-owned 256-bit secret and reuses it', async () => {
+  it('creates one Tomny-owned 256-bit secret and reuses it', async () => {
     const { prepareTelegramRemoteSecret } = await import('@/process/startup/telegramRemoteStartup');
     const first = prepareTelegramRemoteSecret();
     expect(first).toMatch(/^[a-f0-9]{64}$/u);

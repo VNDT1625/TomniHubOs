@@ -1,13 +1,13 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
 /**
  * Music IPC bridge — lets the renderer (Music Studio page) list/create/open/
  * save music projects and render audio via the Main-process repo + the headless
- * @aionui/music-core engine. All channels return an always-resolving envelope so
+ * @tomny/music-core engine. All channels return an always-resolving envelope so
  * the renderer never hangs.
  *
  * The renderer realtime engine (Tone.js) plays audio itself; this bridge is for
@@ -30,7 +30,7 @@ import {
   type Project,
   type ProjectSummary,
   type Sample,
-} from '@aionui/music-core';
+} from '@tomny/music-core';
 import { getMusicServices } from './musicServices';
 
 export const MUSIC_CHANNELS = {

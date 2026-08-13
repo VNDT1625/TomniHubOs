@@ -17,7 +17,7 @@ afterEach(async () => {
   await Promise.all(directories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })));
 });
 
-describe('Tomni native preview history', () => {
+describe('Tomny native preview history', () => {
   it('persists and retrieves isolated snapshots without legacy HTTP', async () => {
     const service = await createService();
     const first = await service.save(target, '# one');

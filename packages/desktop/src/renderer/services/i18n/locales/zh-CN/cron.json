@@ -106,8 +106,8 @@
       "selectFolder": "选择文件夹",
       "clearFolder": "清除",
       "model": "模型",
-      "aionrsModelRequired": "请为 Tomny Agentic 选择模型",
-      "aionrsNoProvider": "暂无可用模型"
+      "tomnyagenticModelRequired": "请为 Tomny Agentic 选择模型",
+      "tomnyagenticNoProvider": "暂无可用模型"
     },
     "freq": {
       "manual": "手动触发",

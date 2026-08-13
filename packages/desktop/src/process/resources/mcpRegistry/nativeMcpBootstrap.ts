@@ -177,7 +177,7 @@ export const runNativeMcpBootstrap = (options: NativeMcpBootstrapOptions = {}): 
     });
 
     console.info(
-      '[Tomni] Native MCP bootstrap completed: defaults=%s, registered=%d, failed=%d, legacyBackendStarted=%s',
+      '[Tomny] Native MCP bootstrap completed: defaults=%s, registered=%d, failed=%d, legacyBackendStarted=%s',
       seeded ? 'ready' : 'failed',
       registered.length,
       failed.length,

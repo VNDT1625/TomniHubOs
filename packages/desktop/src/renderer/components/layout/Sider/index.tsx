@@ -1,293 +1,171 @@
-import classNames from 'classnames';
-import React, { Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { useAuth } from '@/renderer/hooks/context/AuthContext';
+import { useLayoutContext } from '@/renderer/hooks/context/LayoutContext';
+import { HUB_APPS, type HubAppDefinition } from '@/renderer/pages/guid/HubHome/catalog';
+import { blurActiveElement } from '@/renderer/utils/ui/focus';
+import { cleanupSiderTooltips } from '@/renderer/utils/ui/siderTooltip';
+import { Button, Tooltip } from '@arco-design/web-react';
+import {
+  AllApplication,
+  BuildingTwo,
+  DashboardOne,
+  FolderOpen,
+  History,
+  Home,
+  Right,
+  SettingTwo,
+} from '@icon-park/react';
+import React, { Suspense, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import type { NavigateOptions } from 'react-router-dom';
-import { usePreviewContext } from '@renderer/pages/conversation/Preview/context/PreviewContext';
-import { cleanupSiderTooltips, getSiderTooltipProps } from '@renderer/utils/ui/siderTooltip';
-import { useAuth } from '@renderer/hooks/context/AuthContext';
-import { useLayoutContext } from '@renderer/hooks/context/LayoutContext';
-import { blurActiveElement } from '@renderer/utils/ui/focus';
-import { useThemeContext } from '@renderer/hooks/context/ThemeContext';
-import { useAllCronJobs } from '@renderer/pages/cron/useCronJobs';
-import { useTeamCreatedRedirect } from '@renderer/pages/team/hooks/useTeamCreatedRedirect';
-import { SiderToolbar, SiderSearchEntry, SiderScheduledEntry, SiderStudioEntry, SiderManagerEntry } from './SiderNav';
-import SiderFooter from './SiderFooter';
-import CronJobSiderSection from './CronJobSiderSection';
-import TeamSiderSection from './TeamSiderSection';
-import CompanySiderSection from './CompanySiderSection';
-import QuickActiveSiderSection from '@renderer/components/agent/QuickActive/QuickActiveSiderSection';
-import siderStyles from './Sider.module.css';
+import styles from './Sider.module.css';
 
-const WorkspaceGroupedHistory = React.lazy(() => import('@renderer/pages/conversation/GroupedHistory'));
 const SettingsSider = React.lazy(() => import('@renderer/pages/settings/components/SettingsSider'));
 
-interface SiderProps {
+type SiderProps = {
   onSessionClick?: () => void;
+  onNavigate?: (path: string, options?: NavigateOptions) => void;
+  showAccount?: boolean;
   collapsed?: boolean;
-}
+};
 
-const Sider: React.FC<SiderProps> = ({ onSessionClick, collapsed = false }) => {
+const PRIMARY_NAV = [
+  { id: 'home', key: 'guid.hubHome.shell.nav.home', path: '/guid', Icon: Home },
+  { id: 'management', key: 'guid.hubHome.shell.nav.manage', path: '/manager', Icon: DashboardOne },
+  { id: 'store', key: 'guid.hubHome.shell.store', path: '/store', Icon: AllApplication },
+  { id: 'history', key: 'guid.hubHome.shell.nav.history', path: '/history', Icon: History },
+  { id: 'company', key: 'guid.hubHome.shell.nav.company', path: '/company', Icon: BuildingTwo },
+] as const;
+
+const PINNED_APPS = HUB_APPS.filter((app) => ['chat', 'terminal', 'git'].includes(app.id));
+
+const isNavActive = (pathname: string, path: string): boolean =>
+  path === '/guid'
+    ? pathname === '/guid' || pathname.startsWith('/conversation/')
+    : pathname === path || pathname.startsWith(`${path}/`);
+
+const Sider: React.FC<SiderProps> = ({ onSessionClick, onNavigate, showAccount = true, collapsed = false }) => {
+  const { t } = useTranslation();
+  const { user } = useAuth();
   const layout = useLayoutContext();
-  const isMobile = layout?.isMobile ?? false;
-  const location = useLocation();
-  const { pathname, search, hash } = location;
-
   const navigate = useNavigate();
-  const navigateWithFeedback = layout?.navigateWithFeedback;
-  const navigateTopLevel = useCallback(
-    (to: string, options?: NavigateOptions): void => {
-      if (navigateWithFeedback) {
-        navigateWithFeedback(to, options);
-        return;
-      }
-
-      Promise.resolve(navigate(to, options)).catch((error) => {
-        console.error('Navigation failed:', error);
-      });
-    },
-    [navigate, navigateWithFeedback]
-  );
-  const { closePreview } = usePreviewContext();
-  const { logout, status } = useAuth();
-  const { theme, setTheme } = useThemeContext();
-  const [isBatchMode, setIsBatchMode] = useState(false);
-  const { jobs: cronJobs } = useAllCronJobs();
-  useTeamCreatedRedirect();
+  const { pathname } = useLocation();
   const isSettings = pathname.startsWith('/settings');
-  const lastNonSettingsPathRef = useRef('/guid');
-  const showLogout =
-    typeof window !== 'undefined' && !(window as { electronAPI?: unknown }).electronAPI && status === 'authenticated';
+  const accountName = user?.username || 'Tomny';
+  const accountInitial = accountName.trim().charAt(0).toUpperCase() || 'T';
 
-  useEffect(() => {
-    if (!pathname.startsWith('/settings')) {
-      lastNonSettingsPathRef.current = `${pathname}${search}${hash}`;
-    }
-  }, [pathname, search, hash]);
-
-  const handleNewChat = () => {
-    cleanupSiderTooltips();
-    blurActiveElement();
-    closePreview();
-    setIsBatchMode(false);
-    navigateTopLevel('/guid', { state: { resetAssistant: true } });
-    if (onSessionClick) {
-      onSessionClick();
-    }
-  };
-
-  const handleSettingsClick = () => {
-    cleanupSiderTooltips();
-    blurActiveElement();
-    if (isSettings) {
-      const target = lastNonSettingsPathRef.current || '/guid';
-      navigateTopLevel(target);
-    } else {
-      navigateTopLevel('/settings/model');
-    }
-    if (onSessionClick) {
-      onSessionClick();
-    }
-  };
-
-  const handleConversationSelect = () => {
-    cleanupSiderTooltips();
-    blurActiveElement();
-    closePreview();
-    setIsBatchMode(false);
-  };
-
-  const handleScheduledClick = () => {
-    cleanupSiderTooltips();
-    blurActiveElement();
-    closePreview();
-    setIsBatchMode(false);
-    navigateTopLevel('/scheduled');
-    if (onSessionClick) {
-      onSessionClick();
-    }
-  };
-
-  const handleStudioClick = () => {
-    cleanupSiderTooltips();
-    blurActiveElement();
-    closePreview();
-    setIsBatchMode(false);
-    navigateTopLevel('/studio');
-    if (onSessionClick) {
-      onSessionClick();
-    }
-  };
-
-  const handleManagerClick = () => {
-    cleanupSiderTooltips();
-    blurActiveElement();
-    closePreview();
-    setIsBatchMode(false);
-    navigateTopLevel('/manager');
-    if (onSessionClick) {
-      onSessionClick();
-    }
-  };
-
-  const handleQuickThemeToggle = () => {
-    void setTheme(theme === 'dark' ? 'light' : 'dark');
-  };
-
-  const handleLogout = useCallback(async () => {
-    cleanupSiderTooltips();
-    blurActiveElement();
-    closePreview();
-    try {
-      await logout();
-    } catch (error) {
-      console.error('Logout failed:', error);
-      return; // logout 失败时不执行后续操作
-    }
-    if (onSessionClick) {
-      onSessionClick();
-    }
-  }, [closePreview, logout, onSessionClick]);
-
-  useEffect(() => {
-    if (!showLogout) return;
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === 'l') {
-        event.preventDefault();
-        handleLogout();
+  const navigateTo = useCallback(
+    (path: string, options?: NavigateOptions): void => {
+      cleanupSiderTooltips();
+      blurActiveElement();
+      if (onNavigate) {
+        onNavigate(path, options);
+      } else if (layout?.navigateWithFeedback) {
+        layout.navigateWithFeedback(path, options);
+      } else {
+        void navigate(path, options);
       }
-    };
+      onSessionClick?.();
+    },
+    [layout, navigate, onNavigate, onSessionClick]
+  );
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [handleLogout, showLogout]);
+  if (isSettings) {
+    return (
+      <Suspense fallback={<div className='size-full' />}>
+        <SettingsSider collapsed={collapsed} tooltipEnabled={collapsed && !layout?.isMobile} />
+      </Suspense>
+    );
+  }
 
-  const handleCronNavigate = (path: string) => {
-    cleanupSiderTooltips();
-    blurActiveElement();
-    closePreview();
-    navigateTopLevel(path);
-    if (onSessionClick) onSessionClick();
-  };
-
-  const tooltipEnabled = collapsed && !isMobile;
-  const siderTooltipProps = getSiderTooltipProps(tooltipEnabled);
-
-  const workspaceHistoryProps = {
-    collapsed,
-    tooltipEnabled,
-    onSessionClick,
-    batchMode: isBatchMode,
-    onBatchModeChange: setIsBatchMode,
+  const renderNavButton = (
+    key: string,
+    label: string,
+    path: string,
+    Icon: HubAppDefinition['Icon'] | (typeof PRIMARY_NAV)[number]['Icon'],
+    active: boolean
+  ) => {
+    const button = (
+      <Button
+        key={key}
+        type='text'
+        long
+        className={`${styles.navButton} ${active ? styles.navButtonActive : ''}`}
+        icon={<Icon theme='outline' size={16} fill='currentColor' />}
+        aria-label={label}
+        onClick={() => navigateTo(path)}
+      >
+        <span className={styles.sidebarCopy}>{label}</span>
+      </Button>
+    );
+    return collapsed && !layout?.isMobile ? (
+      <Tooltip key={key} content={label} position='right'>
+        {button}
+      </Tooltip>
+    ) : (
+      button
+    );
   };
 
   return (
-    <div className='size-full flex flex-col'>
-      {/* Main content area */}
-      <div className='flex-1 min-h-0 overflow-hidden'>
-        {isSettings ? (
-          <Suspense fallback={<div className='size-full' />}>
-            <SettingsSider collapsed={collapsed} tooltipEnabled={tooltipEnabled} />
-          </Suspense>
-        ) : (
-          <div className='size-full flex flex-col gap-2px'>
-            <SiderToolbar
-              isMobile={isMobile}
-              isBatchMode={isBatchMode}
-              collapsed={collapsed}
-              siderTooltipProps={siderTooltipProps}
-              onNewChat={handleNewChat}
-              onToggleBatchMode={() => setIsBatchMode((prev) => !prev)}
-            />
-            {/* Search entry */}
-            <SiderSearchEntry
-              isMobile={isMobile}
-              collapsed={collapsed}
-              siderTooltipProps={siderTooltipProps}
-              onConversationSelect={handleConversationSelect}
-              onSessionClick={onSessionClick}
-            />
-            {/* Scheduled tasks nav entry - fixed above scroll */}
-            <SiderScheduledEntry
-              isMobile={isMobile}
-              isActive={pathname === '/scheduled'}
-              collapsed={collapsed}
-              siderTooltipProps={siderTooltipProps}
-              onClick={handleScheduledClick}
-            />
-            {/* Studio app nav entry - file hub + universal editor */}
-            <SiderStudioEntry
-              isMobile={isMobile}
-              isActive={pathname === '/studio'}
-              collapsed={collapsed}
-              siderTooltipProps={siderTooltipProps}
-              onClick={handleStudioClick}
-            />
-            {/* Manager app nav entry - tasks, notes & schedule */}
-            <SiderManagerEntry
-              isMobile={isMobile}
-              isActive={pathname === '/manager'}
-              collapsed={collapsed}
-              siderTooltipProps={siderTooltipProps}
-              onClick={handleManagerClick}
-            />
-            {/* Divider between fixed top nav and scrollable content area */}
-            <div
-              className={classNames(
-                'shrink-0 mt-6px mb-2px h-1px bg-[var(--color-border-2)]',
-                collapsed ? 'mx-6px' : 'mx-10px'
-              )}
-            />
-            {/* Scrollable content: pinned → team/cron (slot) → projects → conversations */}
-            <div className={classNames('flex-1 min-h-0 overflow-y-auto', siderStyles.scrollArea)}>
-              <Suspense fallback={<div className='min-h-200px' />}>
-                <WorkspaceGroupedHistory
-                  {...workspaceHistoryProps}
-                  afterPinnedContent={
-                    <>
-                      <QuickActiveSiderSection
-                        collapsed={collapsed}
-                        pathname={pathname}
-                        siderTooltipProps={siderTooltipProps}
-                        onSessionClick={onSessionClick}
-                      />
-                      <TeamSiderSection
-                        collapsed={collapsed}
-                        pathname={pathname}
-                        siderTooltipProps={siderTooltipProps}
-                        onSessionClick={onSessionClick}
-                      />
-                      <CompanySiderSection
-                        collapsed={collapsed}
-                        pathname={pathname}
-                        siderTooltipProps={siderTooltipProps}
-                        onSessionClick={onSessionClick}
-                      />
-                      {!collapsed && (
-                        <CronJobSiderSection jobs={cronJobs} pathname={pathname} onNavigate={handleCronNavigate} />
-                      )}
-                    </>
-                  }
-                />
-              </Suspense>
-            </div>
-          </div>
+    <div className={`${styles.siderContent} ${collapsed ? styles.collapsed : ''}`} data-testid='global-hub-sidebar'>
+      <nav className={styles.navigation} aria-label={t('guid.hubHome.shell.primaryNavigation')}>
+        {PRIMARY_NAV.map((item) =>
+          renderNavButton(item.id, t(item.key), item.path, item.Icon, isNavActive(pathname, item.path))
         )}
-      </div>
-      {/* Footer */}
-      <SiderFooter
-        isMobile={isMobile}
-        isSettings={isSettings}
-        collapsed={collapsed}
-        theme={theme}
-        siderTooltipProps={siderTooltipProps}
-        onSettingsClick={handleSettingsClick}
-        onThemeToggle={handleQuickThemeToggle}
-        showLogout={showLogout}
-        onLogoutClick={handleLogout}
-      />
+      </nav>
+
+      <div className={styles.divider} />
+      <section className={styles.section}>
+        <div className={styles.sectionLabel}>
+          <span className={styles.sidebarCopy}>{t('guid.hubHome.shell.pinnedApps')}</span>
+          <AllApplication theme='outline' size={13} fill='currentColor' />
+        </div>
+        {PINNED_APPS.map((app) =>
+          renderNavButton(app.id, t(app.labelKey), app.path, app.Icon, isNavActive(pathname, app.path))
+        )}
+      </section>
+
+      <div className={styles.divider} />
+      <section className={styles.section}>
+        <div className={styles.sectionLabel}>
+          <span className={styles.sidebarCopy}>{t('guid.hubHome.shell.workspaces')}</span>
+          <FolderOpen theme='outline' size={13} fill='currentColor' />
+        </div>
+        {renderNavButton('workspace', 'Tomny', '/guid', Home, false)}
+      </section>
+
+      <div className={styles.spacer} />
+      {renderNavButton(
+        'store-footer',
+        t('guid.hubHome.shell.store'),
+        '/store',
+        AllApplication,
+        pathname.startsWith('/store')
+      )}
+      {renderNavButton(
+        'settings-footer',
+        t('guid.hubHome.shell.nav.settings'),
+        '/settings/model',
+        SettingTwo,
+        pathname.startsWith('/settings')
+      )}
+      {showAccount && (
+        <Button
+          type='text'
+          long
+          className={styles.accountButton}
+          aria-label={accountName}
+          onClick={() => navigateTo('/settings/personal')}
+        >
+          <span className={styles.accountAvatar}>{accountInitial}</span>
+          <span className={`${styles.accountCopy} ${styles.sidebarCopy}`}>
+            <strong>{accountName}</strong>
+            <small>{t('settings.personalProfile.title')}</small>
+          </span>
+          <Right className={styles.sidebarCopy} theme='outline' size={13} fill='currentColor' />
+        </Button>
+      )}
     </div>
   );
 };

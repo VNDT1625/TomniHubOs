@@ -97,9 +97,7 @@ const MessageOrchestrationProposal: React.FC<Props> = React.memo(({ message }) =
         </div>
 
         {decision ? (
-          <Text type={decision === 'approved' ? 'success' : 'secondary'}>
-            {t('messages.responseSentSuccessfully')}
-          </Text>
+          <Text type={decision === 'approved' ? 'success' : 'secondary'}>{t('messages.responseSentSuccessfully')}</Text>
         ) : (
           <div className='flex flex-wrap gap-8px'>
             <Button type='primary' loading={busy} onClick={() => void decide(true)}>

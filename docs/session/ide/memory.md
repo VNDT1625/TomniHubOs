@@ -12,7 +12,7 @@
   xóa cache trước khi điều tra sâu.
 - Shell = `cmd` trên Windows. Output hay bị mangle → ghi ra file `.kiro\tmp-*.txt` rồi `type | findstr`.
   Nhớ dọn file tạm sau khi xong.
-- Process boundary: renderer KHÔNG dùng Node API; main KHÔNG dùng DOM API. Giao tiếp aioncore qua
+- Process boundary: renderer KHÔNG dùng Node API; main KHÔNG dùng DOM API. Giao tiếp tomnicore qua
   HTTP/WS; trong desktop dùng IPC bridge (`@office-ai/platform` `bridge.buildProvider/buildEmitter`).
 - UI: Arco + `@icon-park/react` + UnoCSS semantic token + i18n `t('key')`. Không raw HTML, không
   hardcode màu/string.

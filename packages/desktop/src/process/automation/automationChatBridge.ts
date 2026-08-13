@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -136,7 +136,7 @@ const buildSystemPrompt = (req: AutomationChatRequest): string => {
 - action.app.makeVideo — generate a video; config: { topic, style, language, scriptModel, imageModel, sceneCount, renderVideo?, secondsPerScene? }.
 - action.app.editor    — create/append a document; config: { path, operation: 'create'|'append', content }.
 
-### App-reuse nodes (drive existing AionUi features)
+### App-reuse nodes (drive existing Tomny features)
 - action.notify      — desktop notification; config: { title, body }.
 - action.manager     — create task/note/event in Personal Manager; config: { entity: 'task'|'note'|'event', title, detail?, at? }.
 - action.browser     — web-agent task; config: { task, url?, model? }.
@@ -237,7 +237,7 @@ type WorkflowNode = {
   })();
 
   return [
-    'You are an expert AI Workflow Designer for AionUi — a desktop automation platform.',
+    'You are an expert AI Workflow Designer for Tomny — an agentic desktop platform.',
     'You help users create, modify, explain, and fix automation workflows using natural language.',
     '',
     nodeKindDocs,

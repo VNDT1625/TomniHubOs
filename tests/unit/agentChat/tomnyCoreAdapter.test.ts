@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -64,7 +64,7 @@ describe('Tomny JSON stream adapter', () => {
     expect(prompt).toContain('[TomnyExactSurfacePrompt]');
     expect(prompt).toContain('[TomnyToolCatalog] surface');
     expect(prompt).toContain('[TomnyToolPatterns] ide_*,tomny_*');
-    expect(prompt).toContain('Tomny on AionUi ide; project: C:/workspace');
+    expect(prompt).toContain('You are Tomny Agentic in Tomny ide; project: C:/workspace');
     expect(prompt).toContain('only for tool/external turns');
     expect(prompt).toContain('never casual chat');
     expect(prompt).not.toContain('Open the current user action exactly once with StartAction');
@@ -89,7 +89,7 @@ describe('Tomny JSON stream adapter', () => {
     expect(prompt).not.toContain('Before execution, find skills');
     expect(prompt).toContain('Secret Context values stay hidden');
     expect(prompt?.trim().split(/\s+/u).length).toBeLessThan(200);
-    expect(tomnySurfaceSystemPrompt('chat', 'C:/workspace')).toContain('Tomny on AionUi chat');
+    expect(tomnySurfaceSystemPrompt('chat', 'C:/workspace')).toContain('You are Tomny Agentic in Tomny chat');
   });
 
   it('never exposes typed credentials in permission details', () => {
@@ -536,11 +536,11 @@ model = "qwen3:30b"
     ).toMatchObject({ name: 'ide-tools', transport: 'sse', url: 'http://127.0.0.1:4100/sse' });
     expect(
       tomnyMcpServerCommand({
-        name: 'aionui-ide',
+        name: 'tomny-ide',
         transport: 'streamable_http',
         url: 'http://127.0.0.1:4100/mcp',
       })
-    ).toMatchObject({ name: 'aionui-ide', transport: 'sse', url: 'http://127.0.0.1:4100/sse' });
+    ).toMatchObject({ name: 'tomny-ide', transport: 'sse', url: 'http://127.0.0.1:4100/sse' });
     expect(() =>
       tomnyMcpServerCommand({ name: 'http-tools', transport: 'streamable_http', url: 'http://127.0.0.1:4100/mcp' })
     ).toThrow('does not support HTTP MCP transport');
@@ -799,9 +799,9 @@ model = "qwen3:30b"
 
   it('rebuilds the runtime when Super changes the deferred ToolMap catalog', () => {
     const identity = { targetId: 'tomny', workspace: 'C:/work', surface: 'ide' };
-    const regular = [{ name: 'aionui-ide', transport: 'sse' as const, url: 'http://127.0.0.1:4100/sse' }];
+    const regular = [{ name: 'tomny-ide', transport: 'sse' as const, url: 'http://127.0.0.1:4100/sse' }];
     const superCatalog = [
-      { name: 'aionui-browser-control', transport: 'sse' as const, url: 'http://127.0.0.1:4200/sse' },
+      { name: 'tomny-browser-control', transport: 'sse' as const, url: 'http://127.0.0.1:4200/sse' },
       ...regular,
     ];
 
@@ -814,7 +814,7 @@ model = "qwen3:30b"
 
   it('separates surface-only and Super alias catalogs even with the same MCP servers', () => {
     const identity = { targetId: 'tomny', workspace: 'C:/work', surface: 'ide' };
-    const servers = [{ name: 'aionui-ide', transport: 'sse' as const, url: 'http://127.0.0.1:4100/sse' }];
+    const servers = [{ name: 'tomny-ide', transport: 'sse' as const, url: 'http://127.0.0.1:4100/sse' }];
     const surfaceCatalog = { mode: 'surface' as const, patterns: ['ide_*', 'tomny_*'] };
     const superCatalog = { mode: 'super' as const, patterns: ['*'] };
 

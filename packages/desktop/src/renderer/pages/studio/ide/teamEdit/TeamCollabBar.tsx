@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -26,7 +26,7 @@ import { useTranslation } from 'react-i18next';
 import type { TeamRole, UseTeamCollab } from './useTeamCollab';
 import type { UseCloudWorkspace } from './cloud/useCloudWorkspace';
 
-const DEFAULT_CLOUD_RELAY_URL = 'https://aionui-cloud-relay.omniagentic.workers.dev';
+const DEFAULT_CLOUD_RELAY_URL = 'https://tomny-cloud-relay.omniagentic.workers.dev';
 
 type TeamCollabBarProps = {
   /** Local working tree bound to the collaboration session. */

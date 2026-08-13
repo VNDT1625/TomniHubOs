@@ -1,12 +1,13 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
 import { createHash } from 'node:crypto';
 import { readFile, stat } from 'node:fs/promises';
 import sharp from 'sharp';
+import { analyzeTextWithLocalOcr } from './localOcr';
 import type {
   AnalyzeVisualArtifactOptions,
   VisualArtifact,
@@ -70,7 +71,7 @@ const extractPalette = async (imagePath: string): Promise<VisualArtifactColor[]>
   }
   const total = Math.max(1, Math.floor(data.length / info.channels));
   return [...counts.values()]
-    .sort((left, right) => right.count - left.count)
+    .toSorted((left, right) => right.count - left.count)
     .slice(0, PALETTE_SIZE)
     .map((item) => ({
       hex: toHex(...item.rgb),
@@ -143,9 +144,17 @@ export const analyzeVisualArtifact = async (
   const height = metadata.height ?? 0;
   if (width <= 0 || height <= 0) throw new Error('Image dimensions could not be read.');
   const palette = await extractPalette(imagePath);
-  const textBlocks = options.textAnalyzer
-    ? await options.textAnalyzer({ imagePath, width, height })
-    : ([] as VisualArtifactTextBlock[]);
+  const textAnalyzer = options.textAnalyzer ?? (options.ocrMode === 'disabled' ? undefined : analyzeTextWithLocalOcr);
+  let textBlocks: VisualArtifactTextBlock[] = [];
+  let ocrError: string | undefined;
+  if (textAnalyzer) {
+    try {
+      textBlocks = await textAnalyzer({ imagePath, width, height });
+    } catch (error) {
+      ocrError = error instanceof Error ? error.message : String(error);
+      if (options.ocrRequired) throw new Error(`Local OCR failed: ${ocrError}`);
+    }
+  }
   return {
     schemaVersion: 1,
     source: {
@@ -173,15 +182,25 @@ export const analyzeVisualArtifact = async (
     },
     regions: inferLayoutRegions(width, height),
     textBlocks,
-    notes:
-      textBlocks.length > 0
+    notes: ocrError
+      ? [`Local OCR failed: ${ocrError}`]
+      : textBlocks.length > 0
         ? []
-        : ['No OCR engine is configured, so this artifact contains visual metadata and layout hints only.'],
+        : [textAnalyzer ? 'Local OCR completed but found no readable text.' : 'Local OCR was explicitly disabled.'],
     provenance: {
-      analyzer: 'visualArtifact.sharp.v1',
+      analyzer: 'visualArtifact.sharp-ocr.v2',
       generatedAt: (options.generatedAt ?? new Date()).toISOString(),
-      capabilities: ['metadata', 'palette', 'geometry-layout', ...(options.textAnalyzer ? ['text-analyzer'] : [])],
-      limitations: options.textAnalyzer ? [] : ['ocr-unavailable', 'object-detection-unavailable'],
+      capabilities: [
+        'metadata',
+        'palette',
+        'geometry-layout',
+        ...(textAnalyzer && !ocrError ? [options.textAnalyzer ? 'text-analyzer' : 'local-ocr'] : []),
+      ],
+      limitations: [
+        ...(ocrError ? ['ocr-failed'] : []),
+        ...(!textAnalyzer ? ['ocr-disabled'] : []),
+        'object-detection-unavailable',
+      ],
     },
   };
 };

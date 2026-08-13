@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -8,7 +8,7 @@
  * Browser IPC bridge — exposes the Main-process embedded-browser services to the
  * renderer Browser UI (Requirement 1, criteria 1.1 and 1.2; Task 6.5).
  *
- * This is an Electron-native bridge (not an aioncore HTTP route), built with the
+ * This is an Electron-native bridge (not an tomnycore HTTP route), built with the
  * same `@office-ai/platform` `bridge` helper that backs `ipcBridge.ts` and the
  * sibling `companyBridge` / `resourceBridge`. Because `ipcBridge.ts` does not
  * (yet) carry a `browser` namespace and this task must not modify it, the typed

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  *
  * Unit tests for the realtime repo watcher. The `fs.watch` + existence check +
@@ -24,7 +24,7 @@ describe('isIgnoredPath / isWatchedFile', () => {
     expect(isIgnoredPath('.git/HEAD')).toBe(true);
     expect(isIgnoredPath('.tomni/understand/summary.json')).toBe(true);
     expect(isIgnoredPath('\x2eomni/wiki/wiki.json')).toBe(true);
-    expect(isIgnoredPath('.aionui/understand/stale.json')).toBe(true);
+    expect(isIgnoredPath('.tomny/understand/stale.json')).toBe(true);
     expect(isIgnoredPath('.mtui/history.sqlite')).toBe(true);
     expect(isIgnoredPath('src/app.ts')).toBe(false);
   });
@@ -98,7 +98,7 @@ describe('createRepoWatcher', () => {
       new Set([
         'node_modules/x/index.js',
         '.tomni/understand/summary.json',
-        '.aionui/understand/stale.json',
+        '.tomny/understand/stale.json',
         '.mtui/history.sqlite',
         'img.png',
         'src/ok.ts',
@@ -110,7 +110,7 @@ describe('createRepoWatcher', () => {
 
     harness.fire('change', 'node_modules/x/index.js');
     harness.fire('change', '.tomni/understand/summary.json');
-    harness.fire('change', '.aionui/understand/stale.json');
+    harness.fire('change', '.tomny/understand/stale.json');
     harness.fire('change', '.mtui/history.sqlite');
     harness.fire('change', 'img.png');
     harness.fire('change', 'src/ok.ts');

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -38,7 +38,7 @@ describe('Tomny Core standalone replacement acceptance', () => {
       configurable: true,
       get: () => {
         legacyBackendAccesses += 1;
-        throw new Error('Legacy AionCore backend is disabled for this acceptance test.');
+        throw new Error('Legacy TomnyCore backend is disabled for this acceptance test.');
       },
     });
   });
@@ -73,7 +73,7 @@ describe('Tomny Core standalone replacement acceptance', () => {
     expect(legacyBackendAccesses).toBe(0);
   });
 
-  it('runs harness, retry, durable replay and session continuation with AionCore disabled', async () => {
+  it('runs harness, retry, durable replay and session continuation with TomnyCore disabled', async () => {
     const events: ExperimentalCoreEvent[] = [];
     const sessionStore = new MemoryCoreSessionStore();
     const eventStore = new MemoryDurableEventStore();
@@ -106,6 +106,16 @@ describe('Tomny Core standalone replacement acceptance', () => {
       new ExperimentalCoreRuntime((event) => events.push(event), {
         detectTargets: vi.fn(async () => [target]),
         adapters: [adapter],
+
+        coordinator: {
+          requestLease: async (request) => ({
+            id: 'test-agent-lease',
+            kind: request.kind,
+            grantedAt: Date.now(),
+            estCostMB: request.estCostMB,
+          }),
+          releaseLease: vi.fn(),
+        },
         sessionStore,
         eventStore,
         resolveCapabilityHosts,
@@ -136,15 +146,26 @@ describe('Tomny Core standalone replacement acceptance', () => {
       }
     );
     await vi.waitFor(() =>
-      expect(events.some((event) => event.requestId === 'standalone-first' && event.type === 'completed')).toBe(true)
+      expect(
+        events.some((event) => event.requestId === 'standalone-first' && event.type === 'completed'),
+        JSON.stringify(events)
+      ).toBe(true)
     );
 
     expect(attempts).toEqual([1, 2]);
-    expect(resolveCapabilityHosts).toHaveBeenCalledWith(['aionui-ide'], []);
+    expect(resolveCapabilityHosts).toHaveBeenCalledWith(
+      ['tomny-tool-selector', 'tomny-secret-context', 'tomny-ide'],
+      [],
+      expect.objectContaining({ surface: 'ide', workspace: 'C:/workspace' })
+    );
     expect(adapter.run).toHaveBeenCalledWith(
       expect.objectContaining({
         surface: 'ide',
-        mcpServers: [{ name: 'aionui-ide', url: 'http://127.0.0.1/aionui-ide' }],
+        mcpServers: [
+          { name: 'tomny-tool-selector', url: 'http://127.0.0.1/tomny-tool-selector' },
+          { name: 'tomny-secret-context', url: 'http://127.0.0.1/tomny-secret-context' },
+          { name: 'tomny-ide', url: 'http://127.0.0.1/tomny-ide' },
+        ],
       })
     );
     expect(events).toContainEqual(
@@ -182,8 +203,9 @@ describe('Tomny Core standalone replacement acceptance', () => {
     );
 
     const secondPrompt = vi.mocked(adapter.run).mock.calls.at(-1)?.[0].prompt ?? '';
-    expect(secondPrompt).toContain('User: first request');
-    expect(secondPrompt).toContain('Assistant: answer:');
+    expect(secondPrompt).not.toContain('User: first request');
+    expect(secondPrompt).not.toContain('Assistant: answer:');
+    expect(secondPrompt).toContain('continue after restart');
     await expect(sessionStore.get(started.sessionId)).resolves.toEqual(
       expect.objectContaining({ status: 'completed', surface: 'ide' })
     );

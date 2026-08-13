@@ -1,4 +1,4 @@
-import AionSelect from '@/renderer/components/base/AionSelect';
+import TomnySelect from '@/renderer/components/base/TomnySelect';
 import type { SelectHandle } from '@arco-design/web-react/es/Select/interface';
 import React, { useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -29,17 +29,17 @@ const LanguageSwitcher: React.FC = () => {
 
   return (
     <div className='flex items-center gap-8px'>
-      <AionSelect ref={selectRef} className='w-160px' value={i18n.language} onChange={handleLanguageChange}>
-        <AionSelect.Option value='zh-CN'>简体中文</AionSelect.Option>
-        <AionSelect.Option value='zh-TW'>繁體中文</AionSelect.Option>
-        <AionSelect.Option value='ja-JP'>日本語</AionSelect.Option>
-        <AionSelect.Option value='ko-KR'>한국어</AionSelect.Option>
-        <AionSelect.Option value='tr-TR'>Türkçe</AionSelect.Option>
-        <AionSelect.Option value='ru-RU'>Русский</AionSelect.Option>
-        <AionSelect.Option value='uk-UA'>Українська</AionSelect.Option>
-        <AionSelect.Option value='vi-VN'>Tiếng Việt</AionSelect.Option>
-        <AionSelect.Option value='en-US'>English</AionSelect.Option>
-      </AionSelect>
+      <TomnySelect ref={selectRef} className='w-160px' value={i18n.language} onChange={handleLanguageChange}>
+        <TomnySelect.Option value='zh-CN'>简体中文</TomnySelect.Option>
+        <TomnySelect.Option value='zh-TW'>繁體中文</TomnySelect.Option>
+        <TomnySelect.Option value='ja-JP'>日本語</TomnySelect.Option>
+        <TomnySelect.Option value='ko-KR'>한국어</TomnySelect.Option>
+        <TomnySelect.Option value='tr-TR'>Türkçe</TomnySelect.Option>
+        <TomnySelect.Option value='ru-RU'>Русский</TomnySelect.Option>
+        <TomnySelect.Option value='uk-UA'>Українська</TomnySelect.Option>
+        <TomnySelect.Option value='vi-VN'>Tiếng Việt</TomnySelect.Option>
+        <TomnySelect.Option value='en-US'>English</TomnySelect.Option>
+      </TomnySelect>
     </div>
   );
 };

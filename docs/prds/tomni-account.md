@@ -1,4 +1,4 @@
-# Tomni Account — Đặc tả đầy đủ chức năng tài khoản sản phẩm
+# Tomny Account — Đặc tả đầy đủ chức năng tài khoản sản phẩm
 
 > **Trạng thái:** `DESIGN_ONLY`
 >
@@ -6,21 +6,21 @@
 >
 > **Hiển thị với người dùng:** Không.
 >
-> **Quyết định hiện tại:** Chức năng được đặc tả đầy đủ để triển khai trong tương lai, nhưng chưa được nối vào renderer, router, sidebar, settings, core, database, telemetry, WebUI hoặc bất kỳ surface nào của bản demo. Người dùng hiện tại phải xem Tomni như chưa có tài khoản sản phẩm.
+> **Quyết định hiện tại:** Chức năng được đặc tả đầy đủ để triển khai trong tương lai, nhưng chưa được nối vào renderer, router, sidebar, settings, core, database, telemetry, WebUI hoặc bất kỳ surface nào của bản demo. Người dùng hiện tại phải xem Tomny như chưa có tài khoản sản phẩm.
 
 ---
 
 ## 1. Tóm tắt điều hành
 
-Tomni Account là lớp danh tính online tùy chọn dành cho người dùng Tomni trong tương lai. Nó cho phép một người liên kết nhiều thiết bị, sử dụng dịch vụ online, đồng bộ có chọn lọc, quản lý gói và license, tham gia tổ chức, khôi phục quyền truy cập và kiểm soát dữ liệu của mình.
+Tomny Account là lớp danh tính online tùy chọn dành cho người dùng Tomny trong tương lai. Nó cho phép một người liên kết nhiều thiết bị, sử dụng dịch vụ online, đồng bộ có chọn lọc, quản lý gói và license, tham gia tổ chức, khôi phục quyền truy cập và kiểm soát dữ liệu của mình.
 
-Tomni Account không được dùng để thay thế triết lý local-first. Người dùng vẫn phải có thể cài đặt, mở và sử dụng các chức năng cục bộ cốt lõi mà không cần đăng ký hoặc đăng nhập.
+Tomny Account không được dùng để thay thế triết lý local-first. Người dùng vẫn phải có thể cài đặt, mở và sử dụng các chức năng cục bộ cốt lõi mà không cần đăng ký hoặc đăng nhập.
 
 Trong giai đoạn hiện tại, tài liệu này chỉ đóng vai trò contract sản phẩm và kỹ thuật. Không có mã runtime nào được phép import hoặc tham chiếu tới chức năng này. Không có UI ẩn, route ẩn, API giả, tài khoản mẫu hoặc migration chờ sẵn trong bản demo.
 
 ## 2. Bối cảnh và vấn đề cần giải quyết
 
-Tomni hiện hướng tới một hệ thống agentic local-first có nhiều surface, nhiều thiết bị, remote access, extension, automation, agent team và khả năng cung cấp dịch vụ online trong tương lai. Khi sản phẩm public hoặc thương mại hóa, cần một lớp danh tính bền vững để giải quyết:
+Tomny hiện hướng tới một hệ thống agentic local-first có nhiều surface, nhiều thiết bị, remote access, extension, automation, agent team và khả năng cung cấp dịch vụ online trong tương lai. Khi sản phẩm public hoặc thương mại hóa, cần một lớp danh tính bền vững để giải quyết:
 
 - xác định một người dùng trên nhiều thiết bị;
 - quản lý thiết bị tin cậy và thu hồi thiết bị thất lạc;
@@ -37,7 +37,7 @@ Nếu nối tài khoản vào app quá sớm, bản demo sẽ phát sinh nhiều
 
 ### 3.1 Local Access Auth
 
-Cơ chế bảo vệ một Tomni instance, WebUI, remote gateway hoặc truy cập cục bộ. Danh tính này thuộc về một máy hoặc một installation.
+Cơ chế bảo vệ một Tomny instance, WebUI, remote gateway hoặc truy cập cục bộ. Danh tính này thuộc về một máy hoặc một installation.
 
 Ví dụ:
 
@@ -46,9 +46,9 @@ Ví dụ:
 - session token của gateway;
 - quyền truy cập một workspace cục bộ.
 
-### 3.2 Tomni Account
+### 3.2 Tomny Account
 
-Danh tính online của một con người hoặc service account trên phạm vi hệ sinh thái Tomni.
+Danh tính online của một con người hoặc service account trên phạm vi hệ sinh thái Tomny.
 
 Ví dụ:
 
@@ -61,7 +61,7 @@ Ví dụ:
 
 ### 3.3 Device Identity
 
-Danh tính riêng của mỗi cài đặt Tomni. Một tài khoản có thể liên kết nhiều device identity. Một thiết bị có thể bị đổi tên, đánh dấu tin cậy, thu hồi hoặc xóa.
+Danh tính riêng của mỗi cài đặt Tomny. Một tài khoản có thể liên kết nhiều device identity. Một thiết bị có thể bị đổi tên, đánh dấu tin cậy, thu hồi hoặc xóa.
 
 ### 3.4 Entitlement
 
@@ -73,7 +73,7 @@ Danh tính và khóa dùng cho đồng bộ. Nó không được mặc định �
 
 ### 3.6 Quy tắc không được phá vỡ
 
-- Không dùng chung mật khẩu giữa Local Access Auth và Tomni Account.
+- Không dùng chung mật khẩu giữa Local Access Auth và Tomny Account.
 - Không dùng chung JWT secret hoặc session store.
 - Không dùng WebUI user làm cloud account.
 - Không lưu refresh token trong `localStorage`.
@@ -84,7 +84,7 @@ Danh tính và khóa dùng cho đồng bộ. Nó không được mặc định �
 
 ## 4. Mục tiêu sản phẩm
 
-1. Cho phép người dùng tạo và quản lý danh tính Tomni online an toàn.
+1. Cho phép người dùng tạo và quản lý danh tính Tomny online an toàn.
 2. Giữ trải nghiệm local-first và tài khoản là tùy chọn.
 3. Hỗ trợ nhiều thiết bị với khả năng xem, đổi tên và thu hồi.
 4. Tạo nền tảng cho đồng bộ có chọn lọc và mã hóa.
@@ -111,23 +111,23 @@ Trong phiên bản đặc tả này chưa quyết định hoặc chưa triển k
 - quảng cáo;
 - bán dữ liệu;
 - bắt buộc đăng nhập để dùng app;
-- migration từ WebUI admin user sang Tomni Account;
+- migration từ WebUI admin user sang Tomny Account;
 - tự động upload toàn bộ conversation hoặc repository;
 - cơ chế KYC;
 - ví tiền hoặc chuyển credit giữa người dùng.
 
 ## 6. Đối tượng người dùng
 
-| Persona | Nhu cầu |
-| --- | --- |
-| Người dùng local-only | Dùng app không cần tài khoản và không bị nhắc đăng nhập liên tục |
-| Người dùng nhiều thiết bị | Đồng bộ lựa chọn và quản lý thiết bị |
-| Người dùng remote | Kết nối an toàn qua relay hoặc dịch vụ online |
-| Người dùng Pro | Nhận đúng quyền theo gói hoặc license |
-| Thành viên tổ chức | Tham gia workspace chung với vai trò rõ ràng |
-| Chủ tổ chức | Mời thành viên, quản lý seat, policy và billing |
-| Người dùng nhạy cảm dữ liệu | Kiểm soát loại dữ liệu nào rời khỏi máy |
-| Support vận hành | Xác minh sự cố mà không đọc nội dung riêng tư |
+| Persona                     | Nhu cầu                                                          |
+| --------------------------- | ---------------------------------------------------------------- |
+| Người dùng local-only       | Dùng app không cần tài khoản và không bị nhắc đăng nhập liên tục |
+| Người dùng nhiều thiết bị   | Đồng bộ lựa chọn và quản lý thiết bị                             |
+| Người dùng remote           | Kết nối an toàn qua relay hoặc dịch vụ online                    |
+| Người dùng Pro              | Nhận đúng quyền theo gói hoặc license                            |
+| Thành viên tổ chức          | Tham gia workspace chung với vai trò rõ ràng                     |
+| Chủ tổ chức                 | Mời thành viên, quản lý seat, policy và billing                  |
+| Người dùng nhạy cảm dữ liệu | Kiểm soát loại dữ liệu nào rời khỏi máy                          |
+| Support vận hành            | Xác minh sự cố mà không đọc nội dung riêng tư                    |
 
 ## 7. Chế độ sử dụng
 
@@ -141,7 +141,7 @@ Trong phiên bản đặc tả này chưa quyết định hoặc chưa triển k
 
 ### 7.2 Linked personal account
 
-- Một thiết bị được liên kết với một Tomni Account.
+- Một thiết bị được liên kết với một Tomny Account.
 - Người dùng chọn bật hoặc tắt từng loại đồng bộ.
 - Entitlement được cache có thời hạn để hỗ trợ offline.
 - Đăng xuất không xóa dữ liệu local nếu người dùng không yêu cầu.
@@ -168,41 +168,41 @@ Trong phiên bản đặc tả này chưa quyết định hoặc chưa triển k
 4. Nút tiếp tục cục bộ phải rõ ràng, không bị làm mờ.
 5. Khi offline, app phải giải thích chức năng online tạm thời không khả dụng nhưng dữ liệu local vẫn dùng được.
 6. Không hiển thị giá hoặc plan khi billing chưa sẵn sàng.
-7. Không trộn tài khoản Tomni với tài khoản model provider như OpenAI, Anthropic hoặc Google.
-8. Không gọi mật khẩu WebUI là mật khẩu Tomni Account.
+7. Không trộn tài khoản Tomny với tài khoản model provider như OpenAI, Anthropic hoặc Google.
+8. Không gọi mật khẩu WebUI là mật khẩu Tomny Account.
 9. Không hiển thị Account Center trong demo hiện tại.
 10. Khi triển khai, mọi text hiển thị phải dùng i18n.
 
 ## 9. Danh mục chức năng
 
-| Mã | Chức năng | Ưu tiên tương lai | Trạng thái |
-| --- | --- | --- | --- |
-| F-ACC-01 | Điểm vào tài khoản tùy chọn | P0 | Chỉ đặc tả |
-| F-ACC-02 | Đăng ký bằng email | P0 | Chỉ đặc tả |
-| F-ACC-03 | Xác minh email | P0 | Chỉ đặc tả |
-| F-ACC-04 | Đăng nhập và session | P0 | Chỉ đặc tả |
-| F-ACC-05 | Đăng xuất và khóa phiên | P0 | Chỉ đặc tả |
-| F-ACC-06 | Khôi phục tài khoản | P0 | Chỉ đặc tả |
-| F-ACC-07 | Hồ sơ cá nhân | P1 | Chỉ đặc tả |
-| F-ACC-08 | Quản lý thiết bị | P0 | Chỉ đặc tả |
-| F-ACC-09 | Đăng nhập qua nhà cung cấp ngoài | P1 | Chỉ đặc tả |
-| F-ACC-10 | Consent và phạm vi đồng bộ | P0 | Chỉ đặc tả |
-| F-ACC-11 | Đồng bộ có chọn lọc | P1 | Chỉ đặc tả |
-| F-ACC-12 | Tổ chức và thành viên | P1 | Chỉ đặc tả |
-| F-ACC-13 | Entitlement và license | P0 khi thương mại hóa | Chỉ đặc tả |
-| F-ACC-14 | Billing và hóa đơn | P1 khi thương mại hóa | Chỉ đặc tả |
-| F-ACC-15 | Bảo mật và lịch sử hoạt động | P0 | Chỉ đặc tả |
-| F-ACC-16 | Export dữ liệu | P0 trước public | Chỉ đặc tả |
-| F-ACC-17 | Xóa tài khoản | P0 trước public | Chỉ đặc tả |
-| F-ACC-18 | Offline và degraded mode | P0 | Chỉ đặc tả |
-| F-ACC-19 | Thông báo bảo mật | P1 | Chỉ đặc tả |
-| F-ACC-20 | Support và account recovery review | P1 | Chỉ đặc tả |
+| Mã       | Chức năng                          | Ưu tiên tương lai     | Trạng thái |
+| -------- | ---------------------------------- | --------------------- | ---------- |
+| F-ACC-01 | Điểm vào tài khoản tùy chọn        | P0                    | Chỉ đặc tả |
+| F-ACC-02 | Đăng ký bằng email                 | P0                    | Chỉ đặc tả |
+| F-ACC-03 | Xác minh email                     | P0                    | Chỉ đặc tả |
+| F-ACC-04 | Đăng nhập và session               | P0                    | Chỉ đặc tả |
+| F-ACC-05 | Đăng xuất và khóa phiên            | P0                    | Chỉ đặc tả |
+| F-ACC-06 | Khôi phục tài khoản                | P0                    | Chỉ đặc tả |
+| F-ACC-07 | Hồ sơ cá nhân                      | P1                    | Chỉ đặc tả |
+| F-ACC-08 | Quản lý thiết bị                   | P0                    | Chỉ đặc tả |
+| F-ACC-09 | Đăng nhập qua nhà cung cấp ngoài   | P1                    | Chỉ đặc tả |
+| F-ACC-10 | Consent và phạm vi đồng bộ         | P0                    | Chỉ đặc tả |
+| F-ACC-11 | Đồng bộ có chọn lọc                | P1                    | Chỉ đặc tả |
+| F-ACC-12 | Tổ chức và thành viên              | P1                    | Chỉ đặc tả |
+| F-ACC-13 | Entitlement và license             | P0 khi thương mại hóa | Chỉ đặc tả |
+| F-ACC-14 | Billing và hóa đơn                 | P1 khi thương mại hóa | Chỉ đặc tả |
+| F-ACC-15 | Bảo mật và lịch sử hoạt động       | P0                    | Chỉ đặc tả |
+| F-ACC-16 | Export dữ liệu                     | P0 trước public       | Chỉ đặc tả |
+| F-ACC-17 | Xóa tài khoản                      | P0 trước public       | Chỉ đặc tả |
+| F-ACC-18 | Offline và degraded mode           | P0                    | Chỉ đặc tả |
+| F-ACC-19 | Thông báo bảo mật                  | P1                    | Chỉ đặc tả |
+| F-ACC-20 | Support và account recovery review | P1                    | Chỉ đặc tả |
 
 ## 10. Yêu cầu chức năng chi tiết
 
 ### F-ACC-01 — Điểm vào tài khoản tùy chọn
 
-**User story:** Là người dùng Tomni, tôi muốn tiếp tục dùng cục bộ hoặc chủ động đăng nhập khi cần dịch vụ online.
+**User story:** Là người dùng Tomny, tôi muốn tiếp tục dùng cục bộ hoặc chủ động đăng nhập khi cần dịch vụ online.
 
 **Luồng tương lai:**
 
@@ -303,10 +303,10 @@ Trong phiên bản đặc tả này chưa quyết định hoặc chưa triển k
 
 Có ba hành động khác nhau:
 
-| Hành động | Kết quả |
-| --- | --- |
-| Đăng xuất thiết bị này | Thu hồi session hiện tại, giữ dữ liệu local |
-| Gỡ liên kết thiết bị | Thu hồi session và xóa liên kết device-account |
+| Hành động                    | Kết quả                                                |
+| ---------------------------- | ------------------------------------------------------ |
+| Đăng xuất thiết bị này       | Thu hồi session hiện tại, giữ dữ liệu local            |
+| Gỡ liên kết thiết bị         | Thu hồi session và xóa liên kết device-account         |
 | Xóa dữ liệu account khỏi máy | Xóa token, cache cloud và metadata account theo policy |
 
 Yêu cầu người dùng được chọn giữ hoặc xóa cache đồng bộ. Không được xóa repository, conversation hoặc file local chỉ vì đăng xuất.
@@ -388,16 +388,16 @@ Provider cụ thể là open decision.
 
 Mỗi loại dữ liệu có switch và mô tả riêng:
 
-| Loại dữ liệu | Mặc định | Ghi chú |
-| --- | --- | --- |
-| Cài đặt giao diện | Tắt | Ít nhạy cảm nhưng vẫn cần consent |
-| Danh sách model/provider không chứa secret | Tắt | Không gửi API key |
-| Automation metadata | Tắt | Nội dung node có thể nhạy cảm |
-| Conversation | Tắt | Chỉ bật sau khi có policy rõ |
-| Workspace metadata | Tắt | Không gồm source code mặc định |
-| Source code/file | Không hỗ trợ mặc định | Cần flow chuyên biệt |
-| Secret/credential | Cấm đồng bộ plaintext | Chỉ qua vault thiết kế riêng |
-| License và entitlement | Bật theo account | Không phải nội dung người dùng |
+| Loại dữ liệu                               | Mặc định              | Ghi chú                           |
+| ------------------------------------------ | --------------------- | --------------------------------- |
+| Cài đặt giao diện                          | Tắt                   | Ít nhạy cảm nhưng vẫn cần consent |
+| Danh sách model/provider không chứa secret | Tắt                   | Không gửi API key                 |
+| Automation metadata                        | Tắt                   | Nội dung node có thể nhạy cảm     |
+| Conversation                               | Tắt                   | Chỉ bật sau khi có policy rõ      |
+| Workspace metadata                         | Tắt                   | Không gồm source code mặc định    |
+| Source code/file                           | Không hỗ trợ mặc định | Cần flow chuyên biệt              |
+| Secret/credential                          | Cấm đồng bộ plaintext | Chỉ qua vault thiết kế riêng      |
+| License và entitlement                     | Bật theo account      | Không phải nội dung người dùng    |
 
 Consent record phải lưu version, mục đích, thời điểm, source device và trạng thái rút consent.
 
@@ -508,7 +508,7 @@ Yêu cầu tương lai:
 - trial policy;
 - proration policy;
 - tax và địa chỉ billing theo yêu cầu pháp lý;
-- không lưu full card data trong hệ thống Tomni;
+- không lưu full card data trong hệ thống Tomny;
 - billing failure không xóa dữ liệu local.
 
 Chưa hiển thị billing trong demo.
@@ -623,25 +623,25 @@ Trong giai đoạn demo hiện tại, không tạo bất kỳ mục nào trong s
 
 ## 12. Trạng thái account phía client
 
-| Trạng thái | Ý nghĩa |
-| --- | --- |
-| `local_only` | Không liên kết account |
-| `linking` | Đang mở auth flow |
-| `authenticated` | Có session hợp lệ |
-| `refreshing` | Access token đang được làm mới |
-| `offline_cached` | Mất mạng nhưng có cache hợp lệ |
-| `reauth_required` | Cần đăng nhập lại cho hành động nhạy cảm |
-| `suspended` | Account bị hạn chế |
-| `deletion_pending` | Đang trong grace period xóa |
-| `signed_out` | Đã thu hồi session |
-| `error_recoverable` | Lỗi có thể retry |
+| Trạng thái          | Ý nghĩa                                  |
+| ------------------- | ---------------------------------------- |
+| `local_only`        | Không liên kết account                   |
+| `linking`           | Đang mở auth flow                        |
+| `authenticated`     | Có session hợp lệ                        |
+| `refreshing`        | Access token đang được làm mới           |
+| `offline_cached`    | Mất mạng nhưng có cache hợp lệ           |
+| `reauth_required`   | Cần đăng nhập lại cho hành động nhạy cảm |
+| `suspended`         | Account bị hạn chế                       |
+| `deletion_pending`  | Đang trong grace period xóa              |
+| `signed_out`        | Đã thu hồi session                       |
+| `error_recoverable` | Lỗi có thể retry                         |
 
 State account không được dùng thay cho trạng thái app readiness. App local không phụ thuộc account state.
 
 ## 13. Mô hình kiến trúc mục tiêu
 
 ```text
-Tomni Desktop / Web / Mobile
+Tomny Desktop / Web / Mobile
   |
   +-- Local Access Auth
   |     +-- WebUI password
@@ -667,16 +667,16 @@ Tomni Desktop / Web / Mobile
 
 ### 13.1 Phân lớp
 
-| Lớp | Trách nhiệm |
-| --- | --- |
-| Renderer | Hiển thị trạng thái, bắt đầu flow, không giữ refresh token |
-| Preload | IPC có kiểu rõ, giới hạn surface |
-| Main process | System browser, deep link, OS credential store, device key |
-| Tomni Core | Chỉ nhận account capability cần thiết, không sở hữu password |
-| Account services | Identity, session, devices, consent, org, entitlement |
-| Sync service | Dữ liệu đồng bộ đã được consent |
-| Billing adapter | Chuyển webhook thành entitlement events |
-| Audit service | Security events và operator actions |
+| Lớp              | Trách nhiệm                                                  |
+| ---------------- | ------------------------------------------------------------ |
+| Renderer         | Hiển thị trạng thái, bắt đầu flow, không giữ refresh token   |
+| Preload          | IPC có kiểu rõ, giới hạn surface                             |
+| Main process     | System browser, deep link, OS credential store, device key   |
+| Tomny Core       | Chỉ nhận account capability cần thiết, không sở hữu password |
+| Account services | Identity, session, devices, consent, org, entitlement        |
+| Sync service     | Dữ liệu đồng bộ đã được consent                              |
+| Billing adapter  | Chuyển webhook thành entitlement events                      |
+| Audit service    | Security events và operator actions                          |
 
 ## 14. Ranh giới với code hiện tại
 
@@ -703,46 +703,46 @@ Khi triển khai account sau này:
 
 ### 15.1 Identity domain
 
-| Bảng | Trường chính |
-| --- | --- |
-| `accounts` | id, status, created_at, updated_at, deletion_requested_at |
-| `account_emails` | id, account_id, normalized_email, verified_at, primary |
-| `password_credentials` | account_id, password_hash, algorithm, changed_at |
-| `external_identities` | account_id, provider, provider_subject, linked_at |
-| `recovery_methods` | account_id, type, status, added_at |
-| `terms_acceptances` | account_id, document_type, version, accepted_at |
-| `consents` | account_id, purpose, category, version, state, recorded_at |
+| Bảng                   | Trường chính                                               |
+| ---------------------- | ---------------------------------------------------------- |
+| `accounts`             | id, status, created_at, updated_at, deletion_requested_at  |
+| `account_emails`       | id, account_id, normalized_email, verified_at, primary     |
+| `password_credentials` | account_id, password_hash, algorithm, changed_at           |
+| `external_identities`  | account_id, provider, provider_subject, linked_at          |
+| `recovery_methods`     | account_id, type, status, added_at                         |
+| `terms_acceptances`    | account_id, document_type, version, accepted_at            |
+| `consents`             | account_id, purpose, category, version, state, recorded_at |
 
 ### 15.2 Session và device domain
 
-| Bảng | Trường chính |
-| --- | --- |
-| `devices` | id, account_id, name, platform, public_key, status, last_seen_at |
-| `sessions` | id, account_id, device_id, created_at, expires_at, revoked_at |
-| `refresh_tokens` | id, session_id, token_hash, family_id, rotated_at, used_at |
-| `auth_challenges` | id, type, subject, token_hash, expires_at, consumed_at |
-| `security_events` | id, account_id, device_id, event_type, risk, occurred_at |
+| Bảng              | Trường chính                                                     |
+| ----------------- | ---------------------------------------------------------------- |
+| `devices`         | id, account_id, name, platform, public_key, status, last_seen_at |
+| `sessions`        | id, account_id, device_id, created_at, expires_at, revoked_at    |
+| `refresh_tokens`  | id, session_id, token_hash, family_id, rotated_at, used_at       |
+| `auth_challenges` | id, type, subject, token_hash, expires_at, consumed_at           |
+| `security_events` | id, account_id, device_id, event_type, risk, occurred_at         |
 
 ### 15.3 Organization domain
 
-| Bảng | Trường chính |
-| --- | --- |
-| `organizations` | id, name, status, created_at |
-| `memberships` | organization_id, account_id, role, state |
-| `invitations` | id, organization_id, email, role, token_hash, expires_at |
-| `organization_policies` | organization_id, policy_key, value, version |
-| `seats` | organization_id, account_id, source, active_from, active_until |
+| Bảng                    | Trường chính                                                   |
+| ----------------------- | -------------------------------------------------------------- |
+| `organizations`         | id, name, status, created_at                                   |
+| `memberships`           | organization_id, account_id, role, state                       |
+| `invitations`           | id, organization_id, email, role, token_hash, expires_at       |
+| `organization_policies` | organization_id, policy_key, value, version                    |
+| `seats`                 | organization_id, account_id, source, active_from, active_until |
 
 ### 15.4 Entitlement và billing domain
 
-| Bảng | Trường chính |
-| --- | --- |
-| `plans` | id, version, status |
-| `subscriptions` | id, owner_type, owner_id, plan_id, status, period_end |
-| `purchases` | id, owner_type, owner_id, sku, status |
-| `entitlement_sources` | id, source_type, source_ref, validity |
-| `entitlement_snapshots` | subject, scope, payload, issued_at, expires_at |
-| `billing_events` | provider, event_id, type, received_at, processed_at |
+| Bảng                    | Trường chính                                          |
+| ----------------------- | ----------------------------------------------------- |
+| `plans`                 | id, version, status                                   |
+| `subscriptions`         | id, owner_type, owner_id, plan_id, status, period_end |
+| `purchases`             | id, owner_type, owner_id, sku, status                 |
+| `entitlement_sources`   | id, source_type, source_ref, validity                 |
+| `entitlement_snapshots` | subject, scope, payload, issued_at, expires_at        |
+| `billing_events`        | provider, event_id, type, received_at, processed_at   |
 
 ### 15.5 Nguyên tắc dữ liệu
 
@@ -761,47 +761,47 @@ Base path ví dụ: `/v1/account`.
 
 ### 16.1 Public auth
 
-| Method | Path | Mục đích |
-| --- | --- | --- |
-| POST | `/register` | Tạo yêu cầu đăng ký |
-| POST | `/email/verify` | Xác minh email |
-| POST | `/email/resend` | Gửi lại xác minh |
-| POST | `/sessions` | Đăng nhập |
-| POST | `/sessions/refresh` | Xoay refresh token |
-| POST | `/password/recovery` | Bắt đầu recovery |
-| POST | `/password/reset` | Hoàn tất reset |
-| GET | `/oauth/{provider}/authorize` | Bắt đầu OAuth |
-| POST | `/oauth/{provider}/callback` | Đổi authorization code |
+| Method | Path                          | Mục đích               |
+| ------ | ----------------------------- | ---------------------- |
+| POST   | `/register`                   | Tạo yêu cầu đăng ký    |
+| POST   | `/email/verify`               | Xác minh email         |
+| POST   | `/email/resend`               | Gửi lại xác minh       |
+| POST   | `/sessions`                   | Đăng nhập              |
+| POST   | `/sessions/refresh`           | Xoay refresh token     |
+| POST   | `/password/recovery`          | Bắt đầu recovery       |
+| POST   | `/password/reset`             | Hoàn tất reset         |
+| GET    | `/oauth/{provider}/authorize` | Bắt đầu OAuth          |
+| POST   | `/oauth/{provider}/callback`  | Đổi authorization code |
 
 ### 16.2 Authenticated account
 
-| Method | Path | Mục đích |
-| --- | --- | --- |
-| GET | `/me` | Lấy hồ sơ và trạng thái |
-| PATCH | `/me` | Cập nhật hồ sơ |
-| GET | `/sessions` | Liệt kê phiên |
-| DELETE | `/sessions/{id}` | Thu hồi phiên |
-| DELETE | `/sessions` | Thu hồi tất cả phiên khác |
-| GET | `/devices` | Liệt kê thiết bị |
-| PATCH | `/devices/{id}` | Đổi tên hoặc trust state |
-| DELETE | `/devices/{id}` | Thu hồi thiết bị |
-| GET | `/consents` | Lấy consent |
-| PUT | `/consents/{category}` | Cập nhật consent |
-| GET | `/entitlements` | Lấy snapshot quyền |
-| POST | `/exports` | Yêu cầu export |
-| POST | `/deletion` | Yêu cầu xóa |
-| DELETE | `/deletion` | Hủy trong grace period |
+| Method | Path                   | Mục đích                  |
+| ------ | ---------------------- | ------------------------- |
+| GET    | `/me`                  | Lấy hồ sơ và trạng thái   |
+| PATCH  | `/me`                  | Cập nhật hồ sơ            |
+| GET    | `/sessions`            | Liệt kê phiên             |
+| DELETE | `/sessions/{id}`       | Thu hồi phiên             |
+| DELETE | `/sessions`            | Thu hồi tất cả phiên khác |
+| GET    | `/devices`             | Liệt kê thiết bị          |
+| PATCH  | `/devices/{id}`        | Đổi tên hoặc trust state  |
+| DELETE | `/devices/{id}`        | Thu hồi thiết bị          |
+| GET    | `/consents`            | Lấy consent               |
+| PUT    | `/consents/{category}` | Cập nhật consent          |
+| GET    | `/entitlements`        | Lấy snapshot quyền        |
+| POST   | `/exports`             | Yêu cầu export            |
+| POST   | `/deletion`            | Yêu cầu xóa               |
+| DELETE | `/deletion`            | Hủy trong grace period    |
 
 ### 16.3 Organization
 
-| Method | Path | Mục đích |
-| --- | --- | --- |
-| GET | `/organizations` | Liệt kê tổ chức |
-| POST | `/organizations` | Tạo tổ chức |
-| GET | `/organizations/{id}/members` | Thành viên |
-| POST | `/organizations/{id}/invitations` | Mời |
-| PATCH | `/organizations/{id}/members/{accountId}` | Đổi vai trò |
-| DELETE | `/organizations/{id}/members/{accountId}` | Xóa thành viên |
+| Method | Path                                      | Mục đích        |
+| ------ | ----------------------------------------- | --------------- |
+| GET    | `/organizations`                          | Liệt kê tổ chức |
+| POST   | `/organizations`                          | Tạo tổ chức     |
+| GET    | `/organizations/{id}/members`             | Thành viên      |
+| POST   | `/organizations/{id}/invitations`         | Mời             |
+| PATCH  | `/organizations/{id}/members/{accountId}` | Đổi vai trò     |
+| DELETE | `/organizations/{id}/members/{accountId}` | Xóa thành viên  |
 
 ### 16.4 Quy tắc API
 
@@ -870,14 +870,14 @@ Mỗi record đồng bộ cần:
 
 ### 18.2 Conflict policy
 
-| Loại dữ liệu | Policy gợi ý |
-| --- | --- |
-| UI preference | Last-write-wins có timestamp hợp lệ |
-| Danh sách item | Merge theo item id |
-| Automation | Versioned document, yêu cầu user resolve khi conflict lớn |
-| Conversation | Append-only hoặc event sequence |
-| Secret | Không sync qua pipeline thường |
-| Organization policy | Server authoritative |
+| Loại dữ liệu        | Policy gợi ý                                              |
+| ------------------- | --------------------------------------------------------- |
+| UI preference       | Last-write-wins có timestamp hợp lệ                       |
+| Danh sách item      | Merge theo item id                                        |
+| Automation          | Versioned document, yêu cầu user resolve khi conflict lớn |
+| Conversation        | Append-only hoặc event sequence                           |
+| Secret              | Không sync qua pipeline thường                            |
+| Organization policy | Server authoritative                                      |
 
 ### 18.3 Encryption
 
@@ -927,17 +927,17 @@ Mỗi event có:
 
 Nhóm error ổn định:
 
-| Nhóm | Ví dụ |
-| --- | --- |
-| Validation | `invalid_email`, `weak_password` |
-| Authentication | `invalid_credentials`, `session_expired` |
-| Authorization | `insufficient_scope`, `organization_policy_denied` |
-| Conflict | `email_in_use`, `version_conflict` |
-| Rate limit | `too_many_attempts` |
-| Risk | `reauth_required`, `device_not_trusted` |
-| Account state | `account_suspended`, `deletion_pending` |
-| Dependency | `email_unavailable`, `billing_unavailable` |
-| Network | client-generated offline/timeout state |
+| Nhóm           | Ví dụ                                              |
+| -------------- | -------------------------------------------------- |
+| Validation     | `invalid_email`, `weak_password`                   |
+| Authentication | `invalid_credentials`, `session_expired`           |
+| Authorization  | `insufficient_scope`, `organization_policy_denied` |
+| Conflict       | `email_in_use`, `version_conflict`                 |
+| Rate limit     | `too_many_attempts`                                |
+| Risk           | `reauth_required`, `device_not_trusted`            |
+| Account state  | `account_suspended`, `deletion_pending`            |
+| Dependency     | `email_unavailable`, `billing_unavailable`         |
+| Network        | client-generated offline/timeout state             |
 
 UI không hiển thị raw server exception.
 
@@ -990,13 +990,13 @@ Biện pháp nền tảng:
 
 ### 22.1 Data classification
 
-| Cấp | Ví dụ | Yêu cầu |
-| --- | --- | --- |
-| Public | Plan name công khai | Integrity |
-| Internal | Feature config | Access control |
-| Personal | Email, display name | Purpose limitation, retention |
-| Sensitive | Security events, IP | Restricted access |
-| Secret | Token, key | Never log, secure storage |
+| Cấp          | Ví dụ                   | Yêu cầu                           |
+| ------------ | ----------------------- | --------------------------------- |
+| Public       | Plan name công khai     | Integrity                         |
+| Internal     | Feature config          | Access control                    |
+| Personal     | Email, display name     | Purpose limitation, retention     |
+| Sensitive    | Security events, IP     | Restricted access                 |
+| Secret       | Token, key              | Never log, secure storage         |
 | User content | Conversation, workspace | Explicit consent, separate domain |
 
 ### 22.2 Retention
@@ -1291,7 +1291,7 @@ Các quyết định sau phải được khóa bằng ADR trước triển khai:
 
 ## 31. Quyết định cuối của giai đoạn hiện tại
 
-Tomni Account là chức năng cần thiết cho tương lai public và thương mại hóa, nhưng chưa phù hợp để xuất hiện trong bản demo hiện tại.
+Tomny Account là chức năng cần thiết cho tương lai public và thương mại hóa, nhưng chưa phù hợp để xuất hiện trong bản demo hiện tại.
 
 Hành động được chốt:
 

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -170,7 +170,7 @@ export type ExperimentalCoreContextIdentity = {
 const MAX_CONVERSATION_CONTEXT_CHARS = 24_000;
 const MAX_SAVED_MEMORY_CONTEXT_CHARS = 64_000;
 const SECRET_CONTEXT_CAPABILITY_ID = 'core.secret-context';
-const SECRET_CONTEXT_SERVER_NAME = 'aionui-secret-context';
+const SECRET_CONTEXT_SERVER_NAME = 'tomny-secret-context';
 const BUILTIN_AVAILABLE_CAPABILITIES = ['core.skill-workflow', SECRET_CONTEXT_CAPABILITY_ID];
 
 const normalizeSavedMemoryContext = (value?: string): string => {

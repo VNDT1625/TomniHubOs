@@ -1,18 +1,13 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
 import { describe, expect, it, vi } from 'vitest';
 import { createWorkflowEngine } from '@/process/automation/workflowEngine';
 import type { NodeExecutorMap } from '@/process/automation/nodeExecutors';
-import type {
-  RunEvent,
-  Workflow,
-  WorkflowCheckpoint,
-  WorkflowNode,
-} from '@/process/automation/automationTypes';
+import type { RunEvent, Workflow, WorkflowCheckpoint, WorkflowNode } from '@/process/automation/automationTypes';
 
 /** Build a workflow from a list of nodes. */
 const workflow = (nodes: WorkflowNode[]): Workflow => ({
@@ -272,6 +267,144 @@ describe('createWorkflowEngine', () => {
     expect(result.ok).toBe(false);
     expect(after).not.toHaveBeenCalled();
     expect(events).toContainEqual(expect.objectContaining({ type: 'approval-resolved', approved: false }));
+  });
+
+  it('fails closed before an email executor when no human approval provider is configured', async () => {
+    const executors = passthroughExecutors();
+    const send = vi.fn();
+    executors['action.email.send'] = send;
+    const email = node('email', 'action.email.send');
+    email.config = { from: 'me@example.com', to: 'you@example.com', subject: 'Hello', body: 'Body' };
+    const engine = createWorkflowEngine({ executors, emit: () => undefined });
+
+    const result = await engine.run(workflow([email]));
+
+    expect(result.ok).toBe(false);
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it('binds email approval to resolved fields and executes the approved snapshot', async () => {
+    const executors = passthroughExecutors();
+    const send = vi.fn().mockResolvedValue({ messageId: 'sent' });
+    executors['action.email.send'] = send;
+    const email = node('email', 'action.email.send', 'Send report');
+    email.config = {
+      from: 'me@example.com',
+      to: 'first@example.com, {{input}}',
+      subject: 'Report for {{input}}',
+      body: 'Approved body: {{input}}',
+      attachArtifact: true,
+    };
+    const requestApproval = vi.fn().mockImplementation(() => {
+      email.config.to = 'attacker@example.com';
+      return Promise.resolve({ approved: true });
+    });
+    const engine = createWorkflowEngine({
+      executors,
+      emit: () => undefined,
+      now: () => 100,
+      newRunId: () => 'run-1',
+      requestApproval,
+    });
+
+    const result = await engine.run(workflow([email]), { input: 'second@example.com' });
+
+    expect(result.ok).toBe(true);
+    expect(requestApproval).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runId: 'run-1',
+        nodeId: 'email',
+        expiresAt: 300_100,
+        action: {
+          kind: 'action.email.send',
+          from: 'me@example.com',
+          to: ['first@example.com', 'second@example.com'],
+          subject: 'Report for second@example.com',
+          body: 'Approved body: second@example.com',
+          attachArtifact: true,
+
+          attachmentPath: null,
+        },
+      }),
+      undefined
+    );
+    expect(send).toHaveBeenCalledWith(
+      expect.objectContaining({ config: expect.objectContaining({ to: 'first@example.com, {{input}}' }) }),
+      { input: 'second@example.com' },
+      undefined
+    );
+  });
+
+  it('binds an attachment to the immutable input snapshot approved by the user', async () => {
+    const executors = passthroughExecutors();
+    const send = vi.fn().mockResolvedValue({ messageId: 'sent' });
+    executors['action.email.send'] = send;
+    const email = node('email', 'action.email.send');
+    email.config = {
+      from: 'me@example.com',
+      to: 'you@example.com',
+      subject: 'Attachment',
+      body: 'See attachment',
+      attachArtifact: true,
+    };
+    const pipelineInput = { artifact: { path: 'C:\\safe.txt' } };
+    const requestApproval = vi.fn().mockImplementation(() => {
+      pipelineInput.artifact.path = 'C:\\changed-after-approval.txt';
+      return Promise.resolve({ approved: true });
+    });
+    const engine = createWorkflowEngine({ executors, emit: () => undefined, requestApproval });
+
+    const result = await engine.run(workflow([email]), { input: pipelineInput });
+
+    expect(result.ok).toBe(true);
+    expect(requestApproval).toHaveBeenCalledWith(
+      expect.objectContaining({ action: expect.objectContaining({ attachmentPath: 'C:\\safe.txt' }) }),
+      undefined
+    );
+    expect(send).toHaveBeenCalledWith(expect.anything(), { input: { artifact: { path: 'C:\\safe.txt' } } }, undefined);
+  });
+
+  it('rejects agent-routed email because it could diverge from the approved preview', async () => {
+    const executors = passthroughExecutors();
+    const send = vi.fn();
+    const executeWithAgent = vi.fn();
+    executors['action.email.send'] = send;
+    const email = node('email', 'action.email.send');
+    email.config = { from: 'me@example.com', to: 'you@example.com', subject: 'Hello', body: 'Body' };
+    email.execution = { mode: 'agent' };
+    const requestApproval = vi.fn().mockResolvedValue({ approved: true });
+    const engine = createWorkflowEngine({
+      executors,
+      executeWithAgent,
+      emit: () => undefined,
+      requestApproval,
+    });
+
+    const result = await engine.run(workflow([email]));
+
+    expect(result.ok).toBe(false);
+    expect(requestApproval).not.toHaveBeenCalled();
+    expect(send).not.toHaveBeenCalled();
+    expect(executeWithAgent).not.toHaveBeenCalled();
+  });
+
+  it('never automatically retries an email after an ambiguous transport failure', async () => {
+    const executors = passthroughExecutors();
+    const send = vi.fn().mockRejectedValue(new Error('SMTP acknowledgement timed out'));
+    executors['action.email.send'] = send;
+    const email = node('email', 'action.email.send');
+    email.config = { from: 'me@example.com', to: 'you@example.com', subject: 'Hello', body: 'Body' };
+    email.onError = { retries: 3, retryDelayMs: 1 };
+    const engine = createWorkflowEngine({
+      executors,
+      emit: () => undefined,
+      requestApproval: () => Promise.resolve({ approved: true }),
+    });
+
+    const result = await engine.run(workflow([email]));
+
+    expect(result.ok).toBe(false);
+    expect(send).toHaveBeenCalledTimes(1);
   });
 
   it('keeps legacy AI nodes on their existing deterministic executor unless explicitly routed', async () => {

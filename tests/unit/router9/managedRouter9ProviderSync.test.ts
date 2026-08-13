@@ -15,7 +15,7 @@ const makeStore = (existing = false): IProviderStore => ({
 });
 
 describe('syncManagedRouter9Provider', () => {
-  it('creates a dedicated Tomni provider without reusing an external CLI client', async () => {
+  it('creates a dedicated Tomny provider without reusing an external CLI client', async () => {
     const managed = {
       start: vi.fn(async () => ({ baseUrl: 'http://127.0.0.1:20129/v1' })),
       ensureClient: vi.fn(async () => ({ id: 'app-client', key: 'sk-tomni-app' })),
@@ -53,7 +53,7 @@ describe('syncManagedRouter9Provider', () => {
     expect(store.create).not.toHaveBeenCalled();
   });
 
-  it('synchronizes Tomni after a persisted gateway finishes starting', async () => {
+  it('synchronizes Tomny after a persisted gateway finishes starting', async () => {
     const status = {
       state: 'running',
       autoStart: true,

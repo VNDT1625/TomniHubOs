@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -136,7 +136,7 @@ export const NODE_KIND_META: NodeKindMeta[] = [
     trigger: false,
     defaultConfig: () => ({ label: '' }),
   },
-  // --- App-function nodes: produce an artifact from an AionUi sub-app ---
+  // --- App-function nodes: produce an artifact from an Tomny sub-app ---
   {
     kind: 'action.app.makeVideo',
     Icon: MovieBoard,

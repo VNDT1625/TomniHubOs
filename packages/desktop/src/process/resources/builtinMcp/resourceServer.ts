@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -138,7 +138,7 @@ async function main() {
 
   server.tool(
     BUILTIN_RESOURCE_TOOL_NAME,
-    `READ-ONLY tool that reports the current host resource status from the AionUi ResourceCoordinator.
+    `READ-ONLY tool that reports the current host resource status from the Tomny ResourceCoordinator.
 
 Use this BEFORE starting any heavy work (spawning extra agents, opening browser tabs, running tests, transcription, document conversion, semantic indexing, etc.) to check whether the machine is under load, then self-throttle accordingly.
 

@@ -1,5 +1,5 @@
 import type { ModalProps } from '@arco-design/web-react';
-import { Modal } from '@arco-design/web-react';
+import { Button, Modal } from '@arco-design/web-react';
 import { Close } from '@icon-park/react';
 import React from 'react';
 
@@ -18,14 +18,14 @@ const ModalWrapper: React.FC<ModalWrapperProps> = ({
   ...props
 }) => {
   return (
-    <Modal {...props} title={null} closable={false} onCancel={onCancel} className={`aionui-modal ${className}`}>
+    <Modal {...props} title={null} closable={false} onCancel={onCancel} className={`tomny-modal ${className}`}>
       <div>
         {showCustomClose && title && (
-          <div className='aionui-modal-header'>
-            <h3 className='aionui-modal-title'>{title}</h3>
-            <button onClick={onCancel} className='aionui-modal-close-btn'>
-              <Close size={20} fill='#86909c' />
-            </button>
+          <div className='tomny-modal-header'>
+            <h3 className='tomny-modal-title'>{title}</h3>
+            <Button type='text' size='small' onClick={onCancel} className='tomny-modal-close-btn'>
+              <Close size={20} fill='currentColor' />
+            </Button>
           </div>
         )}
         {children}

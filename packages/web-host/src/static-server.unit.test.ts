@@ -97,12 +97,35 @@ describe('static-server', () => {
     expect(json).toEqual({ path: '/api/anything', method: 'GET', authorization: 'Bearer gateway-http-token' });
   });
 
+  it('routes owner-local package APIs before the backend proxy', async () => {
+    const backend = await startMockBackend((_req, res) => {
+      res.writeHead(500);
+      res.end('package route must not reach backend');
+    });
+    stopBackend = backend.close;
+    handle = await startStaticServer({
+      staticDir,
+      backendPort: backend.port,
+      port: 0,
+      localApiHandler: async (request, response) => {
+        if (request.url !== '/api/packages') return false;
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end(JSON.stringify({ data: [{ id: 'com.tomni.sample' }] }));
+        return true;
+      },
+    });
+
+    const response = await fetch(`${handle.localUrl}/api/packages`);
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ data: [{ id: 'com.tomni.sample' }] });
+  });
+
   it('/login reverse-proxies to backend (no local handler)', async () => {
     const backend = await startMockBackend((req, res) => {
       if (req.url === '/login' && req.method === 'POST') {
         res.writeHead(200, {
           'content-type': 'application/json',
-          'set-cookie': 'aionui-session=backend-token; Path=/; HttpOnly',
+          'set-cookie': 'tomny-session=backend-token; Path=/; HttpOnly',
         });
         res.end(JSON.stringify({ success: true, proxied: true }));
         return;
@@ -118,7 +141,7 @@ describe('static-server', () => {
       body: JSON.stringify({ username: 'admin', password: 'anything' }),
     });
     expect(r.status).toBe(200);
-    expect(r.headers.get('set-cookie')).toMatch(/aionui-session=backend-token/);
+    expect(r.headers.get('set-cookie')).toMatch(/tomny-session=backend-token/);
     const json = (await r.json()) as { proxied: boolean };
     expect(json.proxied).toBe(true);
   });
@@ -146,7 +169,7 @@ describe('static-server', () => {
       if (req.url === '/logout' && req.method === 'POST') {
         res.writeHead(200, {
           'content-type': 'application/json',
-          'set-cookie': 'aionui-session=; Path=/; Max-Age=0',
+          'set-cookie': 'tomny-session=; Path=/; Max-Age=0',
         });
         res.end(JSON.stringify({ success: true, proxied: true }));
         return;

@@ -51,6 +51,8 @@ export class NativeSnapshotService {
     return simpleGit({ baseDir: workspace });
   }
   private async isGit(workspace: string): Promise<boolean> {
+    const marker = await stat(path.join(workspace, '.git')).catch((): undefined => undefined);
+    if (!marker?.isDirectory() && !marker?.isFile()) return false;
     return this.git(workspace).checkIsRepo();
   }
 

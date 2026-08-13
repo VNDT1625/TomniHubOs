@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -15,6 +15,7 @@ type QuitCleanupDeps = {
   markExplicitQuit: () => void;
   destroyTray: () => void;
   disposeCronResumeListener: () => void;
+  shutdownModelGateway: () => Promise<void>;
   stopBackend: () => Promise<void>;
   destroyPetWindow: () => Promise<void> | void;
   logInfo: (message: string) => void;
@@ -35,7 +36,7 @@ async function runWithTimeout(
   const timeout = new Promise<void>((resolve) => {
     timeoutId = setTimeout(() => {
       timedOut = true;
-      logWarn('[AionUi] Cleanup timed out after 10s, forcing quit');
+      logWarn('[Tomny] Cleanup timed out after 10s, forcing quit');
       resolve();
     }, timeoutMs);
   });
@@ -47,13 +48,17 @@ async function runWithTimeout(
 }
 
 async function runQuitCleanup(deps: QuitCleanupDeps): Promise<void> {
-  deps.logInfo('[AionUi] before-quit');
+  deps.logInfo('[Tomny] before-quit');
   deps.setIsQuitting(true);
   deps.markExplicitQuit();
   deps.destroyTray();
 
   const cleanup = async () => {
     deps.disposeCronResumeListener();
+
+    await deps
+      .shutdownModelGateway()
+      .catch((err) => deps.logError('[App] Failed to stop model gateway or restore CLI configs:', err));
 
     await deps.stopBackend().catch((err) => deps.logError('[App] Failed to stop backend:', err));
 

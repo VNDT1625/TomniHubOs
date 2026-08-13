@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -8,7 +8,7 @@
  * Manager IPC bridge — exposes the Main-process Personal Manager service to the
  * renderer Manager UI (Requirements 1–8, integration 9.4).
  *
- * This is an Electron-native bridge (not an aioncore HTTP route), built with the
+ * This is an Electron-native bridge (not an tomnycore HTTP route), built with the
  * same `@office-ai/platform` `bridge` helper that backs `ipcBridge.ts`. Because
  * `ipcBridge.ts` does not carry a `manager` namespace and this feature must not
  * modify it, the typed channels are declared **here** and exported so the

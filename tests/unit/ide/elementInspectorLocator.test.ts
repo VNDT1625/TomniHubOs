@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  *
  * Unit tests for elementInspectorLocator — the pure mapping core behind Quick
@@ -184,7 +184,7 @@ describe('renderElementBrief', () => {
 
 describe('pruneInspectEvidence', () => {
   it('removes expired managed evidence without touching recent or unrelated files', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'aionui-inspect-'));
+    const root = await mkdtemp(join(tmpdir(), 'tomny-inspect-'));
     const dir = join(root, '.omni', 'inspect');
     const oldShot = join(dir, 'shot-viewport-100.png');
     const recentVideo = join(dir, 'recording-200.mp4');

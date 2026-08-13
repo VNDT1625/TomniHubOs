@@ -2,7 +2,7 @@
  * Transport-neutral CLI routing for background surfaces.
  *
  * `cli:<targetId>` is executed directly through Tomny Core adapters. The legacy
- * AionCore REST conversation and backend WebSocket are deliberately not used.
+ * the legacy core REST conversation and backend WebSocket are deliberately not used.
  */
 
 import type { AgentChat, ChatMessageInput } from '@process/browser/webAgentRunner';

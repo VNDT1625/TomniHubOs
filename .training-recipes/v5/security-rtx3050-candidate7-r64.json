@@ -1,0 +1,59 @@
+{
+  "schemaVersion": "tomny.qlora-recipe.v1",
+  "recipeVersion": 7,
+  "id": "tomny-qwen35-08b-security-rtx3050-candidate7-r64",
+  "version": "2026-07-30.7-r64",
+  "promotionStatus": "candidate-only",
+  "purpose": "security",
+  "dataset": {
+    "datasetId": "tomny-security-candidate5-independent",
+    "datasetVersion": "2026-07-29.v5",
+    "manifestSha256": "7e2004f0d150bdcd4e6a2584a4d15732be309b6952ad3d4f9ff6956414d4d455"
+  },
+  "baseModel": {
+    "modelId": "Qwen/Qwen3.5-0.8B",
+    "revision": "2fc06364715b967f1860aea9cf38778875588b17",
+    "contentSha256": "ff3a07808a9e83627e69a07131fdec45c60973f23cc5617204d173461ec65fe6"
+  },
+  "seed": 20260725,
+  "hardwareProfile": {
+    "profile": "rtx-3050-4gb",
+    "gpuModel": "NVIDIA GeForce RTX 3050 Laptop GPU",
+    "maxVramGiB": 4,
+    "sequentialOnly": true,
+    "finiteGradientSmokePassed": true,
+    "finiteGradientSmokeReceipt": {
+      "candidateVersion": "0.1.0-candidate.7-r64-smoke.2",
+      "reportSha256": "a053fbd02ed12a72c5fc0f2c9d0901ecc8b0d96b0b162c45b70f75f45bc37223",
+      "manifestSha256": "2149a662d47a47915050b2beacafb4c5722cc22981f91f4602508cf593cbc565",
+      "weightSha256": "4024bebba60ef17957b3bc070d82af1aa3293096e3465c1299ef9b5d2bf76b83",
+      "targetProfile": "last-block",
+      "rank": 64,
+      "steps": 5,
+      "allFinite": true,
+      "peakGpuAllocatedBytes": 2549318144,
+      "peakGpuReservedBytes": 4041211904
+    }
+  },
+  "qualityLimitations": [
+    "Candidate 7 is a controlled rank-64 capacity experiment after Candidate 6 improved substantially but remained unsafe on the immutable benchmark.",
+    "The five-step smoke remained finite and inside 4 GiB, but its peak reserved VRAM leaves limited headroom; training must remain sequential and resource-gated.",
+    "The immutable test split remains trainer-isolated; a fresh checkpoint-only benchmark is mandatory before any promotion decision."
+  ],
+  "training": {
+    "maxSteps": 450,
+    "maxLength": 256,
+    "rank": 64,
+    "loraAlpha": 128,
+    "gradientAccumulationSteps": 8,
+    "learningRate": 0.0001,
+    "warmupRatio": 0.05,
+    "targetProfile": "last-block",
+    "loggingSteps": 5,
+    "evalSteps": 50,
+    "saveSteps": 50,
+    "earlyStoppingPatience": 3,
+    "earlyStoppingThreshold": 0.001,
+    "maxValidationRegression": 0
+  }
+}

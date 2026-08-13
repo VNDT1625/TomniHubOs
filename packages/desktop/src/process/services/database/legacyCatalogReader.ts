@@ -165,7 +165,7 @@ const normalizeBehaviorPolicy = (value: unknown): AgentMetadata['behavior_policy
     ? { supports_side_question: row.supports_side_question }
     : undefined;
 };
-const AGENT_TYPES = new Set<AgentType>(['acp', 'remote', 'aionrs', 'openclaw-gateway', 'nanobot']);
+const AGENT_TYPES = new Set<AgentType>(['acp', 'remote', 'tomnyagentic', 'openclaw-gateway', 'nanobot']);
 const asAgentType = (value: unknown): AgentType => {
   const candidate = asString(value);
   return candidate && AGENT_TYPES.has(candidate as AgentType) ? (candidate as AgentType) : 'acp';
@@ -224,7 +224,7 @@ const normalizeAssistant = (raw: unknown): Assistant | undefined => {
     avatar: asString(row.avatar),
     enabled: asBoolean(row.enabled, true),
     sort_order: asNumber(valueField(row, 'sort_order', 'sortOrder')),
-    preset_agent_type: asString(row.preset_agent_type, row.presetAgentType) ?? 'aionrs',
+    preset_agent_type: asString(row.preset_agent_type, row.presetAgentType) ?? 'tomnyagentic',
     enabled_skills: asStringArray(valueField(row, 'enabled_skills', 'enabledSkills')),
     custom_skill_names: asStringArray(valueField(row, 'custom_skill_names', 'customSkillNames')),
     disabled_builtin_skills: asStringArray(valueField(row, 'disabled_builtin_skills', 'disabledBuiltinSkills')),

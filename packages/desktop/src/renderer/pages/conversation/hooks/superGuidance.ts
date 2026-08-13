@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -8,7 +8,7 @@
  * Standing instructions injected into a conversation's rules layer when **Super**
  * is on (the Browser-Control MCP is attached).
  *
- * Why this exists: without explicit guidance the CLI agent (aionrs / Claude
+ * Why this exists: without explicit guidance the CLI agent (tomnyagentic / Claude
  * Code, …) tends to "open a browser" by **spawning sub-agents that shell out to
  * the OS** (`start`/`open`/`cmd /c start`). On Windows that fails outright
  * ("Windows cannot find '\\'") and, worse, those sub-agents do not inherit the
@@ -24,7 +24,7 @@
  */
 
 /** Canonical name of the built-in Browser-Control MCP server (mirror constant). */
-export const BROWSER_CONTROL_MCP_NAME = 'aionui-browser-control';
+export const BROWSER_CONTROL_MCP_NAME = 'tomny-browser-control';
 
 /** Versioned Quick Test guidance, also appended when upgrading an older Super conversation. */
 export const SUPER_QUICK_TEST_RULES = [
@@ -116,7 +116,7 @@ export const withoutSuperBrowserRules = (existingRules?: string): string => {
 };
 
 /** Canonical name of the built-in IDE MCP server (mirror constant). */
-export const IDE_MCP_NAME = 'aionui-ide';
+export const IDE_MCP_NAME = 'tomny-ide';
 
 /** Standing instructions appended when the IDE MCP server is attached to a role. */
 export const IDE_TOOLS_RULES = [
@@ -144,7 +144,7 @@ export const IDE_TOOLS_RULES = [
   '  anything. They reflect the same repo intelligence the IDE workspace uses.',
   '- Never claim a fix while reproduction/post-fix gates or focused regression tests fail; a failed verification reopens root-cause analysis.',
   '- Use absolute paths. When you need to edit a file, read it first with `ide_read_file`.',
-  '- If Strict IDE Mode rejects a native repo tool through the permission protocol, that is AionUi policy enforcement, not a user refusal. Never report that the user blocked or denied the task.',
+  '- If Strict IDE Mode rejects a native repo tool through the permission protocol, that is Tomny policy enforcement, not a user refusal. Never report that the user blocked or denied the task.',
   '- A rejected native call is NOT rerouted or completed automatically. Retry it immediately with the matching provided tool.',
   '- Mapping: Read/cat → `ide_read_file`; Grep/rg → `ide_search` or `ide_grep`; Glob/find/ls → `ide_glob` or `ide_list_dir`; shell commands → `ide_command`.',
   '- Direct file writes through `ide_command` are blocked. Use an MTUI-backed edit/write tool exposed in the session, or run `mtui --json ...` through `ide_command`.',
@@ -163,7 +163,7 @@ export const withIdeToolRules = (existingRules?: string): string => {
 };
 
 /** Canonical name of the built-in Realtime Knowledge MCP server (mirror constant). */
-export const REALTIME_KNOWLEDGE_MCP_NAME = 'aionui-realtime-knowledge';
+export const REALTIME_KNOWLEDGE_MCP_NAME = 'tomny-realtime-knowledge';
 
 /**
  * Standing instructions appended when the Realtime Knowledge MCP server is

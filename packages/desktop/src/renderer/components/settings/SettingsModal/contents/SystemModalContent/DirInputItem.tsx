@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -42,7 +42,7 @@ const DirInputItem: React.FC<{
         };
 
         return (
-          <div className='aion-dir-input h-[32px] flex items-center rounded-8px border border-solid border-transparent pl-14px bg-[var(--fill-0)]'>
+          <div className='tomny-dir-input h-[32px] flex items-center rounded-8px border border-solid border-transparent pl-14px bg-[var(--fill-0)]'>
             <Tooltip content={current_value || t('settings.dirNotConfigured')} position='top'>
               <div className='flex-1 min-w-0 text-13px text-t-primary truncate '>
                 {current_value || t('settings.dirNotConfigured')}

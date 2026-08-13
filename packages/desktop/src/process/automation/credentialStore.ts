@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -30,7 +30,7 @@
  * Process boundary: Main-process (Node.js) module. No DOM APIs.
  */
 
-import { app } from 'electron';
+import { app, safeStorage } from 'electron';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { createHash, randomBytes, createCipheriv, createDecipheriv, randomUUID } from 'node:crypto';
@@ -93,12 +93,21 @@ export type CredentialFs = {
   mkdir(dirPath: string, options: { recursive: true }): Promise<string | undefined>;
 };
 
+/** OS-backed secret codec. Production uses Electron safeStorage; tests inject a deterministic fake. */
+export type CredentialCrypto = {
+  isAvailable(): boolean;
+  encrypt(plain: string): string;
+  decrypt(encoded: string): string;
+};
+
 /** Construction options for {@link createCredentialStore}. */
 export type CredentialStoreOptions = {
   /** Directory the data file lives in. Defaults to the Electron `userData` dir. */
   dir?: string;
   /** File-system implementation. Injectable for tests; defaults to `fs/promises`. */
   fs?: CredentialFs;
+  /** OS-backed secret codec. Defaults to Electron safeStorage. */
+  crypto?: CredentialCrypto;
   /** Clock for `createdAt`/`updatedAt`. Defaults to `Date.now`. */
   now?: () => number;
   /** Id generator. Defaults to `crypto.randomUUID`. */
@@ -123,6 +132,9 @@ const IV_BYTES = 12;
 /** AES-256-GCM auth-tag length in bytes. */
 const AUTH_TAG_BYTES = 16;
 
+const OS_FIELD_PREFIX = 'os:v1:';
+const LEGACY_FIELD_PATTERN = /^[0-9a-f]{24}:[0-9a-f]{32}:[0-9a-f]*$/iu;
+
 // ---------------------------------------------------------------------------
 // Default fs adapter
 // ---------------------------------------------------------------------------
@@ -135,6 +147,12 @@ const defaultFs: CredentialFs = {
 };
 
 // ---------------------------------------------------------------------------
+const defaultCrypto: CredentialCrypto = {
+  isAvailable: () => safeStorage.isEncryptionAvailable(),
+  encrypt: (plain) => safeStorage.encryptString(plain).toString('base64'),
+  decrypt: (encoded) => safeStorage.decryptString(Buffer.from(encoded, 'base64')),
+};
+
 // Key derivation
 // ---------------------------------------------------------------------------
 
@@ -239,17 +257,42 @@ export const createCredentialStore = (options?: CredentialStoreOptions): ICreden
   const nowFn = options?.now ?? Date.now;
   const newId = options?.newId ?? randomUUID;
   const fsImpl = options?.fs ?? defaultFs;
+  const cryptoImpl = options?.crypto ?? defaultCrypto;
+  const useLegacyEncryption = options?.encryptionKey !== undefined;
 
   // Resolve the data directory lazily so callers that inject `dir` never
   // trigger a live Electron `app` call.
   const resolveDir = (): string => options?.dir ?? app.getPath('userData');
 
-  // Derive the encryption key once (lazy, so tests that inject `encryptionKey`
-  // never call `app.getPath`).
-  let _key: Buffer | undefined = options?.encryptionKey;
-  const getKey = (): Buffer => {
-    if (!_key) _key = deriveKey(resolveDir());
-    return _key;
+  // The legacy key remains available only for explicit compatibility mode and
+  // one-time migration of path-derived ciphertext.
+  let legacyKey: Buffer | undefined = options?.encryptionKey;
+  const getLegacyKey = (): Buffer => {
+    if (!legacyKey) legacyKey = deriveKey(resolveDir());
+    return legacyKey;
+  };
+
+  const requireOsEncryption = (): void => {
+    if (!cryptoImpl.isAvailable()) throw new Error('OS credential encryption is unavailable');
+  };
+
+  const protectField = (plain: string): string => {
+    if (useLegacyEncryption) return encryptField(plain, getLegacyKey());
+    requireOsEncryption();
+    return `${OS_FIELD_PREFIX}${cryptoImpl.encrypt(plain)}`;
+  };
+
+  const revealField = (encoded: string): string | null => {
+    if (useLegacyEncryption) return decryptField(encoded, getLegacyKey());
+    requireOsEncryption();
+    if (encoded.startsWith(OS_FIELD_PREFIX)) {
+      try {
+        return cryptoImpl.decrypt(encoded.slice(OS_FIELD_PREFIX.length));
+      } catch {
+        return null;
+      }
+    }
+    return decryptField(encoded, getLegacyKey());
   };
 
   const filePath = (): string => path.join(resolveDir(), CREDENTIAL_DATA_FILE);
@@ -262,6 +305,7 @@ export const createCredentialStore = (options?: CredentialStoreOptions): ICreden
   // -------------------------------------------------------------------------
 
   const persist = async (next: Credential[]): Promise<Credential[]> => {
+    if (!useLegacyEncryption) requireOsEncryption();
     cache = next;
     const fp = filePath();
     const dir = path.dirname(fp);
@@ -272,11 +316,39 @@ export const createCredentialStore = (options?: CredentialStoreOptions): ICreden
     return next;
   };
 
+  const migrateFieldsToOsProtection = async (): Promise<void> => {
+    let changed = false;
+    const migrated = cache.map((credential) => {
+      let credentialChanged = false;
+      const fields: Record<string, string> = {};
+      for (const [key, encoded] of Object.entries(credential.fields)) {
+        if (encoded.startsWith(OS_FIELD_PREFIX)) {
+          fields[key] = encoded;
+          continue;
+        }
+
+        const legacyPlain = decryptField(encoded, getLegacyKey());
+        if (LEGACY_FIELD_PATTERN.test(encoded) && legacyPlain === null) {
+          throw new Error('Legacy credential decryption failed');
+        }
+        fields[key] = protectField(legacyPlain ?? encoded);
+        credentialChanged = true;
+      }
+      if (!credentialChanged) return credential;
+      changed = true;
+      return { ...credential, fields };
+    });
+    if (changed) await persist(migrated);
+  };
+
   const load = async (): Promise<Credential[]> => {
+    if (!useLegacyEncryption) requireOsEncryption();
     try {
       const raw = await fsImpl.readFile(filePath(), 'utf-8');
       cache = normaliseList(JSON.parse(raw) as unknown, nowFn());
+      if (!useLegacyEncryption) await migrateFieldsToOsProtection();
     } catch (error) {
+      if (!isFileNotFound(error) && !useLegacyEncryption) throw error;
       if (!isFileNotFound(error)) {
         console.warn('[CredentialStore] Failed to read automation-credentials.json; using empty list:', error);
       }
@@ -294,36 +366,25 @@ export const createCredentialStore = (options?: CredentialStoreOptions): ICreden
   // Field encryption helpers
   // -------------------------------------------------------------------------
 
-  /**
-   * Encrypt all values in a plain-text field map.
-   * Already-encrypted values (containing ':') are passed through unchanged so
-   * a partial update that omits unchanged fields does not double-encrypt.
-   */
+  /** Encrypt all incoming plaintext values. Existing encrypted fields are merged separately. */
   const encryptFields = (fields: Record<string, string>): Record<string, string> => {
-    const key = getKey();
     const result: Record<string, string> = {};
-    for (const [k, v] of Object.entries(fields)) {
-      // Heuristic: if the value already looks like our encoded format, keep it.
-      result[k] = v.split(':').length === 3 ? v : encryptField(v, key);
+    for (const [key, value] of Object.entries(fields)) {
+      result[key] = protectField(value);
     }
     return result;
   };
 
-  /**
-   * Decrypt all values in an encrypted field map.
-   * Fields that fail to decrypt yield an empty string (never throws).
-   */
+  /** Decrypt all values. Fields that fail authentication yield an empty string. */
   const decryptFields = (fields: Record<string, string>): Record<string, string> => {
-    const key = getKey();
     const result: Record<string, string> = {};
-    for (const [k, v] of Object.entries(fields)) {
-      result[k] = decryptField(v, key) ?? '';
+    for (const [key, value] of Object.entries(fields)) {
+      result[key] = revealField(value) ?? '';
     }
     return result;
   };
 
-  // -------------------------------------------------------------------------
-  // Store implementation
+  // -------------------------------------------------------------------------  // Store implementation
   // -------------------------------------------------------------------------
 
   return {
@@ -342,12 +403,10 @@ export const createCredentialStore = (options?: CredentialStoreOptions): ICreden
       const ts = nowFn();
       const existing = cred.id ? cache.find((c) => c.id === cred.id) : undefined;
 
-      // Merge incoming fields on top of existing encrypted fields, then
-      // encrypt any plain-text values that were just supplied.
-      const mergedFields = encryptFields({
+      const mergedFields = {
         ...existing?.fields,
-        ...cred.fields,
-      });
+        ...encryptFields(cred.fields ?? {}),
+      };
 
       const next: Credential = {
         id: existing?.id ?? (cred.id && cred.id.length > 0 ? cred.id : newId()),

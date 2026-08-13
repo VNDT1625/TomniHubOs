@@ -1,11 +1,11 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  *
  * Unit tests for process/utils/deepLink — focuses on the URL parsing that now
- * also recognises http/https URLs handed to AionUi as the OS default browser
- * (mapped to the `open-url` action) alongside the existing aionui:// protocol.
+ * also recognises http/https URLs handed to Tomny as the OS default browser
+ * alongside the current tomny:// protocol and legacy tomni:// and tomny:// aliases.
  */
 
 import { describe, it, expect, vi } from 'vitest';
@@ -33,9 +33,17 @@ describe('parseDeepLinkUrl — web URLs (default-browser hand-off)', () => {
   });
 });
 
-describe('parseDeepLinkUrl — aionui:// protocol (unchanged)', () => {
+describe('parseDeepLinkUrl — Tomny protocols', () => {
+  it('parses the primary tomny:// protocol', () => {
+    const result = parseDeepLinkUrl('tomny://add-provider?base_url=https://api.test&api_key=abc');
+    expect(result).toEqual({
+      action: 'add-provider',
+      params: { base_url: 'https://api.test', api_key: 'abc' },
+    });
+  });
+
   it('parses the add-provider action with query params', () => {
-    const result = parseDeepLinkUrl('aionui://add-provider?base_url=https://api.test&api_key=abc');
+    const result = parseDeepLinkUrl('tomny://add-provider?base_url=https://api.test&api_key=abc');
     expect(result).toEqual({
       action: 'add-provider',
       params: { base_url: 'https://api.test', api_key: 'abc' },
@@ -44,7 +52,7 @@ describe('parseDeepLinkUrl — aionui:// protocol (unchanged)', () => {
 
   it('decodes the base64 data param into params', () => {
     const data = Buffer.from(JSON.stringify({ base_url: 'https://x.test', api_key: 'k' }), 'utf-8').toString('base64');
-    const result = parseDeepLinkUrl(`aionui://provider/add?v=1&data=${encodeURIComponent(data)}`);
+    const result = parseDeepLinkUrl(`tomny://provider/add?v=1&data=${encodeURIComponent(data)}`);
     expect(result?.action).toBe('provider/add');
     expect(result?.params.base_url).toBe('https://x.test');
     expect(result?.params.api_key).toBe('k');
@@ -58,8 +66,10 @@ describe('parseDeepLinkUrl — aionui:// protocol (unchanged)', () => {
 });
 
 describe('isHandledUrlArg', () => {
-  it('recognises aionui:// and web URLs', () => {
-    expect(isHandledUrlArg('aionui://add-provider')).toBe(true);
+  it('recognises current, legacy, and web URLs', () => {
+    expect(isHandledUrlArg('tomny://add-provider')).toBe(true);
+    expect(isHandledUrlArg('tomni://add-provider')).toBe(true);
+    expect(isHandledUrlArg('tomny://add-provider')).toBe(true);
     expect(isHandledUrlArg('https://example.com')).toBe(true);
     expect(isHandledUrlArg('http://example.com')).toBe(true);
   });

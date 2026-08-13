@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -17,7 +17,7 @@
  * than silently driving the user's real desktop, the launcher runs the app
  * minimized and the engine targets the app's window by handle (not global
  * input). The Windows display backend is enabled by default on Windows so the
- * feature is click-to-run; set `AIONUI_DISABLE_WINDOWS_TEST=1` to refuse Windows
+ * feature is click-to-run; set `TOMNY_DISABLE_WINDOWS_TEST=1` to refuse Windows
  * (no fake pass, no surprise desktop takeover).
  *
  * Step grammar (driven via PowerShell against the launched window):

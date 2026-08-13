@@ -53,7 +53,7 @@ const getTeamOrThrow = (teams: TTeam[], teamId: string): TTeam => {
   return current;
 };
 
-/** Native Team CRUD + AgentMesh lifecycle. No HTTP or AionCore process is involved. */
+/** Native Team CRUD + AgentMesh lifecycle. No HTTP or the legacy core process is involved. */
 export const createTeamBridgeHandlers = (deps: TeamBridgeDependencies) => {
   const now = deps.now ?? (() => Date.now());
   const makeId = deps.id ?? ((prefix: string) => `${prefix}-${randomUUID()}`);

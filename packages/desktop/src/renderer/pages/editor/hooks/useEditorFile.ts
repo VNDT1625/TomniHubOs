@@ -1,13 +1,13 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
 /**
  * `useEditorFile` — the read/write data layer for the Universal Editor (Yêu cầu 2a).
  *
- * It loads a file's content from aioncore via `POST /api/fs/read` (text) or
+ * It loads a file's content from tomnycore via `POST /api/fs/read` (text) or
  * `POST /api/fs/read-buffer` (binary → base64) and persists edits via
  * `POST /api/fs/write`, reusing the renderer's existing HTTP helper
  * (`ipcBridge.fs.*`, backed by `httpBridge`). It owns the editable content
@@ -29,7 +29,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  * Office/PDF adapters open the file in the ONLYOFFICE editor by path and read
  * their lightweight fallback by path too). `none` skips the eager whole-file
  * read entirely, so a huge file never gets loaded into renderer memory and never
- * hits aioncore's `/api/fs/read-buffer` size limit.
+ * hits tomnycore's `/api/fs/read-buffer` size limit.
  */
 export type EditorContentMode = 'text' | 'binary' | 'none';
 
@@ -48,7 +48,7 @@ export type UseEditorFileOptions = {
   workspace?: string;
   /**
    * Optional filesystem override. By default the hook reads/writes through the
-   * aioncore workspace bridge (`/api/fs/*`). The IDE workspace, which opens
+   * tomnycore workspace bridge (`/api/fs/*`). The IDE workspace, which opens
    * ARBITRARY folders on disk, injects a Node-`fs`-backed implementation so the
    * same adapters can edit any file (not just files inside a conversation
    * workspace). See {@link EditorFsOverride}.
@@ -136,7 +136,7 @@ export const useEditorFile = (options: UseEditorFileOptions): UseEditorFileResul
     const requestId = ++loadIdRef.current;
     // `none` mode: the adapter owns reading/editing by path (Office/PDF). Skip
     // the eager whole-file read so large files never load into memory or hit
-    // aioncore's read-buffer size limit. Settle immediately with an empty buffer.
+    // tomnycore's read-buffer size limit. Settle immediately with an empty buffer.
     if (mode === 'none') {
       setContentState('');
       setSavedContent('');

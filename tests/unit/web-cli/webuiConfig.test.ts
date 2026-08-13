@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Tomni
+ * Copyright 2025 Tomny
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -31,7 +31,7 @@ vi.mock('electron', () => ({
   },
 }));
 
-vi.mock('@aionui/web-host', () => ({
+vi.mock('@tomny/web-host', () => ({
   startWebHost: mocks.startWebHost,
 }));
 

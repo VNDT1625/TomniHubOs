@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -16,7 +16,7 @@ import {
 import { compileViuSite } from '@/common/viu/runtime';
 
 const reverseRecord = <T>(record: Record<string, T>): Record<string, T> =>
-  Object.fromEntries(Object.entries(record).reverse());
+  Object.fromEntries(Object.entries(record).toReversed());
 
 const createDenseProject = (nodeCount: number): ViuProjectState => {
   const project = createPremiumStarterProject('release-gate-dense');

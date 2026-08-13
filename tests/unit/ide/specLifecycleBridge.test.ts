@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -22,7 +22,7 @@ import {
 let rootPath = '';
 
 beforeEach(async () => {
-  rootPath = await mkdtemp(join(tmpdir(), 'aionui-spec-'));
+  rootPath = await mkdtemp(join(tmpdir(), 'tomny-spec-'));
 });
 
 afterEach(async () => {

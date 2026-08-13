@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -68,16 +68,16 @@ export const classifyShell = (shellPath: string): ShellFamily => {
  */
 const POWERSHELL_SNIPPET = `
 try {
-  if (-not $global:__aionui_si) {
-    $global:__aionui_si = $true
-    $global:__aionui_origPrompt = $function:prompt
+  if (-not $global:__tomny_si) {
+    $global:__tomny_si = $true
+    $global:__tomny_origPrompt = $function:prompt
     function global:prompt {
       $code = $LASTEXITCODE; if ($null -eq $code) { $code = 0 }
       $out = [char]0x1b + "]633;D;" + $code + [char]0x07
       $out += [char]0x1b + "]633;A" + [char]0x07
       $loc = (Get-Location).Path
       $out += [char]0x1b + "]633;P;Cwd=" + $loc + [char]0x07
-      $userPrompt = & $global:__aionui_origPrompt
+      $userPrompt = & $global:__tomny_origPrompt
       $out += $userPrompt
       $out += [char]0x1b + "]633;B" + [char]0x07
       return $out
@@ -92,9 +92,9 @@ try {
  * PROMPT_COMMAND fires before drawing the prompt (command-end + cwd).
  */
 const BASH_SNIPPET = `
-if [ -z "$__aionui_si" ]; then
-  __aionui_si=1
-  __aionui_prompt_end() {
+if [ -z "$__tomny_si" ]; then
+  __tomny_si=1
+  __tomny_prompt_end() {
     local code=$?
     printf '\\033]633;D;%s\\007' "$code"
     printf '\\033]633;A\\007'
@@ -102,8 +102,8 @@ if [ -z "$__aionui_si" ]; then
   }
   PS0=$'\\033]633;C\\007'"$PS0"
   case "$PROMPT_COMMAND" in
-    *__aionui_prompt_end*) ;;
-    *) PROMPT_COMMAND="__aionui_prompt_end;$PROMPT_COMMAND" ;;
+    *__tomny_prompt_end*) ;;
+    *) PROMPT_COMMAND="__tomny_prompt_end;$PROMPT_COMMAND" ;;
   esac
   PS1=$'\\033]633;A\\007'"$PS1"$'\\033]633;B\\007'
 fi
@@ -114,20 +114,20 @@ fi
  * prompt hooks) to emit the OSC 633 sequences.
  */
 const ZSH_SNIPPET = `
-if [[ -z "$__aionui_si" ]]; then
-  __aionui_si=1
-  __aionui_precmd() {
+if [[ -z "$__tomny_si" ]]; then
+  __tomny_si=1
+  __tomny_precmd() {
     local code=$?
     printf '\\033]633;D;%s\\007' "$code"
     printf '\\033]633;A\\007'
     printf '\\033]633;P;Cwd=%s\\007' "$PWD"
   }
-  __aionui_preexec() {
+  __tomny_preexec() {
     printf '\\033]633;C\\007'
   }
   autoload -Uz add-zsh-hook 2>/dev/null
-  add-zsh-hook precmd __aionui_precmd 2>/dev/null
-  add-zsh-hook preexec __aionui_preexec 2>/dev/null
+  add-zsh-hook precmd __tomny_precmd 2>/dev/null
+  add-zsh-hook preexec __tomny_preexec 2>/dev/null
 fi
 `;
 
@@ -164,7 +164,7 @@ export type IntegratedLaunch = {
 
 /** Write a temp init file and return its path (best-effort; throws on fs error). */
 const writeTempInit = (prefix: string, ext: string, contents: string): string => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'aionui-si-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tomny-si-'));
   const file = path.join(dir, `${prefix}${ext}`);
   fs.writeFileSync(file, contents, 'utf-8');
   return file;
@@ -192,7 +192,7 @@ export const buildIntegratedLaunch = (shell: string, baseArgs?: string[]): Integ
       return { shell, args: ['--rcfile', rc, '-i'], tempFiles: [rc] };
     }
     if (family === 'zsh') {
-      const zdotdir = fs.mkdtempSync(path.join(os.tmpdir(), 'aionui-si-'));
+      const zdotdir = fs.mkdtempSync(path.join(os.tmpdir(), 'tomny-si-'));
       const userZdotdir = process.env.ZDOTDIR ?? os.homedir();
       const zshrc = path.join(zdotdir, '.zshrc');
       fs.writeFileSync(

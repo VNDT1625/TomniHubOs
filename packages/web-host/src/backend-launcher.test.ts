@@ -130,9 +130,9 @@ describe('buildSpawnArgs', () => {
     expect(args).not.toContain('--local');
   });
 
-  it('respects AIONUI_LOG_LEVEL override', () => {
-    const prev = process.env.AIONUI_LOG_LEVEL;
-    process.env.AIONUI_LOG_LEVEL = 'trace';
+  it('respects TOMNY_LOG_LEVEL override', () => {
+    const prev = process.env.TOMNY_LOG_LEVEL;
+    process.env.TOMNY_LOG_LEVEL = 'trace';
     try {
       const args = buildSpawnArgs({
         port: 1,
@@ -143,22 +143,22 @@ describe('buildSpawnArgs', () => {
       });
       expect(args).toContain('trace');
     } finally {
-      if (prev === undefined) delete process.env.AIONUI_LOG_LEVEL;
-      else process.env.AIONUI_LOG_LEVEL = prev;
+      if (prev === undefined) delete process.env.TOMNY_LOG_LEVEL;
+      else process.env.TOMNY_LOG_LEVEL = prev;
     }
   });
 });
 
 describe('buildSpawnEnv', () => {
-  it('merges process.env with AIONUI_* dir vars', () => {
+  it('merges process.env with TOMNY_* dir vars', () => {
     const env = buildSpawnEnv({
       cacheDir: '/c',
       workDir: '/w',
       logDir: '/l',
     });
-    expect(env.AIONUI_CACHE_DIR).toBe('/c');
-    expect(env.AIONUI_WORK_DIR).toBe('/w');
-    expect(env.AIONUI_LOG_DIR).toBe('/l');
+    expect(env.TOMNY_CACHE_DIR).toBe('/c');
+    expect(env.TOMNY_WORK_DIR).toBe('/w');
+    expect(env.TOMNY_LOG_DIR).toBe('/l');
     expect(env.PATH).toBe(process.env.PATH); // inherits
   });
 });
@@ -199,7 +199,7 @@ describe('BackendLifecycleManager.start (success path)', () => {
       .spyOn(globalThis, 'fetch')
       .mockResolvedValue(new Response('ok', { status: 200 }) as unknown as Response);
 
-    const resolveBackend = vi.fn(() => '/abs/path/aioncore');
+    const resolveBackend = vi.fn(() => '/abs/path/tomnycore');
     const mgr = new BackendLifecycleManager(APP_META_PACKAGED, resolveBackend);
 
     const port = await mgr.start('/db/path', '/log/dir', {
@@ -215,7 +215,7 @@ describe('BackendLifecycleManager.start (success path)', () => {
     expect(spawn).toHaveBeenCalledTimes(1);
 
     const spawnCall = vi.mocked(spawn).mock.calls[0];
-    expect(spawnCall[0]).toBe('/abs/path/aioncore');
+    expect(spawnCall[0]).toBe('/abs/path/tomnycore');
     expect(spawnCall[1]).toEqual([
       '--port',
       '55555',
@@ -232,9 +232,9 @@ describe('BackendLifecycleManager.start (success path)', () => {
       '--local',
     ]);
     const opts = spawnCall[2] as { env: NodeJS.ProcessEnv };
-    expect(opts.env.AIONUI_CACHE_DIR).toBe('/c');
-    expect(opts.env.AIONUI_WORK_DIR).toBe('/w');
-    expect(opts.env.AIONUI_LOG_DIR).toBe('/l');
+    expect(opts.env.TOMNY_CACHE_DIR).toBe('/c');
+    expect(opts.env.TOMNY_WORK_DIR).toBe('/w');
+    expect(opts.env.TOMNY_LOG_DIR).toBe('/l');
     expect((spawnCall[2] as { detached?: boolean }).detached).toBe(process.platform !== 'win32');
 
     expect(fetchSpy).toHaveBeenCalled();
@@ -282,7 +282,7 @@ describe('BackendLifecycleManager.start (health timeout)', () => {
 
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('ECONNREFUSED'));
 
-    const mgr = new BackendLifecycleManager(APP_META_PACKAGED, () => '/abs/path/aioncore');
+    const mgr = new BackendLifecycleManager(APP_META_PACKAGED, () => '/abs/path/tomnycore');
     const startPromise = mgr.start('/db/path', '/log/dir', {
       cacheDir: '/cache',
       workDir: '/work',
@@ -292,7 +292,7 @@ describe('BackendLifecycleManager.start (health timeout)', () => {
       name: 'BackendStartupError',
       details: expect.objectContaining({
         stage: 'health_timeout',
-        binaryPath: '/abs/path/aioncore',
+        binaryPath: '/abs/path/tomnycore',
         port: 33334,
         healthCheckAttempts: expect.any(Number),
         healthCheckLastError: 'ECONNREFUSED',
@@ -323,7 +323,7 @@ describe('BackendLifecycleManager.start (health timeout)', () => {
       .spyOn(globalThis, 'fetch')
       .mockImplementation(() => Promise.resolve(new Response('starting', { status: 503 })));
 
-    const mgr = new BackendLifecycleManager(APP_META_PACKAGED, () => '/abs/path/aioncore');
+    const mgr = new BackendLifecycleManager(APP_META_PACKAGED, () => '/abs/path/tomnycore');
     const startPromise = mgr.start('/db/path');
     const expectedRejection = expect(startPromise).rejects.toMatchObject({
       name: 'BackendStartupError',
@@ -352,7 +352,7 @@ describe('BackendLifecycleManager.start (health timeout)', () => {
 
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('fetch failed'));
 
-    const mgr = new BackendLifecycleManager(APP_META_PACKAGED, () => '/abs/path/aioncore');
+    const mgr = new BackendLifecycleManager(APP_META_PACKAGED, () => '/abs/path/tomnycore');
     const startPromise = mgr.start('/db/path');
     const expectedRejection = expect(startPromise).rejects.toMatchObject({
       name: 'BackendStartupError',
@@ -395,7 +395,7 @@ describe('BackendLifecycleManager.start (health timeout)', () => {
     });
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockRejectedValue(fetchError);
 
-    const mgr = new BackendLifecycleManager(APP_META_PACKAGED, () => '/abs/path/aioncore');
+    const mgr = new BackendLifecycleManager(APP_META_PACKAGED, () => '/abs/path/tomnycore');
     const startPromise = mgr.start('/db/path');
     const expectedRejection = expect(startPromise).rejects.toMatchObject({
       details: expect.objectContaining({
@@ -447,7 +447,7 @@ describe('BackendLifecycleManager.start (health timeout)', () => {
 
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('fetch failed'));
 
-    const mgr = new BackendLifecycleManager(APP_META_PACKAGED, () => '/abs/path/aioncore');
+    const mgr = new BackendLifecycleManager(APP_META_PACKAGED, () => '/abs/path/tomnycore');
     const startPromise = mgr.start('/db/path');
     const expectedRejection = expect(startPromise).rejects.toMatchObject({
       details: expect.objectContaining({
@@ -481,7 +481,7 @@ describe('BackendLifecycleManager.start (health timeout)', () => {
     const onHealthTimeout = vi.fn();
     const onReady = vi.fn();
 
-    const mgr = new BackendLifecycleManager(APP_META_PACKAGED, () => '/abs/path/aioncore');
+    const mgr = new BackendLifecycleManager(APP_META_PACKAGED, () => '/abs/path/tomnycore');
     const startPromise = mgr.start('/db/path', '/log/dir', undefined, {
       allowPendingOnHealthTimeout: true,
       onHealthTimeout,
@@ -656,7 +656,7 @@ describe('BackendLifecycleManager crash restart', () => {
     (child1 as unknown as EventEmitter).emit('exit', 1, 'SIGABRT');
     await new Promise((r) => setTimeout(r, 1_200));
 
-    expect(warnSpy).toHaveBeenCalledWith('[aioncore] child exited unexpectedly; scheduling restart', {
+    expect(warnSpy).toHaveBeenCalledWith('[tomnycore] child exited unexpectedly; scheduling restart', {
       exitCode: 1,
       signal: 'SIGABRT',
       port: 65303,
@@ -683,7 +683,7 @@ describe('BackendLifecycleManager crash restart', () => {
     mgr.handleCrash(1, 'SIGABRT');
 
     expect(mgr.status).toBe('error');
-    expect(errorSpy).toHaveBeenCalledWith('[aioncore] child exited unexpectedly; restart limit exceeded', {
+    expect(errorSpy).toHaveBeenCalledWith('[tomnycore] child exited unexpectedly; restart limit exceeded', {
       exitCode: 1,
       signal: 'SIGABRT',
       port: 0,

@@ -1,12 +1,12 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
 import type {
-  AionrsContextBranch,
-  AionrsContextSnapshot,
+  TomnyAgenticContextBranch,
+  TomnyAgenticContextSnapshot,
   IConversationListChangedEvent,
   IConversationTurnCompletedEvent,
   ICreateConversationParams,
@@ -142,12 +142,12 @@ const modelKeyFor = (conversation: TChatConversation): string | undefined => {
       ? withRouter9ReasoningEffort(provider.use_model, provider.reasoning_effort)
       : provider?.use_model;
   const appProviderKey =
-    conversation.type === 'aionrs' && provider?.id?.trim() && appProviderModel?.trim()
+    conversation.type === 'tomnyagentic' && provider?.id?.trim() && appProviderModel?.trim()
       ? `app-provider:${encodeURIComponent(provider.id)}:${encodeURIComponent(appProviderModel)}`
       : undefined;
   for (const value of [extra.tomny_core_model_key, extra.current_model_id, extra.codexModel, extra.codex_model]) {
     if (typeof value !== 'string' || !value.trim()) continue;
-    // A Tomni conversation must carry the provider identity with the model so
+    // A Tomny conversation must carry the provider identity with the model so
     // the adapter can inject that provider's API key, rather than falling back
     // to a stale CLI environment key.
     if (
@@ -166,7 +166,7 @@ const modelKeyFor = (conversation: TChatConversation): string | undefined => {
 const targetFor = (conversation: TChatConversation): string => {
   const nativeTarget = (conversation.extra as Record<string, unknown>).tomny_core_target_id;
   if (typeof nativeTarget === 'string' && nativeTarget.trim()) return nativeTarget;
-  if (conversation.type === 'aionrs') return 'tomny';
+  if (conversation.type === 'tomnyagentic') return 'tomny';
   if (conversation.type === 'codex') return 'codex';
   if (conversation.type === 'remote') {
     const id = (conversation.extra as Record<string, unknown>).remote_agent_id;
@@ -300,10 +300,10 @@ const textMessage = (
   content: { content },
 });
 
-const contextBranchesFor = (conversation: TChatConversation): AionrsContextBranch[] => {
+const contextBranchesFor = (conversation: TChatConversation): TomnyAgenticContextBranch[] => {
   const value = (conversation.extra as Record<string, unknown>).tomny_context_branches;
   if (!Array.isArray(value)) return [];
-  return value.flatMap((branch): AionrsContextBranch[] => {
+  return value.flatMap((branch): TomnyAgenticContextBranch[] => {
     if (!branch || typeof branch !== 'object') return [];
     const item = branch as Record<string, unknown>;
     if (
@@ -480,7 +480,7 @@ const textFromMessage = (message: TMessage): string => {
   return typeof content === 'string' ? content : JSON.stringify(content);
 };
 
-/** Owns the normal chat lifecycle without any AionCore HTTP/WebSocket dependency. */
+/** Owns the normal chat lifecycle without any the legacy core HTTP/WebSocket dependency. */
 export class NativeConversationService {
   private readonly activeByConversation = new Map<string, ActiveTurn>();
   private readonly activeByRequest = new Map<string, ActiveTurn>();
@@ -514,7 +514,7 @@ export class NativeConversationService {
       },
       model: clone(params.model),
       status: 'pending',
-      source: 'aionui',
+      source: 'tomny',
     } as TChatConversation;
     const preparedConversation = await this.provisionWorkspaceIfNeeded(conversation);
     (preparedConversation.extra as Record<string, unknown>).tomny_core_session_id = preparedConversation.id;
@@ -545,7 +545,7 @@ export class NativeConversationService {
   }
 
   /** Returns the renderer-compatible per-conversation context without legacy HTTP. */
-  public async getAionrsContext(conversationId: string): Promise<AionrsContextSnapshot> {
+  public async getTomnyAgenticContext(conversationId: string): Promise<TomnyAgenticContextSnapshot> {
     const conversation = await this.repository.getConversation(conversationId);
     if (!conversation) throw new Error(`Conversation not found: ${conversationId}`);
     const messages = await this.repository.listMessages(conversationId);
@@ -564,7 +564,7 @@ export class NativeConversationService {
     });
     const branches = contextBranchesFor(conversation);
     // The renderer message list is an archive/search surface, never prompt context.
-    const contextMessages: AionrsContextSnapshot['messages'] = [];
+    const contextMessages: TomnyAgenticContextSnapshot['messages'] = [];
     const archivedMessageTokens = messages.reduce(
       (total, message) => total + Math.ceil(textFromMessage(message).length / 4),
       0
@@ -631,11 +631,11 @@ export class NativeConversationService {
     };
   }
 
-  public async updateAionrsContext(
+  public async updateTomnyAgenticContext(
     conversationId: string,
     customContext: string,
-    branches: AionrsContextBranch[]
-  ): Promise<AionrsContextSnapshot> {
+    branches: TomnyAgenticContextBranch[]
+  ): Promise<TomnyAgenticContextSnapshot> {
     const conversation = await this.repository.getConversation(conversationId);
     if (!conversation) throw new Error(`Conversation not found: ${conversationId}`);
     await this.update(conversationId, {
@@ -645,7 +645,7 @@ export class NativeConversationService {
         tomny_context_branches: clone(branches),
       },
     } as Partial<TChatConversation>);
-    return this.getAionrsContext(conversationId);
+    return this.getTomnyAgenticContext(conversationId);
   }
 
   public async getSessionMode(conversationId: string): Promise<{ mode: string; initialized: boolean }> {
@@ -931,7 +931,7 @@ export class NativeConversationService {
     if (active) await this.runtime.cancel(active.requestId);
   }
 
-  /** Resolves a permission produced by the direct Tomni Core runtime. */
+  /** Resolves a permission produced by the direct Tomny Core runtime. */
   public resolvePermission(
     permissionId: string,
     approved: boolean,
@@ -1084,7 +1084,7 @@ export class NativeConversationService {
         this.events.response({
           ...base,
           type: 'error',
-          data: { message: 'Tomni Core emitted an invalid orchestration proposal.' },
+          data: { message: 'Tomny Core emitted an invalid orchestration proposal.' },
         });
         return;
       }
@@ -1121,7 +1121,7 @@ export class NativeConversationService {
         this.events.response({
           ...base,
           type: 'error',
-          data: { message: 'Tomni Core emitted a permission request without a permission id.' },
+          data: { message: 'Tomny Core emitted a permission request without a permission id.' },
         });
         return;
       }

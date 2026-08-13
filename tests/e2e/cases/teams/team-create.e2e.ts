@@ -48,7 +48,7 @@ test.describe('Team Create', () => {
     const nameInput = modal.getByRole('textbox').first();
     await expect(nameInput).toBeVisible();
 
-    // Verify the leader AionSelect trigger exists (agent picker is a searchable dropdown)
+    // Verify the leader TomnySelect trigger exists (agent picker is a searchable dropdown)
     const leaderSelect = page.locator('[data-testid="team-create-leader-select"]');
     const noAgentsMsg = page.locator('.arco-modal').getByText(/No supported agents installed|没有支持的 agent/i);
     const hasSelect = await leaderSelect.isVisible({ timeout: 3000 }).catch(() => false);
@@ -79,7 +79,7 @@ test.describe('Team Create', () => {
     const nameInput = modal.getByRole('textbox').first();
     await nameInput.fill('E2E Test Team');
 
-    // Open the leader select dropdown (AionSelect portals to document.body)
+    // Open the leader select dropdown (TomnySelect portals to document.body)
     const leaderSelect = modal.locator('[data-testid="team-create-leader-select"]');
     const hasSelect = await leaderSelect.isVisible({ timeout: 3000 }).catch(() => false);
 
@@ -148,7 +148,7 @@ async function createTeamWithAgent(
   const nameInput = modal.getByRole('textbox').first();
   await nameInput.fill(teamName);
 
-  // Open the leader select dropdown (AionSelect portals options to document.body)
+  // Open the leader select dropdown (TomnySelect portals options to document.body)
   const leaderSelect = modal.locator('[data-testid="team-create-leader-select"]');
   await expect(leaderSelect).toBeVisible({ timeout: 5000 });
   await leaderSelect.click();

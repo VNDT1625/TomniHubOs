@@ -1,13 +1,13 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
 import type { ConnectorTarget } from './types';
 
 /**
- * Registry of CLI / IDE tools AionUi can auto-configure to route through
+ * Registry of CLI / IDE tools Tomny can auto-configure to route through
  * 9Router. Ordering is display order (most-requested first).
  *
  * Each entry only declares *how* the tool is wired, never secrets. The plan

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -12,7 +12,7 @@
  * so it reads/writes files, runs commands, and produces actual output — not a
  * model merely describing what it would do.
  *
- * Mechanism (all of these already exist in the app; nothing in aioncore changes):
+ * Mechanism (all of these already exist in the app; nothing in tomnycore changes):
  *   1. Resolve/create a conversation for the role (CLI/assistant params + workspace).
  *   2. `sendMessage({ conversation_id, input: task })`.
  *   3. Await the `turn.completed` event for that conversation → `state: 'finished'`

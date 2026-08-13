@@ -16,7 +16,7 @@ const stableJson = (value) => {
   if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
   if (value && typeof value === 'object') {
     return `{${Object.keys(value)
-      .sort()
+      .toSorted()
       .map((key) => `${JSON.stringify(key)}:${stableJson(value[key])}`)
       .join(',')}}`;
   }
@@ -45,7 +45,7 @@ const timestamp = () => {
 
 const runtimeComponents = (packageJson) =>
   Object.entries({ ...packageJson.dependencies, ...packageJson.optionalDependencies })
-    .sort(([left], [right]) => left.localeCompare(right))
+    .toSorted(([left], [right]) => left.localeCompare(right))
     .map(([name, version]) => ({
       type: 'library',
       name,
@@ -109,7 +109,7 @@ const generateReleaseProvenance = (options = {}) => {
       const bytes = fs.readFileSync(filePath);
       return { path: entry.name, size: bytes.length, sha256: sha256(bytes) };
     })
-    .sort((left, right) => left.path.localeCompare(right.path));
+    .toSorted((left, right) => left.path.localeCompare(right.path));
 
   const manifest = {
     schemaVersion: 1,

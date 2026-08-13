@@ -5,8 +5,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path -LiteralPath $TargetRoot).Path
-if ([IO.Path]::GetFileName($root).ToUpperInvariant() -eq 'AIONUI-GOLDEN') {
-  throw 'Refusing to modify AionUi-GOLDEN.'
+if ([IO.Path]::GetFileName($root).ToUpperInvariant() -eq 'TOMNY-GOLDEN') {
+  throw 'Refusing to modify Tomny-GOLDEN.'
 }
 
 $file = Join-Path $root 'packages\desktop\src\process\ide\traceContextBuilder.ts'

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -81,7 +81,7 @@ const WeixinConfigForm: React.FC<WeixinConfigFormProps> = ({ pluginStatus, model
     backend?: string;
     name?: string;
     id?: string;
-  }>({ agent_type: 'aionrs' });
+  }>({ agent_type: 'tomnyagentic' });
 
   // Close EventSource on unmount to prevent connection leaks.
   useEffect(() => {
@@ -218,7 +218,7 @@ const WeixinConfigForm: React.FC<WeixinConfigFormProps> = ({ pluginStatus, model
 
           // Legacy migration: derive agent_type from backend
           if (!agentType && backend) {
-            agentType = ['aionrs', 'tomni-cli', 'openclaw-gateway', 'nanobot', 'remote'].includes(backend)
+            agentType = ['tomnyagentic', 'tomni-cli', 'openclaw-gateway', 'nanobot', 'remote'].includes(backend)
               ? backend
               : 'acp';
           }
@@ -329,13 +329,13 @@ const WeixinConfigForm: React.FC<WeixinConfigFormProps> = ({ pluginStatus, model
     handleLoginWebUI();
   };
 
-  const showModelSelector = selectedAgent.agent_type === 'aionrs';
+  const showModelSelector = selectedAgent.agent_type === 'tomnyagentic';
   const agentOptions: Array<{
     agent_type: string;
     backend?: string;
     name: string;
     id?: string;
-  }> = availableAgents.length > 0 ? availableAgents : [{ agent_type: 'aionrs', name: 'Tomny Agentic' }];
+  }> = availableAgents.length > 0 ? availableAgents : [{ agent_type: 'tomnyagentic', name: 'Tomny Agentic' }];
 
   const handleDisconnect = async () => {
     try {
@@ -451,7 +451,7 @@ const WeixinConfigForm: React.FC<WeixinConfigFormProps> = ({ pluginStatus, model
                       setSelectedAgent(next);
                       void persistSelectedAgent(next);
 
-                      if (next.agent_type === 'aionrs') {
+                      if (next.agent_type === 'tomnyagentic') {
                         const savedModel = configService.get('assistant.weixin.defaultModel');
                         const providers = modelSelection.providers;
                         const savedProviderExists = savedModel?.id && providers.some((p) => p.id === savedModel.id);

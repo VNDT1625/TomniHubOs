@@ -1,4 +1,4 @@
-# AionUi - Project Guide
+# TomniHubOS - Project Guide
 
 All contributors (human and AI) must follow [CONTRIBUTING.md](CONTRIBUTING.md) before opening a PR. ([Chinese version](CONTRIBUTING.zh.md))
 
@@ -143,7 +143,7 @@ For pull request creation, see the `oss-pr` skill (`.claude/skills/oss-pr/SKILL.
 | **architecture**         | File & directory structure conventions for all process types                                                     | Creating files, adding modules, architectural decisions                                    |
 | **frontend-design**      | Distinctive, production-grade UI aesthetics (upstream Anthropic skill + Arco/UnoCSS adaptation)                  | Creating or restyling any UI: pages, panels, components, modals, beautifying screens       |
 | **systematic-debugging** | Root-cause-first debugging (4-phase framework, upstream obra/superpowers)                                        | Any bug, test failure, unexpected behavior, perf/build issue — before proposing fixes      |
-| **performance**          | RAM/CPU/GPU + startup optimization for Electron/React/aioncore, tied to ResourceCoordinator                      | App lag, high memory/GPU, slow startup, tuning concurrency/leases                          |
+| **performance**          | RAM/CPU/GPU + startup optimization for Electron/React/tomnicore, tied to ResourceCoordinator                     | App lag, high memory/GPU, slow startup, tuning concurrency/leases                          |
 | **test-with-computer**   | ⛔ DEPRECATED — do NOT use. Claude/computer-use UI testing is disabled per `.kiro/steering/claude-ui-testing.md` | (none — use Vitest/DOM tests + user-run `bun start` instead)                               |
 | **i18n**                 | Internationalization workflow and standards                                                                      | Adding user-facing text, modifying `locales/` or `packages/desktop/src/common/config/i18n` |
 | **testing**              | Testing workflow and quality standards                                                                           | Writing tests, adding features, before claiming completion                                 |

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Tomni
+ * Copyright 2025 Tomny
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -184,7 +184,7 @@ export const startTomniGateway = async (options: TomniGatewayOptions): Promise<T
   assertValidGatewayAuth(options.auth);
   const maxBufferBytes = options.maxWebSocketBufferBytes ?? 1_000_000;
   if (!Number.isSafeInteger(maxBufferBytes) || maxBufferBytes < 1) {
-    throw new Error('[TomniGateway] maxWebSocketBufferBytes must be a positive safe integer.');
+    throw new Error('[TomnyGateway] maxWebSocketBufferBytes must be a positive safe integer.');
   }
 
   const requestHandler = async (request: IncomingMessage, response: ServerResponse): Promise<void> => {
@@ -218,7 +218,7 @@ export const startTomniGateway = async (options: TomniGatewayOptions): Promise<T
 
     if (!isHttpAuthorized(request.headers, options.auth)) {
       response.setHeader('www-authenticate', 'Bearer');
-      failure(response, 401, 'UNAUTHORIZED', 'A valid Tomni session token is required.', origin);
+      failure(response, 401, 'UNAUTHORIZED', 'A valid Tomny session token is required.', origin);
       return;
     }
 
@@ -383,7 +383,7 @@ export const startTomniGateway = async (options: TomniGatewayOptions): Promise<T
       }
       failure(response, 404, 'NOT_FOUND', 'Route not found.', origin);
     } catch {
-      failure(response, 500, 'INTERNAL_ERROR', 'The Tomni service could not complete the request.', origin);
+      failure(response, 500, 'INTERNAL_ERROR', 'The Tomny service could not complete the request.', origin);
     }
   };
 
@@ -438,7 +438,7 @@ export const startTomniGateway = async (options: TomniGatewayOptions): Promise<T
     clientCount: () => webSockets.clients.size,
     close: async () => {
       unsubscribe?.();
-      for (const client of webSockets.clients) client.close(1001, 'Tomni gateway is shutting down.');
+      for (const client of webSockets.clients) client.close(1001, 'Tomny gateway is shutting down.');
       await new Promise<void>((resolve) => webSockets.close(() => resolve()));
       await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
     },

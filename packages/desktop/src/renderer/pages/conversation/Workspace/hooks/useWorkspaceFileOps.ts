@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -23,7 +23,7 @@ import { getPathSeparator, replacePathInList, updateTreeForRename } from '../uti
 
 interface UseWorkspaceFileOpsOptions {
   workspace: string;
-  eventPrefix: 'acp' | 'codex' | 'aionrs';
+  eventPrefix: 'acp' | 'codex' | 'tomnyagentic';
   messageApi: MessageApi;
   t: (key: string) => string;
 

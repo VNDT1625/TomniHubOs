@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -16,7 +16,11 @@ import { getBaseUrl } from '@/common/adapter/httpBridge';
  * 检测是否运行在 Electron 桌面环境
  */
 export const isElectronDesktop = (): boolean => {
-  return typeof window !== 'undefined' && Boolean(window.electronAPI);
+  return (
+    typeof window !== 'undefined' &&
+    Boolean(window.electronAPI) &&
+    typeof (window as Window & { __backendPort?: number }).__backendPort === 'number'
+  );
 };
 
 /**

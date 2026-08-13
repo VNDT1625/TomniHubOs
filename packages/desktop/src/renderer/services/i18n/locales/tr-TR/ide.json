@@ -39,9 +39,60 @@
     "hooks": "Agent Kancalar\u0131",
     "spec": "Spec",
     "lsp": "Dil Sunucular\u0131",
+    "extensions": "Uzantılar",
     "expbase": "Deneyim Taban\u0131",
     "team": "Tak\u0131m",
     "viu": "Viu \u00b7 Visual UI"
+  },
+  "extensions": {
+    "title": "Uzantılar",
+    "subtitle": "Güvenilir paketlerden yüklenen IDE yetenekleri. Burada yalnızca meta veriler gösterilir; isteğe bağlı modüller çalıştırılmaz.",
+    "installedCount": "{{count}} yüklü",
+    "refresh": "Yenile",
+    "browseStore": "Mağazaya göz at",
+    "activityGroups": "Etkinlik grupları",
+    "installedSubtabs": "Yüklü alt sekmeler",
+    "groupEmpty": "Bu grupta yüklü alt sekme yok.",
+    "findExtensions": "Uzantı bul",
+    "emptyHint": "Buraya yeni yetenekler eklemek için Mağazadan bir IDE uzantısı yükleyin.",
+    "loading": "Uzantılar yükleniyor",
+    "loadFailed": "Uzantılar yüklenemedi.",
+    "retry": "Yeniden dene",
+    "selected": "Seçili katkı",
+    "selectedHint": "Bu katkı seçildi. Yürütme IDE ilkesine tabi olmaya devam eder.",
+    "openPackage": "Paketi aç",
+    "packageLabel": "Paket",
+    "moduleLabel": "Modül",
+    "activationLabel": "Etkinleştirme",
+    "activation": {
+      "onOpen": "Açıldığında",
+      "onStartup": "Başlangıçta"
+    },
+    "runtime": {
+      "open": "Aç",
+      "back": "Uzantılara dön",
+      "title": "{{name}} uzantısı",
+      "policyHint": "Burada yalnızca imzalı birinci taraf güvenilir React modülleri çalışabilir. Diğer çalışma zamanları engellenir.",
+      "checking": "Yürütme ilkesi denetleniyor",
+      "blockedTitle": "Yürütme engellendi",
+      "sandboxedWebBlocked": "Ağ yalıtımı henüz zorunlu tutulmadığı için sandboxed-web modülleri devre dışıdır.",
+      "unsupportedBlocked": "Bu modül IDE yürütme ilkesini karşılamıyor."
+    },
+
+    "groups": {
+      "codebase": "Kod tabanı",
+      "agentOps": "Ajan operasyonları"
+    },
+    "diagnostics": {
+      "title": "Katkı tanılamaları",
+      "redactedHint": "Ayrıntılar gizlendi; yalnızca tanılama kategorileri ve toplamları gösterilir.",
+      "invalidPackage": "Geçersiz paket",
+      "protectedNamespace": "Korumalı ad alanı",
+      "dependencyUnavailable": "Bağımlılık kullanılamıyor",
+      "hostApiIncompatible": "Ana makine API uyumsuzluğu",
+      "contributionCollision": "Katkı çakışması",
+      "danglingReference": "Geçersiz başvuru"
+    }
   },
   "viu": {
     "open": "Viu \u00b7 Visual UI",
@@ -219,8 +270,35 @@
           "y": "Y"
         },
 
-
-"image":{"section":"G\u00f6rsel","fit":"S\u0131\u011fd\u0131rma","fitCover":"Kapla","fitContain":"\u0130\u00e7er","fitFill":"Esnet","fitNone":"\u00d6zg\u00fcn\u0020boyut","fitScaleDown":"K\u00fc\u00e7\u00fclt","crop":"K\u0131rp","focalPoint":"Odak\u0020noktas\u0131","flipHorizontal":"Yatay\u0020\u00e7evir","flipVertical":"Dikey\u0020\u00e7evir","reset":"Kadraj\u0131\u0020s\u0131f\u0131rla"},"stroke":{"section":"Konturlar","add":"Kontur\u0020ekle","dashPattern":"Kesik\u0020deseni","dashOffset":"Kesik\u0020ofseti"},"quality":{"section":"Kalite\u0020kontrol\u00fc","issueCount":"{{count}}\u0020sorun","noIssues":"Kalite\u0020sorunu\u0020bulunamad\u0131.","error":"Hata","warning":"Uyar\u0131","project":"Proje","issue":"{{code}}\u0020\u00b7\u0020{{entityId}}"},
+        "image": {
+          "section": "G\u00f6rsel",
+          "fit": "S\u0131\u011fd\u0131rma",
+          "fitCover": "Kapla",
+          "fitContain": "\u0130\u00e7er",
+          "fitFill": "Esnet",
+          "fitNone": "\u00d6zg\u00fcn\u0020boyut",
+          "fitScaleDown": "K\u00fc\u00e7\u00fclt",
+          "crop": "K\u0131rp",
+          "focalPoint": "Odak\u0020noktas\u0131",
+          "flipHorizontal": "Yatay\u0020\u00e7evir",
+          "flipVertical": "Dikey\u0020\u00e7evir",
+          "reset": "Kadraj\u0131\u0020s\u0131f\u0131rla"
+        },
+        "stroke": {
+          "section": "Konturlar",
+          "add": "Kontur\u0020ekle",
+          "dashPattern": "Kesik\u0020deseni",
+          "dashOffset": "Kesik\u0020ofseti"
+        },
+        "quality": {
+          "section": "Kalite\u0020kontrol\u00fc",
+          "issueCount": "{{count}}\u0020sorun",
+          "noIssues": "Kalite\u0020sorunu\u0020bulunamad\u0131.",
+          "error": "Hata",
+          "warning": "Uyar\u0131",
+          "project": "Proje",
+          "issue": "{{code}}\u0020\u00b7\u0020{{entityId}}"
+        },
         "layout": {
           "section": "Auto layout",
           "mode": "Direction",
@@ -433,7 +511,25 @@
           "timeline": "Timeline",
           "keyframes": "Keyframes",
           "position": "Position",
-    "presetSmartAnimate":"Ak\u0131ll\u0131\u0020animasyon","createTimeline":"Zaman\u0020\u00e7izelgesi\u0020olu\u015ftur","addTrack":"\u0130z\u0020ekle","addKeyframe":"Anahtar\u0020kare\u0020ekle","loop":"D\u00f6ng\u00fc","property":"\u00d6zellik","start":"Ba\u015flang\u0131\u00e7","end":"Biti\u015f","pin":"Sabitle","parallax":"Paralaks","scrollBinding":"Kayd\u0131rma\u0020ba\u011flama","addScrollBinding":"Kayd\u0131rma\u0020ba\u011flama\u0020ekle","noTimeline":"Hen\u00fcz\u0020zaman\u0020\u00e7izelgesi\u0020yok","x":"X","y":"Y","opacity":"Opakl\u0131k","scale":"\u00d6l\u00e7ek","rotate":"D\u00f6nd\u00fcr","blur":"Bulan\u0131kl\u0131k"
+          "presetSmartAnimate": "Ak\u0131ll\u0131\u0020animasyon",
+          "createTimeline": "Zaman\u0020\u00e7izelgesi\u0020olu\u015ftur",
+          "addTrack": "\u0130z\u0020ekle",
+          "addKeyframe": "Anahtar\u0020kare\u0020ekle",
+          "loop": "D\u00f6ng\u00fc",
+          "property": "\u00d6zellik",
+          "start": "Ba\u015flang\u0131\u00e7",
+          "end": "Biti\u015f",
+          "pin": "Sabitle",
+          "parallax": "Paralaks",
+          "scrollBinding": "Kayd\u0131rma\u0020ba\u011flama",
+          "addScrollBinding": "Kayd\u0131rma\u0020ba\u011flama\u0020ekle",
+          "noTimeline": "Hen\u00fcz\u0020zaman\u0020\u00e7izelgesi\u0020yok",
+          "x": "X",
+          "y": "Y",
+          "opacity": "Opakl\u0131k",
+          "scale": "\u00d6l\u00e7ek",
+          "rotate": "D\u00f6nd\u00fcr",
+          "blur": "Bulan\u0131kl\u0131k"
         }
       },
       "inspector": {
@@ -1213,17 +1309,17 @@
       "deleteComboKey": "Anahtar\u0131 kald\u0131r"
     },
     "context": {
-      "loading": "AionRS ba\u011flam\u0131 y\u00fckleniyor\u2026",
-      "loadFailed": "AionRS ba\u011flam\u0131 y\u00fcklenemedi.",
-      "empty": "Hen\u00fcz AionRS ba\u011flam\u0131 yok.",
-      "exactTitle": "Tam AionRS istek ba\u011flam\u0131",
-      "exactHint": "S\u0131k\u0131\u015ft\u0131rmadan sonra do\u011frudan AionRS'den okunur. Dahili ba\u011flam salt okunur; \u00f6zel ba\u011flam d\u00fczenlenebilir.",
+      "loading": "Tomny Agentic ba\u011flam\u0131 y\u00fckleniyor\u2026",
+      "loadFailed": "Tomny Agentic ba\u011flam\u0131 y\u00fcklenemedi.",
+      "empty": "Hen\u00fcz Tomny Agentic ba\u011flam\u0131 yok.",
+      "exactTitle": "Tam Tomny Agentic istek ba\u011flam\u0131",
+      "exactHint": "S\u0131k\u0131\u015ft\u0131rmadan sonra do\u011frudan Tomny Agentic'den okunur. Dahili ba\u011flam salt okunur; \u00f6zel ba\u011flam d\u00fczenlenebilir.",
       "messageCount": "{{count}} mesaj",
       "messageWindow": "Son {{assistant}} AI yan\u0131t\u0131 \u00b7 istekte {{sent}}, oturumda {{total}}",
       "toolCount": "{{count}} ara\u00e7",
       "maxTokens": "en fazla {{count}} \u00e7\u0131kt\u0131",
       "customTitle": "\u00d6zel ba\u011flam",
-      "customHint": "Her AionRS turunda sistem istemine eklenir.",
+      "customHint": "Her Tomny Agentic turunda sistem istemine eklenir.",
       "customPlaceholder": "Bu konu\u015fma i\u00e7in kal\u0131c\u0131 talimat veya ba\u011flam ekleyin\u2026",
       "save": "Ba\u011flam\u0131 kaydet",
       "saved": "\u00d6zel ba\u011flam kaydedildi.",
@@ -1251,7 +1347,7 @@
       "sessionExpbase": "Oturum ExpBase'i (tekrarlanan hatalar\u0131 \u00f6nler)",
       "requestConfig": "\u0130stek yap\u0131land\u0131rmas\u0131",
       "branchesTitle": "Ba\u011flam dallar\u0131 ({{count}})",
-      "branchesHint": "\u0130stem d\u0131\u015f\u0131nda saklan\u0131r. AionRS yaln\u0131zca uzmanla\u015fm\u0131\u015f g\u00f6rev gerekti\u011finde e\u015fle\u015fen dal\u0131 y\u00fckler; en fazla 3 dal ve yakla\u015f\u0131k 3.000 token etkindir.",
+      "branchesHint": "\u0130stem d\u0131\u015f\u0131nda saklan\u0131r. Tomny Agentic yaln\u0131zca uzmanla\u015fm\u0131\u015f g\u00f6rev gerekti\u011finde e\u015fle\u015fen dal\u0131 y\u00fckler; en fazla 3 dal ve yakla\u015f\u0131k 3.000 token etkindir.",
       "branchesEmpty": "Hen\u00fcz uzmanla\u015fm\u0131\u015f ba\u011flam dal\u0131 yok.",
       "branchAdd": "Dal ekle",
       "branchId": "Kal\u0131c\u0131 dal kimli\u011fi",

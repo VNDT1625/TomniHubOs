@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -78,23 +78,23 @@ const makeGitHubReleaseResponse = () => [
     draft: false,
     assets: [
       {
-        name: 'AionUi-1.9.22-mac-arm64.dmg',
+        name: 'Tomny-1.9.22-mac-arm64.dmg',
         browser_download_url:
-          'https://github.com/VNDT1625/OmniAgent/releases/download/v1.9.22/AionUi-1.9.22-mac-arm64.dmg',
+          'https://github.com/VNDT1625/OmniAgent/releases/download/v1.9.22/Tomny-1.9.22-mac-arm64.dmg',
         size: 123,
         content_type: 'application/x-apple-diskimage',
       },
       {
-        name: 'AionUi-1.9.22-win-x64.exe',
+        name: 'Tomny-1.9.22-win-x64.exe',
         browser_download_url:
-          'https://github.com/VNDT1625/OmniAgent/releases/download/v1.9.22/AionUi-1.9.22-win-x64.exe',
+          'https://github.com/VNDT1625/OmniAgent/releases/download/v1.9.22/Tomny-1.9.22-win-x64.exe',
         size: 456,
         content_type: 'application/vnd.microsoft.portable-executable',
       },
       {
-        name: 'AionUi-1.9.22-linux-amd64.deb',
+        name: 'Tomny-1.9.22-linux-amd64.deb',
         browser_download_url:
-          'https://github.com/VNDT1625/OmniAgent/releases/download/v1.9.22/AionUi-1.9.22-linux-amd64.deb',
+          'https://github.com/VNDT1625/OmniAgent/releases/download/v1.9.22/Tomny-1.9.22-linux-amd64.deb',
         size: 789,
       },
     ],
@@ -135,12 +135,12 @@ const getCheckHandler = async () => {
   return lastCall[0];
 };
 
-describe('updateBridge Tomni release URLs', () => {
+describe('updateBridge Tomny release URLs', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('uses the Tomni release repo by default', async () => {
+  it('uses the Tomny release repo by default', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => makeOmniAgentReleaseResponse(),
@@ -154,7 +154,7 @@ describe('updateBridge Tomni release URLs', () => {
       expect(result.success).toBe(true);
       expect(fetchMock).toHaveBeenCalledWith(
         'https://api.github.com/repos/VNDT1625/OmniAgent/releases',
-        expect.objectContaining({ headers: expect.objectContaining({ 'User-Agent': 'TomniAgentic' }) })
+        expect.objectContaining({ headers: expect.objectContaining({ 'User-Agent': 'TomnyAgentic' }) })
       );
       const winAsset = result.data?.latest?.assets.find(
         (a: { name: string }) => a.name === 'OmniAgentic-2.1.15-win-x64.exe'
@@ -167,7 +167,7 @@ describe('updateBridge Tomni release URLs', () => {
     }
   });
 
-  it('does not rewrite fork release assets to the official AionUi CDN', async () => {
+  it('does not rewrite fork release assets to the official Tomny CDN', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => makeOmniAgentReleaseResponse(),

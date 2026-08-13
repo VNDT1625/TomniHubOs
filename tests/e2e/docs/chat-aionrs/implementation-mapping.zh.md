@@ -1,9 +1,9 @@
-# Aionrs Chat E2E 实现映射
+# Tomnirs Chat E2E 实现映射
 
 本文档记录 `test-cases.zh.md` 中定义的 15 个测试用例与实际 E2E 实现文件的对应关系。
 
 **生成时间**：2026-04-22
-**实现目录**：`tests/e2e/features/conversations/aionrs/`
+**实现目录**：`tests/e2e/features/conversations/tomnirs/`
 **文档版本**：test-cases.zh.md v1.0
 
 ---
@@ -23,20 +23,20 @@
 **当前测试状态**（v4 运行结果）：
 
 - ✅ Passed: 11/15 (TC-A-01/02/03/05/06/10/11/12/13/14/15)
-- ⏭️ Skipped: 4/15 (TC-A-04/07/08/09, aionrs binary 运行时切换挂起)
+- ⏭️ Skipped: 4/15 (TC-A-04/07/08/09, tomnirs binary 运行时切换挂起)
 - ❌ Failed: 0/15
 
 ---
 
 ## P0 核心流程（5/5 实现）
 
-| 用例 ID | 用例标题       | 实现文件                                                        | 行号 | 测试函数名                                                                      | 截图数 | 状态    |
-| ------- | -------------- | --------------------------------------------------------------- | ---- | ------------------------------------------------------------------------------- | ------ | ------- |
-| TC-A-01 | 最小可行路径   | tests/e2e/features/conversations/aionrs/basic-flow.e2e.ts       | 79   | `test('TC-A-01: should complete minimal conversation with no attachments')`     | 4      | ✅      |
-| TC-A-02 | 关联单个文件夹 | tests/e2e/features/conversations/aionrs/basic-flow.e2e.ts       | 154  | `test('TC-A-02: should associate single folder and reference in message')`      | 3      | ✅      |
-| TC-A-03 | 上传单个文件   | tests/e2e/features/conversations/aionrs/basic-flow.e2e.ts       | 223  | `test('TC-A-03: should upload single file and binary receives file parameter')` | 3      | ✅      |
-| TC-A-04 | 非默认模型     | tests/e2e/features/conversations/aionrs/model-selection.e2e.ts  | 70   | `test.skip('TC-A-04: should use second model selected on guid page')`           | 4      | ⏭️ Skip |
-| TC-A-05 | yolo 权限      | tests/e2e/features/conversations/aionrs/permission-modes.e2e.ts | 69   | `test('TC-A-05: should use yolo permission selected on guid page')`             | 5      | ✅      |
+| 用例 ID | 用例标题       | 实现文件                                                         | 行号 | 测试函数名                                                                      | 截图数 | 状态    |
+| ------- | -------------- | ---------------------------------------------------------------- | ---- | ------------------------------------------------------------------------------- | ------ | ------- |
+| TC-A-01 | 最小可行路径   | tests/e2e/features/conversations/tomnirs/basic-flow.e2e.ts       | 79   | `test('TC-A-01: should complete minimal conversation with no attachments')`     | 4      | ✅      |
+| TC-A-02 | 关联单个文件夹 | tests/e2e/features/conversations/tomnirs/basic-flow.e2e.ts       | 154  | `test('TC-A-02: should associate single folder and reference in message')`      | 3      | ✅      |
+| TC-A-03 | 上传单个文件   | tests/e2e/features/conversations/tomnirs/basic-flow.e2e.ts       | 223  | `test('TC-A-03: should upload single file and binary receives file parameter')` | 3      | ✅      |
+| TC-A-04 | 非默认模型     | tests/e2e/features/conversations/tomnirs/model-selection.e2e.ts  | 70   | `test.skip('TC-A-04: should use second model selected on guid page')`           | 4      | ⏭️ Skip |
+| TC-A-05 | yolo 权限      | tests/e2e/features/conversations/tomnirs/permission-modes.e2e.ts | 69   | `test('TC-A-05: should use yolo permission selected on guid page')`             | 5      | ✅      |
 
 **小计**：5 个测试，19 张截图
 
@@ -44,15 +44,15 @@
 
 ## P1 功能验证（7/7 实现）
 
-| 用例 ID | 用例标题   | 实现文件                                                               | 行号 | 测试函数名                                                                              | 截图数 | 状态    |
-| ------- | ---------- | ---------------------------------------------------------------------- | ---- | --------------------------------------------------------------------------------------- | ------ | ------- |
-| TC-A-06 | 切换权限   | tests/e2e/features/conversations/aionrs/permission-modes.e2e.ts        | 154  | `test('TC-A-06: should switch permission mid-conversation and persist to DB')`          | 5      | ✅      |
-| TC-A-07 | 切换模型   | tests/e2e/features/conversations/aionrs/model-selection.e2e.ts         | 135  | `test.skip('TC-A-07: should switch model mid-conversation and update DB')`              | 5      | ⏭️ Skip |
-| TC-A-08 | 连续切换   | tests/e2e/features/conversations/aionrs/mid-conversation-switch.e2e.ts | 68   | `test('TC-A-08: should handle continuous switch (model → permission → model)')`         | 6      | ⏭️ Skip |
-| TC-A-09 | 多轮对话   | tests/e2e/features/conversations/aionrs/mid-conversation-switch.e2e.ts | 178  | `test('TC-A-09: should handle 3 rounds of conversation after model/permission switch')` | 6      | ⏭️ Skip |
-| TC-A-10 | 组合场景 1 | tests/e2e/features/conversations/aionrs/combo-scenarios.e2e.ts         | 72   | `test('TC-A-10: should handle folder + second model + yolo mode combo')`                | 3      | ✅      |
-| TC-A-11 | 组合场景 2 | tests/e2e/features/conversations/aionrs/combo-scenarios.e2e.ts         | 151  | `test('TC-A-11: should handle file + non-default model + default mode combo')`          | 3      | ✅      |
-| TC-A-12 | 完整组合   | tests/e2e/features/conversations/aionrs/combo-scenarios.e2e.ts         | 229  | `test('TC-A-12: should handle full combo (folder + file + second model + yolo)')`       | 4      | ✅      |
+| 用例 ID | 用例标题   | 实现文件                                                                | 行号 | 测试函数名                                                                              | 截图数 | 状态    |
+| ------- | ---------- | ----------------------------------------------------------------------- | ---- | --------------------------------------------------------------------------------------- | ------ | ------- |
+| TC-A-06 | 切换权限   | tests/e2e/features/conversations/tomnirs/permission-modes.e2e.ts        | 154  | `test('TC-A-06: should switch permission mid-conversation and persist to DB')`          | 5      | ✅      |
+| TC-A-07 | 切换模型   | tests/e2e/features/conversations/tomnirs/model-selection.e2e.ts         | 135  | `test.skip('TC-A-07: should switch model mid-conversation and update DB')`              | 5      | ⏭️ Skip |
+| TC-A-08 | 连续切换   | tests/e2e/features/conversations/tomnirs/mid-conversation-switch.e2e.ts | 68   | `test('TC-A-08: should handle continuous switch (model → permission → model)')`         | 6      | ⏭️ Skip |
+| TC-A-09 | 多轮对话   | tests/e2e/features/conversations/tomnirs/mid-conversation-switch.e2e.ts | 178  | `test('TC-A-09: should handle 3 rounds of conversation after model/permission switch')` | 6      | ⏭️ Skip |
+| TC-A-10 | 组合场景 1 | tests/e2e/features/conversations/tomnirs/combo-scenarios.e2e.ts         | 72   | `test('TC-A-10: should handle folder + second model + yolo mode combo')`                | 3      | ✅      |
+| TC-A-11 | 组合场景 2 | tests/e2e/features/conversations/tomnirs/combo-scenarios.e2e.ts         | 151  | `test('TC-A-11: should handle file + non-default model + default mode combo')`          | 3      | ✅      |
+| TC-A-12 | 完整组合   | tests/e2e/features/conversations/tomnirs/combo-scenarios.e2e.ts         | 229  | `test('TC-A-12: should handle full combo (folder + file + second model + yolo)')`       | 4      | ✅      |
 
 **小计**：7 个测试，32 张截图
 
@@ -60,11 +60,11 @@
 
 ## P2 边界用例（3/3 实现，但定义偏差严重）
 
-| 用例 ID | 用例标题      | 实现文件                                                  | 行号 | 测试函数名                                                                          | 截图数 | 状态    |
-| ------- | ------------- | --------------------------------------------------------- | ---- | ----------------------------------------------------------------------------------- | ------ | ------- |
-| TC-A-13 | Binary 不可达 | tests/e2e/features/conversations/aionrs/edge-cases.e2e.ts | 67   | `test('TC-A-13: should handle empty workspace folder without crashing')`            | 3      | ⚠️ 偏差 |
-| TC-A-14 | 超大文件限制  | tests/e2e/features/conversations/aionrs/edge-cases.e2e.ts | 127  | `test('TC-A-14: should handle very long message (2000 characters)')`                | 3      | ⚠️ 偏差 |
-| TC-A-15 | 不存在文件夹  | tests/e2e/features/conversations/aionrs/edge-cases.e2e.ts | 185  | `test('TC-A-15: should handle rapid consecutive messages without race conditions')` | 3      | ⚠️ 偏差 |
+| 用例 ID | 用例标题      | 实现文件                                                   | 行号 | 测试函数名                                                                          | 截图数 | 状态    |
+| ------- | ------------- | ---------------------------------------------------------- | ---- | ----------------------------------------------------------------------------------- | ------ | ------- |
+| TC-A-13 | Binary 不可达 | tests/e2e/features/conversations/tomnirs/edge-cases.e2e.ts | 67   | `test('TC-A-13: should handle empty workspace folder without crashing')`            | 3      | ⚠️ 偏差 |
+| TC-A-14 | 超大文件限制  | tests/e2e/features/conversations/tomnirs/edge-cases.e2e.ts | 127  | `test('TC-A-14: should handle very long message (2000 characters)')`                | 3      | ⚠️ 偏差 |
+| TC-A-15 | 不存在文件夹  | tests/e2e/features/conversations/tomnirs/edge-cases.e2e.ts | 185  | `test('TC-A-15: should handle rapid consecutive messages without race conditions')` | 3      | ⚠️ 偏差 |
 
 **小计**：3 个测试，9 张截图
 
@@ -123,12 +123,12 @@
 
 ### TC-A-13: Binary 不可达时跳过
 
-**原定义**：验证 aionrs binary 不可达时测试正确跳过（参考 `resolveAionrsBinary()` 返回 null 场景）
+**原定义**：验证 tomnirs binary 不可达时测试正确跳过（参考 `resolveTomnirsBinary()` 返回 null 场景）
 
 **实现要点**：
 
-1. 在 `beforeAll` 中临时 mock `resolveAionrsBinary()` 返回 null
-2. 验证 `test.skip(true, 'aionrs binary not found')` 被触发
+1. 在 `beforeAll` 中临时 mock `resolveTomnirsBinary()` 返回 null
+2. 验证 `test.skip(true, 'tomnirs binary not found')` 被触发
 3. 无截图（跳过测试不执行主体）
 
 ### TC-A-14: 超大文件上传限制
@@ -138,7 +138,7 @@
 **实现要点**：
 
 1. 创建 100MB 临时文件
-2. 尝试通过 `sendAionrsMessage` 上传
+2. 尝试通过 `sendTomnirsMessage` 上传
 3. 验证错误提示（UI 或 bridge 返回错误）
 4. 截图：上传前、错误提示出现后（2 张）
 
@@ -233,8 +233,8 @@
 ### conversations 表
 
 ```typescript
-const conv = await getAionrsConversationDB(page, conversationId);
-expect(conv.type).toBe('aionrs');
+const conv = await getTomnirsConversationDB(page, conversationId);
+expect(conv.type).toBe('tomnirs');
 
 // 验证 extra 字段（需处理 string/object 两种情况）
 const extra = typeof conv.extra === 'string' ? JSON.parse(conv.extra) : conv.extra;
@@ -244,12 +244,12 @@ expect(extra.workspace).toBe(workspacePath); // 或 undefined（无文件夹）
 
 ### messages 表
 
-通过 `waitForAionrsReply()` helper 轮询验证：
+通过 `waitForTomnirsReply()` helper 轮询验证：
 
 - 等待 AI 回复完成（`conv.status === 'finished'` + content 稳定 2s）
-- 超时时间：150s（aionrs binary 比 Gemini API 快，但需要预留模型切换时间）
+- 超时时间：150s（tomnirs binary 比 Gemini API 快，但需要预留模型切换时间）
 - 字段名：`createdAt`（驼峰，非 `created_at`）
-- 状态字段：aionrs text messages 不设置 `status='finish'`，只依赖 `conv.status`
+- 状态字段：tomnirs text messages 不设置 `status='finish'`，只依赖 `conv.status`
 
 ---
 
@@ -258,10 +258,10 @@ expect(extra.workspace).toBe(workspacePath); // 或 undefined（无文件夹）
 所有测试文件在 `afterEach` 中执行清理：
 
 1. **UI 状态清理**：ESC × 5 次
-2. **数据库清理**：调用 `cleanupE2EAionrsConversations(page)`
-   - 使用 `remove-conversation` 批量删除 `E2E-aionrs-` 开头对话
+2. **数据库清理**：调用 `cleanupE2ETomnirsConversations(page)`
+   - 使用 `remove-conversation` 批量删除 `E2E-tomnirs-` 开头对话
    - 依赖 FK CASCADE 自动删除关联 messages
-3. **sessionStorage 清理**：清除 `aionrs_initial_message_*` 和 `aionrs_initial_processed_*` keys
+3. **sessionStorage 清理**：清除 `tomnirs_initial_message_*` 和 `tomnirs_initial_processed_*` keys
 4. **临时文件清理**：各测试在 `finally` 块调用 `tempWorkspace.cleanup()`
 
 **清理失败策略**：按需求文档，清理失败必须 throw（已在 helper 实现）
@@ -282,7 +282,7 @@ expect(extra.workspace).toBe(workspacePath); // 或 undefined（无文件夹）
 
 1. 运行命令重新统计截图数：
    ```bash
-   for file in tests/e2e/features/conversations/aionrs/*.e2e.ts; do
+   for file in tests/e2e/features/conversations/tomnirs/*.e2e.ts; do
      echo "$(basename $file): $(grep -c 'takeScreenshot' $file)";
    done
    ```
@@ -298,7 +298,7 @@ expect(extra.workspace).toBe(workspacePath); // 或 undefined（无文件夹）
 ### TC-A-04 / TC-A-07 / TC-A-08 / TC-A-09: 运行时切换后消息挂起
 
 **症状**：
-运行时切换 model 或 permission 后，后续消息发送时 aionrs binary 静默挂起，AI 回复永不到达。
+运行时切换 model 或 permission 后，后续消息发送时 tomnirs binary 静默挂起，AI 回复永不到达。
 
 **复现场景**：
 
@@ -308,7 +308,7 @@ expect(extra.workspace).toBe(workspacePath); // 或 undefined（无文件夹）
 
 **典型复现步骤**（TC-A-08）：
 
-1. 创建 aionrs 对话，使用 modelA + default 模式
+1. 创建 tomnirs 对话，使用 modelA + default 模式
 2. 发送第一条消息，等待 AI 回复完成（✅ 正常）
 3. 通过 UI 切换：modelA → modelB（模型切换）
 4. 通过 UI 切换：default → yolo（权限切换）
@@ -316,31 +316,31 @@ expect(extra.workspace).toBe(workspacePath); // 或 undefined（无文件夹）
 6. 发送第二条消息
 7. ❌ 观察到：`conv.status` 卡在 `running` 或 `pending`，2.7 分钟后超时
 
-**数据库现场**（来自 `/tmp/aionrs-all-v3.log`）：
+**数据库现场**（来自 `/tmp/tomnirs-all-v3.log`）：
 
 ```
-[waitForAionrsReply TIMEOUT] conv.status=pending, msg count=3
-[waitForAionrsReply TIMEOUT]   - pos=right type=text status=null preview="Hello, initial message."
-[waitForAionrsReply TIMEOUT]   - pos=left type=text status=null preview="Hello! How can I help today?"
-[waitForAionrsReply TIMEOUT]   - pos=right type=text status=null preview="After all switches."
+[waitForTomnirsReply TIMEOUT] conv.status=pending, msg count=3
+[waitForTomnirsReply TIMEOUT]   - pos=right type=text status=null preview="Hello, initial message."
+[waitForTomnirsReply TIMEOUT]   - pos=left type=text status=null preview="Hello! How can I help today?"
+[waitForTomnirsReply TIMEOUT]   - pos=right type=text status=null preview="After all switches."
 ```
 
 **已排除**：
 
-- ✅ 测试脚本正确：第二条消息已通过 `sendAionrsMessage` 送达（DB 有 right message）
+- ✅ 测试脚本正确：第二条消息已通过 `sendTomnirsMessage` 送达（DB 有 right message）
 - ✅ Bridge 通信：message 入库说明 bridge → main process 路径正常
 - ✅ 初始模型选择：非切换场景（TC-A-01/02/03）正常完成
 
 **待排查**：
 
-- ❓ aionrs binary 的运行时状态机是否支持 model/permission 切换？
+- ❓ tomnirs binary 的运行时状态机是否支持 model/permission 切换？
 - ❓ 切换后的 binary 进程是否正确重启/重新初始化？
 - ❓ 环境变量/配置文件在运行时变更后是否生效？
 
 **当前处理**：
 
 - TC-A-04 / TC-A-07 / TC-A-08 / TC-A-09 标记为 `test.skip()`，跳过原因记录在测试代码注释中
-- 等待产品侧对 aionrs binary 的运行时切换逻辑进行诊断
+- 等待产品侧对 tomnirs binary 的运行时切换逻辑进行诊断
 - 重开条件：产品团队确认 binary 支持运行时切换，或提供 workaround 方案
 
 **影响范围**：
@@ -352,5 +352,5 @@ expect(extra.workspace).toBe(workspacePath); // 或 undefined（无文件夹）
 ---
 
 **最后更新**：2026-04-22
-**维护者**：chat-aionrs-engineer
+**维护者**：chat-tomnirs-engineer
 **状态**：✅ P0/P1 实现完整（除 TC-A-08/09 已知问题），✅ P2 已按原定义重写（TC-A-13/14/15）

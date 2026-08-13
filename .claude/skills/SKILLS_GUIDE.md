@@ -1,6 +1,6 @@
 # Skills Guide — đọc đầu mỗi session
 
-Hướng dẫn dùng skill cho dự án AionUi/Tomni Agentic. **Đầu mỗi session, đọc file này** để biết
+Hướng dẫn dùng skill cho dự án TomniHubOS/Tomni Agentic. **Đầu mỗi session, đọc file này** để biết
 có skill nào, khi nào dùng, path ở đâu, và cách tránh xung đột.
 
 - **Path skill (workspace):** `.claude/skills/<tên-skill>/SKILL.md`
@@ -67,7 +67,7 @@ Bộ skill hiện tại đã phủ: UI, kiến trúc, i18n, test, debug, perform
 Trước khi thêm skill mới, kiểm tra theo checklist để **không gây trùng/xung đột**:
 
 - [ ] Chức năng này đã có skill nào phủ chưa? (xem bảng trên) — nếu có, KHÔNG thêm.
-- [ ] Skill mới có khớp stack dự án không? (Electron + React 19 + Arco + UnoCSS + aioncore Rust)
+- [ ] Skill mới có khớp stack dự án không? (Electron + React 19 + Arco + UnoCSS + tomnicore Rust)
   - Cảnh báo: skill **backend generic** (Express/NestJS/Postgres/nginx) và skill **UI Tailwind/shadcn** thường XUNG ĐỘT với luật dự án — tránh.
 - [ ] Skill có nguồn rõ ràng + license + nhiều sao/được duy trì không?
 - [ ] Tải **verbatim** (giữ `LICENSE`), nếu cần thích ứng thì thêm mục "Project Binding" trong chính SKILL.md, ghi rõ nguồn.
@@ -77,7 +77,7 @@ Trước khi thêm skill mới, kiểm tra theo checklist để **không gây tr
 
 - Skill review bảo mật (security audit) cho code xử lý file/mạng — hiện `pr-review` đã phủ một phần.
 - Skill tài liệu/changelog — `bump-version` đã sinh CHANGELOG, nên có thể không cần.
-- Không khuyến nghị thêm skill backend generic vì xung đột kiến trúc aioncore.
+- Không khuyến nghị thêm skill backend generic vì xung đột kiến trúc tomnicore.
 
 ## Quy trình thêm skill mới (chuẩn)
 

@@ -28,7 +28,7 @@ test.describe('Team Agent Whitelist', () => {
     const createBtn = page.locator('[data-testid="team-create-btn"]').first();
     await createBtn.click();
 
-    // Open the leader AionSelect dropdown (options portal to document.body)
+    // Open the leader TomnySelect dropdown (options portal to document.body)
     const modal = page.locator('.arco-modal');
     const leaderSelect = modal.locator('[data-testid="team-create-leader-select"]');
     await expect(leaderSelect).toBeVisible({ timeout: 5000 });

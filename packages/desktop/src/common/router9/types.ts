@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -9,7 +9,7 @@
  *
  * 9Router exposes a single local OpenAI-compatible endpoint (default
  * `http://127.0.0.1:20128/v1`) that aggregates 40+ providers behind
- * auto-fallback + format translation. This module models how AionUi
+ * auto-fallback + format translation. This module models how Tomny
  * *distributes* that endpoint to external CLI / IDE tools, each of which
  * expects credentials in a different shape ("auto convert to the format the
  * app needs"). Nothing here performs network I/O — it only computes plans.
@@ -17,19 +17,19 @@
 
 /**
  * The wire format a target tool speaks to its model backend. 9Router itself
- * translates between formats, so the only thing AionUi must get right is how a
+ * translates between formats, so the only thing Tomny must get right is how a
  * target is *configured* (env var name, base-url suffix, config file shape).
  */
 export type RouterProtocol = 'openai' | 'anthropic' | 'gemini';
 
-/** Stable identity for the gateway provider managed internally by Tomni. */
+/** Stable identity for the gateway provider managed internally by Tomny. */
 export const TOMNI_GATEWAY_PROVIDER_ID = 'tomni-model-gateway';
 
-/** Dedicated gateway client used by Tomni itself (never shared with external CLIs). */
-export const TOMNI_GATEWAY_APP_CLIENT_NAME = 'Tomni · App';
+/** Dedicated gateway client used by Tomny itself (never shared with external CLIs). */
+export const TOMNI_GATEWAY_APP_CLIENT_NAME = 'Tomny · App';
 
 /**
- * How a target consumes its configuration. Drives what kind of plan AionUi can
+ * How a target consumes its configuration. Drives what kind of plan Tomny can
  * produce automatically vs. what must be shown as manual instructions.
  */
 export type ConnectorMechanism =
@@ -97,7 +97,7 @@ export type ConnectorTarget = {
   /** i18n key for a short description of how the connection works. */
   descriptionKey: string;
   /**
-   * Agent key used by Tomni's main chat preference store. Omitted for tools
+   * Agent key used by Tomny's main chat preference store. Omitted for tools
    * that are external-only and do not have a matching chat surface.
    */
   agentPreferenceKey?: string;

@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "tomny.qlora-recipe.v1",
+  "recipeVersion": 4,
+  "id": "tomny-qwen35-2b-orchestrator-rtx3050",
+  "version": "2026-07-29.4",
+  "promotionStatus": "candidate-only",
+  "purpose": "orchestrator",
+  "dataset": {
+    "datasetId": "tomny-core-adapters-synthetic",
+    "datasetVersion": "2026-07-29.v4",
+    "manifestSha256": "36fb132493dc2090daefb066158b63bc8a99722a9dabb4a0eb46632a1d1fbcb5"
+  },
+  "baseModel": {
+    "modelId": "Qwen/Qwen3.5-2B",
+    "revision": "15852e8c16360a2fea060d615a32b45270f8a8fc",
+    "contentSha256": "f6656ba07f0a996924643f29c971be830b87cfbeea8254d6029b0e98a2a1c8dd"
+  },
+  "seed": 20260725,
+  "hardwareProfile": {
+    "profile": "rtx-3050-4gb",
+    "gpuModel": "NVIDIA GeForce RTX 3050 Laptop GPU",
+    "maxVramGiB": 4,
+    "sequentialOnly": true,
+    "finiteGradientSmokePassed": true
+  },
+  "qualityLimitations": [
+    "Only the final transformer block is adapted; benchmark uplift may trail wider target profiles.",
+    "Synthetic robustness-v1 data uses template-level split isolation and balanced labels; independent benchmark evidence is required before pilot."
+  ],
+  "training": {
+    "maxSteps": 600,
+    "maxLength": 256,
+    "rank": 8,
+    "loraAlpha": 16,
+    "gradientAccumulationSteps": 8,
+    "learningRate": 0.0001,
+    "warmupRatio": 0.05,
+    "targetProfile": "last-block",
+    "loggingSteps": 5,
+    "evalSteps": 200,
+    "saveSteps": 200,
+    "earlyStoppingPatience": 3,
+    "earlyStoppingThreshold": 0.001,
+    "maxValidationRegression": 0.0
+  }
+}

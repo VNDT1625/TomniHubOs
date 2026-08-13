@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -62,8 +62,8 @@ describe('configMigrationIntegration', () => {
 
   it('discovers the active backend catalog before the Electron legacy catalog', () => {
     const dataDir = path.resolve('/data');
-    const backend = path.join(dataDir, 'aionui-backend.db');
-    const electronLegacy = path.join(dataDir, 'aionui.db');
+    const backend = path.join(dataDir, 'tomny-backend.db');
+    const electronLegacy = path.join(dataDir, 'tomny.db');
     (existsSync as any).mockImplementation((candidate: string) => [backend, electronLegacy].includes(candidate));
 
     expect(discoverLegacyDatabasePaths(dataDir)).toEqual([backend, electronLegacy]);
@@ -71,14 +71,14 @@ describe('configMigrationIntegration', () => {
 
   it('discovers the historical nested data directory without inventing a database', () => {
     const dataDir = path.resolve('/data');
-    const nestedLegacy = path.join(dataDir, 'aionui', 'aionui.db');
+    const nestedLegacy = path.join(dataDir, 'tomny', 'tomny.db');
     (existsSync as any).mockImplementation((candidate: string) => candidate === nestedLegacy);
 
     expect(discoverLegacyDatabasePaths(dataDir)).toEqual([nestedLegacy]);
   });
 
   it('runs migrations when database version is outdated', async () => {
-    const result = await runLegacyDatabaseMigrations('/test/aionui.db');
+    const result = await runLegacyDatabaseMigrations('/test/tomny.db');
 
     expect(result.migrated).toBe(true);
     expect(result.fromVersion).toBe(20);
@@ -90,7 +90,7 @@ describe('configMigrationIntegration', () => {
   it('skips migrations when database does not exist', async () => {
     (existsSync as any).mockReturnValue(false);
 
-    const result = await runLegacyDatabaseMigrations('/test/aionui.db');
+    const result = await runLegacyDatabaseMigrations('/test/tomny.db');
 
     expect(result.skipped).toBe(true);
     expect(result.migrated).toBe(false);
@@ -98,13 +98,13 @@ describe('configMigrationIntegration', () => {
   });
 
   it('closes driver after migration completes', async () => {
-    await runLegacyDatabaseMigrations('/test/aionui.db');
+    await runLegacyDatabaseMigrations('/test/tomny.db');
 
     expect(mockDriver.close).toHaveBeenCalled();
   });
 
   it('ensures system user exists after migration', async () => {
-    await runLegacyDatabaseMigrations('/test/aionui.db');
+    await runLegacyDatabaseMigrations('/test/tomny.db');
 
     expect(mockDriver.prepare).toHaveBeenCalledWith(expect.stringContaining('INSERT OR IGNORE INTO users'));
   });
@@ -114,7 +114,7 @@ describe('configMigrationIntegration', () => {
       throw new Error('Migration failed');
     });
 
-    await expect(runLegacyDatabaseMigrations('/test/aionui.db')).rejects.toThrow('Migration failed');
+    await expect(runLegacyDatabaseMigrations('/test/tomny.db')).rejects.toThrow('Migration failed');
     expect(mockDriver.close).toHaveBeenCalled();
   });
 });

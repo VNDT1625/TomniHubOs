@@ -258,7 +258,7 @@ fn should_ignore_stale_marker_path(path: &str) -> bool {
         ".mtui",
         ".tomni",
         ".omni",
-        ".aionui",
+        ".tomny",
         ".tmp",
         ".next",
         ".turbo",
@@ -1962,7 +1962,7 @@ fn should_skip_fallback_path(path: &str) -> bool {
         || path.starts_with(".mtui/")
         || path.starts_with(".tomni/")
         || path.starts_with(".omni/")
-        || path.starts_with(".aionui/")
+        || path.starts_with(".tomny/")
         || path.starts_with(".tmp/")
         || path.starts_with(".next/")
         || path.starts_with(".turbo/")
@@ -2354,7 +2354,7 @@ mod tests {
     #[test]
     fn stale_marker_paths_are_deduped_sorted_and_malformed_safe() {
         let temp = tempfile::tempdir().expect("tempdir");
-        let cache_dir = temp.path().join(".aionui").join("understand");
+        let cache_dir = temp.path().join(".tomny").join("understand");
         std::fs::create_dir_all(&cache_dir).expect("cache dir");
         std::fs::write(
             cache_dir.join("stale.json"),
@@ -2377,7 +2377,7 @@ mod tests {
     #[test]
     fn map_folder_filters_inside_a_coarse_parent_module() {
         let temp = tempfile::tempdir().expect("tempdir");
-        let cache_dir = temp.path().join(".aionui").join("understand");
+        let cache_dir = temp.path().join(".tomny").join("understand");
         std::fs::create_dir_all(&cache_dir).expect("cache dir");
         std::fs::write(
             cache_dir.join("summary.json"),
@@ -2521,7 +2521,7 @@ mod tests {
     #[test]
     fn query_folder_filters_inside_a_coarse_parent_module() {
         let temp = tempfile::tempdir().expect("tempdir");
-        let cache_dir = temp.path().join(".aionui").join("understand");
+        let cache_dir = temp.path().join(".tomny").join("understand");
         std::fs::create_dir_all(&cache_dir).expect("cache dir");
         std::fs::write(
             cache_dir.join("summary.json"),
@@ -2593,7 +2593,7 @@ mod tests {
     #[test]
     fn query_folder_info_compacts_file_symbols() {
         let temp = tempfile::tempdir().expect("tempdir");
-        let cache_dir = temp.path().join(".aionui").join("understand");
+        let cache_dir = temp.path().join(".tomny").join("understand");
         std::fs::create_dir_all(&cache_dir).expect("cache dir");
         std::fs::write(
             cache_dir.join("summary.json"),

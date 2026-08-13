@@ -88,7 +88,7 @@ const IGNORED_POLICY_PATHS: &[&str] = &[
     ".mtui/",
     ".tomni/understand/",
     ".omni/understand/",
-    ".aionui/understand/",
+    ".tomny/understand/",
     "node_modules/",
     "dist/",
     "build/",
@@ -107,7 +107,7 @@ fn normalize_rel(value: &str) -> String {
 
 fn is_ignored_policy_path(path: &str) -> bool {
     let normalized = normalize_rel(path);
-    if normalized.starts_with(".aionui/specs/") && normalized.contains("/plan/temporary/") {
+    if normalized.starts_with(".tomny/specs/") && normalized.contains("/plan/temporary/") {
         return true;
     }
     if normalized.starts_with(".kiro/tmp-") {
@@ -441,7 +441,7 @@ mod tests {
                 "src/b.ts".to_string(),
                 ".tomni/understand/summary.json".to_string(),
                 ".omni/understand/summary.json".to_string(),
-                ".aionui/understand/summary.json".to_string(),
+                ".tomny/understand/summary.json".to_string(),
                 ".kiro/tmp-ox.txt".to_string(),
             ],
             &[op("/repo/src/a.ts")],

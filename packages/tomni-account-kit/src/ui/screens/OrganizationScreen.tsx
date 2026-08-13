@@ -15,12 +15,14 @@ export const OrganizationScreen: React.FC<{
 
   const create = async (values: { name: string }) => {
     const result = await client.createOrganization(values.name);
-    if (result.ok) Message.success(t('successSaved')); else Message.error(t('errorInvalidInput'));
+    if (result.ok) Message.success(t('successSaved'));
+    else Message.error(t('errorInvalidInput'));
   };
 
   const invite = async (values: { email: string; role: OrganizationMember['role'] }) => {
     const result = await client.inviteOrganizationMember(values.email, values.role);
-    if (result.ok) Message.success(t('successSaved')); else Message.error(t('errorInvalidInput'));
+    if (result.ok) Message.success(t('successSaved'));
+    else Message.error(t('errorInvalidInput'));
     if (result.ok) inviteForm.resetFields();
   };
 

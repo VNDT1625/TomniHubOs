@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -333,7 +333,7 @@ export class WorkspaceRoom extends DurableObject<Env> {
     const relPath = normalizePath(body.relPath ?? body.path ?? '');
     if (!relPath) throw new Error('lease path is required');
     const clientId = validateId(
-      body.clientId?.trim() || request.headers.get('x-aion-client-id') || 'http-client',
+      body.clientId?.trim() || request.headers.get('x-tomny-client-id') || 'http-client',
       'clientId'
     );
     const held = await this.getLease(relPath);
@@ -364,7 +364,7 @@ export class WorkspaceRoom extends DurableObject<Env> {
     const relPath = normalizePath(body.relPath ?? body.path ?? '');
     if (!relPath) throw new Error('lease path is required');
     const clientId = validateId(
-      body.clientId?.trim() || request.headers.get('x-aion-client-id') || 'http-client',
+      body.clientId?.trim() || request.headers.get('x-tomny-client-id') || 'http-client',
       'clientId'
     );
     const held = await this.getLease(relPath);

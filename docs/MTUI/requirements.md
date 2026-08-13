@@ -70,7 +70,7 @@ MTUI handles:
 MTUI is a backend component used by Omni.
 
 ```text
-Tomni Agentic / User
+Tomny Agentic / User
         |
         v
 Omni App / Terminal UI

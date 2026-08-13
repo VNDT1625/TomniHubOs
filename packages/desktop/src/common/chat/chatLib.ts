@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -126,7 +126,7 @@ export type IMessageText = IMessage<
   }
 >;
 
-export type AgentErrorOwnership = 'aionui' | 'user_agent' | 'user_llm_provider' | 'unknown_upstream';
+export type AgentErrorOwnership = 'tomny' | 'user_agent' | 'user_llm_provider' | 'unknown_upstream';
 
 export type AgentErrorResolutionKind =
   | 'retry'
@@ -459,7 +459,7 @@ export interface IConfirmation<Option extends any = any> {
    * Used for "always allow" permission memory
    */
   command_type?: string;
-  /** Direct permission id owned by Tomni Core, resolved over Electron IPC rather than the legacy HTTP backend. */
+  /** Direct permission id owned by Tomny Core, resolved over Electron IPC rather than the legacy HTTP backend. */
   native_core_permission_id?: string;
 }
 
@@ -467,7 +467,7 @@ const isObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
 const AGENT_ERROR_OWNERSHIPS = new Set<AgentErrorOwnership>([
-  'aionui',
+  'tomny',
   'user_agent',
   'user_llm_provider',
   'unknown_upstream',

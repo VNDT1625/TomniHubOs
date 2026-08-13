@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -10,8 +10,8 @@ import { Switch } from '@arco-design/web-react';
 import FontSizeControl from '@/renderer/components/settings/FontSizeControl';
 import { ThemeSwitcher } from '@/renderer/components/settings/ThemeSwitcher';
 import CssThemeSettings from '@renderer/pages/settings/DisplaySettings/CssThemeSettings';
-import AionScrollArea from '@/renderer/components/base/AionScrollArea';
-import AionCollapse from '@/renderer/components/base/AionCollapse';
+import TomnyScrollArea from '@/renderer/components/base/TomnyScrollArea';
+import TomnyCollapse from '@/renderer/components/base/TomnyCollapse';
 import { Down, Up } from '@icon-park/react';
 import { configService } from '@/common/config/configService';
 import { useSettingsViewMode } from '../settingsViewContext';
@@ -85,7 +85,7 @@ const DisplayModalContent: React.FC = () => {
   return (
     <div className='flex flex-col h-full w-full'>
       {/* 内容区域 / Content Area */}
-      <AionScrollArea className='flex-1 min-h-0 pb-16px' disableOverflow={isPageMode}>
+      <TomnyScrollArea className='flex-1 min-h-0 pb-16px' disableOverflow={isPageMode}>
         <div className='space-y-16px'>
           {/* 显示设置 / Display Settings */}
           <div className='px-16px md:px-24px lg:px-28px py-14px md:py-16px bg-2 rd-16px space-y-10px md:space-y-12px'>
@@ -99,14 +99,14 @@ const DisplayModalContent: React.FC = () => {
           </div>
 
           {/* CSS 主题设置 / CSS Theme Settings - Collapsible */}
-          <AionCollapse
+          <TomnyCollapse
             className='!bg-transparent !py-0 !px-0 !gap-0'
             bordered={false}
             defaultActiveKey={['css']}
             expandIcon={renderExpandIcon}
             expandIconPosition='right'
           >
-            <AionCollapse.Item
+            <TomnyCollapse.Item
               name='css'
               header={<span className='text-14px text-t-primary leading-22px'>{t('settings.cssSettings')}</span>}
               className='bg-2 rd-16px px-16px md:px-24px lg:px-28px py-12px md:py-14px'
@@ -114,8 +114,8 @@ const DisplayModalContent: React.FC = () => {
               contentStyle={{ padding: '10px 0 0' }}
             >
               <CssThemeSettings />
-            </AionCollapse.Item>
-          </AionCollapse>
+            </TomnyCollapse.Item>
+          </TomnyCollapse>
 
           {/* 开发者工具 / Developer Tools */}
           <div className='px-16px md:px-24px lg:px-28px py-14px md:py-16px bg-2 rd-16px'>
@@ -129,7 +129,7 @@ const DisplayModalContent: React.FC = () => {
             </div>
           </div>
         </div>
-      </AionScrollArea>
+      </TomnyScrollArea>
     </div>
   );
 };

@@ -1,0 +1,47 @@
+{
+  "schemaVersion": "tomny.qlora-recipe.v1",
+  "recipeVersion": 7,
+  "id": "tomny-qwen35-08b-security-rtx3050-candidate7-r64-smoke2",
+  "version": "2026-07-30.7-r64-smoke.2",
+  "promotionStatus": "candidate-only",
+  "purpose": "security",
+  "dataset": {
+    "datasetId": "tomny-security-candidate5-independent",
+    "datasetVersion": "2026-07-29.v5",
+    "manifestSha256": "7e2004f0d150bdcd4e6a2584a4d15732be309b6952ad3d4f9ff6956414d4d455"
+  },
+  "baseModel": {
+    "modelId": "Qwen/Qwen3.5-0.8B",
+    "revision": "2fc06364715b967f1860aea9cf38778875588b17",
+    "contentSha256": "ff3a07808a9e83627e69a07131fdec45c60973f23cc5617204d173461ec65fe6"
+  },
+  "seed": 20260725,
+  "hardwareProfile": {
+    "profile": "rtx-3050-4gb",
+    "gpuModel": "NVIDIA GeForce RTX 3050 Laptop GPU",
+    "maxVramGiB": 4,
+    "sequentialOnly": true,
+    "finiteGradientSmokePassed": false
+  },
+  "qualityLimitations": [
+    "Bounded five-step finite-gradient smoke only; never eligible for promotion or quality conclusions.",
+    "Changes only rank 32 to rank 64 relative to Candidate 6 while retaining the same seed and proven finite last-block target.",
+    "The immutable test split remains trainer-isolated and cannot be used for checkpoint selection."
+  ],
+  "training": {
+    "maxSteps": 5,
+    "maxLength": 256,
+    "rank": 64,
+    "loraAlpha": 128,
+    "gradientAccumulationSteps": 8,
+    "learningRate": 0.0001,
+    "warmupRatio": 0.05,
+    "targetProfile": "last-block",
+    "loggingSteps": 1,
+    "evalSteps": 5,
+    "saveSteps": 5,
+    "earlyStoppingPatience": 1,
+    "earlyStoppingThreshold": 0.001,
+    "maxValidationRegression": 0
+  }
+}

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Tomni
+ * Copyright 2025 Tomny
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -148,7 +148,7 @@ afterEach(async () => {
   await Promise.all(servers.splice(0).map((server) => server.close()));
 });
 
-describe('Tomni MCP gateway routes', () => {
+describe('Tomny MCP gateway routes', () => {
   it('creates, updates, toggles, and deletes MCP servers through the native service', async () => {
     const { server } = await harness();
     const created = await request(server, '/api/v1/mcp', 'POST', {

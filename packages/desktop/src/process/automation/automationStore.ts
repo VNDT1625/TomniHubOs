@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -127,10 +127,7 @@ const normaliseNode = (v: unknown): WorkflowNode | null => {
     const mode = v.execution.mode;
     const access = v.execution.access;
     node.execution = {
-      mode:
-        mode === 'deterministic' || mode === 'agent' || mode === 'hybrid'
-          ? mode
-          : undefined,
+      mode: mode === 'deterministic' || mode === 'agent' || mode === 'hybrid' ? mode : undefined,
       access: access === 'local' || access === 'api' || access === 'mcp' || access === 'browser' ? access : undefined,
       requiresWebsiteLogin:
         typeof v.execution.requiresWebsiteLogin === 'boolean' ? v.execution.requiresWebsiteLogin : undefined,

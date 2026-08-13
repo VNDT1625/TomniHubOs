@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -229,7 +229,7 @@ const verifyBundledTomnyCli = async (
   return verifyTomnyArtifact(binaryPath, path.join(path.dirname(binaryPath), 'manifest.json'), sha256File);
 };
 
-/** Resolve the first executable without invoking aioncore or its HTTP detector. */
+/** Resolve the first executable without invoking tomnycore or its HTTP detector. */
 export const resolveExecutableOnPath = async (
   candidates: string[],
   sha256File: Sha256File = sha256FileWithNode

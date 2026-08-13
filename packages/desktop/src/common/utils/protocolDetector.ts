@@ -1,12 +1,12 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
 /**
- * AionRouter 协议检测器
- * Protocol Detector for AionRouter
+ * TomnyRouter 协议检测器
+ * Protocol Detector for TomnyRouter
  *
  * 支持自动检测 API 端点使用的协议类型：
  * - OpenAI 协议（大多数第三方服务）

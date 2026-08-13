@@ -3,7 +3,7 @@
 
 $ErrorActionPreference = "Stop"
 $Version = "0.1.0"
-$Repo = "AionUi/MTUI"
+$Repo = "Tomny/MTUI"
 $Arch = if ([Environment]::Is64BitOperatingSystem) { "x86_64" } else { "x86" }
 $Platform = "pc-windows-msvc"
 $Binary = "mtui.exe"

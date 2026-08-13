@@ -1,11 +1,11 @@
 {
   "name": "omni-agentic",
   "version": "0.0.0",
-  "description": "Tomni personal agentic operating system.",
+  "description": "Tomny personal agentic operating system.",
   "keywords": [],
   "license": "Apache-2.0",
   "author": {
-    "name": "Tomni",
+    "name": "Tomny",
     "email": "VNDT1625@users.noreply.github.com"
   },
   "workspaces": [
@@ -21,7 +21,7 @@
     "dev:browser": "bun run dev:services",
     "start": "bun run prepare:dev && electron-vite dev --config packages/desktop/electron.vite.config.ts",
     "start:fast": "electron-vite dev --config packages/desktop/electron.vite.config.ts",
-    "start:multi": "bun run prepare:dev && cross-env AIONUI_MULTI_INSTANCE=1 electron-vite dev --config packages/desktop/electron.vite.config.ts",
+    "start:multi": "bun run prepare:dev && cross-env TOMNY_MULTI_INSTANCE=1 electron-vite dev --config packages/desktop/electron.vite.config.ts",
     "cli": "bun run prepare:dev && electron-vite dev --config packages/desktop/electron.vite.config.ts",
     "webui": "tsx scripts/webui.ts",
     "webui:remote": "tsx scripts/webui.ts --remote",
@@ -29,6 +29,8 @@
     "webui:prod:remote": "cross-env NODE_ENV=production tsx scripts/webui.ts --remote",
     "resetpass": "tsx scripts/resetpass.ts",
     "package": "electron-vite build --config packages/desktop/electron.vite.config.ts",
+    "store:pack": "tsx scripts/package-apps/pack.ts",
+    "store:publish": "tsx scripts/package-apps/publish.ts",
     "make": "electron-vite build --config packages/desktop/electron.vite.config.ts",
     "dist": "node scripts/build-with-builder.js",
     "dist:mac": "node scripts/build-with-builder.js auto --mac",
@@ -90,8 +92,6 @@
   "dependencies": {
     "@agentclientprotocol/claude-agent-acp": "0.33.1",
     "@agentclientprotocol/sdk": "^0.18.2",
-    "@aionui/music-core": "workspace:*",
-    "@aionui/web-host": "workspace:*",
     "@anthropic-ai/sdk": "^0.71.2",
     "@arco-design/web-react": "^2.66.1",
     "@aws-sdk/client-bedrock": "^3.987.0",
@@ -114,9 +114,12 @@
     "@larksuiteoapi/node-sdk": "^1.58.0",
     "@modelcontextprotocol/sdk": "^1.20.0",
     "@monaco-editor/react": "^4.7.0",
-    "@office-ai/aioncli-core": "^0.30.6",
     "@office-ai/platform": "^0.3.16",
     "@sentry/electron": "^7.10.0",
+    "@tesseract.js-data/eng": "^1.0.0",
+    "@tesseract.js-data/vie": "^1.0.0",
+    "@tomny/music-core": "workspace:*",
+    "@tomny/web-host": "workspace:*",
     "@types/bcryptjs": "^2.4.6",
     "@types/jsonwebtoken": "^9.0.10",
     "@uiw/codemirror-extensions-langs": "^4.25.1",
@@ -190,6 +193,7 @@
     "streamdown": "^1.5.1",
     "strip-json-comments": "^3.1.1",
     "swr": "^2.3.6",
+    "tesseract.js": "^7.0.0",
     "tiny-csrf": "^1.1.6",
     "tone": "15.0.4",
     "turndown": "^7.2.2",
@@ -299,7 +303,7 @@
   "patchedDependencies": {
     "7zip-bin@5.2.0": "patches/7zip-bin@5.2.0.patch"
   },
-  "productName": "Tomni",
+  "productName": "Tomny",
   "tomnyCliCommit": "cb4a10fdbaa0e4d5c5e767b96081cc21eb476a2a",
   "tomnyCliVersion": "v0.2.4",
   "tomnyCoreCommit": "36938554bc4dca870141d37fc0ac63e2038ff4c0",

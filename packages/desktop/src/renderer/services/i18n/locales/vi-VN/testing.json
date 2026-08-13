@@ -98,7 +98,7 @@
   "core": {
     "tab": "Core Test",
     "title": "Core phản hồi AI thử nghiệm",
-    "subtitle": "Kiểm chứng transport trực tiếp cho Codex app-server và các CLI tương thích ACP, hoàn toàn không dùng executable AionCore.",
+    "subtitle": "Kiểm chứng transport trực tiếp cho Codex app-server và các CLI tương thích ACP, hoàn toàn không dùng executable Tomny Core.",
     "transportNotice": "Core đa CLI trực tiếp",
     "loadFailed": "Không tải được danh sách agent.",
     "selectTarget": "Chọn đích AI",

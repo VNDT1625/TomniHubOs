@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -297,7 +297,7 @@ export const buildTraceContext = (trace: RuntimeTrace, graph: KnowledgeGraph): C
     )
     .map(
       (ev) =>
-        `- ${ev.method} ${ev.url} → ${ev.status}${ev.error ? ` (${ev.error})` : ''} · mapped API/service candidates from endpoint path`,
+        `- ${ev.method} ${ev.url} → ${ev.status}${ev.error ? ` (${ev.error})` : ''} · mapped API/service candidates from endpoint path`
     );
 
   const renderedContext = [

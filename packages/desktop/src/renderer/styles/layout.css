@@ -2,33 +2,35 @@
 
 /* Sticky section labels in the sider (team / cron / projects / timeline). */
 .sider-section-label {
-  background-color: var(--bg-2);
+  background-color: var(--bg-1);
+  border-bottom: 1px solid var(--border-base);
 }
 
 /* Sidebar row action buttons (more / plus) — use opaque tokens so text
-   underneath never bleeds through (Arco's fill tokens are semi-transparent
-   in dark mode). Light tier stays lighter than the row hover fill-3;
-   hover lightens one more step. */
+   underneath never bleeds through. */
 .sider-action-btn {
   background-color: var(--bg-2);
+  border: 1px solid var(--surface-glass-border);
+  border-radius: 6px;
+  transition: all var(--motion-duration-fast) var(--motion-ease-standard);
 }
 .sider-action-btn:hover {
-  background-color: var(--bg-1);
+  background-color: var(--bg-hover);
+  border-color: var(--surface-glass-border-strong);
 }
 [data-theme='dark'] .sider-action-btn {
-  background-color: var(--bg-5);
+  background-color: var(--bg-2);
+  border-color: var(--surface-glass-border);
 }
 [data-theme='dark'] .sider-action-btn:hover {
-  background-color: var(--bg-6);
+  background-color: var(--bg-hover);
+  border-color: var(--surface-glass-border-strong);
 }
 
-/* Section title text — light mode uses text-t-tertiary (#86909c).
-   In dark mode, the tertiary token (#5a5a5a) is too dim on #0e0e0e,
-   while --text-secondary (#ced3da) is too bright; pick a mid-gray
-   shared by sidebar section titles and settings group headers. */
+/* Section title text */
 [data-theme='dark'] .sider-section-title,
 [data-theme='dark'] .settings-sider__group-header {
-  color: #9098a1;
+  color: var(--text-secondary);
 }
 
 /* Layout sider base styles */
@@ -36,6 +38,7 @@
   overflow-x: hidden;
   box-shadow: none !important;
   border-right: 1px solid var(--border-base);
+  background-color: var(--bg-1) !important;
 }
 
 /* Arco Layout inner container needs flex layout so Header + Content + Footer
@@ -282,17 +285,17 @@
 /* Shell-integration command decorations (VS Code-style gutter dots). xterm
    positions the decoration element in the left gutter aligned to the command's
    prompt row; we render a small colored dot reflecting the exit code. */
-.aionui-cmd-dot {
+.tomny-cmd-dot {
   width: 6px;
   height: 6px;
   border-radius: 9999px;
   margin-left: 2px;
   align-self: center;
 }
-.aionui-cmd-ok {
+.tomny-cmd-ok {
   background-color: var(--color-success-6, #23d18b);
 }
-.aionui-cmd-fail {
+.tomny-cmd-fail {
   background-color: var(--color-danger-6, #f14c4c);
 }
 

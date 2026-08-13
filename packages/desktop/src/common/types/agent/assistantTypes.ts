@@ -1,10 +1,10 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
-// Mirror of aionui-api-types/src/assistant.rs.
+// Mirror of tomny-api-types/src/assistant.rs.
 // Any shape change on either side requires a same-PR update on the other.
 
 export type AssistantSource = 'builtin' | 'user' | 'extension';

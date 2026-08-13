@@ -1,13 +1,13 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
 /**
  * Studio binary-write IPC bridge.
  *
- * The aioncore `/api/fs/write` endpoint persists its `data` field as literal
+ * The tomnycore `/api/fs/write` endpoint persists its `data` field as literal
  * UTF-8 text — it does NOT base64-decode — so writing a binary file (a `.docx`
  * ZIP, an image, …) through it corrupts the bytes. Editing + saving a Word
  * document therefore needs a binary-safe write that the Rust backend does not
@@ -15,7 +15,7 @@
  *
  * This Main-process bridge fills that gap: it accepts a path + base64 payload
  * and writes the **decoded bytes** straight to disk with Node `fs`. It is the
- * same pattern the other Tomni native bridges use (Electron `bridge`
+ * same pattern the other Tomny native bridges use (Electron `bridge`
  * helper, not an HTTP route). Desktop-only — in WebUI mode the renderer is
  * remote, so binary editing is a desktop feature.
  *

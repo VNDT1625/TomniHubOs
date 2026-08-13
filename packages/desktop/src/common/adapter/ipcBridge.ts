@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -8,7 +8,7 @@
  * IPC Bridge → HTTP/WS adapter.
  *
  * This file replaces the original IPC bridge calls with HTTP REST and WebSocket
- * calls routed to aioncore. Electron-native operations (window controls,
+ * calls routed to tomnycore. Electron-native operations (window controls,
  * native dialogs, auto-update, devtools, zoom, CDP, deep links) remain as IPC.
  */
 
@@ -27,6 +27,20 @@ import { agentChannels } from '../types/agent/agentChannels';
 import { sessionChannels } from '../types/agent/sessionChannels';
 import type { PreviewHistoryTarget, PreviewSnapshotInfo } from '../types/office/preview';
 import type { PricingRecommendation } from '../pricing/modelPricingAdvisor';
+import type {
+  FederatedCatalogSearchRequest,
+  FederatedCatalogSearchResult,
+  PackageInstallRequest,
+  PackageAsset,
+  PackageAssetRequest,
+  PackageContributionChangedEvent,
+  PackageContributionState,
+  PackageListFilter,
+  PackageListing,
+  PackageSearchRequest,
+  PackageStateChangedEvent,
+  PackageUninstallRequest,
+} from '../packages';
 
 import { providerChannels } from '../types/provider/providerChannels';
 import type { SpeechToTextRequest, SpeechToTextResult } from '../types/provider/speech';
@@ -54,6 +68,7 @@ import type {
   UpdateDownloadResult,
 } from '../update/updateTypes';
 import type { ApplicablePreset, ResourceBudget, ResourceMode, ResourceState } from '@process/resource/leaseTypes';
+import type { LifecycleHandleRequest, LifecycleHandleSnapshot } from '@process/resource/resourceBridge';
 import type { OmniGatewayProgressEvent } from '@process/omni-gateway/omniGatewayProgress';
 import type { OmniAuthMode, OmniOAuthClientSummary, OmniToolPermissions } from '@process/omni-gateway/auth/authTypes';
 import type { RemoteAccessMode } from '@/common/config/remotePublicUrl';
@@ -116,7 +131,7 @@ export const shell = {
 };
 
 // ---------------------------------------------------------------------------
-// Assistants — native Tomni catalog
+// Assistants — native Tomny catalog
 // ---------------------------------------------------------------------------
 
 export const assistants = assistantChannels;
@@ -125,30 +140,30 @@ export const assistants = assistantChannels;
 // Conversation — REST + WS
 // ---------------------------------------------------------------------------
 
-export type AionrsContextMessage = {
+export type TomnyAgenticContextMessage = {
   role: 'user' | 'assistant' | 'system' | 'tool';
   content: Array<Record<string, unknown>>;
   timestamp?: string;
 };
 
-export type AionrsContextTool = {
+export type TomnyAgenticContextTool = {
   name: string;
   description: string;
   input_schema: Record<string, unknown>;
   deferred: boolean;
 };
 
-export type AionrsContextBranch = { id: string; title: string; summary: string; content: string };
+export type TomnyAgenticContextBranch = { id: string; title: string; summary: string; content: string };
 
-export type AionrsContextSnapshot = {
+export type TomnyAgenticContextSnapshot = {
   model: string;
   system: string;
-  messages: AionrsContextMessage[];
-  tools: AionrsContextTool[];
+  messages: TomnyAgenticContextMessage[];
+  tools: TomnyAgenticContextTool[];
   core_context: {
     agent: string;
     personal: string;
-    control_tools: AionrsContextTool[];
+    control_tools: TomnyAgenticContextTool[];
     history: Array<{ role: 'user' | 'assistant'; text: string; timestamp: number }>;
     /** Exact Save block injected into the effective prompt. */
     saved_memory?: string;
@@ -157,7 +172,7 @@ export type AionrsContextSnapshot = {
   thinking: unknown;
   reasoning_effort?: string;
   custom_context: string;
-  context_branches: AionrsContextBranch[];
+  context_branches: TomnyAgenticContextBranch[];
   active_context_branch_ids: string[];
   working_memory: Record<string, unknown>;
   full_message_count: number;
@@ -180,7 +195,7 @@ export type AionrsContextSnapshot = {
   };
 };
 
-export type AionrsContextResult = { ok: true; data: AionrsContextSnapshot } | { ok: false; error: string };
+export type TomnyAgenticContextResult = { ok: true; data: TomnyAgenticContextSnapshot } | { ok: false; error: string };
 
 export const conversation = {
   create: bridge.buildProvider<TChatConversation, ICreateConversationParams>('conversation.native.create'),
@@ -204,12 +219,12 @@ export const conversation = {
   ),
   reset: bridge.buildProvider<void, IResetConversationParams>('conversation.native.reset'),
   warmup: bridge.buildProvider<void, { conversation_id: string }>('conversation.native.warmup'),
-  getAionrsContext: bridge.buildProvider<AionrsContextResult, { conversation_id: string }>(
+  getTomnyAgenticContext: bridge.buildProvider<TomnyAgenticContextResult, { conversation_id: string }>(
     'conversation.native.context.get'
   ),
-  updateAionrsContext: bridge.buildProvider<
-    AionrsContextResult,
-    { conversation_id: string; custom_context: string; context_branches: AionrsContextBranch[] }
+  updateTomnyAgenticContext: bridge.buildProvider<
+    TomnyAgenticContextResult,
+    { conversation_id: string; custom_context: string; context_branches: TomnyAgenticContextBranch[] }
   >('conversation.native.context.update'),
 
   stop: bridge.buildProvider<void, { conversation_id: string }>('conversation.native.cancel'),
@@ -361,14 +376,14 @@ export interface IStartOnBootStatus {
 }
 
 /**
- * Default-browser registration status. `supported` is true only where AionUi
+ * Default-browser registration status. `supported` is true only where Tomny
  * can register itself as an http/https handler candidate (currently Windows).
- * `isDefault` reflects whether the OS currently routes http/https to AionUi.
+ * `isDefault` reflects whether the OS currently routes http/https to Tomny.
  */
 export interface IDefaultBrowserStatus {
   /** Whether registering as a default-browser candidate is available on this OS. */
   supported: boolean;
-  /** Whether the OS currently treats AionUi as the default http/https handler. */
+  /** Whether the OS currently treats Tomny as the default http/https handler. */
   isDefault: boolean;
   /** Current OS platform (process.platform). */
   platform: string;
@@ -401,7 +416,7 @@ export const application = {
 
   getPath: bridge.buildProvider<string, { name: 'desktop' | 'home' | 'downloads' }>('app.get-path'),
   // Electron-local: copies cache dir + persists to ProcessEnv, paired with restart.
-  // The backend reads AIONUI_*_DIR env vars on boot, so it does not own this config.
+  // The backend reads TOMNY_*_DIR env vars on boot, so it does not own this config.
   updateSystemInfo: bridge.buildProvider<void, { cacheDir: string; workDir: string }>('update-system-info'),
   getZoomFactor: bridge.buildProvider<number, void>('app.get-zoom-factor'),
   setZoomFactor: bridge.buildProvider<number, { factor: number }>('app.set-zoom-factor'),
@@ -413,7 +428,7 @@ export const application = {
   ),
   // Default-browser registration (Windows). getDefaultBrowserStatus reports
   // whether registration is supported and currently active; setAsDefaultBrowser
-  // registers AionUi as an http/https handler candidate and opens the OS
+  // registers Tomny as an http/https handler candidate and opens the OS
   // "default apps" settings so the user can confirm the choice.
   getDefaultBrowserStatus: bridge.buildProvider<IBridgeResponse<IDefaultBrowserStatus>, void>(
     'app.get-default-browser-status'
@@ -666,7 +681,7 @@ export const googleAuth = {
 };
 
 // ---------------------------------------------------------------------------
-// Google subscription status (Google OAuth provider path, used by aionrs)
+// Google subscription status (Google OAuth provider path, used by tomnyagentic)
 // ---------------------------------------------------------------------------
 
 export const google = {
@@ -724,7 +739,7 @@ export const personal = {
 };
 
 // ---------------------------------------------------------------------------
-// ACP Conversation — native Tomni agent catalog and durable session contract
+// ACP Conversation — native Tomny agent catalog and durable session contract
 // ---------------------------------------------------------------------------
 
 export const acpConversation = {
@@ -869,7 +884,7 @@ export const database = {
 };
 
 // ---------------------------------------------------------------------------
-// Preview History — Tomni native atomic snapshot store
+// Preview History — Tomny native atomic snapshot store
 // ---------------------------------------------------------------------------
 
 export const previewHistory = {
@@ -1148,6 +1163,13 @@ export const resource = {
   setMode: bridge.buildProvider<ResourceState, { mode: ResourceMode }>('resource.set-mode'),
   setBudget: bridge.buildProvider<ResourceState, { budget: Partial<ResourceBudget> }>('resource.set-budget'),
   applyPreset: bridge.buildProvider<ResourceState, { preset: ApplicablePreset }>('resource.apply-preset'),
+  activateLifecycle: bridge.buildProvider<LifecycleHandleSnapshot, LifecycleHandleRequest>(
+    'resource.lifecycle-activate'
+  ),
+  deactivateLifecycle: bridge.buildProvider<void, LifecycleHandleRequest>('resource.lifecycle-deactivate'),
+  getLifecycleResource: bridge.buildProvider<LifecycleHandleSnapshot, LifecycleHandleRequest>('resource.lifecycle-get'),
+  // Capability-scoped polling only. Push updates require a future targeted
+  // MessagePort/Host SDK; the shared bridge emitter broadcasts to every window.
   stateChanged: bridge.buildEmitter<ResourceState>('resource.state-changed'),
 };
 
@@ -1370,8 +1392,15 @@ interface ISendMessageParams {
 // Server-assigned identifier for the newly created user message. Clients must
 // use this as the canonical msg_id when rendering an optimistic bubble so the
 // local state aligns with DB rows and WebSocket stream events.
+export type OutboundInspectionProjection = {
+  decision: 'allow' | 'sanitize';
+  reasonCode: 'no_sensitive_data' | 'sanitized_secret';
+  findingTypes: string[];
+};
+
 export interface ISendMessageResult {
   msg_id: string;
+  inspection?: OutboundInspectionProjection;
 }
 
 export interface IConfirmMessageParams {
@@ -1382,7 +1411,7 @@ export interface IConfirmMessageParams {
 }
 
 export interface ICreateConversationParams {
-  type: 'acp' | 'codex' | 'openclaw-gateway' | 'nanobot' | 'remote' | 'aionrs';
+  type: 'acp' | 'codex' | 'openclaw-gateway' | 'nanobot' | 'remote' | 'tomnyagentic';
   id?: string;
   name?: string;
   model: TProviderWithModel;
@@ -1776,7 +1805,7 @@ export const channel = {
   userAuthorized: wsMappedEmitter<IChannelUser>('channel.user-authorized', (raw) => toChannelUser(raw as RawUser)),
 };
 
-// Telegram Bot — Tomni-native main-process service.
+// Telegram Bot — Tomny-native main-process service.
 export const telegramChannel = {
   getPluginStatus: bridge.buildProvider<IChannelPluginStatus[], void>('telegram.native.status'),
   enablePlugin: bridge.buildProvider<void, { plugin_id: string; config: Record<string, unknown> }>(
@@ -1815,6 +1844,29 @@ export const hub = {
   checkUpdates: httpPost<{ name: string }[], void>('/api/hub/check-updates'),
   update: httpPost<void, { name: string }>('/api/hub/update'),
   onStateChanged: wsEmitter<{ name: string; status: HubExtensionStatus; error?: string }>('hub.state-changed'),
+};
+
+// ---------------------------------------------------------------------------
+// Package Platform — owner-aware Store/App Registry lifecycle in Electron Main.
+// Phase 1 exposes bundled virtual packages; the same contract also supports
+// signed downloaded artifacts without granting renderer filesystem access.
+// ---------------------------------------------------------------------------
+
+export const packagePlatform = {
+  refresh: bridge.buildProvider<PackageListing[], void>('package-platform.refresh'),
+  list: bridge.buildProvider<PackageListing[], PackageListFilter | undefined>('package-platform.list'),
+  search: bridge.buildProvider<PackageListing[], PackageSearchRequest>('package-platform.search'),
+
+  federatedSearch: bridge.buildProvider<FederatedCatalogSearchResult, FederatedCatalogSearchRequest>(
+    'package-platform.catalog.federated-search'
+  ),
+  status: bridge.buildProvider<PackageListing, { id: string }>('package-platform.status'),
+  install: bridge.buildProvider<PackageListing, PackageInstallRequest>('package-platform.install'),
+  uninstall: bridge.buildProvider<PackageListing, PackageUninstallRequest>('package-platform.uninstall'),
+  contributions: bridge.buildProvider<PackageContributionState, void>('package-platform.contributions'),
+  readAsset: bridge.buildProvider<PackageAsset, PackageAssetRequest>('package-platform.read-asset'),
+  stateChanged: bridge.buildEmitter<PackageStateChangedEvent>('package-platform.state-changed'),
+  contributionsChanged: bridge.buildEmitter<PackageContributionChangedEvent>('package-platform.contributions-changed'),
 };
 
 // ---------------------------------------------------------------------------

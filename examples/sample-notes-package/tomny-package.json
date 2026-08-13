@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "id": "com.tomni.sample.notes",
+  "publisherId": "com.tomni",
+  "name": "Focus Notes",
+  "description": "A tiny sandboxed notes app published independently through the Tomny Store pipeline.",
+  "type": "app",
+  "bundleKind": "single",
+  "version": "1.0.0",
+  "engines": { "tomni": ">=0.0.0" },
+  "modules": [
+    {
+      "id": "notes",
+      "title": "Focus Notes",
+      "surface": "apps/notes",
+      "pinnable": true,
+      "runtime": "sandboxed-web",
+      "entrypoint": "index.html"
+    }
+  ],
+  "permissions": [],
+  "dependencies": [],
+  "tags": ["notes", "sample", "productivity"]
+}

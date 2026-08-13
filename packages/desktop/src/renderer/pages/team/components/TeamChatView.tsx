@@ -2,22 +2,24 @@ import { ipcBridge } from '@/common';
 import type { IProvider, TChatConversation, TProviderWithModel } from '@/common/config/storage';
 import { Spin } from '@arco-design/web-react';
 import React, { Suspense, useCallback } from 'react';
-import { useAionrsModelSelection } from '@/renderer/pages/conversation/platforms/aionrs/useAionrsModelSelection';
-import { saveAionrsDefaultModel } from '@/renderer/pages/guid/hooks/agentSelectionUtils';
+import { useTomnyAgenticModelSelection } from '@/renderer/pages/conversation/platforms/tomnyagentic/useTomnyAgenticModelSelection';
+import { saveTomnyAgenticDefaultModel } from '@/renderer/pages/guid/hooks/agentSelectionUtils';
 import TeamChatEmptyState from './TeamChatEmptyState';
 
 const AcpChat = React.lazy(() => import('@/renderer/pages/conversation/platforms/acp/AcpChat'));
-const AionrsChat = React.lazy(() => import('@/renderer/pages/conversation/platforms/aionrs/AionrsChat'));
+const TomnyAgenticChat = React.lazy(
+  () => import('@/renderer/pages/conversation/platforms/tomnyagentic/TomnyAgenticChat')
+);
 const OpenClawChat = React.lazy(() => import('@/renderer/pages/conversation/platforms/openclaw/OpenClawChat'));
 const NanobotChat = React.lazy(() => import('@/renderer/pages/conversation/platforms/nanobot/NanobotChat'));
 const RemoteChat = React.lazy(() => import('@/renderer/pages/conversation/platforms/remote/RemoteChat'));
 
-// Narrow to Aionrs conversations so model field is always available
-type AionrsConversation = Extract<TChatConversation, { type: 'aionrs' }>;
+// Narrow to TomnyAgentic conversations so model field is always available
+type TomnyAgenticConversation = Extract<TChatConversation, { type: 'tomnyagentic' }>;
 
-/** Aionrs sub-component manages model selection state without adding a ChatLayout wrapper */
-const AionrsTeamChat: React.FC<{
-  conversation: AionrsConversation;
+/** TomnyAgentic sub-component manages model selection state without adding a ChatLayout wrapper */
+const TomnyAgenticTeamChat: React.FC<{
+  conversation: TomnyAgenticConversation;
   emptySlot?: React.ReactNode;
   agent_name?: string;
 }> = ({ conversation, emptySlot, agent_name }) => {
@@ -29,16 +31,16 @@ const AionrsTeamChat: React.FC<{
         ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
       } as TProviderWithModel;
       const ok = await ipcBridge.conversation.update.invoke({ id: conversation.id, updates: { model: selected } });
-      if (ok) void saveAionrsDefaultModel(_provider.id, modelName);
+      if (ok) void saveTomnyAgenticDefaultModel(_provider.id, modelName);
       return Boolean(ok);
     },
     [conversation.id]
   );
 
-  const modelSelection = useAionrsModelSelection({ initialModel: conversation.model, onSelectModel });
+  const modelSelection = useTomnyAgenticModelSelection({ initialModel: conversation.model, onSelectModel });
 
   return (
-    <AionrsChat
+    <TomnyAgenticChat
       conversation_id={conversation.id}
       workspace={conversation.extra.workspace}
       modelSelection={modelSelection}
@@ -103,11 +105,11 @@ const TeamChatView: React.FC<TeamChatViewProps> = ({
             emptySlot={emptySlot}
           />
         );
-      case 'aionrs':
+      case 'tomnyagentic':
         return (
-          <AionrsTeamChat
+          <TomnyAgenticTeamChat
             key={conversation.id}
-            conversation={conversation as AionrsConversation}
+            conversation={conversation as TomnyAgenticConversation}
             emptySlot={emptySlot}
             agent_name={agent_name}
           />

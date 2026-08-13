@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -67,11 +67,11 @@ export interface IConfigStorageRefer {
   customCss: string; // 自定义 CSS 样式
   'css.themes': ICssTheme[]; // 自定义 CSS 主题列表 / Custom CSS themes list
   'css.activeThemeId': string; // 当前激活的主题 ID / Currently active theme ID
-  'aionrs.config'?: {
+  'tomnyagentic.config'?: {
     /** Preferred session mode for new conversations / 新会话的默认模式 */
     preferredMode?: string;
   };
-  'aionrs.defaultModel'?: { id: string; use_model: string };
+  'tomnyagentic.defaultModel'?: { id: string; use_model: string };
   'tools.imageGenerationModel': TProviderWithModel & {
     /** @deprecated Image generation is now controlled via built-in MCP server toggle */
     switch?: boolean;
@@ -95,7 +95,7 @@ export interface IConfigStorageRefer {
   'system.autoPreviewOfficeFiles'?: boolean;
   // Open links in the built-in Browser tab instead of the system browser.
   // On Windows this also governs where OS-handed http/https URLs land when
-  // AionUi is set as the default browser. Desktop-only.
+  // Tomny is set as the default browser. Desktop-only.
   'browser.openLinksInApp'?: boolean;
   // Telegram assistant default model / Telegram 助手默认模型
   'assistant.telegram.defaultModel'?: {
@@ -165,7 +165,7 @@ export interface IConfigStorageRefer {
     custom_agent_id?: string;
     name?: string;
   };
-  // Skills Market: whether the aionui-skills builtin skill is enabled
+  // Skills Market: whether the tomny-skills builtin skill is enabled
   'skillsMarket.enabled'?: boolean;
   /**
    * One-shot completion flag for the legacy `model.config` → backend providers
@@ -198,7 +198,7 @@ export interface IConfigStorageRefer {
 }
 
 export interface IEnvStorageRefer {
-  'aionui.dir': {
+  'tomny.dir': {
     workDir: string;
     cacheDir: string;
   };
@@ -208,7 +208,7 @@ export interface IEnvStorageRefer {
  * Conversation source type - identifies where the conversation was created
  * 会话来源类型 - 标识会话创建的来源
  */
-export type ConversationSource = 'aionui' | 'telegram' | 'lark' | 'dingtalk' | 'weixin' | 'wecom' | (string & {});
+export type ConversationSource = 'tomny' | 'telegram' | 'lark' | 'dingtalk' | 'weixin' | 'wecom' | (string & {});
 
 /** Runtime metadata shared by every conversation backend during the native Tomny cutover. */
 export type TomnyConversationRuntimeMetadata = {
@@ -263,7 +263,7 @@ interface IChatConversation<T, Extra> {
   extra: Extra & TomnyConversationRuntimeMetadata;
   model: TProviderWithModel;
   status?: 'pending' | 'running' | 'finished' | undefined;
-  /** 会话来源，默认为 aionui / Conversation source, defaults to aionui */
+  /** 会话来源，默认为 tomny / Conversation source, defaults to tomny */
   source?: ConversationSource;
   /** Channel chat isolation ID (e.g. user:xxx, group:xxx) */
   channel_chat_id?: string;
@@ -409,7 +409,7 @@ export type TChatConversation =
   // open historical rows with type='gemini' (message history is served
   // by the shared messages table). The backend factory rejects any
   // attempt to resume this conversation — see
-  // AionCore/crates/aionui-common/src/enums.rs and factory.rs.
+  // TomnyCore/crates/tomny-common/src/enums.rs and factory.rs.
   // Every field is optional because legacy rows shape-varies across
   // several older Gemini-runtime versions.
   | Omit<
@@ -482,7 +482,7 @@ export type TChatConversation =
       'model'
     >
   | IChatConversation<
-      'aionrs',
+      'tomnyagentic',
       {
         workspace: string;
         custom_workspace?: boolean;
@@ -662,7 +662,7 @@ export interface IMcpServer {
   created_at: number;
   updated_at: number;
   original_json: string; // 存储原始JSON配置，用于编辑时的准确显示
-  /** Built-in MCP server managed by AionUi (hide edit/delete in UI) */
+  /** Built-in MCP server managed by Tomny (hide edit/delete in UI) */
   builtin?: boolean;
   /** Read-only provenance for an extension-contributed MCP server. */
   extension?: {
@@ -685,8 +685,13 @@ export interface IConversationMcpStatus {
 
 /** Stable ID for the built-in image generation MCP server */
 export const BUILTIN_IMAGE_GEN_ID = 'builtin-image-gen';
-export const BUILTIN_IMAGE_GEN_NAME = 'aionui-image-generation';
-export const BUILTIN_IMAGE_GEN_LEGACY_NAMES = ['AionUi Image Generation', BUILTIN_IMAGE_GEN_ID] as const;
+export const BUILTIN_IMAGE_GEN_NAME = 'tomny-image-generation';
+export const BUILTIN_IMAGE_GEN_LEGACY_NAMES = [
+  'tomny-image-generation',
+  'Tomny Image Generation',
+  'Tomny Image Generation',
+  BUILTIN_IMAGE_GEN_ID,
+] as const;
 
 export interface IMcpTool {
   name: string;

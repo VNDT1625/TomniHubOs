@@ -1,4 +1,4 @@
-/** Direct provider model discovery. No AionCore process or routes involved. */
+/** Direct provider model discovery. No the legacy core process or routes involved. */
 import type { FetchModelsAnonymousRequest, FetchModelsResponse } from '@/common/types/provider/providerApi';
 import {
   getRecommendedPlatform,

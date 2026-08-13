@@ -1,10 +1,10 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
-const WORKSPACE_UPDATE_TIME_KEY = 'aionui_workspace_update_time';
+const WORKSPACE_UPDATE_TIME_KEY = 'tomny_workspace_update_time';
 
 /**
  * 获取 workspace 的最后更新时间

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -91,7 +91,7 @@ const setStrictRuntimeMode = async (conversationId: string, mode: string): Promi
 
 const resolveConversationBackend = (conversation: StrictModeConversation): string | undefined => {
   if (conversation.type === 'acp') return conversation.extra?.backend;
-  if (conversation.type === 'aionrs' || conversation.type === 'codex') return conversation.type;
+  if (conversation.type === 'tomnyagentic' || conversation.type === 'codex') return conversation.type;
   return undefined;
 };
 
@@ -256,9 +256,9 @@ export const enforceStrictIdeModeOnPermission = async (
 };
 
 /**
- * Confirmation-shaped (aionrs) variant of {@link enforceStrictIdeModeOnPermission}.
- * The aionrs backend re-tags `acp_permission` to a Confirmation payload, so we
- * evaluate that shape and send back the option `value` aionrs expects.
+ * Confirmation-shaped (tomnyagentic) variant of {@link enforceStrictIdeModeOnPermission}.
+ * The tomnyagentic backend re-tags `acp_permission` to a Confirmation payload, so we
+ * evaluate that shape and send back the option `value` tomnyagentic expects.
  */
 export const enforceStrictIdeModeOnConfirmation = async (
   message: { id: string; conversation_id: string; content: GuardConfirmation },

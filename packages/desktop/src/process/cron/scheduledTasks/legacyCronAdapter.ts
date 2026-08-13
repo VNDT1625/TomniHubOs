@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -37,7 +37,7 @@ const DEFAULT_RETRY = {
 
 const normalizeTargetId = (agentType: string, backend?: string): string => {
   const raw = agentType.replace(/^cli:/u, '').replace(/^preset:/u, '');
-  if (raw === 'aionrs' || raw === 'tomni' || raw === 'tomny') return 'tomny';
+  if (raw === 'tomnyagentic' || raw === 'tomni' || raw === 'tomny') return 'tomny';
   if (raw === 'acp') return backend || 'claude';
   if (raw === 'openclaw-gateway') return 'openclaw';
   return raw || backend || 'tomny';
@@ -127,7 +127,7 @@ export class LegacyCronAdapter implements CronServiceClient {
     const workspace = params.agent_config?.workspace?.trim() || this.options.defaultWorkspace;
     const modelId = params.agent_config?.model_id;
     const modelKey =
-      params.agent_type === 'aionrs' && backend && modelId
+      params.agent_type === 'tomnyagentic' && backend && modelId
         ? `app-provider:${encodeURIComponent(backend)}:${encodeURIComponent(modelId)}`
         : modelId;
     const fullAccessMode = params.agent_config?.mode;

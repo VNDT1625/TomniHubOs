@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -62,7 +62,7 @@ const mapWorkspace = (workspace: string, mappings: ElectronRemoteCoreTarget['wor
       const relative = path.relative(mapping.localRoot, normalizedWorkspace);
       return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
     })
-    .sort((left, right) => right.localRoot.length - left.localRoot.length);
+    .toSorted((left, right) => right.localRoot.length - left.localRoot.length);
   const selected = matches[0];
   if (!selected) throw new Error('No explicit remote workspace mapping covers the selected local workspace.');
   const relative = path.relative(selected.localRoot, normalizedWorkspace);

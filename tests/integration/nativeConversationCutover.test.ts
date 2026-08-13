@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -161,7 +161,7 @@ describe('native Save context projection', () => {
     expect(secondContext).not.toContain('RECENT-A');
     expect(secondContext).toContain(pinned.item.id);
 
-    const inspected = await harness.service.getAionrsContext(conversation.id);
+    const inspected = await harness.service.getTomnyAgenticContext(conversation.id);
     expect(inspected.messages).toEqual([]);
     expect(inspected.core_context.history).toEqual([]);
     expect(inspected.core_context.saved_memory).toBe(secondContext);
@@ -210,7 +210,7 @@ describe('native Save context projection', () => {
       expect(sentContext).toContain(`PIN-${index}`);
       expect(sentContext).toContain(`END-PIN-${index}`);
     }
-    const inspected = await harness.service.getAionrsContext(conversation.id);
+    const inspected = await harness.service.getTomnyAgenticContext(conversation.id);
     expect(inspected.core_context.saved_memory).toBe(sentContext);
   });
 
@@ -403,7 +403,7 @@ describe('native conversation cutover', () => {
     const harness = await createHarness(async () => workspace);
     const conversation = await harness.service.create({
       ...params(),
-      type: 'aionrs',
+      type: 'tomnyagentic',
       extra: { backend: 'tomny', workspace: '', surface: 'chat' },
     });
 
@@ -413,11 +413,11 @@ describe('native conversation cutover', () => {
     expect(harness.starts[0][3]).toBe(workspace);
   });
 
-  it('passes the selected Tomni provider identity with its model to avoid a stale CLI key', async () => {
+  it('passes the selected Tomny provider identity with its model to avoid a stale CLI key', async () => {
     const harness = await createHarness();
     const conversation = await harness.service.create({
       ...params(),
-      type: 'aionrs',
+      type: 'tomnyagentic',
       extra: { backend: 'tomny', workspace: 'C:\\workspace', surface: 'ide' },
     });
 
@@ -431,7 +431,7 @@ describe('native conversation cutover', () => {
     const base = params();
     const conversation = await harness.service.create({
       ...base,
-      type: 'aionrs',
+      type: 'tomnyagentic',
       model: {
         ...base.model,
         id: 'tomni-model-gateway',
@@ -450,7 +450,7 @@ describe('native conversation cutover', () => {
     const harness = await createHarness();
     const conversation = await harness.service.create({
       ...params(),
-      type: 'aionrs',
+      type: 'tomnyagentic',
       extra: { backend: 'tomny', workspace: 'C:\\workspace', surface: 'ide', session_mode: 'yolo' },
     });
 
@@ -477,10 +477,10 @@ describe('native conversation cutover', () => {
     const conversation = await harness.service.create(params());
     await harness.service.send({ conversation_id: conversation.id, input: 'Remember this.' });
 
-    const saved = await harness.service.updateAionrsContext(conversation.id, 'Use concise Vietnamese.', [
+    const saved = await harness.service.updateTomnyAgenticContext(conversation.id, 'Use concise Vietnamese.', [
       { id: 'release', title: 'Release', summary: 'Current work', content: 'Ship the native core.' },
     ]);
-    const reloaded = await harness.service.getAionrsContext(conversation.id);
+    const reloaded = await harness.service.getTomnyAgenticContext(conversation.id);
 
     expect(saved.custom_context).toBe('Use concise Vietnamese.');
     expect(reloaded.system).toBe('Tomny system prompt');
@@ -792,7 +792,7 @@ describe('native conversation cutover', () => {
         selected_session_mcp_servers: [
           {
             id: 'browser-control',
-            name: 'aionui-browser-control',
+            name: 'tomny-browser-control',
             transport: { type: 'sse', url: 'http://127.0.0.1:4200/sse' },
           },
         ],
@@ -816,7 +816,7 @@ describe('native conversation cutover', () => {
     expect(identity?.conversationContext).toContain('Preserve the native cutover.');
     expect(identity?.conversationContext).not.toContain('must-not-enter-runtime-context');
     expect(identity?.mcpServers).toEqual([
-      { name: 'aionui-browser-control', transport: 'sse', url: 'http://127.0.0.1:4200/sse', headers: [] },
+      { name: 'tomny-browser-control', transport: 'sse', url: 'http://127.0.0.1:4200/sse', headers: [] },
       { name: 'cloud-tools', transport: 'sse', url: 'https://relay.example/mcp/sse', headers: [] },
     ]);
     expect(harness.starts[0][2]).toBe('inspect this project');

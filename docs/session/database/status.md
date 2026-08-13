@@ -20,7 +20,7 @@
 - **Driver test được**: 3 driver nhận `ModuleLoader` inject (default `require`) → test pg/mysql bằng fake module.
 - **UI**: schema tree hiện index/FK, ô lọc bảng (>8 bảng), export **CSV/JSON** (`dbExport.ts` thuần),
   editor Run chạy cả script.
-- **Agent plane**: `db_describe_table` (MCP `aionui-ide`) trả cột + index + foreign key.
+- **Agent plane**: `db_describe_table` (MCP `tomni-ide`) trả cột + index + foreign key.
 - **Cấu trúc**: 3 driver đã chuyển vào `process/ide/db/drivers/` (để top-level db ≤10 children).
 
 ### Backend cho trực quan hóa (ĐÃ xong, đã test) — phần móng cho ER diagram

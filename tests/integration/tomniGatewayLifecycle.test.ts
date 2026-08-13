@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Tomni
+ * Copyright 2025 Tomny
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -56,7 +56,7 @@ afterEach(async () => {
   await Promise.all(tempDirectories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })));
 });
 
-describe('production Tomni gateway lifecycle', () => {
+describe('production Tomny gateway lifecycle', () => {
   it('starts over native service instances, serves data, and stops cleanly', async () => {
     const endpoint = await startProductionTomniGateway(await dependencies());
     expect(await getTomniGatewayEndpoint()).toEqual(endpoint);

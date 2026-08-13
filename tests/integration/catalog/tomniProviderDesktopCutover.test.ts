@@ -22,7 +22,7 @@ const NATIVE_PROVIDER_CONSUMERS = [
 
 const read = (relativePath: string): string => readFileSync(path.join(ROOT, relativePath), 'utf8');
 
-describe('Tomni desktop provider cutover', () => {
+describe('Tomny desktop provider cutover', () => {
   it('keeps normal Main-process model consumers off the legacy provider route', () => {
     for (const relativePath of NATIVE_PROVIDER_CONSUMERS) {
       const source = read(relativePath);
@@ -33,9 +33,7 @@ describe('Tomni desktop provider cutover', () => {
   });
 
   it('retains the legacy provider route only at explicit compatibility-import boundaries', () => {
-    expect(read('packages/desktop/src/process/services/tomnyProviderBridge.ts')).toContain(
-      "httpRequest<IProvider[]>('GET', '/api/providers')"
-    );
+    expect(read('packages/desktop/src/process/services/tomnyProviderBridge.ts')).toContain('readLegacyCatalog');
     expect(read('packages/desktop/src/process/utils/runBackendMigrations.ts')).toContain(
       "httpRequest<IProvider[]>('GET', '/api/providers')"
     );

@@ -1,11 +1,11 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
 /**
- * Unit tests for @aionui/music-core — the headless music engine shared by the
+ * Unit tests for @tomny/music-core — the headless music engine shared by the
  * user UI and the agent (MCP) plane. Covers engine commands, the agent's audio
  * analysis ("ears"), offline render, and the agent tool catalog.
  */
@@ -33,7 +33,7 @@ import {
   computeChroma,
   type Project,
   type SampleBank,
-} from '@aionui/music-core';
+} from '@tomny/music-core';
 
 const SR = 44100;
 

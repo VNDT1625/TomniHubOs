@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -119,7 +119,7 @@ const appendExtractedFiles = async (
   );
   const present = blocks.filter((block): block is string => block !== null);
   if (present.length === 0) return content;
-  return [content, '## AionUi extracted file context', ...present].join('\n\n');
+  return [content, '## Tomny extracted file context', ...present].join('\n\n');
 };
 
 const normalizeStringContent = async (
@@ -137,7 +137,7 @@ const normalizeStringContent = async (
       const outcome = await deps.extract.extract({ kind: 'html', html: content, title: 'Long HTML content' });
       if (outcome.ok && outcome.text.trim().length > 0) {
         normalized = [
-          '## AionUi Markdown-normalized content',
+          '## Tomny Markdown-normalized content',
           '_The original long HTML was converted to Markdown before sending it to the model._',
           '',
           outcome.text.trim(),

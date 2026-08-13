@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -14,7 +14,7 @@
  * It asks the user's configured provider/model over the OpenAI-compatible
  * `/chat/completions` endpoint, mirroring `company/companyGenerator.ts` and
  * `browser/providerChat.ts`: the provider list (with a usable `api_key`) is read
- * from the native Tomni provider catalog and the request is issued directly via
+ * from the native Tomny provider catalog and the request is issued directly via
  * `fetch` (not `ClientFactory`, which expects camelCase `apiKey`). The model is
  * told the exact step grammar the web script-engine understands and must reply
  * with strict JSON, which we parse defensively.

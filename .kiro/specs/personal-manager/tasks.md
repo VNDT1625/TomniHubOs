@@ -9,7 +9,7 @@ côi. Ngôn ngữ: **TypeScript** (Electron + Vite + React + Bun), bám đúng [
 
 Quy ước nền móng (áp dụng xuyên suốt):
 
-- **Không sửa aioncore.** Logic ở Main process (`process/manager/`); UI ở renderer (`pages/manager/`).
+- **Không sửa tomnicore.** Logic ở Main process (`process/manager/`); UI ở renderer (`pages/manager/`).
 - Lưu cục bộ bằng tệp JSON (`manager-data.json`), ghi atomic (tmp→rename), nạp phòng thủ.
 - AI gọi qua model người dùng (`providerChat.ts`); lời gọi nặng đi qua `ResourceCoordinator.requestLease`.
 - Hai mặt phẳng: IPC bridge (UI) + built-in MCP server (agent), cùng một service.
@@ -65,7 +65,7 @@ Quy ước nền móng (áp dụng xuyên suốt):
     - **Property 1: Lịch cứng bất khả xâm phạm** + **Property 4: Đề xuất không tự ghi** + **Property 6: AI nặng đi qua lease**
     - **Validates: Requirements 7.2, 8.2, 2.2, 8.5, 2.6, 8.7**
 
-- [x] 3. Nhắc nhở (scheduler trong Main process — không đụng cron aioncore)
+- [x] 3. Nhắc nhở (scheduler trong Main process — không đụng cron tomnicore)
   - [x] 3.1 Hiện thực `reminderScheduler`
     - Tạo `process/manager/reminderScheduler.ts`: `start()` chạy catch-up (phát reminder quá hạn chưa
       phát) rồi `setInterval` 60s; `snooze`/`dismiss`; DI `{ notify, now, store }`; notify mặc định =
@@ -91,7 +91,7 @@ Quy ước nền móng (áp dụng xuyên suốt):
 - [x] 5. Agent plane — built-in MCP server
   - [x] 5.1 Hiện thực `managerServer` (MCP) + hằng định danh
     - Thêm hằng `BUILTIN_MANAGER_*` + helper `isBuiltinManager*` vào `process/resources/builtinMcp/constants.ts`;
-      tạo `process/resources/builtinMcp/managerServer.ts` (stdio) đọc env `AIONUI_MANAGER_DATA_DIR`, dựng
+      tạo `process/resources/builtinMcp/managerServer.ts` (stdio) đọc env `TOMNIUI_MANAGER_DATA_DIR`, dựng
       store cùng file; tools `manager_list_tasks/add_task/update_task/add_note/list_events/add_event`
     - _Requirements: 9.3_
 
@@ -150,7 +150,7 @@ Ghi chú phụ thuộc chính:
 
 ## Notes
 
-- **Không đụng aioncore.** Nếu phát hiện một yêu cầu buộc phải sửa Rust backend, dừng và ghi `.kiro/status.md`
+- **Không đụng tomnicore.** Nếu phát hiện một yêu cầu buộc phải sửa Rust backend, dừng và ghi `.kiro/status.md`
   (theo `autonomous-run.md`).
 - **Lưu file cục bộ** `manager-data.json` trong `userData`; ghi atomic; nạp phòng thủ. Không upload.
 - **AI qua model người dùng** (`providerChat.ts`); chưa cấu hình → `code:'no-model'`; model không vision →

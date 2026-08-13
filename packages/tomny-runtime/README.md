@@ -9,7 +9,12 @@ The binary reads one JSON request per stdin line and writes one JSON response pe
 stdout line. The protocol is a custom versioned envelope, not JSON-RPC:
 
 ```json
-{"protocol":"tomny.runtime.v1","id":"1","method":"core.initialize","params":{"protocol":"tomny.runtime.v1","minimumProtocolVersion":1,"maximumProtocolVersion":1}}
+{
+  "protocol": "tomny.runtime.v1",
+  "id": "1",
+  "method": "core.initialize",
+  "params": { "protocol": "tomny.runtime.v1", "minimumProtocolVersion": 1, "maximumProtocolVersion": 1 }
+}
 ```
 
 Every connection must successfully call `core.initialize` before other methods.

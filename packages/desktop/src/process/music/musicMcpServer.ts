@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -9,7 +9,7 @@
  *
  * While the renderer page (`renderer/pages/music/`) lets the *user* make music,
  * this server lets an *AI agent* do the same through MCP tool calls, against the
- * SAME headless engine (`@aionui/music-core`) the UI uses (single source of
+ * SAME headless engine (`@tomny/music-core`) the UI uses (single source of
  * truth). The agent loads a project, drives engine commands, and — crucially —
  * can *listen* to audio (pitch/key/tempo analysis) so it behaves like a producer
  * who actually heard the material, not one guessing from metadata.
@@ -30,10 +30,10 @@
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { TOOL_DEFS, dispatchTool, type Project, type ToolAudio } from '@aionui/music-core';
+import { TOOL_DEFS, dispatchTool, type Project, type ToolAudio } from '@tomny/music-core';
 
 /** Canonical MCP server name for the built-in Music server. */
-export const BUILTIN_MUSIC_NAME = 'aionui-music';
+export const BUILTIN_MUSIC_NAME = 'tomny-music';
 
 /**
  * The slice of the Music service this MCP server needs. The host wires the real

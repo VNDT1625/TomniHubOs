@@ -98,9 +98,9 @@ describe('RepoSecretContextPanel', () => {
       ],
     });
 
-    render(<RepoSecretContextPanel repository='C:/NDT/PJ/AionUi' active />);
+    render(<RepoSecretContextPanel repository='C:/NDT/PJ/Tomny' active />);
 
-    expect(await screen.findByTestId('repo-secret-current-scope')).toHaveTextContent('Current workspaceAionUi');
+    expect(await screen.findByTestId('repo-secret-current-scope')).toHaveTextContent('Current workspaceTomny');
     expect(await screen.findByTestId('repo-secret-other-scopes')).toHaveTextContent(
       '8 secrets remain in 1 other workspaces.'
     );

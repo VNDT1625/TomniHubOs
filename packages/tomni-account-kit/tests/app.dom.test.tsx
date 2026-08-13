@@ -22,7 +22,7 @@ Object.defineProperty(window, 'matchMedia', {
 });
 
 describe('account prototype app', () => {
-  it('renders the isolated sign-in experience without a Tomni app host', () => {
+  it('renders the isolated sign-in experience without a Tomny app host', () => {
     const client = new MockAccountClient(new MemoryAccountStorage());
     render(
       <ConfigProvider>
@@ -30,7 +30,7 @@ describe('account prototype app', () => {
       </ConfigProvider>
     );
 
-    expect(screen.getByText('Một danh tính cho mọi bề mặt Tomni')).toBeInTheDocument();
+    expect(screen.getByText('Một danh tính cho mọi bề mặt Tomny')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Mở tài khoản mẫu' })).toBeInTheDocument();
   });
 });

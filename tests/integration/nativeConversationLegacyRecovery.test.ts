@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Tomni
+ * Copyright 2025 Tomny
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -55,7 +55,7 @@ vi.mock('better-sqlite3', () => ({
 
 const createLegacyDatabase = async (directory: string): Promise<string> => {
   await mkdir(directory, { recursive: true });
-  const databasePath = path.join(directory, 'aionui-backend.db');
+  const databasePath = path.join(directory, 'tomny-backend.db');
   await writeFile(databasePath, 'legacy fixture', 'utf8');
   return databasePath;
 };

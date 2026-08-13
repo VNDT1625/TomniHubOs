@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  *
  * Unit tests for quickTestTracer — CDP-based runtime trace recorder.
@@ -93,7 +93,7 @@ describe('createQuickTestTracer', () => {
     const tracer = createQuickTestTracer({ getWebContents: () => wc, now: () => 1000 });
     await tracer.start('/repo');
     fireMessage('Runtime.bindingCalled', {
-      name: '__aionuiQuickTestEmit',
+      name: '__tomnyQuickTestEmit',
       payload: JSON.stringify({ kind: 'click', selector: 'svg.icon > path', text: '' }),
     });
     fireMessage('Runtime.consoleAPICalled', {
@@ -105,7 +105,7 @@ describe('createQuickTestTracer', () => {
       ],
     });
     fireMessage('Runtime.bindingCalled', {
-      name: '__aionuiQuickTestEmit',
+      name: '__tomnyQuickTestEmit',
       payload: JSON.stringify({ kind: 'input', selector: 'input#email', value: 'a@b.co' }),
     });
 

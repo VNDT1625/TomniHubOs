@@ -9,14 +9,14 @@
 #   nohup ./scripts/fix-issues-daemon.sh &      # survives terminal close
 #
 # Logs:
-#   Main log:    ~/.aionui-fix-issues/daemon.log
-#   Session logs: ~/.aionui-fix-issues/tmp/session-<uuid>.log
+#   Main log:    ~/.tomny-fix-issues/daemon.log
+#   Session logs: ~/.tomny-fix-issues/tmp/session-<uuid>.log
 
 set -euo pipefail
 
 # ─── Stop command ───
 
-LOG_DIR="${HOME}/.aionui-fix-issues"
+LOG_DIR="${HOME}/.tomny-fix-issues"
 LOCK_FILE="${LOG_DIR}/daemon.lock"
 
 if [ "${1:-}" = "stop" ]; then

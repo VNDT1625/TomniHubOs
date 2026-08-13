@@ -71,7 +71,7 @@ const input = {
       role: 'leader' as const,
       agent_type: 'tomny',
       agent_name: 'Lead',
-      conversation_type: 'aionrs',
+      conversation_type: 'tomnyagentic',
       status: 'pending' as const,
     },
     {

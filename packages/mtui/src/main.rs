@@ -851,7 +851,7 @@ fn run(cli: cli::Cli, output_mode: OutputMode) -> Result<(), error::MtuiError> {
                     output::print_json(&output::SuccessResponse::new(&result));
                 }
                 OutputMode::Human => {
-                    println!("Spec: .aionui/specs/{}/", result.spec);
+                    println!("Spec: .tomny/specs/{}/", result.spec);
                     println!(
                         "Tasks: {}/{} done, {} pending, {} active, {} blocked",
                         result.counts.done,

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -23,7 +23,7 @@ type FeedbackButtonProps = {
 
 /**
  * Inline feedback chip shown near error messages — styled as a compact pill
- * consistent with AionUi's existing Mention/Agent pill patterns. Click
+ * consistent with Tomny's existing Mention/Agent pill patterns. Click
  * auto-captures the current window and opens the feedback modal with the
  * relevant module preselected; the user only needs to describe the issue.
  */

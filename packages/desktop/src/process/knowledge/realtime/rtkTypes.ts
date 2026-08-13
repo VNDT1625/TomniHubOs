@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -15,7 +15,7 @@
  *
  * This module is PURE: it declares types and a few small constant tables only —
  * no I/O, no Node/DOM APIs — so it can be imported from anywhere and unit-tested
- * trivially. The spec lives at `.aionui/specs/realtime-knowledge/`.
+ * trivially. The spec lives at `.tomny/specs/realtime-knowledge/`.
  *
  * Distinct from `exp-graph` (ExpBase), which remembers the agent's own
  * debugging/coding experience; RTK remembers facts about the outside world.

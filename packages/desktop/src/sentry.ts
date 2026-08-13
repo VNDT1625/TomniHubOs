@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -88,7 +88,7 @@ function hasBackendStartupFailed(): boolean {
 }
 
 function isBackendStartupFailureEvent(event: { tags?: Record<string, unknown> }): boolean {
-  return event.tags?.['aionui.failure'] === 'backend_startup';
+  return event.tags?.['tomny.failure'] === 'backend_startup';
 }
 
 function isBackendStartupSecondaryEvent(event: { tags?: Record<string, unknown> }, haystacks: string[]): boolean {
@@ -167,22 +167,22 @@ export async function captureBackendStartupFailure(error: unknown): Promise<void
   });
   const autoUpdateDiagnostics = readAutoUpdateDiagnostics(app.getPath('userData'));
   Sentry.withScope((scope) => {
-    scope.setTag('aionui.failure', 'backend_startup');
-    scope.setTag('aionui.backend_startup.reason', failureInfo.reason);
+    scope.setTag('tomny.failure', 'backend_startup');
+    scope.setTag('tomny.backend_startup.reason', failureInfo.reason);
     if (failureInfo.runtime) {
-      scope.setTag('aionui.backend_startup.runtime', failureInfo.runtime);
+      scope.setTag('tomny.backend_startup.runtime', failureInfo.runtime);
     }
     if (typeof details?.stage === 'string') {
-      scope.setTag('aionui.backend_startup.stage', details.stage);
+      scope.setTag('tomny.backend_startup.stage', details.stage);
     }
     if (details) {
-      scope.setContext('aioncore_startup', details);
-      scope.setExtra('aioncore_startup', details);
+      scope.setContext('tomnycore_startup', details);
+      scope.setExtra('tomnycore_startup', details);
     }
-    scope.setContext('aioncore_startup_classification', { ...failureInfo });
-    scope.setExtra('aioncore_startup_classification', failureInfo);
-    scope.setContext('aioncore_install_diagnostics', installDiagnostics);
-    scope.setExtra('aioncore_install_diagnostics', installDiagnostics);
+    scope.setContext('tomnycore_startup_classification', { ...failureInfo });
+    scope.setExtra('tomnycore_startup_classification', failureInfo);
+    scope.setContext('tomnycore_install_diagnostics', installDiagnostics);
+    scope.setExtra('tomnycore_install_diagnostics', installDiagnostics);
     if (autoUpdateDiagnostics) {
       scope.setContext('auto_update_diagnostics', autoUpdateDiagnostics);
       scope.setExtra('auto_update_diagnostics', autoUpdateDiagnostics);
@@ -370,7 +370,7 @@ async function runStartupLogReport(): Promise<void> {
 
   Sentry.withScope((scope) => {
     scope.addAttachment({
-      filename: 'aionui-logs.log.gz',
+      filename: 'tomny-logs.log.gz',
       data: pack.gzipped,
       contentType: 'application/gzip',
     });

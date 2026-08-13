@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -35,11 +35,11 @@ import type { OmniRequestMode } from './omniGatewayHost';
 import type { OmniToolPermissions } from './auth/authTypes';
 
 /** Canonical name advertised in the MCP `initialize` handshake. */
-export const OMNI_IDE_SERVER_NAME = 'aionui-omni-ide';
+export const OMNI_IDE_SERVER_NAME = 'tomny-omni-ide';
 
 /** Cross-tool guidance returned in the MCP server's `instructions` field. */
 export const OMNI_IDE_SERVER_INSTRUCTIONS =
-  'This server exposes Tomni IDE tools powered by the Tomny Agentic core. Before calling any tomny_/ide_/team_/db_ tool, ' +
+  'This server exposes Tomny IDE tools powered by the Tomny Agentic core. Before calling any tomny_/ide_/team_/db_ tool, ' +
   'call omni_bootstrap_session (with an EMPTY {} arguments object) to receive the active ' +
   'workspace guide, project rules, session id, and allowed-tool list. Pass the returned ' +
   'sessionId as the `sessionId` argument on every subsequent tool call. Do not send optional ' +
@@ -137,7 +137,7 @@ const registerOmniTools = (server: McpServer, deps: OmniIdeProfileDeps): void =>
 
   server.tool(
     'omni_bootstrap_session',
-    `Bind this MCP session to the AionUi workspace and receive the active guide, project rules,
+    `Bind this MCP session to the Tomny workspace and receive the active guide, project rules,
 session id, and allowed-tool list. CALL THIS FIRST — every other tomny_/ide_/team_/db_ tool is gated
 until you have a sessionId from this call and pass it back as the sessionId argument.
 
@@ -307,7 +307,7 @@ const evaluateExternalTool = (toolName: string, args: unknown, deps: OmniIdeProf
   if (explicit !== true && isDangerous && !session.allowDangerous) {
     return {
       allow: false,
-      reason: `Tool "${toolName}" is in the dangerous group. Enable "Allow dangerous tools" in AionUi → Settings → External MCP Gateway, or allow it individually.`,
+      reason: `Tool "${toolName}" is in the dangerous group. Enable "Allow dangerous tools" in Tomny → Settings → External MCP Gateway, or allow it individually.`,
     };
   }
 

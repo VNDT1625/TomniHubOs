@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -32,9 +32,12 @@
 import { randomUUID } from 'node:crypto';
 import type { NodeExecutorMap } from './nodeExecutors';
 import { conditionFromConfig, evaluateCondition, resolveValue } from './conditions';
+
+import { artifactFromInput } from './connectors/artifacts';
 import type {
   ApprovalDecision,
   ApprovalRequest,
+  EmailApprovalAction,
   NodeAccessMode,
   NodeContext,
   NodeExecutionMode,
@@ -141,6 +144,35 @@ export const createWorkflowEngine = (deps: WorkflowEngineDeps): IWorkflowEngine 
         estimatedTokens: checkpoint?.estimatedTokens ?? 0,
         completedNodeIds: checkpoint?.completedNodeIds ?? [],
       };
+
+      /** Require a fresh, exact, one-run human approval before an email executor can reach the network. */
+      const approveEmail = async (node: WorkflowNode, input: unknown): Promise<void> => {
+        if (!deps.requestApproval) throw new Error('Email sending requires a configured human approval provider.');
+        const timeoutMs = 5 * 60 * 1000;
+        const action = buildEmailApprovalAction(node, input);
+        const message = `Send email to ${action.to.join(', ')} with subject ${action.subject}?`;
+        const request: ApprovalRequest = {
+          runId,
+          nodeId: node.id,
+          name: node.name,
+          message,
+          input,
+          timeoutMs,
+          action,
+          expiresAt: now() + timeoutMs,
+        };
+        deps.emit({ type: 'approval-requested', runId, nodeId: node.id, message, at: now() });
+        const decision = await requestApprovalWithTimeout(deps.requestApproval, request, signal);
+        deps.emit({
+          type: 'approval-resolved',
+          runId,
+          nodeId: node.id,
+          approved: decision.approved,
+          reason: decision.reason,
+          at: now(),
+        });
+        if (!decision.approved) throw new Error(decision.reason || 'Email approval rejected.');
+      };
       if (checkpoint) {
         deps.emit({
           type: 'run-resumed',
@@ -171,37 +203,57 @@ export const createWorkflowEngine = (deps: WorkflowEngineDeps): IWorkflowEngine 
       /** Run a leaf action via deterministic execution, Agent Core, or hybrid fallback. */
       const runLeaf = async (node: WorkflowNode, input: unknown): Promise<unknown> => {
         if (++state.steps > maxSteps) throw new Error(`Automation exceeded max steps (${maxSteps}).`);
-        const mode = resolveExecutionMode(node);
-        const access = resolveAccessMode(node);
-        enforceSafeAccess(workflow, node, access);
-        deps.emit({ type: 'node-routed', runId, nodeId: node.id, mode, access, at: now() });
-        deps.emit({ type: 'node-start', runId, nodeId: node.id, name: node.name, at: now() });
-        const ctx: NodeContext = { input };
-        const retries = Math.max(0, node.onError?.retries ?? 0);
-        const retryDelayMs = Math.max(0, node.onError?.retryDelayMs ?? 0);
+        // Copy email config before awaiting approval so a concurrent editor cannot change
+        // recipients or content between the preview and the actual executor call.
+        const executionNode = node.kind === 'action.email.send' ? { ...node, config: { ...node.config } } : node;
+        const mode = resolveExecutionMode(executionNode);
+        const access = resolveAccessMode(executionNode);
+        enforceSafeAccess(workflow, executionNode, access);
+        deps.emit({ type: 'node-routed', runId, nodeId: executionNode.id, mode, access, at: now() });
+        deps.emit({ type: 'node-start', runId, nodeId: executionNode.id, name: executionNode.name, at: now() });
+        const executionInput = executionNode.kind === 'action.email.send' ? structuredClone(input) : input;
+        const ctx: NodeContext = { input: executionInput };
+        // SMTP acknowledgement failures are ambiguous: the server may have accepted the message.
+        // Never retry automatically because that can deliver duplicates after a timeout.
+        const retries =
+          executionNode.kind === 'action.email.send' ? 0 : Math.max(0, executionNode.onError?.retries ?? 0);
+        const retryDelayMs = Math.max(0, executionNode.onError?.retryDelayMs ?? 0);
 
         let lastError: unknown;
+        if (executionNode.kind === 'action.email.send') {
+          try {
+            if (mode !== 'deterministic') {
+              throw new Error('Email sending must use the deterministic connector after exact human approval.');
+            }
+            await approveEmail(executionNode, executionInput);
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            deps.emit({ type: 'node-finish', runId, nodeId: executionNode.id, ok: false, error: message, at: now() });
+            if (executionNode.onError?.continueOnError) return null;
+            throw error;
+          }
+        }
         for (let attempt = 0; attempt <= retries; attempt++) {
           try {
             // Control kinds never reach here; cast narrows to a leaf executor key.
-            const executor = deps.executors[node.kind as keyof NodeExecutorMap];
+            const executor = deps.executors[executionNode.kind as keyof NodeExecutorMap];
             let output: unknown;
             if (mode === 'agent') {
               if (!deps.executeWithAgent) throw new Error('Agent Core executor is not configured.');
-              consumeAgentBudget(workflow, node, state);
-              output = await deps.executeWithAgent(node, ctx, signal);
+              consumeAgentBudget(workflow, executionNode, state);
+              output = await deps.executeWithAgent(executionNode, ctx, signal);
             } else if (mode === 'hybrid') {
               try {
-                output = await executor(node, ctx, signal);
+                output = await executor(executionNode, ctx, signal);
               } catch (error) {
                 if (!deps.executeWithAgent) throw error;
-                consumeAgentBudget(workflow, node, state);
-                output = await deps.executeWithAgent(node, ctx, signal);
+                consumeAgentBudget(workflow, executionNode, state);
+                output = await deps.executeWithAgent(executionNode, ctx, signal);
               }
             } else {
-              output = await executor(node, ctx, signal);
+              output = await executor(executionNode, ctx, signal);
             }
-            deps.emit({ type: 'node-finish', runId, nodeId: node.id, ok: true, output, at: now() });
+            deps.emit({ type: 'node-finish', runId, nodeId: executionNode.id, ok: true, output, at: now() });
             return output;
           } catch (error) {
             lastError = error;
@@ -212,8 +264,8 @@ export const createWorkflowEngine = (deps: WorkflowEngineDeps): IWorkflowEngine 
           }
         }
         const message = lastError instanceof Error ? lastError.message : String(lastError);
-        deps.emit({ type: 'node-finish', runId, nodeId: node.id, ok: false, error: message, at: now() });
-        if (node.onError?.continueOnError) return null;
+        deps.emit({ type: 'node-finish', runId, nodeId: executionNode.id, ok: false, error: message, at: now() });
+        if (executionNode.onError?.continueOnError) return null;
         throw lastError instanceof Error ? lastError : new Error(message);
       };
 
@@ -380,8 +432,7 @@ export const createWorkflowEngine = (deps: WorkflowEngineDeps): IWorkflowEngine 
   };
 };
 
-const resolveExecutionMode = (node: WorkflowNode): NodeExecutionMode =>
-  node.execution?.mode ?? 'deterministic';
+const resolveExecutionMode = (node: WorkflowNode): NodeExecutionMode => node.execution?.mode ?? 'deterministic';
 
 const resolveAccessMode = (node: WorkflowNode): NodeAccessMode => {
   if (node.execution?.access) return node.execution.access;
@@ -425,6 +476,25 @@ const stringifyInput = (input: unknown): string => {
   } catch {
     return String(input);
   }
+};
+
+const buildEmailApprovalAction = (node: WorkflowNode, input: unknown): EmailApprovalAction => {
+  const resolve = (value: unknown): string =>
+    (typeof value === 'string' ? value : '').replaceAll('{{input}}', stringifyInput(input));
+  const to = resolve(node.config.to)
+    .split(',')
+    .map((address) => address.trim())
+    .filter((address) => address.length > 0);
+  if (to.length === 0) throw new Error('Email approval requires at least one resolved recipient.');
+  return {
+    kind: 'action.email.send',
+    from: resolve(node.config.from).trim(),
+    to,
+    subject: resolve(node.config.subject),
+    body: resolve(node.config.body),
+    attachArtifact: node.config.attachArtifact === true,
+    attachmentPath: node.config.attachArtifact === true ? (artifactFromInput(input)?.path ?? null) : null,
+  };
 };
 
 const requestApprovalWithTimeout = async (

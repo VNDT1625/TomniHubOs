@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -9,7 +9,7 @@
  * renderer's "Distribute via 9Router" panel.
  *
  * Like the News/Manager bridges, this is an Electron-native bridge (not an
- * aioncore HTTP route), built with the `@office-ai/platform` `bridge` helper.
+ * tomnycore HTTP route), built with the `@office-ai/platform` `bridge` helper.
  * The channel-name constants ({@link ROUTER9_CHANNELS}) are the renderer-safe
  * contract — the renderer rebuilds matching invokers without importing this
  * Node-only module (see `router9BridgeClient.ts`).
@@ -24,6 +24,7 @@
 import { bridge } from '@office-ai/platform';
 
 import { applyConnectorPlan, type ApplyResult } from './router9Applier';
+import { router9ConfigSession } from './router9Lifecycle';
 import {
   getManagedRouter9Service,
   type ManagedRouter9Client,
@@ -122,7 +123,12 @@ export function registerRouter9Bridge(): void {
   const managed = getManagedRouter9Service();
   router9Channels.applyPlan.provider(async ({ targetId, endpoint }): Promise<Router9Result<ApplyResult>> => {
     try {
-      const data = await applyConnectorPlan(targetId, endpoint);
+      const data = await router9ConfigSession.apply((hooks) =>
+        applyConnectorPlan(targetId, endpoint, {
+          beforeWrite: hooks.beforeWrite,
+          afterWrite: hooks.afterWrite,
+        })
+      );
       return { ok: true, data };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -146,6 +152,10 @@ export function registerRouter9Bridge(): void {
     wrapRouter9Operation(async () => syncManagedRouter9Provider(managed, await getReadyProviderStore()))
   );
   router9Channels.openDashboard.provider(({ section }) => wrapRouter9Operation(() => managed.openDashboard(section)));
+  void router9ConfigSession.recover().catch((error: unknown) => {
+    console.warn('[Router9Bridge] safe CLI config recovery failed:', error);
+  });
+
   void getReadyProviderStore()
     .then((store) => autoStartAndSyncManagedRouter9Provider(managed, store))
     .catch((error: unknown) => {

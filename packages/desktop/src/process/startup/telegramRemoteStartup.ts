@@ -1,6 +1,6 @@
 /**
- * Tomni-native remote startup. The tunnel targets the native gateway and never
- * depends on AionCore, globalThis.__backendPort, or a legacy /api route.
+ * Tomny-native remote startup. The tunnel targets the native gateway and never
+ * depends on the legacy core, globalThis.__backendPort, or a legacy /api route.
  */
 
 import { randomBytes } from 'node:crypto';
@@ -13,7 +13,7 @@ import { startTunnel, stopTunnel, type TunnelResult } from '@process/studio/clou
 
 const TUNNEL_KEY = 'telegram-remote';
 const SECRET_ENV = 'TOMNI_TELEGRAM_REMOTE_SECRET';
-const LEGACY_SECRET_ENV = 'AIONUI_TELEGRAM_REMOTE_SECRET';
+const LEGACY_SECRET_ENV = 'TOMNY_TELEGRAM_REMOTE_SECRET';
 let startPromise: Promise<TunnelResult> | undefined;
 let activePublicUrl: string | undefined;
 let appLanguage = 'en-US';
@@ -30,7 +30,7 @@ export function prepareTelegramRemoteSecret(): string {
   return secret;
 }
 
-/** Starts the Tomni gateway and exposes that gateway through the quick tunnel. */
+/** Starts the Tomny gateway and exposes that gateway through the quick tunnel. */
 export async function startTelegramRemoteTunnel(language = 'en-US'): Promise<TunnelResult> {
   appLanguage = language;
   const gateway = await startRegisteredTomniRemoteGateway({

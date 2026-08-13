@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -64,10 +64,22 @@ describe('backgroundUtils', () => {
     const existingCss = `${BACKGROUND_BLOCK_START}\nOLD BLOCK CONTENT\n${BACKGROUND_BLOCK_END}`;
     const result = injectBackgroundCssBlock(existingCss, testImageUrl);
     expect(result).not.toContain('OLD BLOCK CONTENT');
-    const startCount = (result.match(/\/\* AionUi Theme Background Start \*\//g) || []).length;
-    const endCount = (result.match(/\/\* AionUi Theme Background End \*\//g) || []).length;
+    const startCount = (result.match(/\/\* Tomny Theme Background Start \*\//g) || []).length;
+    const endCount = (result.match(/\/\* Tomny Theme Background End \*\//g) || []).length;
     expect(startCount).toBe(1);
     expect(endCount).toBe(1);
+  });
+
+  it('migrates a legacy background block to the Tomny marker', () => {
+    const legacyStart = '/* AionUi Theme Background Start */';
+    const legacyEnd = '/* AionUi Theme Background End */';
+    const existingCss = `body { color: red; }\n${legacyStart}\nOLD LEGACY BLOCK\n${legacyEnd}`;
+
+    const result = injectBackgroundCssBlock(existingCss, testImageUrl);
+
+    expect(result).not.toContain('OLD LEGACY BLOCK');
+    expect(result).not.toContain(legacyStart);
+    expect(result).toContain(BACKGROUND_BLOCK_START);
   });
 
   it('preserves other CSS when no existing block', () => {

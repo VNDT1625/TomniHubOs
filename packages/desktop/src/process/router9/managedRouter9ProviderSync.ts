@@ -1,5 +1,5 @@
 /**
- * Synchronize Tomni's internal provider record with the managed model gateway.
+ * Synchronize Tomny's internal provider record with the managed model gateway.
  * The app uses its own client key; external CLI keys are never reused here.
  */
 import { TOMNI_GATEWAY_APP_CLIENT_NAME, TOMNI_GATEWAY_PROVIDER_ID } from '@/common/router9';
@@ -20,13 +20,13 @@ export const syncManagedRouter9Provider = async (
 ): Promise<ManagedRouter9ProviderSync> => {
   const status = await managed.start();
   const client = await managed.ensureClient(TOMNI_GATEWAY_APP_CLIENT_NAME);
-  if (!client.key) throw new Error('Tomni model-gateway client key is unavailable.');
+  if (!client.key) throw new Error('Tomny model-gateway client key is unavailable.');
 
   const models = (await managed.listModels(client.key)).map((item) => item.id).filter(Boolean);
   const provider = {
     id: TOMNI_GATEWAY_PROVIDER_ID,
     platform: 'new-api',
-    name: 'Tomni Model Gateway',
+    name: 'Tomny Model Gateway',
     base_url: status.baseUrl,
     api_key: client.key,
     models,
@@ -44,7 +44,7 @@ export const syncManagedRouter9Provider = async (
   return { providerId: TOMNI_GATEWAY_PROVIDER_ID, models };
 };
 
-/** Start a persisted managed gateway and synchronize Tomni's private client when it becomes ready. */
+/** Start a persisted managed gateway and synchronize Tomny's private client when it becomes ready. */
 export const autoStartAndSyncManagedRouter9Provider = async (
   managed: AutoStartGatewayProviderSource,
   store: IProviderStore

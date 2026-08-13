@@ -121,7 +121,7 @@ const defaultDeps = (): DirectCliAgentDriverDeps => ({
 
 /**
  * Drive a detected CLI directly through Tomny Core adapters. This replaces the
- * legacy REST conversation wrapper and never starts or calls AionCore.
+ * legacy REST conversation wrapper and never starts or calls the legacy core.
  */
 export type DirectCliAgentDriver = CliAgentDriver & { dispose: () => Promise<void> };
 export const createDirectCliAgentDriver = (

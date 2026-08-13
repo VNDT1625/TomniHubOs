@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -232,8 +232,8 @@ export const useConversationActions = ({
   }, []);
 
   /**
-   * Remove project state — rendered via AionModal in the GroupedHistory component.
-   * Uses project's design system: AionModal component with danger-styled action button.
+   * Remove project state — rendered via TomnyModal in the GroupedHistory component.
+   * Uses project's design system: TomnyModal component with danger-styled action button.
    */
   const [removeProjectTarget, setRemoveProjectTarget] = useState<{
     name: string;

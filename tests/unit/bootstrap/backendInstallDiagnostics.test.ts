@@ -5,10 +5,10 @@ import { appendAutoUpdateDiagnosticEvent } from '@/process/services/diagnostics/
 describe('collectBackendInstallDiagnostics', () => {
   it('records packaged runtime manifest and missing backend binary metadata', () => {
     const files = new Map<string, { mtimeMs: number; size: number; content?: string }>([
-      ['C:\\AionUi\\resources', { mtimeMs: 1000, size: 0 }],
-      ['C:\\AionUi\\resources\\bundled-tomny-core\\win32-x64', { mtimeMs: 2000, size: 0 }],
+      ['C:\\Tomny\\resources', { mtimeMs: 1000, size: 0 }],
+      ['C:\\Tomny\\resources\\bundled-tomny-core\\win32-x64', { mtimeMs: 2000, size: 0 }],
       [
-        'C:\\AionUi\\resources\\bundled-tomny-core\\win32-x64\\manifest.json',
+        'C:\\Tomny\\resources\\bundled-tomny-core\\win32-x64\\manifest.json',
         {
           mtimeMs: 3000,
           size: 88,
@@ -26,13 +26,13 @@ describe('collectBackendInstallDiagnostics', () => {
       {
         runtimeKey: 'win32-x64',
         binaryName: 'tomny-core.exe',
-        resourcesPath: 'C:\\AionUi\\resources',
-        checkedBundledPath: 'C:\\AionUi\\resources\\bundled-tomny-core\\win32-x64\\tomny-core.exe',
+        resourcesPath: 'C:\\Tomny\\resources',
+        checkedBundledPath: 'C:\\Tomny\\resources\\bundled-tomny-core\\win32-x64\\tomny-core.exe',
       },
       {
         appVersion: '2.1.7',
         arch: 'x64',
-        execPath: 'C:\\AionUi\\AionUi.exe',
+        execPath: 'C:\\Tomny\\Tomny.exe',
         isPackaged: true,
         platform: 'win32',
         readFile: (filePath) => files.get(filePath)?.content,
@@ -45,23 +45,23 @@ describe('collectBackendInstallDiagnostics', () => {
       arch: 'x64',
       binaryExists: false,
       binaryName: 'tomny-core.exe',
-      binaryPath: 'C:\\AionUi\\resources\\bundled-tomny-core\\win32-x64\\tomny-core.exe',
-      bundledDirPath: 'C:\\AionUi\\resources\\bundled-tomny-core',
-      execPath: 'C:\\AionUi\\AionUi.exe',
+      binaryPath: 'C:\\Tomny\\resources\\bundled-tomny-core\\win32-x64\\tomny-core.exe',
+      bundledDirPath: 'C:\\Tomny\\resources\\bundled-tomny-core',
+      execPath: 'C:\\Tomny\\Tomny.exe',
       isPackaged: true,
       manifestExists: true,
       manifestFiles: ['tomny-core.exe'],
       manifestGeneratedAt: '2026-05-29T12:00:00.000Z',
-      manifestPath: 'C:\\AionUi\\resources\\bundled-tomny-core\\win32-x64\\manifest.json',
+      manifestPath: 'C:\\Tomny\\resources\\bundled-tomny-core\\win32-x64\\manifest.json',
       manifestSize: 88,
       manifestMtimeMs: 3000,
       manifestSourceType: 'download',
       manifestVersion: 'v0.9.0',
       platform: 'win32',
       resourcesDirMtimeMs: 1000,
-      resourcesPath: 'C:\\AionUi\\resources',
+      resourcesPath: 'C:\\Tomny\\resources',
       runtimeDirMtimeMs: 2000,
-      runtimeDirPath: 'C:\\AionUi\\resources\\bundled-tomny-core\\win32-x64',
+      runtimeDirPath: 'C:\\Tomny\\resources\\bundled-tomny-core\\win32-x64',
       runtimeKey: 'win32-x64',
     });
   });

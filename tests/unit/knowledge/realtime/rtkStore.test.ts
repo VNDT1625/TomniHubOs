@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -8,7 +8,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // The store imports `electron` for the lazy userData fallback; tests always pass
 // a `rootDir`, so `app.getPath` is never called — a minimal mock suffices.
-vi.mock('electron', () => ({ app: { getPath: () => '/tmp/aionui-rtk-test' } }));
+vi.mock('electron', () => ({ app: { getPath: () => '/tmp/tomny-rtk-test' } }));
 
 import { createRtkStore, type RtkStoreFs } from '@/process/knowledge/realtime/rtkStore';
 import type { KnowledgeFact } from '@/process/knowledge/realtime/rtkTypes';

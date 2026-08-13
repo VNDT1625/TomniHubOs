@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -18,7 +18,7 @@
  *
  * The Manager AI calls the user's configured model. Rather than binding a fixed
  * model id at construction, the AI helper here resolves the current model on
- * each call from the native Tomni provider catalog (mirrors `company/companyGenerator.ts`):
+ * each call from the native Tomny provider catalog (mirrors `company/companyGenerator.ts`):
  * the underlying `createProviderChat` then issues the request and falls back to
  * the first usable provider/model when the resolved id is gone. When nothing is
  * configured the helper throws the "no usable model" sentinel, which the bridge

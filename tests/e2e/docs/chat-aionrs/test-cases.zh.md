@@ -1,7 +1,7 @@
-# Tomni Agentic (aionrs) E2E 测试用例
+# Tomni Agentic (tomnirs) E2E 测试用例
 
 **版本**: Gate 2 初稿
-**作者**: chat-aionrs-designer
+**作者**: chat-tomnirs-designer
 **日期**: 2026-04-22
 **状态**: 待审核
 
@@ -17,22 +17,22 @@
 
 ### 1.2 全局前置条件
 
-**所有 aionrs 测试用例的前置条件**:
+**所有 tomnirs 测试用例的前置条件**:
 
-1. **aionrs binary 可用**：通过 `ipcBridge.fs.findAionrsBinary.invoke()` 验证，否则 skip 全部测试
+1. **tomnirs binary 可用**：通过 `ipcBridge.fs.findTomnirsBinary.invoke()` 验证，否则 skip 全部测试
 2. **用户配置的模型列表至少 1 个可用 provider**：
    - 调用 `ipcBridge.mode.getModelConfig.invoke()` 获取用户配置的 provider 列表
    - 过滤：排除 Google Auth provider（`platform` 包含 `gemini-with-google-auth`）
    - 验证：至少 1 个 provider 包含 apiKey 且有可用 model
-   - 若无可用 provider：skip 全部 aionrs 测试，原因："No non-Google-Auth provider with apiKey configured"
+   - 若无可用 provider：skip 全部 tomnirs 测试，原因："No non-Google-Auth provider with apiKey configured"
 
-3. **测试数据准备**：临时工作目录 `/tmp/e2e-aionrs-<timestamp>/`
+3. **测试数据准备**：临时工作目录 `/tmp/e2e-tomnirs-<timestamp>/`
 
 **模型获取 helper**（engineer 实现）:
 
 ```typescript
-// tests/e2e/helpers/chatAionrs.ts
-export async function getAionrsTestModels(page: Page): Promise<{
+// tests/e2e/helpers/chatTomnirs.ts
+export async function getTomnirsTestModels(page: Page): Promise<{
   modelA: TProviderWithModel; // 第一个可用模型（默认模型）
   modelB: TProviderWithModel | null; // 第二个可用模型（若存在）
 }>;
@@ -42,22 +42,22 @@ export async function getAionrsTestModels(page: Page): Promise<{
 
 | 维度       | 可选值                     | 说明                                                                                               |
 | ---------- | -------------------------- | -------------------------------------------------------------------------------------------------- |
-| 关联文件夹 | 无 / 单 / 多               | `atPath` 数组（源码：`AionrsSendBox.tsx:331-337`）                                                 |
+| 关联文件夹 | 无 / 单 / 多               | `atPath` 数组（源码：`TomnirsSendBox.tsx:331-337`）                                                |
 | 上传文件   | 无 / 单 / 多               | `uploadFile` 数组（源码：`useSendBoxFiles.ts`）                                                    |
 | 模型       | 默认 / 自选                | 从用户配置的 provider 列表选择（源码：`ipcBridge.mode.getModelConfig.invoke()`，过滤 Google Auth） |
 | 权限       | default / auto_edit / yolo | 源码：`agentModes.ts:65-69`                                                                        |
-| 对话中操作 | 切换模型 / 切换权限 / 无   | 对话页 `AionrsModelSelector` / `AgentModeSelector`                                                 |
+| 对话中操作 | 切换模型 / 切换权限 / 无   | 对话页 `TomnirsModelSelector` / `AgentModeSelector`                                                |
 
 ### 1.4 清理约定
 
-**命名模式**: 所有测试对话命名为 `E2E-aionrs-<timestamp>-<scenario>`
+**命名模式**: 所有测试对话命名为 `E2E-tomnirs-<timestamp>-<scenario>`
 
 **清理顺序**（每个用例 `afterEach` 执行）:
 
 1. 停止 binary 进程：`ipcBridge.conversation.stopAgent.invoke(conversationId)`
-2. 删除 DB 记录：`DELETE FROM conversations WHERE name LIKE 'E2E-aionrs-%'`（级联删除 messages）
-3. 删除临时目录：`fs.rm('/tmp/e2e-aionrs-*', { recursive: true })`
-4. 清理 sessionStorage：`sessionStorage.removeItem('aionrs_initial_message_*')` + `sessionStorage.removeItem('aionrs_initial_processed_*')`
+2. 删除 DB 记录：`DELETE FROM conversations WHERE name LIKE 'E2E-tomnirs-%'`（级联删除 messages）
+3. 删除临时目录：`fs.rm('/tmp/e2e-tomnirs-*', { recursive: true })`
+4. 清理 sessionStorage：`sessionStorage.removeItem('tomnirs_initial_message_*')` + `sessionStorage.removeItem('tomnirs_initial_processed_*')`
 
 ### 1.5 截图要求
 
@@ -79,7 +79,7 @@ export async function getAionrsTestModels(page: Page): Promise<{
 **前置条件**:
 
 - 同 §1.2 全局前置条件
-- 调用 `getAionrsTestModels(page)` 获取 `modelA`（默认模型）
+- 调用 `getTomnirsTestModels(page)` 获取 `modelA`（默认模型）
 
 **维度组合**:
 | 维度 | 值 |
@@ -93,11 +93,11 @@ export async function getAionrsTestModels(page: Page): Promise<{
 **操作步骤**:
 
 1. 打开应用，导航至 guid 页（`/#/guid`）
-2. 选择 aionrs agent（点击 `[data-agent-backend="aionrs"]`）
+2. 选择 tomnirs agent（点击 `[data-agent-backend="tomnirs"]`）
 3. 确认权限选择器显示 `default`（`AgentModeSelector` 默认值）
-4. 输入测试消息："Hello, aionrs! Please list files in current directory."
+4. 输入测试消息："Hello, tomnirs! Please list files in current directory."
 5. 点击发送按钮
-6. 等待跳转至对话页（URL 匹配 `/conversation/aionrs/*`）
+6. 等待跳转至对话页（URL 匹配 `/conversation/tomnirs/*`）
 7. 等待 AI 回复流式完成（轮询 DB `messages.status='finish'`，超时 60s）
 
 **DB 断言点**:
@@ -106,14 +106,14 @@ export async function getAionrsTestModels(page: Page): Promise<{
 -- 1. 验证 conversation 创建
 SELECT id, name, type, model, status, json_extract(extra, '$.sessionMode') as mode
 FROM conversations
-WHERE name LIKE 'E2E-aionrs-%' AND id = ?;
--- 期望: type='aionrs', mode='default', status='finished'
+WHERE name LIKE 'E2E-tomnirs-%' AND id = ?;
+-- 期望: type='tomnirs', mode='default', status='finished'
 
 -- 2. 验证用户消息
 SELECT id, type, position, content, status
 FROM messages
 WHERE conversation_id = ? AND position = 'right';
--- 期望: type='text', position='right', json_extract(content, '$.content') 包含 "Hello, aionrs!"
+-- 期望: type='text', position='right', json_extract(content, '$.content') 包含 "Hello, tomnirs!"
 
 -- 3. 验证 AI 回复
 SELECT id, type, position, status, created_at
@@ -128,9 +128,9 @@ SELECT COUNT(*) FROM messages WHERE conversation_id = ?;
 
 **清理义务**:
 
-- conversations name: `E2E-aionrs-<timestamp>-minimal-path`
-- temp dir: `/tmp/e2e-aionrs-<timestamp>-tc-a-01/`（workspace）
-- sessionStorage: `aionrs_initial_message_${conversationId}`, `aionrs_initial_processed_${conversationId}`
+- conversations name: `E2E-tomnirs-<timestamp>-minimal-path`
+- temp dir: `/tmp/e2e-tomnirs-<timestamp>-tc-a-01/`（workspace）
+- sessionStorage: `tomnirs_initial_message_${conversationId}`, `tomnirs_initial_processed_${conversationId}`
 
 **截图数**: 3
 
@@ -144,7 +144,7 @@ SELECT COUNT(*) FROM messages WHERE conversation_id = ?;
 **前置条件**:
 
 - 同 §1.2 全局前置条件
-- 临时工作目录存在测试文件夹：`/tmp/e2e-aionrs-<timestamp>/test-folder/`
+- 临时工作目录存在测试文件夹：`/tmp/e2e-tomnirs-<timestamp>/test-folder/`
 
 **维度组合**:
 | 维度 | 值 |
@@ -159,11 +159,11 @@ SELECT COUNT(*) FROM messages WHERE conversation_id = ?;
 
 1. 创建临时目录 + 测试文件夹：
    ```bash
-   mkdir -p /tmp/e2e-aionrs-<timestamp>/test-folder/
-   echo "sample content" > /tmp/e2e-aionrs-<timestamp>/test-folder/sample.txt
+   mkdir -p /tmp/e2e-tomnirs-<timestamp>/test-folder/
+   echo "sample content" > /tmp/e2e-tomnirs-<timestamp>/test-folder/sample.txt
    ```
-2. 打开 guid 页，选择 aionrs agent
-3. 从文件树选择 `test-folder/`（触发 `emitter.emit('aionrs.selected.file', [{ path, name, isFile: false }])`）
+2. 打开 guid 页，选择 tomnirs agent
+3. 从文件树选择 `test-folder/`（触发 `emitter.emit('tomnirs.selected.file', [{ path, name, isFile: false }])`）
 4. 确认 guid 页显示文件夹 Tag（`data-testid="folder-tag-0"`）
 5. 输入消息："What files are in the attached folder?"
 6. 点击发送
@@ -191,8 +191,8 @@ SELECT status FROM messages WHERE conversation_id = ? AND position = 'left' AND 
 
 **清理义务**:
 
-- conversations name: `E2E-aionrs-<timestamp>-folder-single`
-- temp dir: `/tmp/e2e-aionrs-<timestamp>/`（包含 test-folder）
+- conversations name: `E2E-tomnirs-<timestamp>-folder-single`
+- temp dir: `/tmp/e2e-tomnirs-<timestamp>/`（包含 test-folder）
 - sessionStorage: 同 TC-A-01
 
 **截图数**: 3
@@ -207,7 +207,7 @@ SELECT status FROM messages WHERE conversation_id = ? AND position = 'left' AND 
 **前置条件**:
 
 - 同 §1.2 全局前置条件
-- 测试文件存在：`/tmp/e2e-test-file.txt`（内容："Test file content for aionrs E2E"）
+- 测试文件存在：`/tmp/e2e-test-file.txt`（内容："Test file content for tomnirs E2E"）
 
 **维度组合**:
 | 维度 | 值 |
@@ -222,9 +222,9 @@ SELECT status FROM messages WHERE conversation_id = ? AND position = 'left' AND 
 
 1. 创建测试文件：
    ```bash
-   echo "Test file content for aionrs E2E" > /tmp/e2e-test-file.txt
+   echo "Test file content for tomnirs E2E" > /tmp/e2e-test-file.txt
    ```
-2. 打开 guid 页，选择 aionrs agent
+2. 打开 guid 页，选择 tomnirs agent
 3. 上传文件：
    - WebUI: 使用 `<input type="file">` 选择 `/tmp/e2e-test-file.txt`
    - Desktop: 调用 `ipcBridge.dialog.showOpen()` 选择文件
@@ -255,8 +255,8 @@ SELECT status FROM messages WHERE conversation_id = ? AND position = 'left';
 
 **清理义务**:
 
-- conversations name: `E2E-aionrs-<timestamp>-file-single`
-- temp dir: `/tmp/e2e-aionrs-<timestamp>/`（workspace）
+- conversations name: `E2E-tomnirs-<timestamp>-file-single`
+- temp dir: `/tmp/e2e-tomnirs-<timestamp>/`（workspace）
 - test file: `/tmp/e2e-test-file.txt`（测试后删除）
 - sessionStorage: 同 TC-A-01
 
@@ -272,7 +272,7 @@ SELECT status FROM messages WHERE conversation_id = ? AND position = 'left';
 **前置条件**:
 
 - 同 §1.2 全局前置条件
-- 调用 `getAionrsTestModels(page)` 获取 `{ modelA, modelB }`
+- 调用 `getTomnirsTestModels(page)` 获取 `{ modelA, modelB }`
 - 若 `modelB === null`：skip 此用例（原因："Only 1 model available, skipping guid page model selection test"）
 
 **维度组合**:
@@ -286,7 +286,7 @@ SELECT status FROM messages WHERE conversation_id = ? AND position = 'left';
 
 **操作步骤**:
 
-1. 打开 guid 页，选择 aionrs agent
+1. 打开 guid 页，选择 tomnirs agent
 2. 打开模型选择器（`GuidModelSelector`，仅当 `isGeminiMode=true` 可见，源码：`GuidPage.tsx:465-469`）
    - 若不可见，skip 此用例（标注原因："guid page model selector not enabled"）
 3. 选择 `modelB`（不 hardcode 具体模型 ID）
@@ -314,8 +314,8 @@ SELECT COUNT(*) FROM messages WHERE conversation_id = ? AND position = 'left';
 
 **清理义务**:
 
-- conversations name: `E2E-aionrs-<timestamp>-model-second`
-- temp dir: `/tmp/e2e-aionrs-<timestamp>/`
+- conversations name: `E2E-tomnirs-<timestamp>-model-second`
+- temp dir: `/tmp/e2e-tomnirs-<timestamp>/`
 - sessionStorage: 同 TC-A-01
 
 **截图数**: 3
@@ -344,8 +344,8 @@ SELECT COUNT(*) FROM messages WHERE conversation_id = ? AND position = 'left';
 
 **操作步骤**:
 
-1. 打开 guid 页，选择 aionrs agent
-2. 打开权限选择器（`AgentModeSelector`，`data-testid="agent-mode-selector-aionrs"`）
+1. 打开 guid 页，选择 tomnirs agent
+2. 打开权限选择器（`AgentModeSelector`，`data-testid="agent-mode-selector-tomnirs"`）
 3. 选择 `yolo` 模式（label: "YOLO"）
 4. 输入消息："Please create a file named test.txt with content 'E2E test'."
 5. 点击发送
@@ -374,8 +374,8 @@ WHERE conversation_id = ? AND type = 'tool_group';
 
 **清理义务**:
 
-- conversations name: `E2E-aionrs-<timestamp>-yolo-mode`
-- temp dir: `/tmp/e2e-aionrs-<timestamp>/`（包含 binary 创建的 test.txt）
+- conversations name: `E2E-tomnirs-<timestamp>-yolo-mode`
+- temp dir: `/tmp/e2e-tomnirs-<timestamp>/`（包含 binary 创建的 test.txt）
 - sessionStorage: 同 TC-A-01
 
 **截图数**: 3
@@ -404,7 +404,7 @@ WHERE conversation_id = ? AND type = 'tool_group';
 
 **操作步骤**:
 
-1. 打开 guid 页，选择 aionrs agent
+1. 打开 guid 页，选择 tomnirs agent
 2. 选择 `auto_edit` 模式（label: "Auto-Accept Edits"）
 3. 输入消息："Please read the file ./README.md and summarize it."（触发 info 工具）
 4. 等待工具执行完成（无确认弹窗）
@@ -434,8 +434,8 @@ WHERE conversation_id = ? AND type = 'tool_group';
 
 **清理义务**:
 
-- conversations name: `E2E-aionrs-<timestamp>-auto-edit-mode`
-- temp dir: `/tmp/e2e-aionrs-<timestamp>/`
+- conversations name: `E2E-tomnirs-<timestamp>-auto-edit-mode`
+- temp dir: `/tmp/e2e-tomnirs-<timestamp>/`
 - sessionStorage: 同 TC-A-01
 
 **截图数**: 4（增加 1 张确认弹窗截图）
@@ -450,7 +450,7 @@ WHERE conversation_id = ? AND type = 'tool_group';
 **前置条件**:
 
 - 同 §1.2 全局前置条件
-- 调用 `getAionrsTestModels(page)` 获取 `{ modelA, modelB }`
+- 调用 `getTomnirsTestModels(page)` 获取 `{ modelA, modelB }`
 - 若 `modelB === null`：skip 此用例（原因："Only 1 model available, skipping model switch test"）
 
 **维度组合**:
@@ -466,7 +466,7 @@ WHERE conversation_id = ? AND type = 'tool_group';
 
 1. 按 TC-A-01 创建对话（使用 `modelA`）
 2. 等待首条 AI 回复完成
-3. 点击对话页模型选择器（`AionrsModelSelector`，`data-testid="aionrs-model-selector"`）
+3. 点击对话页模型选择器（`TomnirsModelSelector`，`data-testid="tomnirs-model-selector"`）
 4. 选择 `modelB`（不 hardcode 具体模型 ID）
 5. 等待模型切换完成（轮询 DB `conversations.extra.model` 更新）
 6. 输入第二条消息："What model are you using now?"
@@ -490,8 +490,8 @@ SELECT COUNT(*) FROM messages WHERE conversation_id = ?;
 
 **清理义务**:
 
-- conversations name: `E2E-aionrs-<timestamp>-switch-model`
-- temp dir: `/tmp/e2e-aionrs-<timestamp>/`
+- conversations name: `E2E-tomnirs-<timestamp>-switch-model`
+- temp dir: `/tmp/e2e-tomnirs-<timestamp>/`
 - sessionStorage: 同 TC-A-01
 
 **截图数**: 4（增加 1 张模型选择器打开状态截图）
@@ -557,8 +557,8 @@ LIMIT 1;
 
 **清理义务**:
 
-- conversations name: `E2E-aionrs-<timestamp>-switch-permission-1`
-- temp dir: `/tmp/e2e-aionrs-<timestamp>/`
+- conversations name: `E2E-tomnirs-<timestamp>-switch-permission-1`
+- temp dir: `/tmp/e2e-tomnirs-<timestamp>/`
 - sessionStorage: 同 TC-A-01
 
 **截图数**: 5（2 张确认弹窗：第一次出现 + 第二次未出现）
@@ -614,8 +614,8 @@ LIMIT 1;
 
 **清理义务**:
 
-- conversations name: `E2E-aionrs-<timestamp>-switch-permission-2`
-- temp dir: `/tmp/e2e-aionrs-<timestamp>/`
+- conversations name: `E2E-tomnirs-<timestamp>-switch-permission-2`
+- temp dir: `/tmp/e2e-tomnirs-<timestamp>/`
 - sessionStorage: 同 TC-A-01
 
 **截图数**: 4
@@ -645,11 +645,11 @@ LIMIT 1;
 
 1. 创建测试数据：
    ```bash
-   mkdir -p /tmp/e2e-aionrs-<timestamp>/folder-a/
-   echo "content A" > /tmp/e2e-aionrs-<timestamp>/folder-a/file-a.txt
+   mkdir -p /tmp/e2e-tomnirs-<timestamp>/folder-a/
+   echo "content A" > /tmp/e2e-tomnirs-<timestamp>/folder-a/file-a.txt
    echo "content B" > /tmp/e2e-test-file-b.txt
    ```
-2. 打开 guid 页，选择 aionrs agent
+2. 打开 guid 页，选择 tomnirs agent
 3. 选择第二个模型 + auto_edit 权限
 4. 关联文件夹 `folder-a/`
 5. 上传文件 `e2e-test-file-b.txt`
@@ -685,8 +685,8 @@ WHERE conversation_id = ? AND position = 'left' AND type = 'text';
 
 **清理义务**:
 
-- conversations name: `E2E-aionrs-<timestamp>-combo-folder-file-model`
-- temp dir: `/tmp/e2e-aionrs-<timestamp>/`
+- conversations name: `E2E-tomnirs-<timestamp>-combo-folder-file-model`
+- temp dir: `/tmp/e2e-tomnirs-<timestamp>/`
 - test file: `/tmp/e2e-test-file-b.txt`
 - sessionStorage: 同 TC-A-01
 
@@ -721,7 +721,7 @@ WHERE conversation_id = ? AND position = 'left' AND type = 'text';
    echo "File 2 content" > /tmp/e2e-file-2.txt
    echo "File 3 content" > /tmp/e2e-file-3.txt
    ```
-2. 打开 guid 页，选择 aionrs agent
+2. 打开 guid 页，选择 tomnirs agent
 3. 批量上传 3 个文件（WebUI: 选择多个文件；Desktop: 多次调用 dialog）
 4. 确认显示 3 个文件预览卡片
 5. 输入消息："Count the total lines across all attached files."
@@ -746,8 +746,8 @@ WHERE conversation_id = ? AND position = 'left' AND type = 'text';
 
 **清理义务**:
 
-- conversations name: `E2E-aionrs-<timestamp>-multi-files`
-- temp dir: `/tmp/e2e-aionrs-<timestamp>/`
+- conversations name: `E2E-tomnirs-<timestamp>-multi-files`
+- temp dir: `/tmp/e2e-tomnirs-<timestamp>/`
 - test files: `/tmp/e2e-file-*.txt`
 - sessionStorage: 同 TC-A-01
 
@@ -778,11 +778,11 @@ WHERE conversation_id = ? AND position = 'left' AND type = 'text';
 
 1. 创建测试数据：
    ```bash
-   mkdir -p /tmp/e2e-aionrs-<timestamp>/folder-x/ /tmp/e2e-aionrs-<timestamp>/folder-y/
-   echo "X content" > /tmp/e2e-aionrs-<timestamp>/folder-x/x.txt
-   echo "Y content" > /tmp/e2e-aionrs-<timestamp>/folder-y/y.txt
+   mkdir -p /tmp/e2e-tomnirs-<timestamp>/folder-x/ /tmp/e2e-tomnirs-<timestamp>/folder-y/
+   echo "X content" > /tmp/e2e-tomnirs-<timestamp>/folder-x/x.txt
+   echo "Y content" > /tmp/e2e-tomnirs-<timestamp>/folder-y/y.txt
    ```
-2. 打开 guid 页，选择 aionrs agent
+2. 打开 guid 页，选择 tomnirs agent
 3. 从文件树依次选择 `folder-x/` 和 `folder-y/`
 4. 确认显示 2 个文件夹 Tag
 5. 输入消息："List all files in both attached folders."
@@ -807,8 +807,8 @@ WHERE conversation_id = ? AND position = 'left' AND type = 'text';
 
 **清理义务**:
 
-- conversations name: `E2E-aionrs-<timestamp>-multi-folders`
-- temp dir: `/tmp/e2e-aionrs-<timestamp>/`（包含 folder-x, folder-y）
+- conversations name: `E2E-tomnirs-<timestamp>-multi-folders`
+- temp dir: `/tmp/e2e-tomnirs-<timestamp>/`（包含 folder-x, folder-y）
 - sessionStorage: 同 TC-A-01
 
 **截图数**: 3
@@ -824,22 +824,22 @@ WHERE conversation_id = ? AND position = 'left' AND type = 'text';
 
 **前置条件**:
 
-- aionrs binary **不可用**（通过环境变量 `AION_CLI_PATH=/dev/null` 模拟）
+- tomnirs binary **不可用**（通过环境变量 `TOMNI_CLI_PATH=/dev/null` 模拟）
 
 **维度组合**: N/A（验证前置检查逻辑）
 
 **操作步骤**:
 
-1. 设置环境变量：`process.env.AION_CLI_PATH = '/dev/null'`
+1. 设置环境变量：`process.env.TOMNI_CLI_PATH = '/dev/null'`
 2. 运行测试套件（或单个用例）
-3. 验证测试被 skip（状态：skipped，原因："aionrs binary not found"）
+3. 验证测试被 skip（状态：skipped，原因："tomnirs binary not found"）
 
 **DB 断言点**: N/A（测试未执行，不产生 DB 记录）
 
 **预期行为**:
 
 - 测试框架输出包含 `test.skip()` 标记
-- 控制台输出 skip 原因："aionrs binary not found, skipping E2E tests"
+- 控制台输出 skip 原因："tomnirs binary not found, skipping E2E tests"
 - CI 报告显示测试为 skipped（非 failed）
 
 **清理义务**: N/A（无 DB 记录产生）
@@ -849,21 +849,21 @@ WHERE conversation_id = ? AND position = 'left' AND type = 'text';
 **实现参考**:
 
 ```typescript
-// tests/e2e/setup/aionrs.setup.ts
-export async function checkAionrsBinary(): Promise<boolean> {
+// tests/e2e/setup/tomnirs.setup.ts
+export async function checkTomnirsBinary(): Promise<boolean> {
   try {
-    const binary = await ipcBridge.fs.findAionrsBinary.invoke();
+    const binary = await ipcBridge.fs.findTomnirsBinary.invoke();
     return binary !== null;
   } catch {
     return false;
   }
 }
 
-// tests/e2e/specs/chat-aionrs/*.spec.ts
+// tests/e2e/specs/chat-tomnirs/*.spec.ts
 test.beforeAll(async () => {
-  const hasBinary = await checkAionrsBinary();
+  const hasBinary = await checkTomnirsBinary();
   if (!hasBinary) {
-    test.skip('aionrs binary not found, skipping E2E tests');
+    test.skip('tomnirs binary not found, skipping E2E tests');
   }
 });
 ```
@@ -895,7 +895,7 @@ test.beforeAll(async () => {
    ```bash
    dd if=/dev/zero of=/tmp/e2e-large-file.bin bs=1M count=100
    ```
-2. 打开 guid 页，选择 aionrs agent
+2. 打开 guid 页，选择 tomnirs agent
 3. 尝试上传 `/tmp/e2e-large-file.bin`
 4. **验证出现错误提示**（预期：前端拦截，显示 "文件过大" 提示）
 5. 确认文件未被添加到 `uploadFile` 数组
@@ -938,10 +938,10 @@ test.beforeAll(async () => {
 
 **操作步骤**:
 
-1. 打开 guid 页，选择 aionrs agent
+1. 打开 guid 页，选择 tomnirs agent
 2. 手动触发文件夹选择事件（模拟选择不存在的路径）：
    ```typescript
-   emitter.emit('aionrs.selected.file', [
+   emitter.emit('tomnirs.selected.file', [
      { path: '/tmp/e2e-nonexistent-folder/', name: 'e2e-nonexistent-folder', isFile: false },
    ]);
    ```
@@ -972,8 +972,8 @@ SELECT status FROM conversations WHERE id = ?;
 
 **清理义务**:
 
-- conversations name: `E2E-aionrs-<timestamp>-nonexistent-folder`
-- temp dir: `/tmp/e2e-aionrs-<timestamp>/`
+- conversations name: `E2E-tomnirs-<timestamp>-nonexistent-folder`
+- temp dir: `/tmp/e2e-tomnirs-<timestamp>/`
 - sessionStorage: 同 TC-A-01
 
 **截图数**: 3
@@ -997,7 +997,7 @@ SELECT status FROM conversations WHERE id = ?;
    - 原因：根据议题 2 决策，本轮只测同一对话内切换生效
 
 4. **并发对话场景**（暂缓至后续 Gate）：
-   - 场景：同时打开 2 个 aionrs 对话，轮流发送消息 → 验证 binary 进程隔离
+   - 场景：同时打开 2 个 tomnirs 对话，轮流发送消息 → 验证 binary 进程隔离
    - 原因：需更复杂的测试编排（Playwright 多标签页 + 进程监控），本轮聚焦单对话流程
 
 ---
@@ -1056,7 +1056,7 @@ SELECT status FROM conversations WHERE id = ?;
 
 ## 8. 下一步（Gate 2 → Gate 3）
 
-1. **chat-aionrs-engineer** review 本用例设计，评估实现工作量
+1. **chat-tomnirs-engineer** review 本用例设计，评估实现工作量
 2. **team-lead** 批准后进入 Gate 3（实现）
 3. engineer 实现完成后，designer 产出 `implementation-mapping.zh.md`（TC ID → 文件:行号:函数名 映射）
 
@@ -1064,19 +1064,19 @@ SELECT status FROM conversations WHERE id = ?;
 
 ## 附录 A: 关键源码参考
 
-| 文件                                                                          | 关键行号 | 说明                                              |
-| ----------------------------------------------------------------------------- | -------- | ------------------------------------------------- |
-| `src/renderer/pages/guid/GuidPage.tsx`                                        | 465-469  | guid 页模型选择器可见性（`isGeminiMode`）         |
-| `src/renderer/pages/guid/components/AgentPillBar.tsx`                         | 58-122   | agent pill 点击事件                               |
-| `src/renderer/pages/conversation/platforms/aionrs/AionrsSendBox.tsx`          | 331-337  | `atPath` 状态（关联文件夹数组）                   |
-| `src/renderer/pages/conversation/platforms/aionrs/AionrsSendBox.tsx`          | 103-125  | 文件上传 handler                                  |
-| `src/renderer/pages/conversation/platforms/aionrs/AionrsSendBox.tsx`          | 206-212  | 发送消息（传递 `files` 参数）                     |
-| `src/renderer/pages/conversation/platforms/aionrs/useAionrsModelSelection.ts` | 36-40    | 过滤 Google Auth 模型                             |
-| `src/renderer/utils/model/agentModes.ts`                                      | 65-69    | aionrs 权限枚举（`default`, `auto_edit`, `yolo`） |
-| `src/process/task/AionrsManager.ts`                                           | 250-259  | 权限模式自动批准逻辑                              |
-| `src/process/task/AionrsManager.ts`                                           | 727-737  | `setMode()` 持久化                                |
-| `src/process/task/AionrsManager.ts`                                           | 452-489  | missing finish fallback（15s 超时）               |
-| `aioncore aionui.db`                                                          | —        | conversations + messages 由 backend 独占持久化    |
+| 文件                                                                            | 关键行号 | 说明                                               |
+| ------------------------------------------------------------------------------- | -------- | -------------------------------------------------- |
+| `src/renderer/pages/guid/GuidPage.tsx`                                          | 465-469  | guid 页模型选择器可见性（`isGeminiMode`）          |
+| `src/renderer/pages/guid/components/AgentPillBar.tsx`                           | 58-122   | agent pill 点击事件                                |
+| `src/renderer/pages/conversation/platforms/tomnirs/TomnirsSendBox.tsx`          | 331-337  | `atPath` 状态（关联文件夹数组）                    |
+| `src/renderer/pages/conversation/platforms/tomnirs/TomnirsSendBox.tsx`          | 103-125  | 文件上传 handler                                   |
+| `src/renderer/pages/conversation/platforms/tomnirs/TomnirsSendBox.tsx`          | 206-212  | 发送消息（传递 `files` 参数）                      |
+| `src/renderer/pages/conversation/platforms/tomnirs/useTomnirsModelSelection.ts` | 36-40    | 过滤 Google Auth 模型                              |
+| `src/renderer/utils/model/agentModes.ts`                                        | 65-69    | tomnirs 权限枚举（`default`, `auto_edit`, `yolo`） |
+| `src/process/task/TomnirsManager.ts`                                            | 250-259  | 权限模式自动批准逻辑                               |
+| `src/process/task/TomnirsManager.ts`                                            | 727-737  | `setMode()` 持久化                                 |
+| `src/process/task/TomnirsManager.ts`                                            | 452-489  | missing finish fallback（15s 超时）                |
+| `tomnicore tomni.db`                                                            | —        | conversations + messages 由 backend 独占持久化     |
 
 ---
 
@@ -1094,7 +1094,7 @@ SELECT
   json_extract(extra, '$.model.useModel') as extra_model,
   json_extract(extra, '$.lastTokenUsage.totalTokens') as tokens
 FROM conversations
-WHERE name LIKE 'E2E-aionrs-%';
+WHERE name LIKE 'E2E-tomnirs-%';
 
 -- 查询消息列表
 SELECT
@@ -1130,7 +1130,7 @@ FROM messages
 WHERE conversation_id = ? AND type = 'thinking';
 
 -- 清理所有 E2E 数据
-DELETE FROM conversations WHERE name LIKE 'E2E-aionrs-%';
+DELETE FROM conversations WHERE name LIKE 'E2E-tomnirs-%';
 ```
 
 ---

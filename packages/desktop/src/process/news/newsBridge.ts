@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -9,7 +9,7 @@
  * News UI.
  *
  * Like the Personal Manager bridge, this is an Electron-native bridge (not an
- * aioncore HTTP route), built with the `@office-ai/platform` `bridge` helper.
+ * tomnycore HTTP route), built with the `@office-ai/platform` `bridge` helper.
  * The typed channels are declared here and the channel-name constants
  * ({@link NEWS_CHANNELS}) are the renderer-safe contract — the renderer rebuilds
  * matching invokers from those names without importing this Node-only module

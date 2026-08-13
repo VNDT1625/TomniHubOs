@@ -2,7 +2,7 @@
 fn doctor_reports_the_canonical_understand_generation() {
     let repo = tempfile::tempdir().unwrap();
     let canonical = repo.path().join(".tomni/understand");
-    let legacy = repo.path().join(".aionui/understand");
+    let legacy = repo.path().join(".tomny/understand");
     std::fs::create_dir_all(&canonical).unwrap();
     std::fs::create_dir_all(&legacy).unwrap();
     std::fs::write(canonical.join("summary.json"), "{}").unwrap();
@@ -26,7 +26,7 @@ fn doctor_reports_the_canonical_understand_generation() {
 #[test]
 fn doctor_keeps_legacy_understand_as_a_read_fallback() {
     let repo = tempfile::tempdir().unwrap();
-    let legacy = repo.path().join(".aionui/understand");
+    let legacy = repo.path().join(".tomny/understand");
     std::fs::create_dir_all(&legacy).unwrap();
     std::fs::write(legacy.join("summary.json"), "{}").unwrap();
 

@@ -79,7 +79,7 @@ pub enum Commands {
     #[command(about = "Build intent-focused repo context from Understand/codegraph")]
     Context(ContextArgs),
 
-    #[command(about = "Query the durable shared project Wiki built by AionUi Studio")]
+    #[command(about = "Query the durable shared project Wiki built by Tomny Studio")]
     Wiki(WikiArgs),
 
     #[command(about = "Show a codebase map from Understand/codegraph")]
@@ -582,7 +582,7 @@ pub struct VerifyPythonArgs {
 
     #[arg(
         long,
-        help = "Spec slug or .aionui/specs/<slug>/ path for plan/temporary log storage"
+        help = "Spec slug or .tomny/specs/<slug>/ path for plan/temporary log storage"
     )]
     pub spec: Option<String>,
 
@@ -626,7 +626,7 @@ pub struct VerifyRunArgs {
 
     #[arg(
         long,
-        help = "Spec slug or .aionui/specs/<slug>/ path for plan/temporary log storage"
+        help = "Spec slug or .tomny/specs/<slug>/ path for plan/temporary log storage"
     )]
     pub spec: Option<String>,
 
@@ -662,7 +662,7 @@ pub struct TasksArgs {
     #[command(subcommand)]
     pub query: TasksQuery,
 
-    #[arg(long, global = true, help = "Spec slug or .aionui/specs/<slug>/ path")]
+    #[arg(long, global = true, help = "Spec slug or .tomny/specs/<slug>/ path")]
     pub spec: Option<String>,
 }
 
@@ -912,7 +912,7 @@ pub struct MemoryCompactArgs {
 
     #[arg(
         long,
-        help = "Spec slug or .aionui/specs/<slug>/ path to include task state"
+        help = "Spec slug or .tomny/specs/<slug>/ path to include task state"
     )]
     pub spec: Option<String>,
 }

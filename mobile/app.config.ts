@@ -5,20 +5,20 @@ import VERSION from './versions/version.json';
 export default ({ config }: ConfigContext): ExpoConfig => {
   return {
     ...config,
-    name: 'AionUi Mobile',
-    slug: 'aionui-mobile',
+    name: 'Tomny Mobile',
+    slug: 'tomny-mobile',
     version: VERSION.version,
     orientation: 'portrait',
     icon: './assets/images/icon.png',
-    scheme: 'aionui-mobile',
+    scheme: 'tomny-mobile',
     userInterfaceStyle: 'automatic',
     ios: {
       supportsTablet: true,
-      bundleIdentifier: 'ai.resopod.aionui',
+      bundleIdentifier: 'ai.resopod.tomny',
       buildNumber: String(VERSION.buildNumber),
       infoPlist: {
         ITSAppUsesNonExemptEncryption: false,
-        NSCameraUsageDescription: 'AionUi needs camera access to scan QR codes for server login.',
+        NSCameraUsageDescription: 'Tomny needs camera access to scan QR codes for server login.',
       },
     },
     android: {
@@ -26,7 +26,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         foregroundImage: './assets/images/icon.png',
         backgroundColor: '#000000',
       },
-      package: 'ai.resopod.aionui',
+      package: 'ai.resopod.tomny',
       versionCode: VERSION.buildNumber,
     },
     web: {

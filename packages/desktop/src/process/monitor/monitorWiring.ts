@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -59,12 +59,12 @@ const resolveMonitorDir = (): string => path.join(app.getPath('userData'), 'moni
 
 /**
  * Resolve the fork remote URL the publisher pushes fix branches to, from
- * `AIONUI_FIX_REMOTE`. Returns `undefined` when unset → the publisher stays in
+ * `TOMNY_FIX_REMOTE`. Returns `undefined` when unset → the publisher stays in
  * safe "prepare branch + commit locally, do not push" mode. Never defaults to
  * the upstream `origin` (`VNDT1625/OmniAgent`).
  */
 const resolveForkUrl = (): string | undefined => {
-  const url = process.env.AIONUI_FIX_REMOTE?.trim();
+  const url = process.env.TOMNY_FIX_REMOTE?.trim();
   return url && url.length > 0 ? url : undefined;
 };
 
@@ -164,7 +164,7 @@ export const getMonitorServices = (): MonitorServices & { bugMonitor: IBugMonito
 
   // Publisher: branches + commits an APPLIED fix and (only when a fork remote is
   // configured) pushes it + opens a PR. Pushes to a dedicated fork remote, never
-  // the upstream `origin`. Without `AIONUI_FIX_REMOTE` it prepares the branch
+  // the upstream `origin`. Without `TOMNY_FIX_REMOTE` it prepares the branch
   // locally and leaves the push to the user (safest default).
   const forkUrl = resolveForkUrl();
   const gitRunner = createGitRunner(sourceRoot);

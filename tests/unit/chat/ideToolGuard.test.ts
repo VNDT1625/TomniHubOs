@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -72,12 +72,12 @@ describe('isAllowedIdeTool', () => {
 
 describe('isToolCallAllowedInStrictMode', () => {
   it('allows when the MCP server is the built-in IDE plane', () => {
-    expect(isToolCallAllowedInStrictMode({ raw_input: { server: 'aionui-ide' } })).toBe(true);
+    expect(isToolCallAllowedInStrictMode({ raw_input: { server: 'tomny-ide' } })).toBe(true);
   });
 
   it('allows Browser-Control while keeping unrelated MCP servers denied', () => {
     expect(isToolCallAllowedInStrictMode({ title: 'browser_open' })).toBe(true);
-    expect(isToolCallAllowedInStrictMode({ raw_input: { server: 'aionui-browser-control' } })).toBe(true);
+    expect(isToolCallAllowedInStrictMode({ raw_input: { server: 'tomny-browser-control' } })).toBe(true);
     expect(isToolCallAllowedInStrictMode({ raw_input: { server: 'untrusted-tools' } })).toBe(false);
   });
 
@@ -90,8 +90,8 @@ describe('isToolCallAllowedInStrictMode', () => {
   });
 
   it('allows advertised grep and glob tools from the built-in IDE MCP server', () => {
-    expect(isToolCallAllowedInStrictMode({ raw_input: { server: 'aionui-ide', tool_name: 'ide_grep' } })).toBe(true);
-    expect(isToolCallAllowedInStrictMode({ raw_input: { server: 'aionui-ide', tool_name: 'ide_glob' } })).toBe(true);
+    expect(isToolCallAllowedInStrictMode({ raw_input: { server: 'tomny-ide', tool_name: 'ide_grep' } })).toBe(true);
+    expect(isToolCallAllowedInStrictMode({ raw_input: { server: 'tomny-ide', tool_name: 'ide_glob' } })).toBe(true);
   });
 
   it('lets an explicit IDE identity override generic permission metadata', () => {
@@ -179,7 +179,7 @@ describe('evaluateStrictModePermission', () => {
   });
 });
 
-describe('evaluateStrictModeConfirmation (aionrs legacy shape)', () => {
+describe('evaluateStrictModeConfirmation (tomnyagentic legacy shape)', () => {
   it('allows an ide_* tool identified by title', () => {
     const d = evaluateStrictModeConfirmation(true, {
       title: 'ide_search',

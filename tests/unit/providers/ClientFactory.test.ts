@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -9,7 +9,7 @@ import { ClientFactory, normalizeNewApiBaseUrl } from '@/common/api/ClientFactor
 import { OpenAIRotatingClient } from '@/common/api/OpenAIRotatingClient';
 import { GeminiRotatingClient } from '@/common/api/GeminiRotatingClient';
 import { AnthropicRotatingClient } from '@/common/api/AnthropicRotatingClient';
-import { AuthType } from '@office-ai/aioncli-core';
+import { AuthType } from '@/common/utils/platformAuthType';
 
 // Mock rotating clients
 vi.mock('@/common/api/OpenAIRotatingClient');
@@ -17,9 +17,16 @@ vi.mock('@/common/api/GeminiRotatingClient');
 vi.mock('@/common/api/AnthropicRotatingClient');
 
 // Mock utility functions
-vi.mock('@/common/utils/platformAuthType', () => ({
-  getProviderAuthType: vi.fn((provider) => provider.auth_type || provider.authType || AuthType.USE_OPENAI),
-}));
+vi.mock('@/common/utils/platformAuthType', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/common/utils/platformAuthType')>();
+  return {
+    ...actual,
+    getProviderAuthType: vi.fn(
+      (provider: Parameters<typeof actual.getProviderAuthType>[0]) =>
+        provider.auth_type || provider.authType || actual.AuthType.USE_OPENAI
+    ),
+  };
+});
 
 vi.mock('@/common/utils/platformConstants', () => ({
   isNewApiPlatform: vi.fn((platform) => platform === 'new-api'),
@@ -163,7 +170,7 @@ describe('ClientFactory', () => {
       const config = calls[0][1];
       expect(config.defaultHeaders).toEqual({
         'HTTP-Referer': 'https://github.com/VNDT1625/OmniAgent',
-        'X-Title': 'AionUi',
+        'X-Title': 'Tomny',
       });
     });
 

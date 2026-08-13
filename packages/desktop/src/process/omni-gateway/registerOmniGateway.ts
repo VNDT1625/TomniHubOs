@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -250,7 +250,7 @@ const readToken = async (): Promise<string | undefined> => {
 const writeToken = async (token: string): Promise<void> => {
   await store().save({
     id: OMNI_GATEWAY_CREDENTIAL_ID,
-    name: 'AionUi External MCP Gateway',
+    name: 'Tomny External MCP Gateway',
     kind: 'token',
     fields: { bearer: token },
   });

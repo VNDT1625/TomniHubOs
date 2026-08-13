@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -49,6 +49,7 @@ import {
 } from '@arco-design/web-react';
 import type { RefInputType } from '@arco-design/web-react/es/Input';
 import {
+  AllApplication,
   Book,
   Brain,
   Branch,
@@ -123,6 +124,7 @@ import type { EditorFsOverride } from '@renderer/pages/editor/UniversalEditor';
 import ViuPanel from './Viu';
 
 const UniversalEditor = React.lazy(() => import('@renderer/pages/editor/UniversalEditor'));
+const IdeExtensionsPanel = React.lazy(() => import('./hooks/extensions/IdeExtensionsPanel'));
 
 const CLOUD_BOOTSTRAP_EXCLUDED_DIRS = new Set([
   '.git',
@@ -167,6 +169,7 @@ type IdeMode =
   | 'hooks'
   | 'spec'
   | 'lsp'
+  | 'extensions'
   | 'expbase'
   | 'team'
   | 'viu';
@@ -549,6 +552,12 @@ const IdeWorkspace: React.FC<IdeWorkspaceProps> = ({ onBack, initialMode = 'file
       { id: 'hooks', label: t('ide.mode.hooks'), hint: t('ide.palette.category.go'), run: goto('hooks') },
       { id: 'spec', label: t('ide.mode.spec'), hint: t('ide.palette.category.go'), run: goto('spec') },
       { id: 'lsp', label: t('ide.mode.lsp'), hint: t('ide.palette.category.go'), run: goto('lsp') },
+      {
+        id: 'extensions',
+        label: t('ide.mode.extensions'),
+        hint: t('ide.palette.category.go'),
+        run: goto('extensions'),
+      },
       { id: 'expbase', label: t('ide.mode.expbase'), hint: t('ide.palette.category.go'), run: goto('expbase') },
       {
         id: 'rescan',
@@ -834,6 +843,12 @@ const IdeWorkspace: React.FC<IdeWorkspaceProps> = ({ onBack, initialMode = 'file
             onClick={() => setMode('lsp')}
           />
           <ActivityItem
+            icon={<AllApplication theme='outline' size={20} />}
+            label={t('ide.mode.extensions')}
+            active={mode === 'extensions'}
+            onClick={() => setMode('extensions')}
+          />
+          <ActivityItem
             icon={<Brain theme='outline' size={20} />}
             label={t('ide.mode.expbase')}
             active={mode === 'expbase'}
@@ -988,6 +1003,14 @@ const IdeWorkspace: React.FC<IdeWorkspaceProps> = ({ onBack, initialMode = 'file
           {mode === 'lsp' ? (
             <div className='absolute inset-0'>
               <LspServersPanel rootPath={ide.rootPath} />
+            </div>
+          ) : null}
+
+          {mode === 'extensions' ? (
+            <div className='absolute inset-0'>
+              <Suspense fallback={<Spin className='flex-center size-full' />}>
+                <IdeExtensionsPanel />
+              </Suspense>
             </div>
           ) : null}
 

@@ -120,7 +120,7 @@ fn counts_from_tasks(tasks: &[TaskRecord]) -> TaskCounts {
 }
 
 fn specs_root(project_root: &Path) -> PathBuf {
-    project_root.join(".aionui").join("specs")
+    project_root.join(".tomny").join("specs")
 }
 
 fn resolve_spec_dir(
@@ -135,7 +135,7 @@ fn resolve_spec_dir(
             .trim_end_matches('/')
             .to_string();
         let slug = normalized
-            .split(".aionui/specs/")
+            .split(".tomny/specs/")
             .last()
             .unwrap_or(&normalized)
             .split('/')
@@ -145,7 +145,7 @@ fn resolve_spec_dir(
         if slug.is_empty() {
             return Err(MtuiError::InvalidArgument {
                 message: "Spec slug is empty".to_string(),
-                suggestion: "Use --spec <slug> or --spec .aionui/specs/<slug>/".to_string(),
+                suggestion: "Use --spec <slug> or --spec .tomny/specs/<slug>/".to_string(),
             });
         }
         return Ok((slug.clone(), root.join(slug)));
@@ -153,7 +153,7 @@ fn resolve_spec_dir(
 
     let mut entries = fs::read_dir(&root)
         .map_err(|_| MtuiError::FileNotFound {
-            message: "No .aionui/specs directory found".to_string(),
+            message: "No .tomny/specs directory found".to_string(),
             suggestion: "Create a planning spec in the IDE first".to_string(),
         })?
         .filter_map(|entry| entry.ok())

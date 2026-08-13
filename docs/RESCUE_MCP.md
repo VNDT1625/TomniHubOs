@@ -90,4 +90,4 @@ node scripts/omni-mcp-sidecar.cjs stop
 
 ## Data and naming notes
 
-This rescue sidecar does not perform branding migration. It does not rename `.aionui`, does not create an `.omni` data migration, and does not rename or rewrite `aioncore.exe` references. Logs use `.omni/logs` only when `.omni` already exists; otherwise they fall back to `.aionui/logs` when present or `.omni-sidecar/logs`.
+This rescue sidecar does not perform branding migration. It does not rename `.tomni`, does not create an `.omni` data migration, and does not rename or rewrite `tomnicore.exe` references. Logs use `.omni/logs` only when `.omni` already exists; otherwise they fall back to `.tomni/logs` when present or `.omni-sidecar/logs`.

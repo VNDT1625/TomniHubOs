@@ -13,11 +13,11 @@ runtime failure → trace → context builder → file/symbol evidence → regre
 Dùng năm thư mục độc lập:
 
 ```text
-C:\Bench\AionUi-GOLDEN   ← repo gốc, không agent nào được sửa
-C:\Bench\AionUi-Tomny    ← chỉ Tomny chạy ở đây
-C:\Bench\AionUi-Claude   ← chỉ Claude chạy ở đây
-C:\Bench\AionUi-ChatGPT  ← chỉ ChatGPT/Codex chạy ở đây
-C:\Bench\AionUi-Kiro     ← chỉ Kiro chạy ở đây
+C:\Bench\TomniHubOS-GOLDEN   ← repo gốc, không agent nào được sửa
+C:\Bench\TomniHubOS-Tomny    ← chỉ Tomny chạy ở đây
+C:\Bench\TomniHubOS-Claude   ← chỉ Claude chạy ở đây
+C:\Bench\TomniHubOS-ChatGPT  ← chỉ ChatGPT/Codex chạy ở đây
+C:\Bench\TomniHubOS-Kiro     ← chỉ Kiro chạy ở đây
 ```
 
 Quy trình:
@@ -64,31 +64,31 @@ Không thêm tên file hoặc predicate vào prompt. Nếu thêm manh mối, ben
 
 ## Tiêu chí chấm chất lượng (10 điểm)
 
-| Hạng mục | Điểm | Cách chấm |
-|---|---:|---|
-| Tìm đúng nguyên nhân gốc | 2.0 | Nhận ra bất nhất giữa việc nhận diện lỗi network và mapping vào ContextPack, bao gồm 4xx |
-| Khoanh vùng đúng chuỗi file/symbol | 2.0 | Có bằng chứng từ tracer/buffer, context builder và test |
-| Sửa đúng hành vi | 3.0 | Lỗi 404 được map vào API/service; 5xx/transport/exception vẫn hoạt động |
-| Regression test | 1.5 | Có test 404 thất bại trước và pass sau |
-| Phạm vi thay đổi | 1.0 | Không sửa lan sang UI, provider hoặc file không liên quan |
-| Báo cáo cuối | 0.5 | Nêu nguyên nhân, thay đổi, test và giới hạn một cách kiểm chứng được |
+| Hạng mục                           | Điểm | Cách chấm                                                                                |
+| ---------------------------------- | ---: | ---------------------------------------------------------------------------------------- |
+| Tìm đúng nguyên nhân gốc           |  2.0 | Nhận ra bất nhất giữa việc nhận diện lỗi network và mapping vào ContextPack, bao gồm 4xx |
+| Khoanh vùng đúng chuỗi file/symbol |  2.0 | Có bằng chứng từ tracer/buffer, context builder và test                                  |
+| Sửa đúng hành vi                   |  3.0 | Lỗi 404 được map vào API/service; 5xx/transport/exception vẫn hoạt động                  |
+| Regression test                    |  1.5 | Có test 404 thất bại trước và pass sau                                                   |
+| Phạm vi thay đổi                   |  1.0 | Không sửa lan sang UI, provider hoặc file không liên quan                                |
+| Báo cáo cuối                       |  0.5 | Nêu nguyên nhân, thay đổi, test và giới hạn một cách kiểm chứng được                     |
 
 ## Chỉ số hiệu suất cần ghi lại
 
 Ghi một dòng cho mỗi agent/run:
 
-| Metric | Ý nghĩa |
-|---|---|
-| `wall_time_s` | Từ lúc gửi Prompt 1 đến câu trả lời cuối Prompt 2 |
-| `input_tokens` | Tổng token input của mọi request trong hai prompt |
-| `output_tokens` | Tổng token output |
-| `tool_calls` | Tổng số tool call |
-| `research_calls` | Số lần gọi `ide_research`/tương đương |
+| Metric               | Ý nghĩa                                                    |
+| -------------------- | ---------------------------------------------------------- |
+| `wall_time_s`        | Từ lúc gửi Prompt 1 đến câu trả lời cuối Prompt 2          |
+| `input_tokens`       | Tổng token input của mọi request trong hai prompt          |
+| `output_tokens`      | Tổng token output                                          |
+| `tool_calls`         | Tổng số tool call                                          |
+| `research_calls`     | Số lần gọi `ide_research`/tương đương                      |
 | `duplicate_research` | Số query trùng bị gọi lại; mục tiêu là 0 trong cùng action |
-| `files_read` | Số file thực sự đọc, không chỉ file được nêu trong kết quả |
-| `tests_run` | Số test/test suite đã chạy |
-| `quality_score` | Điểm theo bảng 10 điểm |
-| `passed` | Test hồi quy cuối cùng có pass hay không |
+| `files_read`         | Số file thực sự đọc, không chỉ file được nêu trong kết quả |
+| `tests_run`          | Số test/test suite đã chạy                                 |
+| `quality_score`      | Điểm theo bảng 10 điểm                                     |
+| `passed`             | Test hồi quy cuối cùng có pass hay không                   |
 
 Nên tính thêm hai chỉ số tổng hợp:
 
@@ -103,10 +103,10 @@ Không dùng token hoặc thời gian một mình để tuyên bố thắng. M�
 
 Chạy mỗi cấu hình ít nhất 3 lần rồi lấy median:
 
-1. Tomny chạy trong `AionUi-Tomny`, Save/dedup bật.
-2. Claude chạy trong `AionUi-Claude`, cùng model qua router.
-3. ChatGPT/Codex chạy trong `AionUi-ChatGPT`, cùng model qua router.
-4. Kiro chạy trong `AionUi-Kiro`, cùng model qua router.
+1. Tomny chạy trong `TomniHubOS-Tomny`, Save/dedup bật.
+2. Claude chạy trong `TomniHubOS-Claude`, cùng model qua router.
+3. ChatGPT/Codex chạy trong `TomniHubOS-ChatGPT`, cùng model qua router.
+4. Kiro chạy trong `TomniHubOS-Kiro`, cùng model qua router.
 5. Tuỳ chọn: một track Tomny baseline khác với Save/dedup tắt.
 
 Mỗi run phải bắt đầu từ cùng fixture bug. Sau run, lưu patch và log riêng; không để agent sau nhìn thấy patch của agent trước.
@@ -128,11 +128,11 @@ Nếu chỉ giảm token nhưng chất lượng dưới 9/10, kết luận là *
 `traceContextBuilder.ts` trong repo gốc phải typecheck sạch và xử lý 4xx đúng. Dùng các script trong thư mục này:
 
 ```powershell
-.\prepare-copies.ps1 -SourceRoot C:\NDT\PJ\AionUi -DestinationRoot C:\Bench\AionUi-fix-bug
-.\apply-fixture.ps1 -TargetRoot C:\Bench\AionUi-fix-bug\AionUi-Tomny
-.\apply-fixture.ps1 -TargetRoot C:\Bench\AionUi-fix-bug\AionUi-Claude
-.\apply-fixture.ps1 -TargetRoot C:\Bench\AionUi-fix-bug\AionUi-ChatGPT
-.\apply-fixture.ps1 -TargetRoot C:\Bench\AionUi-fix-bug\AionUi-Kiro
+.\prepare-copies.ps1 -SourceRoot C:\NDT\PJ\TomniHubOS -DestinationRoot C:\Bench\TomniHubOS-fix-bug
+.\apply-fixture.ps1 -TargetRoot C:\Bench\TomniHubOS-fix-bug\TomniHubOS-Tomny
+.\apply-fixture.ps1 -TargetRoot C:\Bench\TomniHubOS-fix-bug\TomniHubOS-Claude
+.\apply-fixture.ps1 -TargetRoot C:\Bench\TomniHubOS-fix-bug\TomniHubOS-ChatGPT
+.\apply-fixture.ps1 -TargetRoot C:\Bench\TomniHubOS-fix-bug\TomniHubOS-Kiro
 ```
 
 `apply-fixture.ps1` chỉ đổi hai predicate `status >= 400` thành `status >= 500` và từ chối sửa `GOLDEN`. Sau mỗi run, copy lại từ `GOLDEN` hoặc dùng `restore-fixture.ps1` khi cần kiểm tra nhanh.
@@ -140,7 +140,7 @@ Nếu chỉ giảm token nhưng chất lượng dưới 9/10, kết luận là *
 Sau khi một agent hoàn tất, chấm kỹ thuật bằng evaluator nằm ngoài ba repo agent:
 
 ```powershell
-.\evaluate-run.ps1 -TargetRoot C:\Bench\AionUi-fix-bug\AionUi-Tomny
+.\evaluate-run.ps1 -TargetRoot C:\Bench\TomniHubOS-fix-bug\TomniHubOS-Tomny
 ```
 
 Evaluator chạy probe 404 thực tế, test Quick Test liên quan, typecheck và báo số file đã thay đổi. Trước khi agent sửa, fixture phải cho `maps404ToApiService: false`; sau khi sửa đúng phải thành `true`.

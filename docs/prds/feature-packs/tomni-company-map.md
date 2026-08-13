@@ -1,4 +1,9 @@
-# Tomni Company Map — Live Multi-Agent Organization
+# Tomny Company Map — Live Multi-Agent Organization
+
+> **Design conformance:** [Tomny Hub OS Visual Design System](tomni-hub-visual-design.md) là nguồn
+> sự thật cho typography, glass, spacing, control, popup và responsive. Mock ASCII bên dưới
+> chỉ mô tả information architecture; không được dùng để tạo một visual system khác.
+
 
 > Trạng thái: Đã chốt định hướng UX nền tảng  
 > Ngày cập nhật: 2026-07-21  
@@ -119,23 +124,21 @@ Hoạt động
 
 ## 4. Company Map là giao diện trung tâm
 
-### 4.1 Vị trí trong shell Tomni
+### 4.1 Vị trí trong shell Tomny
 
-Company Map nằm trong content chính, bên dưới header và giữa hai panel dùng chung của Hub.
+Company Map nằm trong content chính của shell Tomny, dưới topbar và cạnh status rail khi đủ rộng.
 
 ```text
-Header
-├─ Panel trái
-├─ Company Map
-└─ Panel trạng thái phải
+Topbar 48 px
+├─ Sidebar 220/64 px
+├─ Company Map (fluid)
+└─ Status rail 256 px ở viewport >= 1180 px
 ```
 
-Hai panel trái và phải dùng cơ chế ghim/tự ẩn:
-
-- ghim: chiếm không gian layout;
-- bỏ ghim: tự ẩn và mở dạng overlay khi chuột tới mép;
-- khi cả hai panel được ẩn, Company Map mở rộng gần toàn màn hình;
-- bản đồ không bị reset vị trí hoặc zoom khi panel mở/đóng;
+- Sidebar dùng nút collapse; dưới 760 px mở bằng drawer/overlay.
+- Status rail ẩn dưới 1180 px và nội dung của rail mở qua popup/shortcut.
+- Không dùng hover-edge auto-hide hoặc trạng thái pin riêng cho hai panel.
+- Bản đồ không reset vị trí/zoom khi shell thay đổi kích thước.
 - Company lớn phải xem được bằng kéo, cuộn và zoom.
 
 ### 4.2 Cảm giác giống bản đồ
@@ -296,7 +299,7 @@ Có bộ chọn:
 
 ```text
 ┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
-│ ◈ TOMNI                    🔍 Tìm app, workspace, company, agent...                              🔔 4        │
+│ ◈ TOMNY                    🔍 Tìm app, workspace, company, agent...                              🔔 4        │
 ├──────────────────────┬─────────────────────────────────────────────────────────────┬─────────────────────────┤
 │                  📌  │ Company                                                     │ Trạng thái          📌 │
 │ ◉ Home               │                                                             │                         │
@@ -308,14 +311,14 @@ Có bộ chọn:
 │ ⚙ Cài đặt            │ └─────────────────────────────────────────────────────────┘ │                         │
 │                      │                                                             │ ┌─────────────────────┐ │
 │ COMPANY            ＋ │  ┌───────────────────────────────────────────────────────┐  │ │ Thông báo          │ │
-│ ▾ Aion Company       │  │                    COMPANY MAP                        │  │ │ 4 chưa đọc         │ │
-│   Tomni Labs         │  │                                                       │  │ │ Company · Chat    →│ │
+│ ▾ Tomny Company       │  │                    COMPANY MAP                        │  │ │ 4 chưa đọc         │ │
+│   Tomny Labs         │  │                                                       │  │ │ Company · Chat    →│ │
 │   Security Company   │  │   ┌────────────────┐       ┌────────────────┐         │  │ └─────────────────────┘ │
-│                      │  │   │ Tomni Labs     │       │ Security Co.   │         │  │                         │
+│                      │  │   │ Tomny Labs     │       │ Security Co.   │         │  │                         │
 │ WORKSPACES         ＋ │  │   │ ● Running     │       │ ◐ Waiting      │         │  │ ┌─────────────────────┐ │
-│ ▾ AionUi             │  │   │ 4 phòng ban   │       │ 2 phòng ban   │         │  │ │ Models             │ │
+│ ▾ Tomny Hub OS             │  │   │ 4 phòng ban   │       │ 2 phòng ban   │         │  │ │ Models             │ │
 │   AI Security        │  │   │ 18 agent      │       │ 7 agent       │         │  │ │ ● OpenAI           │ │
-│   Tomni Design       │  │   └────────────────┘       └────────────────┘         │  │ │ ● Anthropic        │ │
+│   Tomny Design       │  │   └────────────────┘       └────────────────┘         │  │ │ ● Anthropic        │ │
 │                      │  │                                                       │  │ │ 7 model khả dụng → │ │
 │ APPS               ＋ │  │           ┌────────────────┐                          │  │ └─────────────────────┘ │
 │ ◇ Chat               │  │           │ Content Studio │                          │  │                         │
@@ -334,11 +337,11 @@ Có bộ chọn:
 
 ## 8. Mock UI — Bên trong một Company
 
-Khi click `Tomni Labs`, camera zoom vào cùng canvas:
+Khi click `Tomny Labs`, camera zoom vào cùng canvas:
 
 ```text
 ┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
-│ ← Company Map   TOMNI LABS     ● RUNNING     4 phòng ban · 8 nhóm · 18 agent      [Tạm dừng] [⋯]          │
+│ ← Company Map   TOMNY LABS     ● RUNNING     4 phòng ban · 8 nhóm · 18 agent      [Tạm dừng] [⋯]          │
 ├──────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                                              │
 │                          ┌────────────────────────────────────┐                                              │
@@ -465,7 +468,7 @@ Animation chỉ phản ánh event thật.
 
 ### 11.1 Character Library
 
-Tomni có một thư viện khoảng 100 nhân vật pixel-art, được bổ sung dần theo phiên bản.
+Tomny có một thư viện khoảng 100 nhân vật pixel-art, được bổ sung dần theo phiên bản.
 
 Mỗi character là một bộ asset hoàn chỉnh:
 
@@ -523,7 +526,7 @@ Quy trình:
 Tải ảnh
 → chọn vùng khuôn mặt
 → xóa nền
-→ chuyển sang phong cách pixel của Tomni
+→ chuyển sang phong cách pixel của Tomny
 → chọn tóc, trang phục, phụ kiện
 → sinh sprite animation chuẩn
 → xem trước
@@ -564,12 +567,12 @@ Mock UI:
 │                                                                               │
 │ Tên Company                                                                  │
 │ ┌───────────────────────────────────────────────────────────────────────────┐ │
-│ │ Tomni Product Company                                                    │ │
+│ │ Tomny Product Company                                                    │ │
 │ └───────────────────────────────────────────────────────────────────────────┘ │
 │                                                                               │
 │ Company này cần hoàn thành điều gì?                                           │
 │ ┌───────────────────────────────────────────────────────────────────────────┐ │
-│ │ Xây dựng, kiểm thử và phát hành phiên bản mới của Tomni.                 │ │
+│ │ Xây dựng, kiểm thử và phát hành phiên bản mới của Tomny.                 │ │
 │ └───────────────────────────────────────────────────────────────────────────┘ │
 │                                                                               │
 │ Cấu trúc đề xuất                                                              │
@@ -579,7 +582,7 @@ Mock UI:
 │ │      [Chỉnh sửa] │ │      [Chỉnh sửa] │ │      [Chỉnh sửa] │              │
 │ └──────────────────┘ └──────────────────┘ └──────────────────┘              │
 │                                                                               │
-│ Chủ tịch: Atlas      Workspace: AionUi      Chế độ: Có giám sát             │
+│ Chủ tịch: Atlas      Workspace: Tomny Hub OS      Chế độ: Có giám sát             │
 │                                                                               │
 │                                        [Lưu bản nháp] [Tạo và khởi chạy]    │
 └───────────────────────────────────────────────────────────────────────────────┘
@@ -609,9 +612,9 @@ Hoạt động
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ Thời gian  Company        Phòng ban      Nhóm         Hoạt động             │
 ├──────────────────────────────────────────────────────────────────────────────┤
-│ 14:32      Tomni Labs     Development    Frontend     Gửi bản review         │
+│ 14:32      Tomny Labs     Development    Frontend     Gửi bản review         │
 │ 14:31      Security Co.   Analysis       Scan         Phát hiện URL nguy hiểm│
-│ 14:29      Tomni Labs     Quality        Testing      Build #128 bắt đầu     │
+│ 14:29      Tomny Labs     Quality        Testing      Build #128 bắt đầu     │
 │ 14:25      Content Studio Writing        Editorial    Hoàn thành bài viết    │
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -629,7 +632,7 @@ Click agent:
 - camera focus đúng vị trí;
 - agent có viền sáng;
 - bảng chi tiết trượt từ cạnh phải;
-- không thay thế panel trạng thái toàn cục nếu panel đó đang ghim;
+- không thay thế status rail toàn cục; inspector là overlay/drawer riêng của map;
 - inspector có thể đóng bằng `Esc`.
 
 ```text
@@ -672,14 +675,14 @@ Kết quả:
 
 Global Search vẫn có thể tìm Company và dẫn tới đúng vị trí trên map.
 
-## 16. Hành vi khi panel trái/phải ẩn
+## 16. Hành vi khi shell thay đổi
 
-- Company Map phải tận dụng toàn bộ vùng trống mới.
-- Camera giữ nguyên tâm nội dung đang xem.
-- Zoom không tự thay đổi đột ngột.
-- Vùng kích hoạt panel ở mép màn hình không được chặn thao tác kéo map.
-- Khi đang kéo map sát mép, panel chỉ mở sau delay đủ dài để tránh kích hoạt nhầm.
-- Có nút `Focus Mode` để ẩn cả hai panel và header phụ, chỉ giữ map controls tối thiểu.
+- Company Map tận dụng vùng trống khi sidebar collapse hoặc status rail ẩn theo breakpoint.
+- Camera giữ nguyên tâm nội dung; zoom không thay đổi đột ngột khi resize.
+- Drawer/sidebar overlay không chặn thao tác kéo map sau khi đóng.
+- Không có vùng hover ở mép màn hình vì dễ xung đột với pan.
+- `Focus Mode` chỉ được ẩn toolbar phụ và surface của Company Map cho đến khi product owner
+  xác nhận có thể ẩn topbar/shell toàn cục.
 
 ## 17. Accessibility và giảm chuyển động
 
@@ -795,8 +798,8 @@ Dữ liệu map layout nên lưu riêng với cấu trúc runtime để có th�
 - Không bắt click phòng ban mới thấy nhóm.
 - Zoom điều khiển lượng chi tiết, không thay thế cấu trúc.
 - Map hỗ trợ kéo và cuộn như bản đồ.
-- Company Map nằm giữa hai panel ghim/tự ẩn của Hub.
-- Khi tắt hai panel, map dùng gần toàn màn hình.
+- Company Map nằm trong content fluid của shell; sidebar collapse và rail responsive theo contract chung.
+- Khi sidebar collapse hoặc rail ẩn theo breakpoint, map tận dụng vùng trống và giữ camera.
 - Dây nối và lá thư đại diện cho `sendMessage` thật.
 - Animation không được giả lập hoạt động.
 - Avatar là danh tính ổn định của agent.

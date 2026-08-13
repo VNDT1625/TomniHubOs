@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -22,7 +22,7 @@
  * This step is the missing wiring that previously left the Manager feature
  * UI-only: the page worked, but no agent could ever discover the
  * `manager_*` tools. Without this registration the catalog has no
- * `aionui-manager` entry, so the "Super" / MCP picker never offers it.
+ * `tomny-manager` entry, so the "Super" / MCP picker never offers it.
  *
  * The catalog entry is created `enabled: false` (available, not auto-attached to
  * every new chat): a conversation opts in via the MCP picker / the "Super"
@@ -77,7 +77,7 @@ const isSameStdioTransport = (left: IMcpServerTransportStdio, right: IMcpServerT
 };
 
 /**
- * Ensure the catalog has the `aionui-manager` stdio entry, creating or
+ * Ensure the catalog has the `tomny-manager` stdio entry, creating or
  * refreshing it as needed.
  *
  * @returns `true` when the catalog reflects the bundled server, `false` on any

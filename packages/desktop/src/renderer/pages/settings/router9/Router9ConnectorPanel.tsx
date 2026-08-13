@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -21,7 +21,7 @@ import { Button, Collapse, Input, Message, Switch, Tag, Tooltip } from '@arco-de
 import { Copy, LinkCloud, Components, CheckOne, PlayOne, Browser, ChartHistogram } from '@icon-park/react';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import AionSelect from '@/renderer/components/base/AionSelect';
+import TomnySelect from '@/renderer/components/base/TomnySelect';
 import {
   buildConnectorPlan,
   CONNECTOR_TARGETS,
@@ -111,7 +111,7 @@ const mechanismColor = (mechanism: string): string => {
 };
 
 type Router9ConnectorPanelProps = {
-  /** Refresh model consumers after Main has synchronized Tomni's managed provider. */
+  /** Refresh model consumers after Main has synchronized Tomny's managed provider. */
   onProviderSynced?: () => void;
 };
 
@@ -198,15 +198,15 @@ const Router9ConnectorPanel: React.FC<Router9ConnectorPanelProps> = ({ onProvide
   };
 
   const restoreManagedClient = async (status: ManagedRouter9Status): Promise<string> => {
-    const client = await router9Client.ensureClient(`Tomni · ${target?.label ?? targetId}`);
+    const client = await router9Client.ensureClient(`Tomny · ${target?.label ?? targetId}`);
     if (!client.ok) throw new Error('error' in client ? client.error : 'unknown');
     if (!client.data.key) throw new Error(t('settings.router9.clientKeyUnavailable'));
     setManagedStatus(status);
     setBaseUrl(status.baseUrl);
     setApiKey(client.data.key);
-    // Tomni is a gateway consumer of its own, separate from the selected CLI.
+    // Tomny is a gateway consumer of its own, separate from the selected CLI.
     // Main owns the dedicated credential and provider-store update so the
-    // renderer never has to copy a CLI key into Tomni's direct-provider list.
+    // renderer never has to copy a CLI key into Tomny's direct-provider list.
     void router9Client.syncTomniProvider().then((synced) => {
       if (!synced.ok) return;
       setAvailableModels(synced.data.models);
@@ -243,8 +243,6 @@ const Router9ConnectorPanel: React.FC<Router9ConnectorPanelProps> = ({ onProvide
   const useManagedGateway = async () => {
     setManagedLoading(true);
     try {
-      const preference = await router9Client.setAutoStart(true);
-      if (!preference.ok) throw new Error('error' in preference ? preference.error : 'unknown');
       const started = await router9Client.start();
       if (!started.ok) throw new Error('error' in started ? started.error : 'unknown');
       const clientKey = await restoreManagedClient(started.data);
@@ -340,9 +338,9 @@ const Router9ConnectorPanel: React.FC<Router9ConnectorPanelProps> = ({ onProvide
         if (res.ok) {
           const selectedModel = model.trim();
           if (target?.agentPreferenceKey && selectedModel) {
-            // Config files control standalone CLIs; Tomni's main chat keeps a
+            // Config files control standalone CLIs; Tomny's main chat keeps a
             // separate per-agent preference. Keep both surfaces aligned for
-            // every connector target that has a matching Tomni agent.
+            // every connector target that has a matching Tomny agent.
             await savePreferredModelId(target.agentPreferenceKey, preferredChatModel(selectedModel));
           }
           setApplied(res.data);
@@ -529,7 +527,7 @@ const Router9ConnectorPanel: React.FC<Router9ConnectorPanelProps> = ({ onProvide
           <div className='grid grid-cols-1 md:grid-cols-2 gap-12px'>
             <label className='flex flex-col gap-4px'>
               <span className='text-12px text-t-secondary'>{t('settings.router9.targetLabel')}</span>
-              <AionSelect
+              <TomnySelect
                 data-testid='router9-target-select'
                 aria-label={t('settings.router9.targetLabel')}
                 value={targetId}
@@ -537,11 +535,11 @@ const Router9ConnectorPanel: React.FC<Router9ConnectorPanelProps> = ({ onProvide
                 className='w-full'
               >
                 {CONNECTOR_TARGETS.map((tg) => (
-                  <AionSelect.Option key={tg.id} value={tg.id}>
+                  <TomnySelect.Option key={tg.id} value={tg.id}>
                     {tg.label}
-                  </AionSelect.Option>
+                  </TomnySelect.Option>
                 ))}
-              </AionSelect>
+              </TomnySelect>
             </label>
             <label className='flex flex-col gap-4px'>
               <span className='text-12px text-t-secondary'>{t('settings.router9.endpointLabel')}</span>
@@ -570,7 +568,7 @@ const Router9ConnectorPanel: React.FC<Router9ConnectorPanelProps> = ({ onProvide
             </label>
             <label className='flex flex-col gap-4px'>
               <span className='text-12px text-t-secondary'>{t('settings.router9.modelLabel')}</span>
-              <AionSelect
+              <TomnySelect
                 aria-label={t('settings.router9.modelLabel')}
                 value={model || undefined}
                 onChange={(value) => selectModel(value ?? '')}
@@ -580,27 +578,27 @@ const Router9ConnectorPanel: React.FC<Router9ConnectorPanelProps> = ({ onProvide
                 allowClear
               >
                 {availableModels.map((modelId) => (
-                  <AionSelect.Option key={modelId} value={modelId}>
+                  <TomnySelect.Option key={modelId} value={modelId}>
                     {modelId}
-                  </AionSelect.Option>
+                  </TomnySelect.Option>
                 ))}
-              </AionSelect>
+              </TomnySelect>
             </label>
             <label className='flex flex-col gap-4px'>
               <span className='text-12px text-t-secondary'>{t('settings.router9.reasoningLabel')}</span>
-              <AionSelect
+              <TomnySelect
                 data-testid='router9-reasoning-select'
                 aria-label={t('settings.router9.reasoningLabel')}
                 value={reasoningEffort ?? 'auto'}
                 onChange={(value) => selectReasoning(String(value))}
               >
-                <AionSelect.Option value='auto'>{t('settings.router9.reasoning.auto')}</AionSelect.Option>
+                <TomnySelect.Option value='auto'>{t('settings.router9.reasoning.auto')}</TomnySelect.Option>
                 {ROUTER9_REASONING_EFFORTS.map((effort) => (
-                  <AionSelect.Option key={effort} value={effort}>
+                  <TomnySelect.Option key={effort} value={effort}>
                     {t(`settings.router9.reasoning.${effort}`)}
-                  </AionSelect.Option>
+                  </TomnySelect.Option>
                 ))}
-              </AionSelect>
+              </TomnySelect>
               <span className='text-10px leading-4 text-t-tertiary'>{t('settings.router9.reasoningHint')}</span>
             </label>
           </div>
@@ -731,7 +729,7 @@ const Router9ConnectorPanel: React.FC<Router9ConnectorPanelProps> = ({ onProvide
                     icon={<CheckOne theme='outline' size='14' />}
                     onClick={() => void syncToTomniChat()}
                   >
-                    {t('settings.router9.useInTomniChat')}
+                    {t('settings.router9.useInTomnyChat')}
                   </Button>
                   <span className='text-12px text-t-secondary'>{t('settings.router9.manualChatHint')}</span>
                 </div>

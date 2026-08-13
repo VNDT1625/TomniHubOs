@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -8,7 +8,7 @@
  * System Insight IPC bridge — exposes the Main-process {@link SystemInfoService}
  * to the renderer Quan sát page (Settings › Quan sát).
  *
- * Like `resourceBridge`, this is an Electron-native bridge (not an aioncore HTTP
+ * Like `resourceBridge`, this is an Electron-native bridge (not an tomnycore HTTP
  * route): the service is a Main-process singleton that owns the sampling timer
  * and per-process priority control, so its surface is reached through the same
  * `ipcBridge` provider/emitter channels used by the other native bridges.

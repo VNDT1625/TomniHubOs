@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -18,7 +18,7 @@ interface ChannelConflictWarningProps {
 }
 
 /**
- * Warning component when OpenClaw channel conflicts with AionUi Channels
+ * Warning component when OpenClaw channel conflicts with Tomny Channels
  */
 export const ChannelConflictWarning: React.FC<ChannelConflictWarningProps> = ({
   platform,

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -24,7 +24,7 @@ import { createSocket, type Socket } from 'node:dgram';
 /** UDP port both the beacon and the listener use (must match across the LAN). */
 const DISCOVERY_PORT = 41329;
 /** Magic tag so we ignore unrelated datagrams on the port. */
-const MAGIC = 'aionui-collab-v1';
+const MAGIC = 'tomny-collab-v1';
 /** Subnet broadcast address. */
 const BROADCAST_ADDR = '255.255.255.255';
 /** How often the host re-broadcasts its beacon. */

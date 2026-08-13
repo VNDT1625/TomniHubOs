@@ -1,235 +1,151 @@
-# PRD — Feature Packs (Modular Omni)
+﻿# PRD index — Tomny Hub Agent OS packages
 
-> **Trạng thái:** ĐÃ CHỐT NGUYÊN TẮC, **HOÃN TRIỂN KHAI** đến khi các tính năng
-> chính của app ổn định (gần ra mắt v3). Tài liệu này lưu lại quyết định và kế
-> hoạch để khi quay lại không phải nghĩ từ đầu.
-> **Tác giả:** Omni team. **Ngày tạo:** 2026-06-01.
+> **Design conformance:** [Tomny Hub OS Visual Design System](tomni-hub-visual-design.md) là nguồn
+> sự thật cho typography, glass, spacing, control, popup và responsive. Mock ASCII trong các PRD
+> chỉ mô tả information architecture; không được dùng để tạo một visual system khác.
+> **Trạng thái:** Active design baseline
+> **Ngày chuẩn hóa:** 2026-07-23
 
-## 1. Bối cảnh & vấn đề
+## 1. Mục tiêu
 
-Omni đang gộp nhiều "ứng dụng con" trong một app Electron: Chat (lõi),
-Browser nhúng + web-agent, Studio (Universal Editor + Make Video + Automation +
-IDE Repo Intelligence + IDE Understand), Manager (Tasks/Notes/Schedule),
-Testing đa nền tảng, Bug Monitor, Agent Company, Pet, v.v.
+Tomny chuyển từ một app Electron chứa sẵn mọi tính năng thành Hub Agent OS có installer lõi
+gọn và các package tải theo nhu cầu. Việc chuyển hóa phải giữ lại business logic, dữ liệu và
+năng lực đang hoạt động tốt; không big-bang rewrite.
 
-Mỗi tính năng kéo theo phụ thuộc nặng riêng (ví dụ Browser cần `yt-dlp`,
-`ffmpeg`; Studio cần ONLYOFFICE Document Server; IDE cần `web-tree-sitter` +
-data file lớn; Make Video có thể cần model image-gen). Đóng gói tất cả vào
-một installer làm app **rất nặng** dù phần lớn user chỉ dùng vài tính năng.
+Kết quả sản phẩm tối thiểu:
 
-## 2. Mục tiêu
+- Base OS mở và chat được khi chưa cài package tùy chọn;
+- Store tìm, cài, cập nhật, rollback và gỡ package;
+- app đã cài xuất hiện trong Apps Library và có thể ghim;
+- app đang phát triển xuất hiện ở Home với trạng thái Development;
+- Studio là một Suite App Package tải một lần;
+- package có manifest, signature, permission và sandbox;
+- UI của Hub, popup, page và app opt-in dùng cùng design system.
 
-- Installer **gọn**: chỉ chứa lõi (Chat + aioncore + cấu hình + i18n + UI khung).
-- Mỗi tính năng lớn = một **feature pack** tải về theo yêu cầu, kiểu update nhỏ.
-- Người dùng vào tính năng chưa cài → modal "Tải gói X (~Y MB)" → tải xong dùng được.
-- Mỗi pack **độc lập về phiên bản**, **cập nhật riêng**, **gỡ được**.
-- App mở dù không có pack nào — chế độ Chat thuần vẫn chạy bình thường.
+## 2. Taxonomy chính thức
 
-## 3. Phi mục tiêu (giai đoạn này)
+Store và Creator Platform chỉ có ba loại package cấp cao:
 
-- KHÔNG xây dựng "marketplace" cho pack do bên thứ ba publish (chỉ pack chính
-  chủ Omni, ký số). Mở cho cộng đồng là việc rất khác và cho sau.
-- KHÔNG hỗ trợ tải pack từ network nội bộ doanh nghiệp (offline mirror) ở
-  giai đoạn đầu — sẽ thêm khi có nhu cầu thật.
-- KHÔNG đụng aioncore (Rust backend): aioncore vẫn bundle như hiện tại.
+| Loại | Vai trò | Ví dụ |
+| --- | --- | --- |
+| **App Package** | ứng dụng hoàn chỉnh có surface/workspace riêng | Studio Suite, IDE, Browser |
+| **UI Package** | token/theme/widget/layout cho Hub hoặc app opt-in | Developer Workspace, Accessibility UI |
+| **Agent Capsule** | hành vi AI có prompt, workflow, automation, tool và policy | Research, Security Audit |
 
-## 4. User stories (rút gọn)
+`Feature Pack`, `Capability Package` và `Code Pack` là thuật ngữ lịch sử, không dùng làm nhãn
+sản phẩm mới. Asset/binary có thể là nội dung bên trong App Package, không phải loại package
+cấp cao thứ tư.
 
-- **U1** — Là user mới, tôi tải installer ~80 MB (thay vì ~250 MB), cài nhanh,
-  vào ngay được Chat.
-- **U2** — Khi vào Settings → Browser, tôi thấy modal "Tải gói Trình duyệt
-  (~25 MB, gồm yt-dlp + ffmpeg)". Bấm tải, có progress bar, xong thì Browser
-  bật lên ngay không cần restart.
-- **U3** — Settings → Tính năng cho phép tôi xem mọi pack đã cài, dung lượng,
-  bật/tắt auto-update, gỡ pack không dùng để giải phóng đĩa.
-- **U4** — Tôi đang dùng app v2.x. Update lên v3.x → app phát hiện tôi đang
-  dùng Browser/Studio/Manager → tự tải lại các pack đó **ở nền** rồi báo
-  "Tính năng đã sẵn sàng", không gián đoạn.
-- **U5** — Mất mạng → tính năng đã cài vẫn dùng được; tính năng chưa cài hiện
-  thông báo "Cần kết nối để tải".
-- **U6** — Pack có lỗ hổng/lỗi → Omni đẩy pack mới, app phát hiện auto-update
-  trong nền (theo channel `stable`/`beta` user chọn).
+## 3. Base OS
 
-## 5. Yêu cầu chức năng
+Base luôn cài và không thể gỡ:
 
-### 5.1 Pack registry & manifest
+- Hub shell, Home, Store, Account/Auth, Settings và onboarding;
+- Chat/agent control tối thiểu;
+- Package Manager, App Registry và contribution registries;
+- Tomny Core, Model/CLI gateway, context/workspace primitives;
+- Permission Broker, Secret Vault và sandbox supervisor;
+- updater, recovery, entitlement và diagnostics.
 
-- Mỗi pack có manifest JSON ký số, gồm: `id`, `version`, `appCompat` (semver
-  range của app), `os/arch`, `sizeBytes`, `sha256`, `urls[]` (HTTPS), `dependsOn[]`,
-  `includes[]` (binary, code bundle, asset, locale), `signature`.
-- Manifest registry tổng đặt ở GitHub Releases của Omni (URL bất biến qua
-  config app), tải về cache trong `userData/packs/registry.json`.
+Editor, browser automation, media engine và công cụ chuyên môn nặng phải tách khỏi Base khi
+boundary thực tế cho phép.
 
-### 5.2 Cài / cập nhật / gỡ
+## 4. Vòng đời package
 
-- Cài: tải file ZIP/tar từ `urls[]`, verify `sha256` + `signature` (Ed25519),
-  giải nén vào `userData/packs/<id>/<version>/`, cập nhật `installed.json`.
-- Cập nhật: tải bản mới song song, swap atomically, rollback được.
-- Gỡ: xoá thư mục version, cập nhật `installed.json`. Pack có dependent → cảnh
-  báo trước khi gỡ.
-- Mọi thao tác có lease ResourceCoordinator (`pack-io`) để không cạnh tranh
-  tài nguyên với agent đang chạy.
-
-### 5.3 Lazy load ở runtime
-
-- **Main process**: thay vì `import './browser'` ngay, `process/index.ts` chỉ
-  đăng ký bridge core (Chat + Settings + Pack manager). Khi user vào tính năng
-  → pack manager kiểm tra cài chưa → `import` động bundle pack vào, gọi hàm
-  `register*()` của pack đó.
-- **Renderer**: `Router.tsx` dùng `lazy()` cho mọi feature route; route chưa
-  có pack → render `FeatureGate` (giới thiệu + nút Tải).
-- i18n module mỗi feature đi kèm pack, register động qua `i18n.addResourceBundle`.
-
-### 5.4 UX
-
-- Settings → **Tính năng** (tab mới): danh sách pack (đã cài / có thể cài /
-  cần update), dung lượng, mô tả, hình ảnh.
-- Pack chưa cài: vào route → `FeatureGate` (Arco) với mô tả tính năng + ảnh
-  preview + nút "Tải gói" + ước lượng dung lượng + thời gian.
-- Tiến trình tải: dock toast (Arco Notification) có thể minimize, không chặn UI.
-
-### 5.5 Bảo mật
-
-- Mọi pack ký Ed25519 bằng key của Omni (private key trong CI secrets).
-- Public key embed cứng vào app — không tải từ mạng.
-- App từ chối pack signature sai / không có signature.
-- HTTPS bắt buộc; reject HTTP/file://.
-- App từ chối pack có `appCompat` không khớp app version.
-- Không cho phép pack thực thi code Node tuỳ ý ngoài bộ API định sẵn (Pack
-  exposes named exports: `registerBridges()`, `registerRoutes()`, `i18nResources`).
-
-### 5.6 Migration (v2.x → v3.x modular)
-
-- Lần đầu chạy v3.x trên user v2.x: đọc usage cũ (file config v2 đã có
-  `recently used features`) → seed danh sách pack cần auto-install.
-- Tải nền + thông báo "Tính năng X đã sẵn sàng".
-- Có thể tắt auto-install trong Onboarding lần đầu.
-
-## 6. Yêu cầu phi chức năng
-
-- **Hiệu năng**: lazy-load thêm <200 ms khi vào tính năng đã cài (overhead
-  parse manifest + dynamic import).
-- **Kích thước installer lõi**: mục tiêu <100 MB (hiện ~250 MB ước tính).
-- **Tải pack**: tốc độ giới hạn theo băng thông user, có thể pause/resume,
-  retry với exponential backoff.
-- **Toàn vẹn**: kiểm tra sha256 + signature; pack hỏng → tự xoá + tải lại.
-- **Privacy**: không gửi telemetry usage pack ra ngoài (trừ khi user opt-in).
-
-## 7. Kiến trúc tóm tắt
-
-```
-┌────────────────────── App lõi (installer) ──────────────────────┐
-│  Electron shell + aioncore + Chat + Settings + Pack Manager UI  │
-│                                                                 │
-│  process/services/packManager/                                  │
-│    ├── registry.ts    — fetch manifest, verify, cache           │
-│    ├── installer.ts   — download/verify/extract/rollback        │
-│    ├── runtime.ts     — load pack on demand, expose lifecycle    │
-│    ├── signature.ts   — Ed25519 verify                          │
-│    └── store.ts       — installed.json + state                  │
-└────────────────────────┬────────────────────────────────────────┘
-                         │ tải/cập nhật pack
-                         ▼
-              userData/packs/<packId>/<version>/
-                ├── manifest.json
-                ├── main.js          (CommonJS bundle, Main process)
-                ├── renderer.js      (ESM bundle, lazy-loaded)
-                ├── locales/*.json
-                └── assets/          (binary: yt-dlp.exe, ffmpeg, …)
+```text
+Discover → Inspect → Permission preview → Download → Verify → Stage
+→ Activate → Use → Update/Rollback → Disable/Uninstall
 ```
 
-Mỗi pack export hợp đồng cố định:
+Yêu cầu bắt buộc:
 
-```ts
-// main.js (Main process)
-export function registerPack(ctx: PackContext): void {
-  ctx.registerBridge('browser.*', registerBrowserBridge);
-  ctx.registerMcp('browser-control', createBrowserControlServer);
-  ctx.registerAssetResolver('yt-dlp', () => path.join(ctx.assetsDir, 'yt-dlp.exe'));
-}
+- manifest có `id`, `type`, `version`, compatibility, platform/arch, size, hash, signature,
+  dependencies, contributions và permissions;
+- tải HTTPS, pause/resume và retry;
+- kiểm tra SHA-256 và chữ ký trước khi giải nén/kích hoạt;
+- cài/update atomically, giữ bản trước để rollback;
+- activation/deactivation idempotent và quan sát được;
+- package lỗi không làm Base OS crash;
+- gỡ package không xóa user data nếu chưa có xác nhận rõ;
+- package đã cài vẫn chạy offline nếu không phụ thuộc dịch vụ mạng.
 
-// renderer.js (Renderer)
-export const routes = [...];
-export const i18nResources = { 'vi-VN': {...}, 'en-US': {...} };
-export const settingsTabs = [...];
-```
+## 5. Lazy activation
 
-## 8. Lộ trình triển khai (3 giai đoạn)
+- Main process chỉ expose Package Runtime và IPC bridge được kiểm soát; package không tự chèn
+  global side effect vào Router, sidebar hoặc Electron main.
+- Renderer route/surface được đăng ký qua contribution registry và lazy-load sau activation.
+- Locale, command, settings, app surface, worker và capability đều là contribution khai báo.
+- Feature chưa cài mở Store detail/quick install, không dẫn đến route chết.
 
-### Giai đoạn 1 — Asset pack (1–2 ngày)
+## 6. Bảo mật
 
-**Mục tiêu**: chứng minh được mô hình download/verify/install pack hoạt động,
-trên scope nhỏ, không refactor code.
+- First-party và community package cùng tuân public contract; mức trust/policy có thể khác.
+- Package Store phải được ký; public key tin cậy nằm trong Base và hỗ trợ rotation/revoke.
+- Secret chỉ được dùng qua alias/capability, không đi vào renderer, prompt, log hoặc checkpoint.
+- Quyền nhạy cảm hiển thị trước khi cài, có thể thu hồi và có audit trail.
+- Code không tin cậy không chạy trực tiếp trong Electron main process.
+- UI Package không inject script hoặc sửa DOM tùy ý; chỉ dùng token/component contract.
 
-- Phạm vi: pack `browser-assets` chứa `yt-dlp.exe` + `ffmpeg.exe`.
-- Code Browser vẫn nằm trong app như cũ; pack chỉ chứa **binary**.
-- Khi vào Browser → modal "Tải gói trình duyệt nâng cao".
-- Pack tải về `userData/packs/browser-assets/<v>/`, `externalTools.ts` thêm
-  thư mục đó vào danh sách dò.
-- Hosting: GitHub Releases (`browser-assets-vX.Y.Z-win-x64.zip`, signature đi kèm).
-- **Deliverable**: `process/services/packManager/` (mvp), `FeatureGate.tsx`,
-  Settings → Tính năng (tab cơ bản).
+## 7. UX cài đặt
 
-### Giai đoạn 2 — Code pack thử nghiệm (1 tuần)
+- Store là nơi khám phá và cài; Settings chỉ quản lý package đã cài, update channel, storage
+  và quyền.
+- Quick install popup hiển thị publisher, version, dung lượng, permission và compatibility.
+- Tiến trình tải là notification/dock không chặn toàn app.
+- Sau khi cài thành công, nút đổi thành `Mở`; không yêu cầu restart nếu runtime hỗ trợ hot
+  activation.
+- Khi gỡ, giải thích app/surface nào biến mất và dữ liệu nào được giữ.
+- Toàn bộ popup/card/page tuân [Visual Design System](tomni-hub-visual-design.md).
 
-**Mục tiêu**: tách MỘT feature ra code pack thật để xác nhận lazy-load + bundle
+## 8. Migration
 
-- contract `registerPack` ổn.
+1. Đóng băng contract và baseline hành vi.
+2. Đăng ký module hiện có thành virtual package, chưa di chuyển code/data.
+3. Bọc activation adapter và contribution registry.
+4. Pilot artifact tải thật với package boundary ít rủi ro.
+5. Tách Studio thành một Suite App Package.
+6. Mở Creator Mode và local development app.
+7. Mở community Store sau khi sandbox, permission, signing và rollback đạt gate.
 
-* Chọn feature ít liên kết với Chat — đề xuất **Testing** hoặc **Make Video**.
-* electron-vite cấu hình để build feature đó thành bundle riêng (CommonJS Main
-  - ESM Renderer), không đóng vào installer chính.
-* Renderer route lazy + `FeatureGate`.
-* Migration test: cài app, không có pack → app bình thường, không lỗi import.
+Testing/Benchmark không xuất hiện như app hoặc package sản phẩm. Phần preview/validation còn
+hữu ích được chuyển vào Studio development tooling hoặc CI.
 
-### Giai đoạn 3 — Modular hoá toàn bộ (2–3 tuần, trải dài)
+## 9. Yêu cầu phi chức năng
 
-- Tách dần các feature lớn thành pack: Browser, Studio, Manager, Bug Monitor,
-  Company, IDE.
-- Settings → Tính năng UI hoàn chỉnh (đã cài / có thể cài / cần update / gỡ).
-- Auto-update từng pack (background, channel `stable`/`beta`).
-- Migration v2.x → v3.x: đọc config cũ → tự seed pack cần cài.
-- Documentation người dùng (FAQ, privacy, troubleshoot).
+- Base khởi động không phụ thuộc package tùy chọn.
+- Package đã cài lazy-activate với overhead mục tiêu dưới 200 ms, chưa tính tải asset nặng.
+- Installer/Base budget phải được đo từ build thực tế; không ghi số MB giả định như cam kết.
+- Mọi download có checksum, signature, retry, rollback và telemetry opt-in.
+- Light/dark/reduced-motion/reduced-transparency đạt parity.
+- UI mới dùng Arco, Icon Park, semantic tokens và i18n.
 
-## 9. Đánh đổi đã thảo luận với người dùng
+## 10. Quyết định đã chốt
 
-| Vấn đề                                                             | Quyết định                                              |
-| ------------------------------------------------------------------ | ------------------------------------------------------- |
-| Tốn thời gian dev (~3–4 tuần tổng)                                 | Chấp nhận. Làm CUỐI khi feature đã ổn định.             |
-| Hosting & băng thông                                               | GitHub Releases miễn phí (CDN tốt).                     |
-| Migration user v2.x                                                | Bắt buộc làm cẩn thận. Có user-story U4.                |
-| Tốc độ phát triển sau này (mỗi PR tính năng đụng manifest/version) | Chấp nhận, đổi lấy installer gọn + UX tốt.              |
-| Marketplace bên thứ ba                                             | KHÔNG làm giai đoạn này. Chỉ pack chính chủ.            |
-| Tính năng chưa cài → trang giới thiệu vs ẩn hoàn toàn              | Hiển thị `FeatureGate`, KHÔNG ẩn — user biết app có gì. |
+- Không viết lại toàn bộ app để package hóa.
+- Studio tải một lần, module bên trong code-split/lazy-load.
+- Có marketplace community nhưng triển khai sau security gates.
+- Có package miễn phí và trả phí; entitlement nằm ở Base.
+- App Package, UI Package và Agent Capsule là taxonomy duy nhất ở cấp Store.
+- Home là shell điều hành chính; Store là vòng đời phân phối.
+- UI Package chỉ ảnh hưởng app đã opt-in.
 
-## 10. Rủi ro & cách giảm
+## 11. Tài liệu trong bộ thiết kế
 
-- **Rủi ro: pack "treo" khi tải lúc agent đang chạy nặng** → dùng lease
-  ResourceCoordinator `pack-io`, queue sau.
-- **Rủi ro: pack bản mới làm crash app** → mỗi pack có version + rollback;
-  app crash 2 lần liên tiếp khi load pack X → tự rollback về version cũ.
-- **Rủi ro: signature key bị lộ** → embed nhiều public key (key rotation),
-  có cơ chế revoke.
-- **Rủi ro: GitHub Releases rate limit** → CDN cache tự nhiên + retry; nếu
-  cần thêm Cloudflare R2 (chi phí thấp).
-- **Rủi ro: i18n thiếu key khi pack chưa cài** → mọi key core phải nằm ở
-  installer lõi; pack chỉ thêm key của riêng nó.
+- [Visual Design System](tomni-hub-visual-design.md) — nguồn visual duy nhất.
+- [Home Hub PRD](tomni-home-hub.md) — bố cục và hành vi Home.
+- [Hub Pages PRD](tomni-hub-pages.md) — Lịch sử, Sản phẩm, Quản lý, Cài đặt.
+- [Agentic Store PRD](tomni-agentic-store.md) — khám phá và vòng đời package.
+- [Package Platform Design](tomni-package-platform-design.md) — taxonomy, manifest, runtime và Creator.
+- [Migration Design](tomni-hub-agent-os-migration-design.md) — chuyển hóa không rewrite.
+- [Company Map](tomni-company-map.md) — bề mặt tổ chức multi-agent.
+- [Defensible + three product cores](tomni-defensible-core-design.md) — Outcome Intelligence Network, Security, User Understanding và Efficiency Orchestrator.
+- [Local Core Model Runtime](tomni-local-core-model-runtime-design.md) — retention/first-use loop, local model 0.8B/2B, hardware profiling, degraded mode, inference broker, benchmark plan và headless MCP runtime.
+- [Execution Roadmap](tomni-hub-agent-os-execution-roadmap.md) — stages và commercial gates.
 
-## 11. Bước tiếp theo khi quay lại làm
+## 12. Phân quyền quyết định
 
-Khi sẵn sàng triển khai, đọc lại file này rồi:
-
-1. Tạo spec chính thức ở `.kiro/specs/feature-packs/` (`requirements.md` +
-   `design.md` + `tasks.md`) bám theo lộ trình mục 8.
-2. Bắt đầu Giai đoạn 1 (asset pack `browser-assets` cho yt-dlp + ffmpeg) —
-   có thể làm độc lập mà không refactor app.
-3. Đánh giá Giai đoạn 2 sau khi G1 ổn định 1–2 tuần thực tế (bug, feedback).
-4. Giai đoạn 3 dàn trải, chỉ bắt đầu khi feature lớn đã ổn định để tránh
-   rework.
-
-## 12. Liên kết
-
-- Hướng dẫn codebase: [`docs/CODEBASE_GUIDE.md`](../../CODEBASE_GUIDE.md)
-- Trạng thái đang chạy: [`.kiro/status.md`](../../../.kiro/status.md)
-- aioncore bundling pattern (tham khảo): `packages/desktop/src/process/backend/binaryResolver.ts`
-- Service trích xuất nội dung (sẽ được pack hoá ở G3): `packages/desktop/src/process/services/contentExtract/`
+- PRD chức năng quyết định dữ liệu, hành vi và acceptance của feature.
+- Package Platform quyết định loại package và runtime lifecycle.
+- Visual Design System quyết định presentation và responsive.
+- Khi tài liệu mâu thuẫn, dùng thứ tự ưu tiên ghi trong Visual Design System và cập nhật tài
+  liệu thấp hơn; không tạo exception CSS/UX âm thầm.

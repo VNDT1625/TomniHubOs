@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -20,11 +20,11 @@ const DEFAULT_USER_ID = 'system_default_user';
 const DEFAULT_PASSWORD_PLACEHOLDER = '';
 
 /**
- * The Rust backend writes to aionui-backend.db. Before that backend existed,
- * Electron owned aionui.db. These names are compatibility identifiers and must
+ * The Rust backend writes to tomny-backend.db. Before that backend existed,
+ * Electron owned tomny.db. These names are compatibility identifiers and must
  * not be renamed as part of product branding.
  */
-export const LEGACY_DATABASE_FILENAMES = ['aionui-backend.db', 'aionui.db'] as const;
+export const LEGACY_DATABASE_FILENAMES = ['tomny-backend.db', 'tomny.db'] as const;
 
 export type LegacyDatabaseMigrationResult = {
   dbPath: string;
@@ -36,11 +36,11 @@ export type LegacyDatabaseMigrationResult = {
 
 /**
  * Discover history catalogs in priority order. The direct data directory is
- * the production layout. The nested aionui directory covers older launchers
+ * the production layout. The nested tomny directory covers older launchers
  * that passed the Electron userData root instead of getDataPath().
  */
 export function discoverLegacyDatabasePaths(dataDir = getDataPath()): string[] {
-  const directories = [path.resolve(dataDir), path.resolve(dataDir, 'aionui')];
+  const directories = [path.resolve(dataDir), path.resolve(dataDir, 'tomny')];
   const candidates = LEGACY_DATABASE_FILENAMES.flatMap((filename) =>
     directories.map((directory) => path.join(directory, filename))
   );
@@ -49,7 +49,7 @@ export function discoverLegacyDatabasePaths(dataDir = getDataPath()): string[] {
 
 /** Resolve the authoritative catalog, falling back to the Electron filename. */
 export function resolveLegacyDatabasePath(dataDir = getDataPath()): string {
-  return discoverLegacyDatabasePaths(dataDir)[0] ?? path.join(dataDir, 'aionui.db');
+  return discoverLegacyDatabasePaths(dataDir)[0] ?? path.join(dataDir, 'tomny.db');
 }
 
 function ensureSystemUser(db: ISqliteDriver): void {

@@ -30,7 +30,7 @@ describe('IDE chat workspace history discovery', () => {
     ).toBe(true);
     expect(
       isConversationForIdeWorkspace(
-        conversation(rootPath, { mcp_servers: ['aionui-ide'], surface: undefined }),
+        conversation(rootPath, { mcp_servers: ['tomny-ide'], surface: undefined }),
         rootPath
       )
     ).toBe(true);
@@ -62,12 +62,12 @@ describe('IDE chat active tab selection', () => {
 describe('IDE chat MCP attachment', () => {
   const ideServer = {
     id: 'ide-live',
-    name: 'aionui-ide',
+    name: 'tomny-ide',
     transport: { type: 'sse', url: 'http://127.0.0.1:4100/sse' },
   } as const;
   const browserServer = {
     id: 'browser-live',
-    name: 'aionui-browser-control',
+    name: 'tomny-browser-control',
     transport: { type: 'sse', url: 'http://127.0.0.1:4200/sse' },
   } as const;
 
@@ -76,7 +76,7 @@ describe('IDE chat MCP attachment', () => {
       [
         {
           id: 'browser-stale',
-          name: 'aionui-browser-control',
+          name: 'tomny-browser-control',
           transport: { type: 'sse', url: 'http://127.0.0.1:9999/sse' },
         },
         { id: 'custom', name: 'custom-tools', transport: { type: 'sse', url: 'https://example.test/sse' } },
@@ -86,7 +86,7 @@ describe('IDE chat MCP attachment', () => {
       browserServer
     );
 
-    expect(merged.find((server) => server.name === 'aionui-browser-control')).toEqual(browserServer);
+    expect(merged.find((server) => server.name === 'tomny-browser-control')).toEqual(browserServer);
     expect(merged.some((server) => server.name === 'custom-tools')).toBe(true);
   });
 
@@ -98,14 +98,14 @@ describe('IDE chat MCP attachment', () => {
       browserServer
     );
 
-    expect(merged.some((server) => server.name === 'aionui-browser-control')).toBe(true);
+    expect(merged.some((server) => server.name === 'tomny-browser-control')).toBe(true);
     expect(merged.some((server) => server.name === 'custom-tools')).toBe(true);
   });
 
   it('keeps the IDE usable when Browser-Control is temporarily absent from the catalog', () => {
     const merged = mergeIdeSessionMcpServers([], ideServer, null, undefined);
 
-    expect(merged.some((server) => server.name === 'aionui-browser-control')).toBe(false);
-    expect(merged.some((server) => server.name === 'aionui-ide')).toBe(true);
+    expect(merged.some((server) => server.name === 'tomny-browser-control')).toBe(false);
+    expect(merged.some((server) => server.name === 'tomny-ide')).toBe(true);
   });
 });

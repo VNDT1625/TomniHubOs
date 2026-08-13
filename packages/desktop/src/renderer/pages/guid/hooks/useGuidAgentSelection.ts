@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -82,7 +82,7 @@ export type GuidAgentSelectionResult = {
  *   1. Handshake `available_modes.current_mode_id` from `/api/agents`
  *   2. First entry of handshake `available_modes`
  *   3. First entry of the static `AGENT_MODES` table
- *   4. Literal `'default'` (legacy fallback — only correct for claude/qwen/gemini/aionrs)
+ *   4. Literal `'default'` (legacy fallback — only correct for claude/qwen/gemini/tomnyagentic)
  *
  * This mirrors the runtime fallback inside `AgentModeSelector` so the
  * parent-held `selectedMode` stays in sync with what the UI shows.
@@ -128,9 +128,9 @@ export const useGuidAgentSelection = ({
 }: UseGuidAgentSelectionOptions): GuidAgentSelectionResult => {
   const [selectedAgentKey, _setSelectedAgentKey] = useState<string>(() => {
     try {
-      return configService.get('guid.lastSelectedAgent') || 'aionrs';
+      return configService.get('guid.lastSelectedAgent') || 'tomnyagentic';
     } catch {
-      return 'aionrs';
+      return 'tomnyagentic';
     }
   });
   const [availableAgents, setAvailableAgents] = useState<AvailableAgent[]>();
@@ -334,7 +334,7 @@ export const useGuidAgentSelection = ({
       const currentIsPreset = selectedAgentKey.startsWith('custom:');
       if (currentIsPreset) {
         const firstCliAgent = availableAgents.find((a) => !a.is_preset);
-        const fallbackKey = firstCliAgent ? getAgentKey(firstCliAgent) : 'aionrs';
+        const fallbackKey = firstCliAgent ? getAgentKey(firstCliAgent) : 'tomnyagentic';
         _setSelectedAgentKey(fallbackKey);
         configService.set('guid.lastSelectedAgent', fallbackKey).catch((error) => {
           console.error('Failed to save reset agent key:', error);
@@ -440,8 +440,8 @@ export const useGuidAgentSelection = ({
         let preferred: string | undefined;
         let yoloMode = false;
 
-        if (configKey === 'aionrs') {
-          const config = configService.get('aionrs.config');
+        if (configKey === 'tomnyagentic') {
+          const config = configService.get('tomnyagentic.config');
           preferred = config?.preferredMode;
         } else {
           const config = configService.get('acp.config');
@@ -520,7 +520,7 @@ export const useGuidAgentSelection = ({
   // Key of the first non-preset CLI agent (used as fallback when leaving preset mode)
   const defaultAgentKey = useMemo(() => {
     const firstCliAgent = availableAgents?.find((a) => !a.is_preset);
-    return firstCliAgent ? getAgentKey(firstCliAgent) : 'aionrs';
+    return firstCliAgent ? getAgentKey(firstCliAgent) : 'tomnyagentic';
   }, [availableAgents]);
 
   return {

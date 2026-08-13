@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -9,7 +9,7 @@
  * ARBITRARY folders on disk via Node `fs`.
  *
  * Why this exists: the renderer's existing `fs.*` bridge (`/api/fs/*`) is served
- * by aioncore and is scoped to the active conversation WORKSPACE — it cannot
+ * by tomnycore and is scoped to the active conversation WORKSPACE — it cannot
  * list or read a folder the user opens from anywhere on disk. The IDE needs to
  * open any project folder (exactly like the Map's `ide.scan-repo`, which already
  * uses Node `fs`), so file listing/reading/writing for the IDE goes through this
@@ -440,7 +440,7 @@ const SKIP_DIRS = new Set([
   '.cache',
   'target',
   '.mtui',
-  '.aionui',
+  '.tomny',
   '.turbo',
 ]);
 

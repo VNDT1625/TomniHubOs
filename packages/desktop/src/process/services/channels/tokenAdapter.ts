@@ -20,7 +20,9 @@ export type TokenChannelTransport = {
 
 const tokenFrom = (config: Record<string, unknown>): string => {
   const credentials = config.credentials;
-  return credentials && typeof credentials === 'object' && typeof (credentials as { token?: unknown }).token === 'string'
+  return credentials &&
+    typeof credentials === 'object' &&
+    typeof (credentials as { token?: unknown }).token === 'string'
     ? (credentials as { token: string }).token.trim()
     : '';
 };

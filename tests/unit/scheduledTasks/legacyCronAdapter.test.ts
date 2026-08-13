@@ -88,7 +88,7 @@ describe('legacy Cron compatibility over Tomny scheduledTasks', () => {
     expect(created).toHaveBeenCalledWith(expect.objectContaining({ id: added.id }));
   });
 
-  it('preserves manual and interval schedules without depending on AionCore cron', async () => {
+  it('preserves manual and interval schedules without depending on TomnyCore cron', async () => {
     const manual = await adapter.addJob(params({ schedule: { kind: 'cron', expr: '', description: 'Manual only' } }));
     const interval = await adapter.addJob(
       params({
@@ -110,10 +110,10 @@ describe('legacy Cron compatibility over Tomny scheduledTasks', () => {
     });
   });
 
-  it('maps the built-in aionrs identity to Tomny while retaining provider metadata', async () => {
+  it('maps the built-in tomnyagentic identity to Tomny while retaining provider metadata', async () => {
     const job = await adapter.addJob(
       params({
-        agent_type: 'aionrs',
+        agent_type: 'tomnyagentic',
         agent_config: {
           backend: 'provider-row-id',
           name: '9Router',

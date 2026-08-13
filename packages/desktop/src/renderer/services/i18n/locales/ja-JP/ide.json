@@ -39,9 +39,60 @@
     "hooks": "\u30a8\u30fc\u30b8\u30a7\u30f3\u30c8\u30d5\u30c3\u30af",
     "spec": "\u4ed5\u69d8",
     "lsp": "\u8a00\u8a9e\u30b5\u30fc\u30d0\u30fc",
+    "extensions": "拡張機能",
     "expbase": "\u7d4c\u9a13\u30d9\u30fc\u30b9",
     "team": "\u30c1\u30fc\u30e0",
     "viu": "Viu \u00b7 Visual UI"
+  },
+  "extensions": {
+    "title": "拡張機能",
+    "subtitle": "信頼済みパッケージからインストールされた IDE 機能です。ここではメタデータのみを表示し、オプションモジュールは実行しません。",
+    "installedCount": "{{count}} 件インストール済み",
+    "refresh": "更新",
+    "browseStore": "ストアを開く",
+    "activityGroups": "アクティビティグループ",
+    "installedSubtabs": "インストール済みサブタブ",
+    "groupEmpty": "このグループにはインストール済みのサブタブがありません。",
+    "findExtensions": "拡張機能を探す",
+    "emptyHint": "ストアから IDE 拡張機能をインストールすると、ここに機能が追加されます。",
+    "loading": "拡張機能を読み込み中",
+    "loadFailed": "拡張機能を読み込めませんでした。",
+    "retry": "再試行",
+    "selected": "選択中のコントリビューション",
+    "selectedHint": "このコントリビューションが選択されています。実行には IDE ポリシーが適用されます。",
+    "openPackage": "パッケージを開く",
+    "packageLabel": "パッケージ",
+    "moduleLabel": "モジュール",
+    "activationLabel": "有効化",
+    "activation": {
+      "onOpen": "開いたとき",
+      "onStartup": "起動時"
+    },
+    "runtime": {
+      "open": "開く",
+      "back": "拡張機能に戻る",
+      "title": "{{name}} 拡張機能",
+      "policyHint": "ここでは署名済みのファーストパーティ製 trusted React モジュールのみ実行できます。他のランタイムはブロックされます。",
+      "checking": "実行ポリシーを確認中",
+      "blockedTitle": "実行をブロックしました",
+      "sandboxedWebBlocked": "ネットワーク分離がまだ強制されていないため、サンドボックス Web モジュールは無効です。",
+      "unsupportedBlocked": "このモジュールは IDE の実行ポリシーを満たしていません。"
+    },
+
+    "groups": {
+      "codebase": "コードベース",
+      "agentOps": "エージェント運用"
+    },
+    "diagnostics": {
+      "title": "コントリビューション診断",
+      "redactedHint": "詳細は非表示です。診断カテゴリと件数のみ表示します。",
+      "invalidPackage": "無効なパッケージ",
+      "protectedNamespace": "保護された名前空間",
+      "dependencyUnavailable": "依存関係を利用できません",
+      "hostApiIncompatible": "ホスト API に非対応",
+      "contributionCollision": "コントリビューションの競合",
+      "danglingReference": "未解決の参照"
+    }
   },
   "viu": {
     "open": "Viu \u00b7 Visual UI",
@@ -219,8 +270,35 @@
           "y": "Y"
         },
 
-
-"image":{"section":"\u753b\u50cf","fit":"\u30d5\u30a3\u30c3\u30c8","fitCover":"\u30ab\u30d0\u30fc","fitContain":"\u5185\u306b\u53ce\u3081\u308b","fitFill":"\u5f15\u304d\u4f38\u3070\u3059","fitNone":"\u5143\u306e\u30b5\u30a4\u30ba","fitScaleDown":"\u7e2e\u5c0f","crop":"\u30af\u30ed\u30c3\u30d7","focalPoint":"\u7126\u70b9","flipHorizontal":"\u6c34\u5e73\u53cd\u8ee2","flipVertical":"\u5782\u76f4\u53cd\u8ee2","reset":"\u30d5\u30ec\u30fc\u30df\u30f3\u30b0\u3092\u30ea\u30bb\u30c3\u30c8"},"stroke":{"section":"\u30b9\u30c8\u30ed\u30fc\u30af","add":"\u30b9\u30c8\u30ed\u30fc\u30af\u3092\u8ffd\u52a0","dashPattern":"\u7834\u7dda\u30d1\u30bf\u30fc\u30f3","dashOffset":"\u7834\u7dda\u30aa\u30d5\u30bb\u30c3\u30c8"},"quality":{"section":"\u54c1\u8cea\u30c1\u30a7\u30c3\u30af","issueCount":"{{count}}\u0020\u4ef6\u306e\u554f\u984c","noIssues":"\u54c1\u8cea\u4e0a\u306e\u554f\u984c\u306f\u3042\u308a\u307e\u305b\u3093\u3002","error":"\u30a8\u30e9\u30fc","warning":"\u8b66\u544a","project":"\u30d7\u30ed\u30b8\u30a7\u30af\u30c8","issue":"{{code}}\u0020\u00b7\u0020{{entityId}}"},
+        "image": {
+          "section": "\u753b\u50cf",
+          "fit": "\u30d5\u30a3\u30c3\u30c8",
+          "fitCover": "\u30ab\u30d0\u30fc",
+          "fitContain": "\u5185\u306b\u53ce\u3081\u308b",
+          "fitFill": "\u5f15\u304d\u4f38\u3070\u3059",
+          "fitNone": "\u5143\u306e\u30b5\u30a4\u30ba",
+          "fitScaleDown": "\u7e2e\u5c0f",
+          "crop": "\u30af\u30ed\u30c3\u30d7",
+          "focalPoint": "\u7126\u70b9",
+          "flipHorizontal": "\u6c34\u5e73\u53cd\u8ee2",
+          "flipVertical": "\u5782\u76f4\u53cd\u8ee2",
+          "reset": "\u30d5\u30ec\u30fc\u30df\u30f3\u30b0\u3092\u30ea\u30bb\u30c3\u30c8"
+        },
+        "stroke": {
+          "section": "\u30b9\u30c8\u30ed\u30fc\u30af",
+          "add": "\u30b9\u30c8\u30ed\u30fc\u30af\u3092\u8ffd\u52a0",
+          "dashPattern": "\u7834\u7dda\u30d1\u30bf\u30fc\u30f3",
+          "dashOffset": "\u7834\u7dda\u30aa\u30d5\u30bb\u30c3\u30c8"
+        },
+        "quality": {
+          "section": "\u54c1\u8cea\u30c1\u30a7\u30c3\u30af",
+          "issueCount": "{{count}}\u0020\u4ef6\u306e\u554f\u984c",
+          "noIssues": "\u54c1\u8cea\u4e0a\u306e\u554f\u984c\u306f\u3042\u308a\u307e\u305b\u3093\u3002",
+          "error": "\u30a8\u30e9\u30fc",
+          "warning": "\u8b66\u544a",
+          "project": "\u30d7\u30ed\u30b8\u30a7\u30af\u30c8",
+          "issue": "{{code}}\u0020\u00b7\u0020{{entityId}}"
+        },
         "layout": {
           "section": "Auto layout",
           "mode": "Direction",
@@ -433,7 +511,25 @@
           "timeline": "Timeline",
           "keyframes": "Keyframes",
           "position": "Position",
-    "presetSmartAnimate":"\u30b9\u30de\u30fc\u30c8\u30a2\u30cb\u30e1\u30fc\u30c8","createTimeline":"\u30bf\u30a4\u30e0\u30e9\u30a4\u30f3\u3092\u4f5c\u6210","addTrack":"\u30c8\u30e9\u30c3\u30af\u3092\u8ffd\u52a0","addKeyframe":"\u30ad\u30fc\u30d5\u30ec\u30fc\u30e0\u3092\u8ffd\u52a0","loop":"\u30eb\u30fc\u30d7","property":"\u30d7\u30ed\u30d1\u30c6\u30a3","start":"\u958b\u59cb","end":"\u7d42\u4e86","pin":"\u56fa\u5b9a","parallax":"\u30d1\u30e9\u30e9\u30c3\u30af\u30b9","scrollBinding":"\u30b9\u30af\u30ed\u30fc\u30eb\u9023\u643a","addScrollBinding":"\u30b9\u30af\u30ed\u30fc\u30eb\u9023\u643a\u3092\u8ffd\u52a0","noTimeline":"\u30bf\u30a4\u30e0\u30e9\u30a4\u30f3\u306f\u307e\u3060\u3042\u308a\u307e\u305b\u3093","x":"X","y":"Y","opacity":"\u4e0d\u900f\u660e\u5ea6","scale":"\u30b9\u30b1\u30fc\u30eb","rotate":"\u56de\u8ee2","blur":"\u307c\u304b\u3057"
+          "presetSmartAnimate": "\u30b9\u30de\u30fc\u30c8\u30a2\u30cb\u30e1\u30fc\u30c8",
+          "createTimeline": "\u30bf\u30a4\u30e0\u30e9\u30a4\u30f3\u3092\u4f5c\u6210",
+          "addTrack": "\u30c8\u30e9\u30c3\u30af\u3092\u8ffd\u52a0",
+          "addKeyframe": "\u30ad\u30fc\u30d5\u30ec\u30fc\u30e0\u3092\u8ffd\u52a0",
+          "loop": "\u30eb\u30fc\u30d7",
+          "property": "\u30d7\u30ed\u30d1\u30c6\u30a3",
+          "start": "\u958b\u59cb",
+          "end": "\u7d42\u4e86",
+          "pin": "\u56fa\u5b9a",
+          "parallax": "\u30d1\u30e9\u30e9\u30c3\u30af\u30b9",
+          "scrollBinding": "\u30b9\u30af\u30ed\u30fc\u30eb\u9023\u643a",
+          "addScrollBinding": "\u30b9\u30af\u30ed\u30fc\u30eb\u9023\u643a\u3092\u8ffd\u52a0",
+          "noTimeline": "\u30bf\u30a4\u30e0\u30e9\u30a4\u30f3\u306f\u307e\u3060\u3042\u308a\u307e\u305b\u3093",
+          "x": "X",
+          "y": "Y",
+          "opacity": "\u4e0d\u900f\u660e\u5ea6",
+          "scale": "\u30b9\u30b1\u30fc\u30eb",
+          "rotate": "\u56de\u8ee2",
+          "blur": "\u307c\u304b\u3057"
         }
       },
       "inspector": {
@@ -1213,17 +1309,17 @@
       "deleteComboKey": "\u30ad\u30fc\u3092\u524a\u9664"
     },
     "context": {
-      "loading": "AionRS \u30b3\u30f3\u30c6\u30ad\u30b9\u30c8\u3092\u8aad\u307f\u8fbc\u307f\u4e2d\u2026",
-      "loadFailed": "AionRS \u30b3\u30f3\u30c6\u30ad\u30b9\u30c8\u3092\u8aad\u307f\u8fbc\u3081\u307e\u305b\u3093\u3002",
-      "empty": "AionRS \u30b3\u30f3\u30c6\u30ad\u30b9\u30c8\u306f\u307e\u3060\u3042\u308a\u307e\u305b\u3093\u3002",
-      "exactTitle": "AionRS \u306e\u5b9f\u969b\u306e\u30ea\u30af\u30a8\u30b9\u30c8\u30b3\u30f3\u30c6\u30ad\u30b9\u30c8",
-      "exactHint": "\u5727\u7e2e\u5f8c\u306e AionRS \u304b\u3089\u76f4\u63a5\u53d6\u5f97\u3057\u307e\u3059\u3002\u5185\u90e8\u30b3\u30f3\u30c6\u30ad\u30b9\u30c8\u306f\u8aad\u307f\u53d6\u308a\u5c02\u7528\u3067\u3001\u30ab\u30b9\u30bf\u30e0\u30b3\u30f3\u30c6\u30ad\u30b9\u30c8\u306f\u7de8\u96c6\u3067\u304d\u307e\u3059\u3002",
+      "loading": "Tomny Agentic \u30b3\u30f3\u30c6\u30ad\u30b9\u30c8\u3092\u8aad\u307f\u8fbc\u307f\u4e2d\u2026",
+      "loadFailed": "Tomny Agentic \u30b3\u30f3\u30c6\u30ad\u30b9\u30c8\u3092\u8aad\u307f\u8fbc\u3081\u307e\u305b\u3093\u3002",
+      "empty": "Tomny Agentic \u30b3\u30f3\u30c6\u30ad\u30b9\u30c8\u306f\u307e\u3060\u3042\u308a\u307e\u305b\u3093\u3002",
+      "exactTitle": "Tomny Agentic \u306e\u5b9f\u969b\u306e\u30ea\u30af\u30a8\u30b9\u30c8\u30b3\u30f3\u30c6\u30ad\u30b9\u30c8",
+      "exactHint": "\u5727\u7e2e\u5f8c\u306e Tomny Agentic \u304b\u3089\u76f4\u63a5\u53d6\u5f97\u3057\u307e\u3059\u3002\u5185\u90e8\u30b3\u30f3\u30c6\u30ad\u30b9\u30c8\u306f\u8aad\u307f\u53d6\u308a\u5c02\u7528\u3067\u3001\u30ab\u30b9\u30bf\u30e0\u30b3\u30f3\u30c6\u30ad\u30b9\u30c8\u306f\u7de8\u96c6\u3067\u304d\u307e\u3059\u3002",
       "messageCount": "{{count}} \u4ef6\u306e\u30e1\u30c3\u30bb\u30fc\u30b8",
       "messageWindow": "\u76f4\u8fd1\u306e AI \u5fdc\u7b54 {{assistant}} \u4ef6 \u00b7 \u30ea\u30af\u30a8\u30b9\u30c8 {{sent}} \u4ef6\u3001\u30bb\u30c3\u30b7\u30e7\u30f3\u5168\u4f53 {{total}} \u4ef6",
       "toolCount": "{{count}} \u500b\u306e\u30c4\u30fc\u30eb",
       "maxTokens": "\u6700\u5927\u51fa\u529b {{count}}",
       "customTitle": "\u30ab\u30b9\u30bf\u30e0\u30b3\u30f3\u30c6\u30ad\u30b9\u30c8",
-      "customHint": "\u5404 AionRS \u30bf\u30fc\u30f3\u306e\u30b7\u30b9\u30c6\u30e0\u30d7\u30ed\u30f3\u30d7\u30c8\u306b\u8ffd\u52a0\u3055\u308c\u307e\u3059\u3002",
+      "customHint": "\u5404 Tomny Agentic \u30bf\u30fc\u30f3\u306e\u30b7\u30b9\u30c6\u30e0\u30d7\u30ed\u30f3\u30d7\u30c8\u306b\u8ffd\u52a0\u3055\u308c\u307e\u3059\u3002",
       "customPlaceholder": "\u3053\u306e\u4f1a\u8a71\u306e\u7d99\u7d9a\u7684\u306a\u6307\u793a\u3084\u30b3\u30f3\u30c6\u30ad\u30b9\u30c8\u3092\u8ffd\u52a0\u2026",
       "save": "\u30b3\u30f3\u30c6\u30ad\u30b9\u30c8\u3092\u4fdd\u5b58",
       "saved": "\u30ab\u30b9\u30bf\u30e0\u30b3\u30f3\u30c6\u30ad\u30b9\u30c8\u3092\u4fdd\u5b58\u3057\u307e\u3057\u305f\u3002",

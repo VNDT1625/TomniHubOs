@@ -1,12 +1,12 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
 /**
  * 自定义 CSS 处理工具
- * 统一处理自定义 CSS 的 !important 添加和格式化
+ * 统一处理自定义 CSS 的包装和格式化；用户优先级由声明本身控制，Tomny glass contract 由主题层统一控制
  */
 
 /**
@@ -32,7 +32,7 @@ export const addImportantToAll = (css: string): string => {
 
 /**
  * 包装自定义 CSS，添加注释说明
- * @param css - 处理后的 CSS 字符串
+ * @param css - 原始 CSS 字符串
  * @returns 带注释的 CSS 字符串
  */
 export const wrapCustomCss = (css: string): string => {
@@ -41,8 +41,8 @@ export const wrapCustomCss = (css: string): string => {
   }
 
   return `
-/* 用户自定义样式 - 自动添加 !important 提升优先级 */
-/* User Custom Styles - Auto !important for highest priority */
+/* 用户自定义样式 - 保留用户声明的优先级；Tomny glass contract 由主题层统一控制 */
+/* User Custom Styles - Preserve declared priority; Tomny glass contract is owned by the theme layer */
 ${css}
   `.trim();
 };
@@ -53,8 +53,7 @@ ${css}
  * @returns 处理后并包装的 CSS 字符串
  */
 export const processCustomCss = (css: string): string => {
-  const processed = addImportantToAll(css);
-  return wrapCustomCss(processed);
+  return wrapCustomCss(css);
 };
 
 /**

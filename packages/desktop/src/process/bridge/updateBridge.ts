@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -55,7 +55,7 @@ interface AutoUpdateCheckParams {
 }
 
 const DEFAULT_REPO = 'VNDT1625/OmniAgent';
-const DEFAULT_USER_AGENT = 'TomniAgentic';
+const DEFAULT_USER_AGENT = 'TomnyAgentic';
 const ALLOWED_ASSET_EXTS = new Set(['.exe', '.msi', '.dmg', '.zip', '.deb', '.rpm']);
 const ALLOWED_DOWNLOAD_HOSTS = new Set<string>([
   'github.com',
@@ -182,7 +182,7 @@ export const pickRecommendedAsset = (
 };
 
 const resolveRepo = (requestRepo?: string): string => {
-  const envRepo = process.env.AIONUI_GITHUB_REPO?.trim();
+  const envRepo = process.env.TOMNY_GITHUB_REPO?.trim();
   const repo = (requestRepo || envRepo || DEFAULT_REPO).trim();
   return repo || DEFAULT_REPO;
 };

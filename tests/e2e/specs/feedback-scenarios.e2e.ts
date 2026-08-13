@@ -24,13 +24,13 @@ const MODAL_BODY = '[data-testid="feedback-report-scroll-body"]';
 /** Close the feedback modal (ModalWrapper sets closable=false so Escape is a no-op). */
 async function closeFeedbackModal(page: Page) {
   // ModalWrapper renders the feedback modal with a dedicated custom close
-  // button class — scoped to avoid matching the Agent editor's AionModal
+  // button class — scoped to avoid matching the Agent editor's TomnyModal
   // close button (which uses aria-label='Close' instead).
-  await page.locator('.aionui-modal-close-btn').first().click();
+  await page.locator('.tomny-modal-close-btn').first().click();
   await expect(page.locator(MODAL_BODY)).toBeHidden({ timeout: 5_000 });
 }
 
-/** Close any open AionModal (e.g. the Agent editor) so the next test starts clean. */
+/** Close any open TomnyModal (e.g. the Agent editor) so the next test starts clean. */
 async function closeAgentEditor(page: Page) {
   const closeBtn = page.locator('.arco-modal button[aria-label="Close"]').first();
   if (await closeBtn.isVisible().catch(() => false)) {
@@ -81,7 +81,7 @@ test('[1] About → Bug Report entry opens feedback modal', async ({ page }) => 
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function openCustomAgentEditor(page: Page, command: string) {
-  // Defensive: close any AionModal left over from a prior test so the
+  // Defensive: close any TomnyModal left over from a prior test so the
   // sidebar/page buttons are clickable.
   await closeAgentEditor(page);
 
@@ -107,7 +107,7 @@ async function openCustomAgentEditor(page: Page, command: string) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 test('[5] Agent fail_cli alert surfaces feedback pill (module=agent-detection)', async ({ page }) => {
-  await openCustomAgentEditor(page, 'aionui-e2e-missing-binary-xyz');
+  await openCustomAgentEditor(page, 'tomny-e2e-missing-binary-xyz');
 
   // Expect the fail_cli alert to appear with the feedback pill inside.
   const alert = page.locator('.arco-alert-error').first();

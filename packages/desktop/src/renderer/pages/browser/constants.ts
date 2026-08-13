@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -34,10 +34,10 @@ export const BRIDGE_BOUNDS_TIMEOUT_MS = 1500;
  * per-tab on/off flag, so the *which model* choice is a renderer-side concern
  * persisted here.
  */
-export const AGENT_MODEL_STORAGE_KEY = 'aionui.browser.agentModel';
+export const AGENT_MODEL_STORAGE_KEY = 'tomny.browser.agentModel';
 
 /** `localStorage` key remembering which side the agent chat dock sits on. */
-export const CHAT_SIDE_STORAGE_KEY = 'aionui.browser.chatSide';
+export const CHAT_SIDE_STORAGE_KEY = 'tomny.browser.chatSide';
 
 /** Which side of the viewport the agent chat panel docks to. */
 export type ChatSide = 'left' | 'right';

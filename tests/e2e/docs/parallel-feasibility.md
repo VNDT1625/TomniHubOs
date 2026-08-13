@@ -57,18 +57,18 @@ let mainPage: Page | null = null;
 **Path resolution** (`src/process/utils/utils.ts:getDataPath()` + backend `--data-dir`):
 
 ```typescript
-return path.join(getDataPath(), 'aionui.db');
+return path.join(getDataPath(), 'tomni.db');
 ```
 
 **userData directory** (`src/process/utils/configureChromium.ts:18-26`):
 
-- Dev mode: `~/Library/Application Support/AionUi-Dev/` (macOS)
-- Database: `{userData}/config/aionui.db`
+- Dev mode: `~/Library/Application Support/TomniHubOS-Dev/` (macOS)
+- Database: `{userData}/config/tomni.db`
 - Shared by all E2E tests
 
 **Conflict scenario**: If Assistant tests and Skills tests run in parallel workers:
 
-1. Both access same `aionui.db` file
+1. Both access same `tomni.db` file
 2. SQLite allows multiple readers, but writes lock the entire database
 3. Test data pollution: Assistant test creates custom assistant → Skills test sees it
 
@@ -77,14 +77,14 @@ return path.join(getDataPath(), 'aionui.db');
 **File**: `tests/e2e/fixtures.ts:29-30`
 
 ```typescript
-const e2eStateSandboxDir = fs.mkdtempSync(path.join(os.tmpdir(), 'aionui-e2e-state-'));
+const e2eStateSandboxDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tomni-e2e-state-'));
 const e2eStateFile = path.join(e2eStateSandboxDir, 'extension-states.json');
 ```
 
 **Environment variable** (L113):
 
 ```typescript
-AIONUI_EXTENSION_STATES_FILE: process.env.AIONUI_EXTENSION_STATES_FILE || e2eStateFile;
+TOMNIUI_EXTENSION_STATES_FILE: process.env.TOMNIUI_EXTENSION_STATES_FILE || e2eStateFile;
 ```
 
 **Current isolation**: Each worker creates unique temp directory → **no conflict** (✅ parallel-safe for this resource)
@@ -94,7 +94,7 @@ AIONUI_EXTENSION_STATES_FILE: process.env.AIONUI_EXTENSION_STATES_FILE || e2eSta
 **CDP disabled** (`tests/e2e/fixtures.ts:117`):
 
 ```typescript
-AIONUI_CDP_PORT: '0';
+TOMNIUI_CDP_PORT: '0';
 ```
 
 **Result**: No port binding conflicts → **parallel-safe** (✅)
@@ -110,7 +110,7 @@ AIONUI_CDP_PORT: '0';
 | Extension state file  | Worker temp dir     | ✅ No conflict             | -                                       |
 | Network ports         | None (CDP disabled) | ✅ No conflict             | -                                       |
 
-**Critical bottleneck**: `workers: 1` enforced + shared `aionui.db` → parallel execution impossible without refactoring.
+**Critical bottleneck**: `workers: 1` enforced + shared `tomni.db` → parallel execution impossible without refactoring.
 
 ---
 
@@ -122,18 +122,18 @@ AIONUI_CDP_PORT: '0';
 
 **Implementation**:
 
-1. Extend `AIONUI_E2E_TEST` to include worker ID:
+1. Extend `TOMNIUI_E2E_TEST` to include worker ID:
    ```typescript
-   AIONUI_E2E_TEST_WORKER_ID: process.env.PLAYWRIGHT_WORKER_INDEX || '0';
+   TOMNIUI_E2E_TEST_WORKER_ID: process.env.PLAYWRIGHT_WORKER_INDEX || '0';
    ```
 2. Modify `getDevAppName()` to return worker-specific name:
    ```typescript
-   const workerId = process.env.AIONUI_E2E_TEST_WORKER_ID || '0';
-   return `AionUi-E2E-Worker-${workerId}`;
+   const workerId = process.env.TOMNIUI_E2E_TEST_WORKER_ID || '0';
+   return `TomniHubOS-E2E-Worker-${workerId}`;
    ```
 3. Each worker gets isolated:
-   - `~/Library/Application Support/AionUi-E2E-Worker-0/config/aionui.db`
-   - `~/Library/Application Support/AionUi-E2E-Worker-1/config/aionui.db`
+   - `~/Library/Application Support/TomniHubOS-E2E-Worker-0/config/tomni.db`
+   - `~/Library/Application Support/TomniHubOS-E2E-Worker-1/config/tomni.db`
 4. Update `playwright.config.ts`:
    ```typescript
    workers: 2,  // or process.env.CI ? 1 : 2
@@ -161,7 +161,7 @@ bun run test:e2e:skills      # Matches tests/e2e/specs/skills-*.e2e.ts
 
 **Approach**: Pass unique database path via environment variable per spec
 
-**Complexity**: High (requires main process to read `AIONUI_DATABASE_PATH`, conflicts with userData convention)
+**Complexity**: High (requires main process to read `TOMNIUI_DATABASE_PATH`, conflicts with userData convention)
 
 **Not recommended**: Breaks Electron's standard paths, hard to maintain
 

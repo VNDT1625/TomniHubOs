@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -65,7 +65,7 @@ const RESOLVE_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'] as con
 const IGNORED_DIRS = new Set([
   '.tomni',
   '\x2eomni',
-  '.aionui',
+  '.tomny',
   '.cache',
   '.git',
   '.mtui',
@@ -586,7 +586,7 @@ const isGeneratedWikiExport = (relPath: string): boolean => {
   return (
     normalized.startsWith('.tomni/wiki/') ||
     normalized.startsWith('.omni/wiki/') ||
-    normalized.startsWith('.aionui/wiki/')
+    normalized.startsWith('.tomny/wiki/')
   );
 };
 

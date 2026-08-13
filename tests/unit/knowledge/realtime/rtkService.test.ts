@@ -1,12 +1,12 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('electron', () => ({ app: { getPath: () => '/tmp/aionui-rtk-svc' } }));
+vi.mock('electron', () => ({ app: { getPath: () => '/tmp/tomny-rtk-svc' } }));
 
 import { createRtkStore, type RtkStoreFs } from '@/process/knowledge/realtime/rtkStore';
 import { createRtkVectorIndex, type Embedder } from '@/process/knowledge/realtime/rtkVectorIndex';

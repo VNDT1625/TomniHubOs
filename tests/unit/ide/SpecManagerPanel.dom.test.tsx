@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  *
  * DOM tests for the SpecManagerPanel — the spec-driven workflow health view.
@@ -103,7 +103,7 @@ beforeEach(() => {
       exists: true,
       hasAnySpec: true,
       slug: 'demo',
-      specDir: '/repo/.aionui/specs/demo',
+      specDir: '/repo/.tomny/specs/demo',
       phase: 'tasks',
       approvals: { requirements: true, design: true, tasks: false },
       files: {

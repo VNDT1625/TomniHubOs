@@ -23,7 +23,7 @@ describe('compareQuickTestRuns', () => {
     ]);
     const current = trace([
       { kind: 'navigate', url: 'http://localhost/', at: 1_000 },
-      { kind: 'input', selector: '#name', value: 'Aion', at: 1_050 },
+      { kind: 'input', selector: '#name', value: 'Tomny', at: 1_050 },
       { kind: 'click', selector: '#save', text: 'Save', at: 1_100 },
     ]);
 

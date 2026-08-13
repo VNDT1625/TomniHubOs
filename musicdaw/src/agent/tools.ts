@@ -6,7 +6,7 @@
  * pure handler that operates on a project (+ optional analysis input) and
  * returns a result plus the (possibly) updated project.
  *
- * The real MCP server (`aionui-music`, wired in the host app) is a thin adapter
+ * The real MCP server (`tomny-music`, wired in the host app) is a thin adapter
  * that maps tool calls to `dispatchTool`. Keeping this layer pure means it is
  * fully testable with bun and reusable by UI "assist" actions too.
  */

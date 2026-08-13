@@ -124,7 +124,7 @@ fn is_ignored_dir(name: &str) -> bool {
         name,
         ".git"
             | ".mtui"
-            | ".aionui"
+            | ".tomny"
             | ".kiro"
             | "node_modules"
             | "target"

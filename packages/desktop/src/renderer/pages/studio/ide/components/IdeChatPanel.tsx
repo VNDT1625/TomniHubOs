@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -132,7 +132,7 @@ const IdeChatPanel: React.FC<IdeChatPanelProps> = ({ rootPath, activeFile, repoF
     }
     void getConversationOrNull(chat.activeId).then((conversation) => {
       if (cancelled) return;
-      // Conversations created before the Tomni runtime type cutover were
+      // Conversations created before the Tomny runtime type cutover were
       // persisted as ACP with extra.backend = tomny. Preserve their native
       // Context and Secret tabs instead of making the user recreate the chat.
       const type =

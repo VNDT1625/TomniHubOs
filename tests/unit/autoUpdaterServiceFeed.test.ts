@@ -1,17 +1,17 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-const originalFeedUrl = process.env.AIONUI_UPDATE_FEED_URL;
+const originalFeedUrl = process.env.TOMNY_UPDATE_FEED_URL;
 
 const importService = async (feedUrl: string | undefined) => {
   vi.resetModules();
-  if (feedUrl === undefined) delete process.env.AIONUI_UPDATE_FEED_URL;
-  else process.env.AIONUI_UPDATE_FEED_URL = feedUrl;
+  if (feedUrl === undefined) delete process.env.TOMNY_UPDATE_FEED_URL;
+  else process.env.TOMNY_UPDATE_FEED_URL = feedUrl;
 
   const autoUpdater = {
     logger: null,
@@ -39,7 +39,7 @@ const importService = async (feedUrl: string | undefined) => {
   vi.doMock('electron', () => ({
     app: {
       getVersion: vi.fn(() => '1.0.0'),
-      getPath: vi.fn(() => '/tmp/aionui-test'),
+      getPath: vi.fn(() => '/tmp/tomny-test'),
     },
   }));
 
@@ -51,11 +51,11 @@ describe('autoUpdaterService update feed override', () => {
   afterEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
-    if (originalFeedUrl === undefined) delete process.env.AIONUI_UPDATE_FEED_URL;
-    else process.env.AIONUI_UPDATE_FEED_URL = originalFeedUrl;
+    if (originalFeedUrl === undefined) delete process.env.TOMNY_UPDATE_FEED_URL;
+    else process.env.TOMNY_UPDATE_FEED_URL = originalFeedUrl;
   });
 
-  it('points electron-updater at a generic feed when AIONUI_UPDATE_FEED_URL is set', async () => {
+  it('points electron-updater at a generic feed when TOMNY_UPDATE_FEED_URL is set', async () => {
     const { autoUpdater } = await importService('http://192.168.1.10:5077/releases');
 
     expect(autoUpdater.setFeedURL).toHaveBeenCalledWith({
@@ -68,6 +68,6 @@ describe('autoUpdaterService update feed override', () => {
     const { autoUpdater, log } = await importService('file:///tmp/releases');
 
     expect(autoUpdater.setFeedURL).not.toHaveBeenCalled();
-    expect(log.error).toHaveBeenCalledWith('Invalid AIONUI_UPDATE_FEED_URL:', expect.any(Error));
+    expect(log.error).toHaveBeenCalledWith('Invalid TOMNY_UPDATE_FEED_URL:', expect.any(Error));
   });
 });

@@ -1,11 +1,11 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
 import type { TChatConversation } from '@/common/config/storage';
-import AionModal from '@/renderer/components/base/AionModal';
+import TomnyModal from '@/renderer/components/base/TomnyModal';
 import DirectorySelectionModal from '@/renderer/components/settings/DirectorySelectionModal';
 import { useLayoutContext } from '@/renderer/hooks/context/LayoutContext';
 import { CronJobIndicator, useCronJobsMap } from '@/renderer/pages/cron';
@@ -436,8 +436,8 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
         </div>
       )}
 
-      {/* 移除项目确认弹窗 — 使用项目自家 AionModal + 圆角线框按钮（红色危险态） */}
-      <AionModal
+      {/* 移除项目确认弹窗 — 使用项目自家 TomnyModal + 圆角线框按钮（红色危险态） */}
+      <TomnyModal
         visible={removeProjectTarget !== null}
         style={{ width: '400px' }}
         header={{
@@ -501,7 +501,7 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
             count: removeProjectTarget?.conversations.length ?? 0,
           })}
         </div>
-      </AionModal>
+      </TomnyModal>
 
       <div>
         {/* L1: Pinned section */}

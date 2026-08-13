@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -105,7 +105,7 @@ describe('createDirectCliAgentDriver', () => {
       surface: 'ide',
       permissionMode: 'workspace-write',
       sessionId: 'stable-agent-session',
-      excludedMcpServerNames: ['aionui-agent-orchestrator'],
+      excludedMcpServerNames: ['tomny-agent-orchestrator'],
     } as const;
     const resolveMcpServers = vi.fn(async () => []);
     const driver = createDirectCliAgentDriver(

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  *
  * White-box tests for FeedbackReportModal's prefill behavior.
@@ -141,7 +141,7 @@ describe('FeedbackReportModal — prefill', () => {
     const user = userEvent.setup();
     renderModal(<FeedbackReportModal visible={true} onCancel={onCancel} defaultModule='agent-detection' />);
 
-    const closeBtn = document.querySelector('.aionui-modal-close-btn') as HTMLElement | null;
+    const closeBtn = document.querySelector('.tomny-modal-close-btn') as HTMLElement | null;
     expect(closeBtn).not.toBeNull();
     await user.click(closeBtn!);
 

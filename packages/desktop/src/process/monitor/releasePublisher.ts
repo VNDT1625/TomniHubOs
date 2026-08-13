@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -59,7 +59,7 @@ export type PublisherConfig = {
   push?: boolean;
   /** Allow pushing even when the remote looks like the shared upstream. Defaults to `false`. */
   allowUpstreamPush?: boolean;
-  /** Pattern identifying the protected upstream remote. Defaults to the Tomni upstream. */
+  /** Pattern identifying the protected upstream remote. Defaults to the Tomny upstream. */
   upstreamPattern?: RegExp;
 };
 

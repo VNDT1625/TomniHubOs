@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -17,7 +17,7 @@ import { useCallback, useEffect, useState } from 'react';
 /** @deprecated Import from `superGuidance`; retained for existing callers. */
 export { BROWSER_CONTROL_MCP_NAME } from './superGuidance';
 
-const SUPER_KEY_PREFIX = 'aionui.super.';
+const SUPER_KEY_PREFIX = 'tomny.super.';
 
 const loadSuper = (conversationId: string): boolean => {
   if (typeof window === 'undefined') return false;

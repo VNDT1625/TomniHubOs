@@ -1,12 +1,12 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
 /**
  * In-process MCP host for the Cron (Scheduled Tasks) server — the bridge that
- * lets an agent (e.g. Claude Code over ACP, aionrs, …) manage the user's
+ * lets an agent (e.g. Claude Code over ACP, tomnyagentic, …) manage the user's
  * scheduled tasks as tools.
  *
  * ## Why an in-process HTTP/SSE host (not a stdio child)

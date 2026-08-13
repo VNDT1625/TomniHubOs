@@ -1,4 +1,9 @@
-# Tomni Hub Agent OS — Execution and Commercial Roadmap
+# Tomny Hub Agent OS — Execution and Commercial Roadmap
+
+> **Design conformance:** [Tomny Hub OS Visual Design System](tomni-hub-visual-design.md) là nguồn
+> sự thật cho typography, glass, spacing, control, popup và responsive. Mock ASCII bên dưới
+> chỉ mô tả information architecture; không được dùng để tạo một visual system khác.
+
 
 > **Trạng thái:** Roadmap đề xuất  
 > **Phạm vi:** từ hiện trạng đến product-market fit, marketplace và nền tảng bền vững  
@@ -6,7 +11,7 @@
 
 ## 1. Mục tiêu cuối
 
-Tomni đạt trạng thái thành công bền vững khi:
+Tomny đạt trạng thái thành công bền vững khi:
 
 - người dùng thường xuyên giao mục tiêu và nhận verified outcome;
 - Base OS ổn định, package lỗi không làm hỏng hệ thống;
@@ -148,7 +153,7 @@ Nếu package runtime chỉ chạy được cho code nội bộ hoặc secret c�
 
 ### Mục tiêu
 
-Dùng chính Tomni để xây Tomni, chứng minh public contract đủ mạnh.
+Dùng chính Tomny để xây Tomny, chứng minh public contract đủ mạnh.
 
 ### Tổ chức team
 
@@ -258,7 +263,7 @@ Chứng minh creator flywheel và willingness to pay.
 - Free: Hub OS, free package, BYOK/local model;
 - Pro: khoảng `$19/tháng` hoặc `$190/năm`, trial 14 ngày;
 - AI usage: credit giới hạn hoặc BYOK, không unlimited;
-- marketplace: creator 85%, Tomni 15%;
+- marketplace: creator 85%, Tomny 15%;
 - chưa thu phí listing ở giai đoạn đầu.
 
 ### Gate

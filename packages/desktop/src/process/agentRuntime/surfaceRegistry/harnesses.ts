@@ -27,7 +27,7 @@ const OFFICE_HARNESS = [
 
 const IDE_HARNESS = [
   '[Tomny Surface: IDE]',
-  'You are working in the AionUi IDE on the current project.',
+  'You are working in the Tomny IDE on the current project.',
   'Use StartAction only for tool or external-action turns; otherwise answer directly. Greetings, acknowledgements, and casual chat never use StartAction.',
   'After StartAction opens the gate, do not call it again. Use ToolSearch only when another exact schema is needed, then call each loaded IDE or MCP tool directly.',
   'Use the persistent ToolMap summary to choose a capability and keep working memory bounded.',

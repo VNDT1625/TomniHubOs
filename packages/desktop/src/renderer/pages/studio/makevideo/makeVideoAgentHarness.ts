@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -27,7 +27,12 @@ export type MakeVideoAgentAction =
   | { tool: 'create_project'; topic: string; style: string; language: string }
   | { tool: 'update_project'; projectId: string; topic?: string; style?: string; language?: string }
   | { tool: 'replace_scenes'; projectId: string; scenes: Scene[] }
-  | { tool: 'update_scene'; projectId: string; sceneId: string; patch: Partial<Pick<Scene, 'title' | 'narration' | 'imagePrompt' | 'frameStartPath' | 'frameEndPath'>> }
+  | {
+      tool: 'update_scene';
+      projectId: string;
+      sceneId: string;
+      patch: Partial<Pick<Scene, 'title' | 'narration' | 'imagePrompt' | 'frameStartPath' | 'frameEndPath'>>;
+    }
   | { tool: 'reorder_scenes'; projectId: string; sceneIds: string[] }
   | { tool: 'set_film_bible'; projectId: string; filmBible: FilmBible }
   | { tool: 'set_assets'; projectId: string; assets: FilmAsset[] }
@@ -70,7 +75,11 @@ const loadProject = async (projectId: string): Promise<VideoProject | null> => {
 const saveProject = async (project: VideoProject): Promise<MakeVideoAgentResult> => {
   const result = await makeVideoClient.save({ ...project, updatedAt: Date.now() });
   return result.ok
-    ? { ok: true, observation: `Saved film project "${result.data.topic}" with ${result.data.scenes.length} scenes.`, project: result.data }
+    ? {
+        ok: true,
+        observation: `Saved film project "${result.data.topic}" with ${result.data.scenes.length} scenes.`,
+        project: result.data,
+      }
     : providerError(result as ProviderFailure);
 };
 
@@ -165,7 +174,7 @@ export const runMakeVideoAgentAction = async (action: MakeVideoAgentAction): Pro
         const project = await loadProject(action.projectId);
         if (!project) return failure(`Film project ${action.projectId} was not found.`, 'not-found');
         const invalidClip = action.timeline.clips.find(
-          (clip) => clip.startSec < 0 || clip.durationSec <= 0 || clip.trimStartSec < 0 || clip.trimEndSec < 0,
+          (clip) => clip.startSec < 0 || clip.durationSec <= 0 || clip.trimStartSec < 0 || clip.trimEndSec < 0
         );
         if (invalidClip) return failure(`Timeline clip ${invalidClip.id} has invalid timing.`, 'invalid-action');
         return saveProject({ ...project, timeline: action.timeline });
@@ -190,7 +199,9 @@ export const runMakeVideoAgentAction = async (action: MakeVideoAgentAction): Pro
         });
         return {
           ok: true,
-          observation: issues.length ? `Continuity audit found ${issues.length} issue(s): ${issues.join('; ')}.` : 'Continuity audit passed.',
+          observation: issues.length
+            ? `Continuity audit found ${issues.length} issue(s): ${issues.join('; ')}.`
+            : 'Continuity audit passed.',
           project,
         };
       }
@@ -227,7 +238,7 @@ export const runMakeVideoAgentAction = async (action: MakeVideoAgentAction): Pro
         return saveProject({
           ...project,
           scenes: project.scenes.map((item) =>
-            item.id === scene.id ? { ...item, imagePath: result.data.imagePath, imageError: null } : item,
+            item.id === scene.id ? { ...item, imagePath: result.data.imagePath, imageError: null } : item
           ),
         });
       }
@@ -252,7 +263,8 @@ export const runMakeVideoAgentAction = async (action: MakeVideoAgentAction): Pro
         const scene = project?.scenes.find((item) => item.id === action.sceneId);
         if (!project || !scene) return failure('Project or scene was not found.', 'not-found');
         const frameStartPath = scene.frameStartPath ?? scene.imagePath;
-        if (!frameStartPath) return failure('Generate or assign a start-frame image before generating a clip.', 'invalid-action');
+        if (!frameStartPath)
+          return failure('Generate or assign a start-frame image before generating a clip.', 'invalid-action');
         const result = await makeVideoClient.generateVideoClip({
           projectId: project.id,
           sceneId: scene.id,

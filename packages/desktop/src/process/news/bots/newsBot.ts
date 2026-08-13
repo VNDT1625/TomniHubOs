@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -11,7 +11,7 @@
  * finance-oriented lexicon + cross-source trend strength), raises alerts for
  * keyword-matched, high-sentiment, or multi-source-corroborated stories. It
  * also exposes per-symbol aggregate sentiment that the trading bot consumes as
- * one of its ensemble signals — this is the cross-feature edge AionUi has that
+ * one of its ensemble signals — this is the cross-feature edge Tomny has that
  * a standalone trading bot does not.
  *
  * Pure + deterministic. No Node/DOM imports.

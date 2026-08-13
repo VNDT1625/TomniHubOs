@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -10,6 +10,7 @@ import type { ElectronBridgeAPI } from '@/common/types/platform/electron';
 
 interface CustomWindow extends Window {
   electronAPI?: ElectronBridgeAPI;
+  __backendPort?: number;
   __bridgeEmitter?: { emit: (name: string, data: unknown) => void };
   __emitBridgeCallback?: (name: string, data: unknown) => void;
   __websocketReconnect?: () => void;
@@ -20,7 +21,7 @@ const win = window as CustomWindow;
 /**
  * 适配electron的API到浏览器中,建立renderer和main的通信桥梁, 与preload.ts中的注入对应
  * */
-if (win.electronAPI) {
+if (win.electronAPI && typeof win.__backendPort === 'number') {
   // Electron 环境 - 使用 IPC 通信
   bridge.adapter({
     emit(name, data) {

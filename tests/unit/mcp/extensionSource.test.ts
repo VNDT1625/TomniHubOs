@@ -14,7 +14,7 @@ const createExtension = async (
 ): Promise<void> => {
   const extensionRoot = path.join(root, directory);
   await mkdir(path.join(extensionRoot, 'contributes'), { recursive: true });
-  await writeFile(path.join(extensionRoot, 'aion-extension.json'), JSON.stringify(manifest));
+  await writeFile(path.join(extensionRoot, 'tomny-extension.json'), JSON.stringify(manifest));
   if (contribution !== undefined) {
     await writeFile(path.join(extensionRoot, 'contributes', 'mcp-servers.json'), JSON.stringify(contribution));
   }
@@ -97,7 +97,7 @@ describe('extension MCP contribution source', () => {
     tempRoots.push(root);
     const malformedRoot = path.join(root, 'malformed');
     await mkdir(malformedRoot, { recursive: true });
-    await writeFile(path.join(malformedRoot, 'aion-extension.json'), '{');
+    await writeFile(path.join(malformedRoot, 'tomny-extension.json'), '{');
     await createExtension(root, 'invalid-transport', {
       name: 'invalid-extension',
       version: '1.0.0',

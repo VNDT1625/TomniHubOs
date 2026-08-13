@@ -19,12 +19,12 @@ function resolveDesktopDataDir(env = process.env, platform = process.platform, h
   if (override) return path.resolve(override);
   if (platform === 'win32') {
     const appData = env.APPDATA || path.join(homeDir, 'AppData', 'Roaming');
-    return path.join(appData, 'AionUi-Dev', 'aionui');
+    return path.join(appData, 'Tomny-Dev', 'tomny');
   }
   if (platform === 'darwin') {
-    return path.join(homeDir, 'Library', 'Application Support', 'AionUi-Dev', 'aionui');
+    return path.join(homeDir, 'Library', 'Application Support', 'Tomny-Dev', 'tomny');
   }
-  return path.join(env.XDG_CONFIG_HOME || path.join(homeDir, '.config'), 'AionUi-Dev', 'aionui');
+  return path.join(env.XDG_CONFIG_HOME || path.join(homeDir, '.config'), 'Tomny-Dev', 'tomny');
 }
 
 function resolveConfig(env = process.env) {
@@ -139,7 +139,7 @@ function buildServiceSpecs(config, env = process.env) {
       ],
       healthUrl: `http://127.0.0.1:${config.webuiPort}/api/auth/status`,
       logPath: config.webLogPath,
-      env: { ...env, AIONUI_OPEN_BROWSER: '0' },
+      env: { ...env, TOMNY_OPEN_BROWSER: '0' },
     },
     mcp: {
       command: nodeExecutable,

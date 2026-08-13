@@ -1,4 +1,4 @@
-﻿//! Query the durable project Wiki exported by AionUi into `.omni/wiki/wiki.json`.
+﻿//! Query the durable project Wiki exported by Tomny into `.omni/wiki/wiki.json`.
 //!
 //! This is intentionally a small read-only adapter over the persisted Wiki
 //! schema. Agents can retrieve shared, model-authored project knowledge without
@@ -110,7 +110,7 @@ pub fn query_wiki(
         if error.kind() == std::io::ErrorKind::NotFound {
             MtuiError::FileNotFound {
                 message: format!("Project Wiki not found at {WIKI_REL_PATH}"),
-                suggestion: "Build the Wiki from AionUi Studio, then retry `mtui wiki <query>`"
+                suggestion: "Build the Wiki from Tomny Studio, then retry `mtui wiki <query>`"
                     .to_string(),
             }
         } else {

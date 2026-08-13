@@ -17,6 +17,204 @@
     "searchPlaceholder": "搜索项目…",
     "noProject": "不使用项目"
   },
+  "hubHome": {
+    "title": "What do you want to accomplish today?",
+    "subtitle": "Tomny is ready to coordinate agents, apps, and capabilities for your work.",
+    "quickPromptsLabel": "Quick prompts",
+    "quickPrompts": {
+      "plan": "Create a plan",
+      "analyze": "Analyze data",
+      "write": "Write a document",
+      "build": "Build an app"
+    },
+    "appsTitle": "Apps",
+    "appsSubtitle": "Open a tool directly or explore an app group.",
+    "viewAll": "View all",
+    "allApps": "All apps",
+    "openCategory": "Open {{category}} apps",
+    "categories": {
+      "communication": {
+        "title": "Communication",
+        "description": "Talk, browse, and collaborate"
+      },
+      "creative": {
+        "title": "Creative",
+        "description": "Create media and experiences"
+      },
+      "developer": {
+        "title": "Developer tools",
+        "description": "Build, run, and manage code"
+      },
+      "productivity": {
+        "title": "Productivity",
+        "description": "Organize work and knowledge"
+      }
+    },
+    "apps": {
+      "chat": {
+        "title": "Chat",
+        "description": "Work with your AI agents"
+      },
+      "browser": {
+        "title": "Browser",
+        "description": "Research and navigate the web"
+      },
+      "company": {
+        "title": "Company",
+        "description": "Coordinate teams and workspaces"
+      },
+      "studio": {
+        "title": "Studio",
+        "description": "Create with the complete studio suite"
+      },
+      "music": {
+        "title": "Music",
+        "description": "Generate and shape audio"
+      },
+      "realtime": {
+        "title": "Realtime",
+        "description": "Build live AI experiences"
+      },
+      "ide": {
+        "title": "IDE",
+        "description": "Develop apps inside Tomny"
+      },
+      "terminal": {
+        "title": "Terminal",
+        "description": "Run commands and local tools"
+      },
+      "git": {
+        "title": "Git",
+        "description": "Manage repositories and changes"
+      },
+      "manager": {
+        "title": "Manager",
+        "description": "Plan and track work"
+      },
+      "automation": {
+        "title": "Automation",
+        "description": "Schedule repeatable workflows"
+      },
+      "knowledge": {
+        "title": "Knowledge",
+        "description": "Organize reusable context"
+      }
+    },
+    "recentTitle": "Continue",
+    "recentSubtitle": "Return to the apps you used recently.",
+    "recentEmpty": "Your recently opened apps will appear here.",
+    "status": {
+      "title": "Tomny status",
+      "runtimeTitle": "Agent runtime",
+      "ready": "Ready",
+      "agents": "Agents",
+      "capabilities": "Capabilities",
+      "workspace": "Workspace",
+      "optional": "Optional",
+      "modelTitle": "Active agent",
+      "automatic": "Automatic",
+      "systemTitle": "System",
+      "coreReady": "Tomny Core is ready",
+      "coreReadyHint": "Local orchestration is available",
+      "vaultProtected": "Security Vault protected",
+      "vaultProtectedHint": "Secrets stay isolated from agents",
+      "noWorkspace": "No workspace selected",
+      "workspaceHint": "Current working context",
+      "workTitle": "Work",
+      "notificationsTitle": "Notifications",
+      "modelsTitle": "Models",
+      "manage": "Manage",
+      "details": "Details",
+      "cpu": "CPU",
+      "ram": "RAM",
+      "workInProgress": "{{count}} in progress",
+      "workPending": "{{count}} pending approval",
+      "workBlocked": "{{count}} blocked",
+      "notificationIdeUpdated": "IDE was updated to a new version",
+      "notificationWorkspaceActivity": "Workspace Tomny has new activity",
+      "notificationApprovalRequested": "SubAgent approval requested",
+      "primaryModelName": "Claude 3.5 Sonnet",
+      "secondaryModelName": "Gemini 1.5 Pro",
+      "active": "Active",
+      "storage": "Storage",
+      "connection": "Connection",
+      "connectionGood": "Good"
+    },
+    "storeDetail": {
+      "back": "Back to Store",
+      "viewDetails": "View details for {{name}}",
+      "app": "App",
+      "installed": "Installed",
+      "available": "Available",
+      "microsoftStore": "Microsoft Store",
+      "microsoftCertified": "Microsoft 认证",
+      "microsoftSummaryFallback": "通过 Microsoft Store 了解此应用。",
+      "openMicrosoftStore": "在 Microsoft Store 中查看",
+      "microsoftSourceStale": "Microsoft Store 结果可能已过期。",
+      "microsoftSourceFailed": "Microsoft Store 暂时不可用。",
+      "availability": {
+        "available": "可用",
+        "installed": "已安装",
+        "unavailable": "不可用",
+        "unknown": "未知"
+      },
+      "verified": "Verified package",
+      "install": "安装",
+      "update": "更新",
+      "reinstall": "重新安装",
+      "updateAvailable": "有可用更新",
+      "incompatible": "不兼容",
+      "quarantined": "安全检查失败",
+      "removeTitle": "移除 {{name}}？",
+      "removeDescription": "下载的包及其本地文件将从此设备中删除。",
+      "empty": "没有匹配的商店包。请刷新目录或更改搜索内容。",
+      "moduleCount": "{{count}} 个模块",
+      "size": "Download size",
+      "compatibility": "Compatibility",
+      "previewLabel": "Capability preview",
+      "previewTitle": "Explore {{name}}",
+      "previewDescription": "A truthful preview of the modules and workspaces included in this package.",
+      "previewImageAlt": "{{name}} preview image {{index}}",
+      "about": "About this app",
+      "whatsInside": "What's inside",
+      "releaseNotes": "What's new",
+      "currentRelease": "Version {{version}}",
+      "releaseNotesBody": "Current signed release from the Tomny Store catalog.",
+      "developer": "Developer and package",
+      "publisher": "Publisher",
+      "packageType": "Package type",
+      "trust": "Trust",
+      "firstParty": "Tomny verified",
+      "storeSigned": "Store signed",
+      "permissions": "Permissions",
+      "noPermissions": "This app requests no additional permissions.",
+      "dependencies": "Dependencies",
+      "noDependencies": "No additional packages required.",
+      "notFound": "This Store product is unavailable."
+    },
+    "launcherHint": "Choose an app to open it. Install and discovery belong in Store.",
+    "shell": {
+      "primaryNavigation": "Primary navigation",
+      "searchPlaceholder": "Search in Tomny",
+      "pinnedApps": "Pinned apps",
+      "workspaces": "Workspaces",
+      "store": "Store",
+      "storeHint": "Discover apps and packages",
+      "more": "More",
+      "version": "Tomny Hub v1.0.0",
+      "support": "Support",
+      "feedback": "Feedback",
+      "coreHealthy": "Tomny Core: Healthy",
+      "nav": {
+        "home": "Home",
+        "manage": "Manage",
+        "products": "Products",
+        "history": "History",
+        "company": "Company",
+        "settings": "Settings"
+      }
+    }
+  },
   "scanning": {
     "initialMessage": "当前Agent不可用, 正在检测其他可用agent...",
     "scanningMessage": "正在扫描本地可用agent...",

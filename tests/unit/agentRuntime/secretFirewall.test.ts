@@ -131,4 +131,13 @@ describe('Secret Firewall', () => {
     expect(result.text).not.toContain('plaintext-leak');
     expect(result.findings).toEqual([{ name: 'API_KEY', type: 'api-key', confidence: 'high' }]);
   });
+  it('redacts Vietnamese password labels including OCR-normalized text', () => {
+    const accented = redactSecretText('mật khẩu : 0329108079');
+    const normalized = redactSecretText('mat khau : 03291 08079');
+
+    expect(accented.text).toBe('mật khẩu : [REDACTED]');
+    expect(normalized.text).toBe('mat khau : [REDACTED]');
+    expect(accented.findings).toEqual([{ name: 'mật khẩu', type: 'password', confidence: 'high' }]);
+    expect(normalized.findings).toEqual([{ name: 'mat khau', type: 'password', confidence: 'high' }]);
+  });
 });

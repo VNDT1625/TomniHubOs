@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -17,8 +17,8 @@ import { Help, Down, Plus } from '@icon-park/react';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import useConfigModelListWithImage from '@/renderer/hooks/agent/useConfigModelListWithImage';
-import AionScrollArea from '@/renderer/components/base/AionScrollArea';
-import AionSelect from '@/renderer/components/base/AionSelect';
+import TomnyScrollArea from '@/renderer/components/base/TomnyScrollArea';
+import TomnySelect from '@/renderer/components/base/TomnySelect';
 import AddMcpServerModal from '@/renderer/pages/settings/components/AddMcpServerModal';
 import McpServerItem from '@/renderer/pages/settings/ToolsSettings/McpServerItem';
 import ExternalMcpGatewaySettings from '@/renderer/pages/settings/ToolsSettings/ExternalMcpGatewaySettings';
@@ -30,7 +30,7 @@ type MessageInstance = ReturnType<typeof Message.useMessage>[0];
 
 const isBuiltinImageGenServer = (server: IMcpServer) =>
   server.builtin === true && (server.id === BUILTIN_IMAGE_GEN_ID || server.name === BUILTIN_IMAGE_GEN_NAME);
-const SPEECH_TO_TEXT_CONFIG_CHANGED_EVENT = 'aionui:speech-to-text-config-changed';
+const SPEECH_TO_TEXT_CONFIG_CHANGED_EVENT = 'tomny:speech-to-text-config-changed';
 const areEnvRecordsEqual = (a: Record<string, string>, b: Record<string, string>) => {
   const aKeys = Object.keys(a);
   const bKeys = Object.keys(b);
@@ -146,10 +146,10 @@ const SpeechToTextSettingsSection: React.FC<{
 
           <Form layout='horizontal' labelAlign='left' className='space-y-12px'>
             <Form.Item label={t('settings.speechToTextProvider')}>
-              <AionSelect value={config.provider} onChange={handleProviderChange}>
-                <AionSelect.Option value='openai'>{t('settings.speechToTextProviderOpenAI')}</AionSelect.Option>
-                <AionSelect.Option value='deepgram'>{t('settings.speechToTextProviderDeepgram')}</AionSelect.Option>
-              </AionSelect>
+              <TomnySelect value={config.provider} onChange={handleProviderChange}>
+                <TomnySelect.Option value='openai'>{t('settings.speechToTextProviderOpenAI')}</TomnySelect.Option>
+                <TomnySelect.Option value='deepgram'>{t('settings.speechToTextProviderDeepgram')}</TomnySelect.Option>
+              </TomnySelect>
             </Form.Item>
 
             {config.provider === 'openai' ? (
@@ -419,7 +419,7 @@ const ModalMcpManagementSection: React.FC<{
             {t('settings.mcpNoServersFound')}
           </div>
         ) : (
-          <AionScrollArea
+          <TomnyScrollArea
             className={classNames('max-h-360px', isPageMode && 'max-h-none')}
             disableOverflow={isPageMode}
           >
@@ -453,7 +453,7 @@ const ModalMcpManagementSection: React.FC<{
                 />
               ))}
             </div>
-          </AionScrollArea>
+          </TomnyScrollArea>
         )}
       </div>
 
@@ -722,12 +722,12 @@ const ToolsModalContent: React.FC = () => {
       {mcpMessageContext}
 
       {/* Content Area */}
-      <AionScrollArea className='flex-1 min-h-0 pb-16px' disableOverflow={isPageMode}>
+      <TomnyScrollArea className='flex-1 min-h-0 pb-16px' disableOverflow={isPageMode}>
         <div className='space-y-16px'>
           {/* MCP 工具配置 */}
           <div className='px-[12px] md:px-[32px] py-[24px] bg-2 rd-12px md:rd-16px flex flex-col min-h-0 border border-border-2'>
             <div className='flex-1 min-h-0'>
-              <AionScrollArea
+              <TomnyScrollArea
                 className={classNames('h-full', isPageMode && 'overflow-visible')}
                 disableOverflow={isPageMode}
               >
@@ -739,7 +739,7 @@ const ToolsModalContent: React.FC = () => {
                   saveMcpServers={saveMcpServers}
                   isPageMode={isPageMode}
                 />
-              </AionScrollArea>
+              </TomnyScrollArea>
             </div>
           </div>
           {/* 图像生成 */}
@@ -778,7 +778,7 @@ const ToolsModalContent: React.FC = () => {
                 }
               >
                 {imageGenerationModelList.length > 0 ? (
-                  <AionSelect
+                  <TomnySelect
                     value={
                       imageGenerationModel?.id && imageGenerationModel?.use_model
                         ? `${imageGenerationModel.id}|${imageGenerationModel.use_model}`
@@ -796,15 +796,15 @@ const ToolsModalContent: React.FC = () => {
                     }}
                   >
                     {imageGenerationModelList.map(({ models, ...platform }) => (
-                      <AionSelect.OptGroup label={platform.name} key={platform.id}>
+                      <TomnySelect.OptGroup label={platform.name} key={platform.id}>
                         {models.map((modelName) => (
-                          <AionSelect.Option key={platform.id + modelName} value={platform.id + '|' + modelName}>
+                          <TomnySelect.Option key={platform.id + modelName} value={platform.id + '|' + modelName}>
                             {modelName}
-                          </AionSelect.Option>
+                          </TomnySelect.Option>
                         ))}
-                      </AionSelect.OptGroup>
+                      </TomnySelect.OptGroup>
                     ))}
-                  </AionSelect>
+                  </TomnySelect>
                 ) : (
                   <div className='text-t-secondary flex items-center'>
                     {t('settings.noAvailable')}
@@ -813,7 +813,7 @@ const ToolsModalContent: React.FC = () => {
                         <div>
                           {t('settings.needHelpTooltip')}
                           <a
-                            href='https://github.com/VNDT1625/OmniAgent/wiki/AionUi-Image-Generation-Tool-Model-Configuration-Guide'
+                            href='https://github.com/VNDT1625/OmniAgent/wiki/Tomny-Image-Generation-Tool-Model-Configuration-Guide'
                             target='_blank'
                             rel='noopener noreferrer'
                             className='text-[rgb(var(--primary-6))] hover:text-[rgb(var(--primary-5))] underline ml-4px'
@@ -825,7 +825,7 @@ const ToolsModalContent: React.FC = () => {
                       }
                     >
                       <a
-                        href='https://github.com/VNDT1625/OmniAgent/wiki/AionUi-Image-Generation-Tool-Model-Configuration-Guide'
+                        href='https://github.com/VNDT1625/OmniAgent/wiki/Tomny-Image-Generation-Tool-Model-Configuration-Guide'
                         target='_blank'
                         rel='noopener noreferrer'
                         className='ml-8px text-[rgb(var(--primary-6))] hover:text-[rgb(var(--primary-5))] cursor-pointer'
@@ -841,7 +841,7 @@ const ToolsModalContent: React.FC = () => {
           </div>
           <SpeechToTextSettingsSection config={speechToTextConfig} onChange={updateSpeechToTextConfig} />
         </div>
-      </AionScrollArea>
+      </TomnyScrollArea>
     </div>
   );
 };

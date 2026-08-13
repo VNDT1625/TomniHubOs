@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -43,8 +43,8 @@ async function resolvePreferredMode(backend: string): Promise<string | undefined
 
   let preference: ModePreference | undefined;
 
-  if (backend === 'aionrs') {
-    preference = configService.get('aionrs.config');
+  if (backend === 'tomnyagentic') {
+    preference = configService.get('tomnyagentic.config');
   } else {
     const acpConfig = configService.get('acp.config');
     preference = acpConfig?.[backend as string];
@@ -88,7 +88,7 @@ async function resolvePreferredAcpModelId(backend: string): Promise<string | und
   return undefined;
 }
 
-function getAvailableAionrsModels(provider: IProvider): string[] {
+function getAvailableTomnyAgenticModels(provider: IProvider): string[] {
   return (provider.models || []).filter((modelName) => {
     if (provider.model_enabled?.[modelName] === false) {
       return false;
@@ -99,36 +99,36 @@ function getAvailableAionrsModels(provider: IProvider): string[] {
   });
 }
 
-function isAionrsCompatibleProvider(provider: IProvider): boolean {
+function isTomnyAgenticCompatibleProvider(provider: IProvider): boolean {
   const platform = provider.platform?.toLowerCase() ?? '';
   if (provider.enabled === false || platform.includes('gemini-with-google-auth')) {
     return false;
   }
-  return getAvailableAionrsModels(provider).length > 0;
+  return getAvailableTomnyAgenticModels(provider).length > 0;
 }
 
 /**
- * Get a model from configured providers that is compatible with aionrs.
- * Respects the user's saved `aionrs.defaultModel` selection when it still
+ * Get a model from configured providers that is compatible with tomnyagentic.
+ * Respects the user's saved `tomnyagentic.defaultModel` selection when it still
  * exists in the current provider list, otherwise falls back to the first
  * compatible provider/model pair.
  */
-export async function getDefaultAionrsModel(): Promise<TProviderWithModel> {
+export async function getDefaultTomnyAgenticModel(): Promise<TProviderWithModel> {
   const providers = await ipcBridge.mode.listProviders.invoke();
 
   if (!providers || providers.length === 0) {
     throw new Error('No model provider configured');
   }
 
-  const compatibleProviders = providers.filter(isAionrsCompatibleProvider);
+  const compatibleProviders = providers.filter(isTomnyAgenticCompatibleProvider);
   if (compatibleProviders.length === 0) {
     throw new Error('No enabled model provider for Tomny Agentic');
   }
 
-  const savedDefault = configService.get('aionrs.defaultModel');
+  const savedDefault = configService.get('tomnyagentic.defaultModel');
   if (savedDefault?.id && savedDefault.use_model) {
     const savedProvider = compatibleProviders.find((provider) => provider.id === savedDefault.id);
-    if (savedProvider && getAvailableAionrsModels(savedProvider).includes(savedDefault.use_model)) {
+    if (savedProvider && getAvailableTomnyAgenticModels(savedProvider).includes(savedDefault.use_model)) {
       return {
         ...savedProvider,
         use_model: savedDefault.use_model,
@@ -137,7 +137,7 @@ export async function getDefaultAionrsModel(): Promise<TProviderWithModel> {
   }
 
   const provider = compatibleProviders[0];
-  const enabledModel = getAvailableAionrsModels(provider)[0];
+  const enabledModel = getAvailableTomnyAgenticModels(provider)[0];
 
   return {
     id: provider.id,
@@ -167,9 +167,9 @@ export async function buildCliAgentParams(agent: AgentMetadata, workspace: strin
   const preferredAcpModelId = type === 'acp' ? await resolvePreferredAcpModelId(agentKey) : undefined;
 
   let model: TProviderWithModel;
-  if (type === 'aionrs') {
-    // Aionrs needs a real model from configured providers (anthropic, openai, ali-intl, aws)
-    model = await getDefaultAionrsModel();
+  if (type === 'tomnyagentic') {
+    // TomnyAgentic needs a real model from configured providers (anthropic, openai, ali-intl, aws)
+    model = await getDefaultTomnyAgenticModel();
   } else {
     model = {} as TProviderWithModel;
   }

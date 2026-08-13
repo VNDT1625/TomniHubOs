@@ -4,7 +4,7 @@
 
 Thiết kế bám các nguyên tắc đã được kiểm chứng trong sản xuất (Anthropic orchestrator-workers cookbook;
 LangGraph supervisor; CrewAI hierarchical; các tổng kết "patterns that work 2026"). Nội dung được tổng
-hợp/diễn giải lại cho hợp ngữ cảnh AionUi (không sao chép nguyên văn):
+hợp/diễn giải lại cho hợp ngữ cảnh TomniHubOS (không sao chép nguyên văn):
 
 1. **Orchestrator-workers (Anthropic):** một điều phối viên _phân rã → giao việc → KIỂM CHỨNG → tổng hợp_.
    Điều phối viên **không tự viết code**; chỉ định tuyến và xác minh. Worker mới là người làm thật, mỗi
@@ -32,7 +32,7 @@ hợp/diễn giải lại cho hợp ngữ cảnh AionUi (không sao chép nguyê
 Tài liệu này thiết kế việc nâng công ty tác nhân thành **một tổ chức làm việc thật**, đệ quy nhiều cấp,
 do **soul/rule** điều khiển. Nguyên tắc kiến trúc trùm lên mọi quyết định:
 
-- **Không sửa aioncore.** Mọi điều phối dùng API sẵn có.
+- **Không sửa tomnicore.** Mọi điều phối dùng API sẵn có.
 - **Một cơ chế đệ quy tổng quát** (`runRole`) — không hardcode quy trình của một loại công ty.
 - **Thực thi thật (B)** qua **conversation + CLI/assistant** đã có: `conversation.sendMessage` →
   chờ `turn.completed` → đọc `last_message.content`. Tác nhân chạy trong **workspace thật**.
@@ -43,7 +43,7 @@ do **soul/rule** điều khiển. Nguyên tắc kiến trúc trùm lên mọi qu
     `companySession.openRoleChat` đã sống.
 
 > **Vì sao orchestrator nằm ở renderer, không phải Main?** Primitive thực thi thật (`sendMessage`,
-> `turn.completed`, tạo conversation từ agent metadata) đều là API renderer (gọi aioncore qua HTTP/WS, đọc
+> `turn.completed`, tạo conversation từ agent metadata) đều là API renderer (gọi tomnicore qua HTTP/WS, đọc
 > `configService`). Đặt orchestrator ở renderer để **tái dùng nguyên trạng**, không phải bắc cầu IPC mới
 > (đỡ rủi ro, đúng ranh giới process). Manager popup cũng ở renderer nên gọi trực tiếp, stream mượt.
 
@@ -266,7 +266,7 @@ type RoleResult = { ok: true; result: string; artifactIds: string[] } | { ok: fa
 
 - **Orchestrator ở renderer** (không Main): để tái dùng API conversation/turn thật, tránh bắc cầu IPC mới.
   Đánh đổi: logic nặng ở renderer — chấp nhận vì nó chỉ điều phối (I/O-bound), việc nặng thật nằm trong CLI
-  agent (process riêng do aioncore quản) và đã có lease.
+  agent (process riêng do tomnicore quản) và đã có lease.
 - **Giữ cả 2 engine** (conversation diễn + pipeline thật): không xoá công sức cũ; cho người dùng chọn.
 - **Workflow trong soul, không trong code**: tổng quát cho mọi loại công ty; rủi ro là model viết soul kém →
   có `soulTemplates` mặc định + người dùng sửa được.

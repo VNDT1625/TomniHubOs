@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -418,7 +418,7 @@ export const applyHeadings = async (
     throw new Error('Applying heading styles is only supported for Word files.');
   }
   // Hand the heading map to the command realm via the GLOBAL Asc.scope.
-  setAscScope('aionuiHeadings', headings);
+  setAscScope('tomnyHeadings', headings);
   const out = await callCommand(connector, () => {
     type Para = {
       GetText?: () => string;
@@ -431,9 +431,9 @@ export const applyHeadings = async (
     };
     const g = globalThis as unknown as {
       Api: { GetDocument: () => DocApi };
-      Asc?: { scope?: { aionuiHeadings?: Array<{ text: string; level: number }> } };
+      Asc?: { scope?: { tomnyHeadings?: Array<{ text: string; level: number }> } };
     };
-    const map = g.Asc?.scope?.aionuiHeadings ?? [];
+    const map = g.Asc?.scope?.tomnyHeadings ?? [];
     const want = new Map<string, number>();
     for (const h of map) want.set(h.text.trim(), h.level);
     const doc = g.Api.GetDocument();
@@ -537,7 +537,7 @@ export const replacePassage = async (
 ): Promise<boolean> => {
   const { connector, kind } = await awaitEntry(filePath);
   if (kind !== 'word') throw new Error('Replacing a specific passage is only supported for Word files.');
-  setAscScope('aionuiPassage', { find, replacement, until: until ?? null });
+  setAscScope('tomnyPassage', { find, replacement, until: until ?? null });
   const out = await callCommand(connector, () => {
     type Range = {
       GetStartPos?: () => unknown;
@@ -551,9 +551,9 @@ export const replacePassage = async (
     };
     const g = globalThis as unknown as {
       Api: { GetDocument: () => Doc };
-      Asc?: { scope?: { aionuiPassage?: { find: string; replacement: string; until: string | null } } };
+      Asc?: { scope?: { tomnyPassage?: { find: string; replacement: string; until: string | null } } };
     };
-    const data = g.Asc?.scope?.aionuiPassage;
+    const data = g.Asc?.scope?.tomnyPassage;
     if (!data) return false;
     const doc = g.Api.GetDocument();
     const startMatches = doc.Search(data.find, false) || [];
@@ -614,7 +614,7 @@ export const formatText = async (filePath: string, search: string, format: TextF
   if (kind !== 'word') throw new Error('Text formatting is only supported for Word files.');
   const rgb = format.color ? hexToRgbLiteral(format.color) : null;
   const hl = format.highlight ? hexToRgbLiteral(format.highlight) : null;
-  setAscScope('aionuiFmt', { search, format, rgb, hl });
+  setAscScope('tomnyFmt', { search, format, rgb, hl });
   const out = await callCommand(connector, () => {
     type Range = {
       SetBold?: (v: boolean) => void;
@@ -631,7 +631,7 @@ export const formatText = async (filePath: string, search: string, format: TextF
       Api: { GetDocument: () => DocSearch };
       Asc?: {
         scope?: {
-          aionuiFmt?: {
+          tomnyFmt?: {
             search: string;
             format: TextFormat;
             rgb: { r: number; g: number; b: number } | null;
@@ -640,7 +640,7 @@ export const formatText = async (filePath: string, search: string, format: TextF
         };
       };
     };
-    const data = g.Asc?.scope?.aionuiFmt;
+    const data = g.Asc?.scope?.tomnyFmt;
     if (!data) return 0;
     const { format: f, rgb: c, hl: h } = data;
     const ranges = g.Api.GetDocument().Search(data.search, false) || [];
@@ -682,7 +682,7 @@ export const formatPassage = async (
   if (kind !== 'word') throw new Error('Formatting a specific passage is only supported for Word files.');
   const rgb = format.color ? hexToRgbLiteral(format.color) : null;
   const hl = format.highlight ? hexToRgbLiteral(format.highlight) : null;
-  setAscScope('aionuiFmtPassage', { find, format, until: until ?? null, rgb, hl });
+  setAscScope('tomnyFmtPassage', { find, format, until: until ?? null, rgb, hl });
   const out = await callCommand(connector, () => {
     type Range = {
       GetStartPos?: () => unknown;
@@ -704,7 +704,7 @@ export const formatPassage = async (
       Api: { GetDocument: () => Doc };
       Asc?: {
         scope?: {
-          aionuiFmtPassage?: {
+          tomnyFmtPassage?: {
             find: string;
             format: TextFormat;
             until: string | null;
@@ -714,7 +714,7 @@ export const formatPassage = async (
         };
       };
     };
-    const data = g.Asc?.scope?.aionuiFmtPassage;
+    const data = g.Asc?.scope?.tomnyFmtPassage;
     if (!data) return false;
     const doc = g.Api.GetDocument();
     const startMatches = doc.Search(data.find, false) || [];
@@ -754,7 +754,7 @@ export const insertTable = async (filePath: string, rows: number, cols: number, 
   if (kind !== 'word') throw new Error('Inserting a table is only supported for Word files.');
   const r = Math.max(1, data?.length || rows);
   const c = Math.max(1, data?.[0]?.length || cols);
-  setAscScope('aionuiTable', { rows: r, cols: c, data: data ?? null });
+  setAscScope('tomnyTable', { rows: r, cols: c, data: data ?? null });
   await callCommand(connector, () => {
     type Cell = { GetContent?: () => { GetElement: (i: number) => { AddText?: (t: string) => void } } };
     type Row = { GetCell: (i: number) => Cell };
@@ -762,9 +762,9 @@ export const insertTable = async (filePath: string, rows: number, cols: number, 
     type Doc = { Push: (el: unknown) => void };
     const g = globalThis as unknown as {
       Api: { GetDocument: () => Doc; CreateTable: (cols: number, rows: number) => Table };
-      Asc?: { scope?: { aionuiTable?: { rows: number; cols: number; data: string[][] | null } } };
+      Asc?: { scope?: { tomnyTable?: { rows: number; cols: number; data: string[][] | null } } };
     };
-    const t = g.Asc?.scope?.aionuiTable;
+    const t = g.Asc?.scope?.tomnyTable;
     if (!t) return;
     const table = g.Api.CreateTable(t.cols, t.rows);
     if (t.data) {
@@ -795,7 +795,7 @@ export const setCells = async (
 ): Promise<number> => {
   const { connector, kind } = await awaitEntry(filePath);
   if (kind !== 'cell') throw new Error('Setting cells is only supported for spreadsheets.');
-  setAscScope('aionuiCells', { start, values, sheetName: sheetName ?? null });
+  setAscScope('tomnyCells', { start, values, sheetName: sheetName ?? null });
   const out = await callCommand(connector, () => {
     type Range = { SetValue: (v: string | number) => void };
     type Sheet = { GetRangeByNumber?: (r: number, c: number) => Range; GetRange?: (ref: string) => Range };
@@ -807,11 +807,11 @@ export const setCells = async (
       Api: ApiX;
       Asc?: {
         scope?: {
-          aionuiCells?: { start: string; values: Array<Array<string | number>>; sheetName: string | null };
+          tomnyCells?: { start: string; values: Array<Array<string | number>>; sheetName: string | null };
         };
       };
     };
-    const data = g.Asc?.scope?.aionuiCells;
+    const data = g.Asc?.scope?.tomnyCells;
     if (!data) return 0;
     const sheet = data.sheetName && g.Api.GetSheet ? g.Api.GetSheet(data.sheetName) : g.Api.GetActiveSheet();
     if (!sheet) return 0;

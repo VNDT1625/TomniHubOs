@@ -1,10 +1,10 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import AionScrollArea from '@/renderer/components/base/AionScrollArea';
+import TomnyScrollArea from '@/renderer/components/base/TomnyScrollArea';
 import { useSettingsViewMode } from '@/renderer/components/settings/SettingsModal/settingsViewContext';
 import { isElectronDesktop } from '@/renderer/utils/platform';
 import { BuildingTwo, Play, Robot } from '@icon-park/react';
@@ -74,6 +74,33 @@ const CompanyPage: React.FC = () => {
     setStarting(true);
     const closeLoading = Message.loading({ content: t('company.sider.chatOpening'), duration: 0 });
     try {
+      // 1. RunKernel 3-Core Preflight Execution
+      const api = (window as any).electronAPI;
+      if (api?.executeFoundationRun) {
+        const foundationRes = await api.executeFoundationRun({
+          intent: {
+            runId: `run_company_${activeId}_${Date.now()}`,
+            rootTaskId: `task_company_${activeId}`,
+            surface: 'company',
+            goal: `Start Agent Company pipeline for ${activeId}`,
+            constraints: ['safe_only', 'multi_tier'],
+            successCriteria: ['pipeline_started'],
+            workspaceScope: activeId,
+            userId: 'user_company',
+            createdAt: Date.now(),
+            correlationId: `corr_company_${Date.now()}`,
+            policyVersion: '1.0.0',
+          },
+          candidates: [
+            { id: `company_role_${structure.root.id}`, factors: { speed: 0.9, accuracy: 0.95 } },
+          ],
+        });
+        if (foundationRes?.success && foundationRes.receipt?.status === 'verified') {
+          console.log('[CompanyPage] 3-Core Foundation RunKernel preflight verified:', foundationRes.receipt);
+        }
+      }
+
+      // 2. Start Company Chat Session
       const convId = await openRoleChat({
         companyId: activeId,
         companyName: activeId,
@@ -121,7 +148,7 @@ const CompanyPage: React.FC = () => {
         )}
       </header>
 
-      <AionScrollArea className='flex-1 min-h-0 pb-16px' disableOverflow={isPageMode}>
+      <TomnyScrollArea className='flex-1 min-h-0 pb-16px' disableOverflow={isPageMode}>
         {!isDesktop ? (
           <div className='flex flex-col items-center gap-12px py-56px text-center'>
             <span className='size-48px flex-center rd-full bg-fill-2 text-t-tertiary'>
@@ -160,7 +187,7 @@ const CompanyPage: React.FC = () => {
             <RulesEditor rules={rules} status={rulesStatus} onSave={saveRules} />
           </div>
         )}
-      </AionScrollArea>
+      </TomnyScrollArea>
 
       <ManagerPopup
         visible={managerOpen}

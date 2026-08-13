@@ -10,14 +10,14 @@ describe('usageByConsumer', () => {
       totalCachedTokens: 4,
       totalCost: 0.3,
       byApiKey: {
-        first: { keyName: 'Tomni · Codex CLI', requests: 1, promptTokens: 10, completionTokens: 4, cost: 0.1 },
-        second: { keyName: 'Tomni · Codex CLI', requests: 2, promptTokens: 20, completionTokens: 5, cost: 0.2 },
+        first: { keyName: 'Tomny · Codex CLI', requests: 1, promptTokens: 10, completionTokens: 4, cost: 0.1 },
+        second: { keyName: 'Tomny · Codex CLI', requests: 2, promptTokens: 20, completionTokens: 5, cost: 0.2 },
       },
     });
 
     expect(rows).toEqual([
       expect.objectContaining({
-        consumer: 'Tomni · Codex CLI',
+        consumer: 'Tomny · Codex CLI',
         requests: 3,
         promptTokens: 30,
         completionTokens: 9,

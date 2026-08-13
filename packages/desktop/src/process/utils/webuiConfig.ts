@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -10,7 +10,7 @@ import * as path from 'path';
 import { networkInterfaces } from 'os';
 import { getSystemDir, ProcessConfig } from './initStorage';
 
-import { startWebHost, type WebHostHandle, type WebHostOptions } from '@aionui/web-host';
+import { startWebHost, type WebHostHandle, type WebHostOptions } from '@tomny/web-host';
 import { ensureCloudflared, startTunnel, stopTunnel } from '@process/studio/cloudflareTunnel';
 import { getTomniGatewayEndpoint } from '@process/tomnigateway';
 import { getDataPath } from './utils';
@@ -136,7 +136,7 @@ export const saveUserWebUIConfig = async (config: WebUIUserConfig): Promise<void
 //   production -> 25808, dev -> 25809, multi-instance dev -> 25810
 const DEFAULT_WEBUI_PORT = (() => {
   if (process.env.NODE_ENV === 'production') return 25808;
-  if (process.env.AIONUI_MULTI_INSTANCE === '1') return 25810;
+  if (process.env.TOMNY_MULTI_INSTANCE === '1') return 25810;
   return 25809;
 })();
 
@@ -147,7 +147,7 @@ export const resolveWebUIPort = (
   const cliPort = parsePortValue(getSwitchValue('port') ?? getSwitchValue('webui-port'));
   if (cliPort) return cliPort;
 
-  const envPort = parsePortValue(process.env.AIONUI_PORT ?? process.env.PORT);
+  const envPort = parsePortValue(process.env.TOMNY_PORT ?? process.env.PORT);
   if (envPort) return envPort;
 
   const configPort = parsePortValue(config.port);
@@ -157,8 +157,8 @@ export const resolveWebUIPort = (
 };
 
 export const resolveRemoteAccess = (config: WebUIUserConfig, isRemoteMode: boolean): boolean => {
-  const envRemote = parseBooleanEnv(process.env.AIONUI_ALLOW_REMOTE || process.env.AIONUI_REMOTE);
-  const hostHint = process.env.AIONUI_HOST?.trim();
+  const envRemote = parseBooleanEnv(process.env.TOMNY_ALLOW_REMOTE || process.env.TOMNY_REMOTE);
+  const hostHint = process.env.TOMNY_HOST?.trim();
   const hostRequestsRemote = hostHint ? ['0.0.0.0', '::', '::0'].includes(hostHint) : false;
   const configRemote = config.allowRemote === true;
 
@@ -247,7 +247,7 @@ const getCandidateLanIPs = (): string[] => {
     }
   }
 
-  return candidates.sort((a, b) => b.score - a.score).map((candidate) => candidate.address);
+  return candidates.toSorted((a, b) => b.score - a.score).map((candidate) => candidate.address);
 };
 
 const getLanIP = (): string | null => getCandidateLanIPs()[0] ?? null;
@@ -285,7 +285,7 @@ export async function startDesktopWebUI(opts: { port?: number; allowRemote?: boo
   const sysDir = getSystemDir();
 
   // Preserve the full compatibility surface when its backend is available.
-  // Native-only mode has no backend port, so use the same Tomni Gateway path
+  // Native-only mode has no backend port, so use the same Tomny Gateway path
   // as headless --webui instead of refusing to start from Settings.
   const legacyBackendPort = (globalThis as typeof globalThis & { __backendPort?: number }).__backendPort;
   let backend: WebHostOptions['backend'];
@@ -307,7 +307,7 @@ export async function startDesktopWebUI(opts: { port?: number; allowRemote?: boo
       resourcesPath: app.getAppPath(),
       // webui.config.json must live next to the backend SQLite DB so --resetpass
       // CLI and the runtime settings path read/write the same user record.
-      // getDataPath() returns ~/.aionui[-dev] symlink on macOS to sidestep
+      // getDataPath() returns ~/.tomny[-dev] symlink on macOS to sidestep
       // path-with-spaces issues under Application Support.
       userDataPath: getDataPath(),
     },

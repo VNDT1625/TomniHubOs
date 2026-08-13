@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -515,7 +515,7 @@ export const resolveSummaryConcurrency = (model: string, requested?: number): nu
   if (requested !== undefined) {
     return Math.max(1, Math.min(12, Math.floor(requested)));
   }
-  const env = parsePositiveInteger(process.env.AIONUI_UNDERSTAND_SUMMARY_CONCURRENCY);
+  const env = parsePositiveInteger(process.env.TOMNY_UNDERSTAND_SUMMARY_CONCURRENCY);
   if (env !== null) {
     return Math.max(1, Math.min(12, env));
   }
@@ -541,7 +541,7 @@ export const resolveSummaryBatchSize = (requested?: number): number => {
   if (requested !== undefined) {
     return Math.max(1, Math.min(24, Math.floor(requested)));
   }
-  const env = parsePositiveInteger(process.env.AIONUI_UNDERSTAND_SUMMARY_BATCH_SIZE);
+  const env = parsePositiveInteger(process.env.TOMNY_UNDERSTAND_SUMMARY_BATCH_SIZE);
   return env === null ? DEFAULT_BATCH_SIZE : Math.max(1, Math.min(24, env));
 };
 
@@ -549,7 +549,7 @@ const resolveSummaryBatchTimeoutMs = (requested?: number): number => {
   if (requested !== undefined) {
     return Math.max(1_000, Math.min(600_000, Math.floor(requested)));
   }
-  const env = parsePositiveInteger(process.env.AIONUI_UNDERSTAND_SUMMARY_BATCH_TIMEOUT_MS);
+  const env = parsePositiveInteger(process.env.TOMNY_UNDERSTAND_SUMMARY_BATCH_TIMEOUT_MS);
   return env === null ? DEFAULT_SUMMARY_BATCH_TIMEOUT_MS : Math.max(1_000, Math.min(600_000, env));
 };
 

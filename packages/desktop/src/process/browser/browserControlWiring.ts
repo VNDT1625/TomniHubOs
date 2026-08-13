@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -9,7 +9,7 @@
  * plane) for the Main process. It assembles the {@link BrowserControlDeps} the
  * server needs from the real browser services and starts the in-process SSE
  * host, then registers it in the MCP catalog as an `sse` server so an agent
- * (Claude Code / ACP, aionrs, …) can connect and drive the live embedded
+ * (Claude Code / ACP, tomnyagentic, …) can connect and drive the live embedded
  * browser.
  *
  * ## Shared browser, two planes

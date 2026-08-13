@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -9,6 +9,8 @@ import type { ProgressInfo, UpdateInfo } from 'electron-updater';
 import { app } from 'electron';
 import log from 'electron-log';
 import { EventEmitter } from 'events';
+
+import { requestAppActionAfterCleanup } from '@process/startup/appTermination';
 import { recordAutoUpdateQuitAndInstall, recordAutoUpdateStatus } from './diagnostics/autoUpdateDiagnostics';
 
 /**
@@ -46,7 +48,7 @@ const normalizeUpdateFeedUrl = (raw: string | undefined): string | undefined => 
   if (!value) return undefined;
   const parsed = new URL(value);
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-    throw new Error('AIONUI_UPDATE_FEED_URL must start with http:// or https://.');
+    throw new Error('TOMNY_UPDATE_FEED_URL must start with http:// or https://.');
   }
   return `${parsed.toString().replace(/\/+$/, '')}/`;
 };
@@ -100,13 +102,13 @@ class AutoUpdaterService extends EventEmitter {
     }
 
     try {
-      const feedUrl = normalizeUpdateFeedUrl(process.env.AIONUI_UPDATE_FEED_URL);
+      const feedUrl = normalizeUpdateFeedUrl(process.env.TOMNY_UPDATE_FEED_URL);
       if (feedUrl) {
         autoUpdater.setFeedURL({ provider: 'generic', url: feedUrl });
         log.info(`Update feed override set to: ${feedUrl}`);
       }
     } catch (error) {
-      log.error('Invalid AIONUI_UPDATE_FEED_URL:', error);
+      log.error('Invalid TOMNY_UPDATE_FEED_URL:', error);
     }
   }
 
@@ -341,10 +343,13 @@ class AutoUpdaterService extends EventEmitter {
     // behavior + close-to-tray). This leaves the process alive and Squirrel
     // cannot finish replacing the app bundle. Force-exit after a short delay
     // to let Squirrel receive the install signal.
-    autoUpdater.quitAndInstall(true, true);
-    setTimeout(() => {
-      app.exit(0);
-    }, 1000);
+    requestAppActionAfterCleanup(() => {
+      autoUpdater.quitAndInstall(true, true);
+      setTimeout(() => {
+        // Shared cleanup has completed before this updater-only hard-exit fallback.
+        app.exit(0);
+      }, 1000);
+    });
   }
 
   /**

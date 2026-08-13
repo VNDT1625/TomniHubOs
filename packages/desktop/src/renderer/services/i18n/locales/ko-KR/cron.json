@@ -106,8 +106,8 @@
       "selectFolder": "폴더 선택",
       "clearFolder": "지우기",
       "model": "모델",
-      "aionrsModelRequired": "Tomny Agentic의 모델을 선택하세요",
-      "aionrsNoProvider": "사용 가능한 모델 없음"
+      "tomnyagenticModelRequired": "Tomny Agentic의 모델을 선택하세요",
+      "tomnyagenticNoProvider": "사용 가능한 모델 없음"
     },
     "freq": {
       "manual": "수동",

@@ -1,4 +1,4 @@
-// Core types for @aionui/web-host (M3 interface contract, locked for M4-M8)
+// Core types for @tomny/web-host (M3 interface contract, locked for M4-M8)
 
 /**
  * App metadata injected by host environment (Electron or Node)
@@ -16,7 +16,7 @@ export type AppMetadata = {
 export type BackendBinaryResolver = () => string;
 
 /**
- * System dirs exported to the backend via AIONUI_{CACHE,WORK,LOG}_DIR env.
+ * System dirs exported to the backend via TOMNY_{CACHE,WORK,LOG}_DIR env.
  * Backend surfaces these on `/api/system/info`. Omit and the backend inherits
  * process.env, which may carry stale values from the parent shell — better to
  * be explicit.
@@ -38,6 +38,9 @@ export type WebHostOptions = {
   dataDir?: string;
   logDir?: string;
   dirs?: BackendSystemDirs;
+  createLocalApiHandler?: (
+    backendPort: number
+  ) => (request: IncomingMessage, response: ServerResponse) => Promise<boolean>;
   backend:
     | { kind: 'ownBackend'; resolveBackend: BackendBinaryResolver }
     | { kind: 'useExistingBackend'; port: number }
@@ -56,3 +59,4 @@ export type WebHostHandle = {
   lanIP?: string;
   stop: () => Promise<void>;
 };
+import type { IncomingMessage, ServerResponse } from 'node:http';

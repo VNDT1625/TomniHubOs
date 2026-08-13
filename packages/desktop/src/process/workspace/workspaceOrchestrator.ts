@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -42,6 +42,7 @@ import {
   hostTitle,
   SURFACE_AGENT_COST_MB,
   type ISurfaceRunner,
+  type SurfacePrepared,
   type SurfaceKind,
   type SurfaceSpec,
   type SurfaceState,
@@ -133,17 +134,17 @@ export const createWorkspaceOrchestrator = (deps: WorkspaceOrchestratorDeps): IW
     }
 
     setStatus('starting');
+    let prepared: SurfacePrepared | undefined;
     try {
       // 2. Prepare the surface (open the tab / resolve the file) so its frame
       // can appear, then announce it to the renderer.
-      const prepared = await runner.prepare(spec);
+      prepared = await runner.prepare(spec);
       state.title = prepared.title;
       state.tabId = prepared.tabId;
       state.filePath = prepared.filePath;
       onEvent({ type: 'surface-created', surface: { ...state } });
 
       if (controller.signal.aborted) {
-        runner.dispose?.(spec, prepared);
         setStatus('stopped');
         return;
       }
@@ -171,14 +172,13 @@ export const createWorkspaceOrchestrator = (deps: WorkspaceOrchestratorDeps): IW
 
       // 4. Settle.
       state.steps = outcome.steps;
-      if (controller.signal.aborted) {
+      if (controller.signal.aborted || outcome.status === 'stopped') {
         setStatus('stopped');
       } else {
         state.answer = outcome.answer;
         setStatus('done');
         onEvent({ type: 'surface-final', id: state.id, answer: outcome.answer });
       }
-      runner.dispose?.(spec, prepared);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (controller.signal.aborted) {
@@ -189,6 +189,13 @@ export const createWorkspaceOrchestrator = (deps: WorkspaceOrchestratorDeps): IW
         onEvent({ type: 'surface-error', id: state.id, message });
       }
     } finally {
+      if (prepared) {
+        try {
+          runner.dispose?.(spec, prepared);
+        } catch {
+          console.warn('[Workspace] Surface cleanup failed.');
+        }
+      }
       coordinator.releaseLease(lease.id);
     }
   };

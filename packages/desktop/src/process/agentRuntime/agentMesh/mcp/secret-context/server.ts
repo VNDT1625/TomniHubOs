@@ -4,7 +4,7 @@ import { z } from 'zod';
 import type { SecretContextUseRouter } from './router';
 import { protectedMcpTextContent } from '../../security';
 
-export const BUILTIN_SECRET_CONTEXT_NAME = 'aionui-secret-context';
+export const BUILTIN_SECRET_CONTEXT_NAME = 'tomny-secret-context';
 export const BUILTIN_SECRET_CONTEXT_ID = 'builtin-secret-context';
 export const AGENT_SECRET_CONTEXT_USE_TOOL = 'agent_secret_context_use';
 export const SECRET_CONTEXT_CAPTURE_TOOL = 'secret_context_capture';

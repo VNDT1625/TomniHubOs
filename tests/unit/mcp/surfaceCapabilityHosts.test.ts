@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -71,14 +71,14 @@ describe('surface capability host restoration', () => {
     registryMocks.list.mockResolvedValueOnce([
       {
         id: 'agent-orchestrator-stale-json',
-        name: 'aionui-agent-orchestrator',
+        name: 'tomny-agent-orchestrator',
         description: AGENT_DESCRIPTION,
         enabled: true,
         builtin: true,
         transport: { type: 'sse', url: 'http://127.0.0.1:64000/sse' },
         original_json: JSON.stringify({
           mcpServers: {
-            'aionui-agent-orchestrator': {
+            'tomny-agent-orchestrator': {
               url: 'http://127.0.0.1:64000/sse',
               headers: { Authorization: 'Bearer stale-token' },
             },
@@ -97,14 +97,14 @@ describe('surface capability host restoration', () => {
 
   it('repairs stale subagent metadata without changing its enabled state', async () => {
     const cleanOriginalJson = JSON.stringify(
-      { mcpServers: { 'aionui-agent-orchestrator': { url: 'http://127.0.0.1:64000/sse' } } },
+      { mcpServers: { 'tomny-agent-orchestrator': { url: 'http://127.0.0.1:64000/sse' } } },
       null,
       2
     );
     registryMocks.list.mockResolvedValueOnce([
       {
         id: 'agent-orchestrator-stale-metadata',
-        name: 'aionui-agent-orchestrator',
+        name: 'tomny-agent-orchestrator',
         description: 'Old description',
         enabled: false,
         builtin: true,
@@ -126,9 +126,9 @@ describe('surface capability host restoration', () => {
   it('resolves the authenticated subagent host as a core capability', async () => {
     const hosts = createElectronSurfaceCapabilityHosts();
 
-    await expect(hosts.resolve(['aionui-agent-orchestrator'])).resolves.toEqual([
+    await expect(hosts.resolve(['tomny-agent-orchestrator'])).resolves.toEqual([
       {
-        name: 'aionui-agent-orchestrator',
+        name: 'tomny-agent-orchestrator',
         url: 'http://127.0.0.1:64000/sse',
         headers: [{ name: 'Authorization', value: 'Bearer test-token' }],
       },
@@ -139,7 +139,7 @@ describe('surface capability host restoration', () => {
     registryMocks.list.mockResolvedValueOnce([
       {
         id: 'legacy-secret-context',
-        name: 'aionui-secret-context',
+        name: 'tomny-secret-context',
         enabled: true,
         builtin: true,
         transport: { type: 'sse', url: 'http://127.0.0.1:64002/sse' },
@@ -172,8 +172,8 @@ describe('surface capability host restoration', () => {
     });
     const hosts = createElectronSurfaceCapabilityHosts();
 
-    const first = await hosts.resolve(['aionui-agent-orchestrator'], [], context);
-    const restarted = await hosts.resolve(['aionui-agent-orchestrator'], [], context);
+    const first = await hosts.resolve(['tomny-agent-orchestrator'], [], context);
+    const restarted = await hosts.resolve(['tomny-agent-orchestrator'], [], context);
 
     expect(startHost).toHaveBeenNthCalledWith(
       startHost.mock.calls.length - 1,
@@ -202,9 +202,9 @@ describe('surface capability host restoration', () => {
   it('injects the live Testing bearer header into the core capability', async () => {
     const hosts = createElectronSurfaceCapabilityHosts();
 
-    await expect(hosts.resolve(['aionui-testing'])).resolves.toEqual([
+    await expect(hosts.resolve(['tomny-testing'])).resolves.toEqual([
       {
-        name: 'aionui-testing',
+        name: 'tomny-testing',
         url: 'http://127.0.0.1:64001/sse',
         headers: [{ name: 'Authorization', value: 'Bearer testing-token' }],
       },
@@ -239,10 +239,10 @@ describe('surface capability host restoration', () => {
       permissionMode: 'workspace-write' as const,
     });
 
-    const secretFirst = await hosts.resolve(['aionui-secret-context'], [], context);
-    const secretRestarted = await hosts.resolve(['aionui-secret-context'], [], context);
-    const testingFirst = await hosts.resolve(['aionui-testing']);
-    const testingRestarted = await hosts.resolve(['aionui-testing']);
+    const secretFirst = await hosts.resolve(['tomny-secret-context'], [], context);
+    const secretRestarted = await hosts.resolve(['tomny-secret-context'], [], context);
+    const testingFirst = await hosts.resolve(['tomny-testing']);
+    const testingRestarted = await hosts.resolve(['tomny-testing']);
 
     expect(secretFirst[0]).toMatchObject({
       url: 'http://127.0.0.1:65100/sse',
@@ -268,7 +268,7 @@ describe('surface capability host restoration', () => {
   it('refuses to expose Secret Context without a scoped Core session', async () => {
     const hosts = createElectronSurfaceCapabilityHosts();
 
-    await expect(hosts.resolve(['aionui-secret-context'])).rejects.toThrow(
+    await expect(hosts.resolve(['tomny-secret-context'])).rejects.toThrow(
       'Secret Context requires a scoped Core session authority.'
     );
   });
@@ -288,13 +288,13 @@ describe('surface capability host restoration', () => {
     registryMocks.list.mockResolvedValueOnce([
       {
         id: 'testing-server',
-        name: 'aionui-testing',
+        name: 'tomny-testing',
         enabled: true,
         builtin: true,
         transport: { type: 'sse', url: 'http://127.0.0.1:64001/sse' },
         original_json: JSON.stringify({
           mcpServers: {
-            'aionui-testing': {
+            'tomny-testing': {
               url: 'http://127.0.0.1:64001/sse',
               headers: { Authorization: 'Bearer stale-token' },
             },
@@ -316,14 +316,14 @@ describe('surface capability host restoration', () => {
 
   it('scrubs persisted Testing transport headers when the URL is unchanged', async () => {
     const cleanOriginalJson = JSON.stringify(
-      { mcpServers: { 'aionui-testing': { url: 'http://127.0.0.1:64001/sse' } } },
+      { mcpServers: { 'tomny-testing': { url: 'http://127.0.0.1:64001/sse' } } },
       null,
       2
     );
     registryMocks.list.mockResolvedValueOnce([
       {
         id: 'testing-server-headers',
-        name: 'aionui-testing',
+        name: 'tomny-testing',
         enabled: true,
         builtin: true,
         transport: {
@@ -349,19 +349,19 @@ describe('surface capability host restoration', () => {
   it('replaces a persisted loopback snapshot with the live host after restart', async () => {
     const hosts = new ElectronSurfaceCapabilityHosts();
     const factory = vi.fn(async () => ({
-      name: 'aionui-office-editor',
+      name: 'tomny-office-editor',
       transport: 'sse' as const,
       url: 'http://127.0.0.1:62000/sse',
     }));
-    hosts.register('aionui-office-editor', factory);
+    hosts.register('tomny-office-editor', factory);
 
     const resolved = await hosts.resolve(
-      ['aionui-office-editor'],
-      [{ name: 'aionui-office-editor', transport: 'sse', url: 'http://127.0.0.1:51372/sse' }]
+      ['tomny-office-editor'],
+      [{ name: 'tomny-office-editor', transport: 'sse', url: 'http://127.0.0.1:51372/sse' }]
     );
 
     expect(factory).toHaveBeenCalledOnce();
-    expect(resolved).toEqual([{ name: 'aionui-office-editor', transport: 'sse', url: 'http://127.0.0.1:62000/sse' }]);
+    expect(resolved).toEqual([{ name: 'tomny-office-editor', transport: 'sse', url: 'http://127.0.0.1:62000/sse' }]);
   });
 
   it('preserves an external session server that has no managed live host', async () => {
@@ -374,17 +374,17 @@ describe('surface capability host restoration', () => {
   it('omits managed session servers that the active surface did not request', async () => {
     const hosts = new ElectronSurfaceCapabilityHosts();
     const factory = vi.fn(async () => ({
-      name: 'aionui-office-editor',
+      name: 'tomny-office-editor',
       transport: 'sse' as const,
       url: 'http://127.0.0.1:62000/sse',
     }));
-    hosts.register('aionui-office-editor', factory);
+    hosts.register('tomny-office-editor', factory);
     const external = { name: 'external-mcp', transport: 'sse' as const, url: 'https://example.com/sse' };
 
     await expect(
       hosts.resolve(
         [],
-        [{ name: 'aionui-office-editor', transport: 'sse', url: 'http://127.0.0.1:51372/sse' }, external]
+        [{ name: 'tomny-office-editor', transport: 'sse', url: 'http://127.0.0.1:51372/sse' }, external]
       )
     ).resolves.toEqual([external]);
     expect(factory).not.toHaveBeenCalled();

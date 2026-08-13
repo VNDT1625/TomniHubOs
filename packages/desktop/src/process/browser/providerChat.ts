@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -10,7 +10,7 @@
  * Builds an {@link AgentChat} that calls the user's configured provider/model
  * over the OpenAI-compatible `/chat/completions` endpoint. The call style
  * mirrors `company/companyGenerator.ts`: the provider list (with a usable
- * `api_key`) is read from the native Tomni provider catalog and the request is
+ * `api_key`) is read from the native Tomny provider catalog and the request is
  * issued directly via `fetch` (not through `ClientFactory`, which expects a
  * camelCase `apiKey` and throws outside the chat pipeline).
  *

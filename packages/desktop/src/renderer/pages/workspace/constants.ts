@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -23,7 +23,7 @@ export const WORKSPACE_BRIDGE_TIMEOUT_MS = 4000;
 export const SURFACE_BOUNDS_DEBOUNCE_MS = 120;
 
 /** `localStorage` key remembering the model picked to drive workspace sub-agents. */
-export const WORKSPACE_MODEL_STORAGE_KEY = 'aionui.workspace.model';
+export const WORKSPACE_MODEL_STORAGE_KEY = 'tomny.workspace.model';
 
 /** Matches a bare URL/host token inside free text (for surface detection). */
 const URL_TOKEN = /\bhttps?:\/\/[^\s"'<>]+|\b[\w-]+\.(?:com|net|org|io|vn|dev|app|edu|gov)\b[^\s"'<>]*/gi;

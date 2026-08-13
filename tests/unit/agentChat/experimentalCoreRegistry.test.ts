@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -24,7 +24,7 @@ afterEach(async () => {
 });
 
 describe('direct core adapter registry', () => {
-  it('contains the requested CLI families without routing through aioncore', () => {
+  it('contains the requested CLI families without routing through tomnycore', () => {
     expect(CORE_ADAPTER_DEFINITIONS.map((definition) => definition.id)).toEqual(
       expect.arrayContaining([
         'tomny',

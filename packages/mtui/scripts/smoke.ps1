@@ -14,9 +14,9 @@ if (-not (Test-Path $Binary)) {
 $Root = Join-Path $env:TEMP ('mtui-smoke-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Force -Path $Root | Out-Null
 git -C $Root init -q
-New-Item -ItemType Directory -Force -Path (Join-Path $Root '.aionui\specs\smoke-plan') | Out-Null
-New-Item -ItemType Directory -Force -Path (Join-Path $Root '.aionui\specs\smoke-plan\plan\temporary') | Out-Null
-New-Item -ItemType Directory -Force -Path (Join-Path $Root '.aionui\understand') | Out-Null
+New-Item -ItemType Directory -Force -Path (Join-Path $Root '.tomny\specs\smoke-plan') | Out-Null
+New-Item -ItemType Directory -Force -Path (Join-Path $Root '.tomny\specs\smoke-plan\plan\temporary') | Out-Null
+New-Item -ItemType Directory -Force -Path (Join-Path $Root '.tomny\understand') | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $Root 'src') | Out-Null
 Set-Content -Path (Join-Path $Root 'src\a.ts') -Value 'export const a = 1;' -Encoding UTF8
 [System.IO.File]::WriteAllText((Join-Path $Root 'patch-target.txt'), "before`n", [System.Text.UTF8Encoding]::new($false))
@@ -26,7 +26,7 @@ Set-Content -Path (Join-Path $Root 'src\a.ts') -Value 'export const a = 1;' -Enc
 - [x] Done task
 - [~] Active task
 - [ ] Pending task
-'@ | Set-Content -Path (Join-Path $Root '.aionui\specs\smoke-plan\tasks.md') -Encoding UTF8
+'@ | Set-Content -Path (Join-Path $Root '.tomny\specs\smoke-plan\tasks.md') -Encoding UTF8
 @'
 {
   "version": 2,
@@ -70,7 +70,7 @@ Set-Content -Path (Join-Path $Root 'src\a.ts') -Value 'export const a = 1;' -Enc
     }
   ]
 }
-'@ | Set-Content -Path (Join-Path $Root '.aionui\understand\summary.json') -Encoding UTF8
+'@ | Set-Content -Path (Join-Path $Root '.tomny\understand\summary.json') -Encoding UTF8
 Push-Location $Root
 
 $Results = @()
@@ -109,8 +109,8 @@ diff --git a/patch-target.txt b/patch-target.txt
 -before
 +after
 '@ + "`n"
-    [System.IO.File]::WriteAllText((Join-Path $Root '.aionui\specs\smoke-plan\plan\temporary\change.diff'), $PatchText, [System.Text.UTF8Encoding]::new($false))
-    $ApplyPatch = (Invoke-MtuiSmokeStep 'apply patch' @('--json', 'apply-patch', '--file', '.aionui/specs/smoke-plan/plan/temporary/change.diff')) | ConvertFrom-Json
+    [System.IO.File]::WriteAllText((Join-Path $Root '.tomny\specs\smoke-plan\plan\temporary\change.diff'), $PatchText, [System.Text.UTF8Encoding]::new($false))
+    $ApplyPatch = (Invoke-MtuiSmokeStep 'apply patch' @('--json', 'apply-patch', '--file', '.tomny/specs/smoke-plan/plan/temporary/change.diff')) | ConvertFrom-Json
     [void](Invoke-MtuiSmokeStep 'edit line replace' @('--json', 'edit', 'sample.txt', 'line', '2', 'replace', 'MARKER'))
     [void](Invoke-MtuiSmokeStep 'edit insert-after' @('--json', 'edit', 'sample.txt', 'insert-after', 'MARKER', 'after-line'))
     [void](Invoke-MtuiSmokeStep 'edit insert-before' @('--json', 'edit', 'sample.txt', 'insert-before', 'beta', 'before-beta'))
@@ -134,21 +134,21 @@ Blocking waiting for file lock
 error: cannot find module
 src/a.ts:1:1
 test result: FAILED
-'@ | Set-Content -Path (Join-Path $Root '.aionui\specs\smoke-plan\plan\temporary\noisy.log') -Encoding UTF8
-    $Compact = (Invoke-MtuiSmokeStep 'compact file' @('--json', 'compact', '--profile', 'auto', '--file', '.aionui/specs/smoke-plan/plan/temporary/noisy.log', '--save')) | ConvertFrom-Json
-    $CompactAll = (Invoke-MtuiSmokeStep 'compact all' @('--json', 'compact', '--file', '.aionui/specs/smoke-plan/plan/temporary/noisy.log', '--all')) | ConvertFrom-Json
+'@ | Set-Content -Path (Join-Path $Root '.tomny\specs\smoke-plan\plan\temporary\noisy.log') -Encoding UTF8
+    $Compact = (Invoke-MtuiSmokeStep 'compact file' @('--json', 'compact', '--profile', 'auto', '--file', '.tomny/specs/smoke-plan/plan/temporary/noisy.log', '--save')) | ConvertFrom-Json
+    $CompactAll = (Invoke-MtuiSmokeStep 'compact all' @('--json', 'compact', '--file', '.tomny/specs/smoke-plan/plan/temporary/noisy.log', '--all')) | ConvertFrom-Json
     $CompactRetrieve = (Invoke-MtuiSmokeStep 'compact retrieve' @('--json', 'compact', '--retrieve', $Compact.saved_id)) | ConvertFrom-Json
-    [System.IO.File]::WriteAllText((Join-Path $Root '.aionui\\specs\\smoke-plan\\plan\\temporary\\empty.log'), '', [System.Text.UTF8Encoding]::new($false))
-    $CompactEmpty = (Invoke-MtuiSmokeStep 'compact empty' @('--json', 'compact', '--file', '.aionui/specs/smoke-plan/plan/temporary/empty.log')) | ConvertFrom-Json
+    [System.IO.File]::WriteAllText((Join-Path $Root '.tomny\\specs\\smoke-plan\\plan\\temporary\\empty.log'), '', [System.Text.UTF8Encoding]::new($false))
+    $CompactEmpty = (Invoke-MtuiSmokeStep 'compact empty' @('--json', 'compact', '--file', '.tomny/specs/smoke-plan/plan/temporary/empty.log')) | ConvertFrom-Json
     @'
 print("ok")
-'@ | Set-Content -Path (Join-Path $Root '.aionui\specs\smoke-plan\plan\temporary\pass.py') -Encoding UTF8
+'@ | Set-Content -Path (Join-Path $Root '.tomny\specs\smoke-plan\plan\temporary\pass.py') -Encoding UTF8
     @'
 print("before failure")
 raise AssertionError("focused failure")
-'@ | Set-Content -Path (Join-Path $Root '.aionui\specs\smoke-plan\plan\temporary\fail.py') -Encoding UTF8
-    $VerifyPass = (Invoke-MtuiSmokeStep 'verify python pass' @('--json', 'verify', 'python', '--spec', 'smoke-plan', '.aionui/specs/smoke-plan/plan/temporary/pass.py')) | ConvertFrom-Json
-    $VerifyFailOutput = & $Binary '--json' 'verify' 'python' '--spec' 'smoke-plan' '.aionui/specs/smoke-plan/plan/temporary/fail.py' 2>&1
+'@ | Set-Content -Path (Join-Path $Root '.tomny\specs\smoke-plan\plan\temporary\fail.py') -Encoding UTF8
+    $VerifyPass = (Invoke-MtuiSmokeStep 'verify python pass' @('--json', 'verify', 'python', '--spec', 'smoke-plan', '.tomny/specs/smoke-plan/plan/temporary/pass.py')) | ConvertFrom-Json
+    $VerifyFailOutput = & $Binary '--json' 'verify' 'python' '--spec' 'smoke-plan' '.tomny/specs/smoke-plan/plan/temporary/fail.py' 2>&1
     $VerifyFailExitCode = $LASTEXITCODE
     if ($VerifyFailExitCode -ne 0) {
         throw "MTUI verify fail case should return JSON with passed=false, not exit non-zero`n$VerifyFailOutput"

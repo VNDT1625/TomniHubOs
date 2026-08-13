@@ -1,12 +1,12 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
 /**
  * IDE spec-lifecycle bridge — manages Kiro-style planning directories under
- * `.aionui/specs/<slug>/` so Planning Mode has observable state instead of
+ * `.tomny/specs/<slug>/` so Planning Mode has observable state instead of
  * being only prompt text.
  *
  * Process boundary: Main-process (Node.js) module. No DOM APIs.
@@ -56,7 +56,7 @@ export const SPEC_PHASE_ORDER: readonly SpecLifecyclePhase[] = [
 /** Which phase each approval gate unlocks (approving `requirements` opens `design`, …). */
 export type SpecApprovalGate = 'requirements' | 'design' | 'tasks';
 
-/** Per-spec manifest persisted at `.aionui/specs/<slug>/spec.json`. */
+/** Per-spec manifest persisted at `.tomny/specs/<slug>/spec.json`. */
 export type SpecManifest = {
   /** Schema version for forward compatibility. */
   version: number;
@@ -225,7 +225,7 @@ const emptyTaskCounts = (): SpecTaskCounts => ({
 const workspaceMetaChildRoot = (rootPath: string, childDir: 'specs'): string => {
   const next = path.join(rootPath, '.omni', childDir);
   if (existsSync(next)) return next;
-  const legacy = path.join(rootPath, '.aionui', childDir);
+  const legacy = path.join(rootPath, '.tomny', childDir);
   return existsSync(legacy) ? legacy : next;
 };
 
@@ -235,7 +235,7 @@ const understandRoot = (rootPath: string): string => {
   if (existsSync(canonical)) return canonical;
   const migration = path.join(rootPath, '.omni', 'understand');
   if (existsSync(migration)) return migration;
-  const legacy = path.join(rootPath, '.aionui', 'understand');
+  const legacy = path.join(rootPath, '.tomny', 'understand');
   return existsSync(legacy) ? legacy : canonical;
 };
 

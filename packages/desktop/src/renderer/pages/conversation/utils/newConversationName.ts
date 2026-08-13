@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2026 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2026 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 

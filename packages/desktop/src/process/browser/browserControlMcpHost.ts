@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -16,7 +16,7 @@
  * child process. The Testing MCP already faced — and solved — exactly this:
  * host the `McpServer` in the Main process on a **loopback HTTP server** using
  * the MCP SDK's {@link SSEServerTransport}, then register it in the MCP catalog
- * as an `sse` server pointing at that loopback URL. aioncore (the MCP client)
+ * as an `sse` server pointing at that loopback URL. tomnycore (the MCP client)
  * connects over SSE like any remote MCP server. This module mirrors
  * `process/testing/testingMcpHost.ts` 1:1.
  *

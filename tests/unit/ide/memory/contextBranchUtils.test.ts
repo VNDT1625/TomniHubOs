@@ -1,11 +1,11 @@
-import type { AionrsContextBranch } from '@/common';
+import type { TomnyAgenticContextBranch } from '@/common';
 import {
   areContextBranchesValid,
   estimateContextBranchTokens,
 } from '@/renderer/pages/studio/ide/memory/contextBranchUtils';
 import { describe, expect, it } from 'vitest';
 
-const branch = (id: string, content: string): AionrsContextBranch => ({
+const branch = (id: string, content: string): TomnyAgenticContextBranch => ({
   id,
   title: id,
   summary: `${id} summary`,

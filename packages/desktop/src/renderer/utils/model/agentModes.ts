@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -62,7 +62,7 @@ export const AGENT_MODES: Record<string, AgentModeOption[]> = {
     { value: 'autoEdit', label: 'Auto-Accept Edits' },
     { value: 'yolo', label: 'YOLO' },
   ],
-  aionrs: [
+  tomnyagentic: [
     { value: 'default', label: 'Default' },
     { value: 'auto_edit', label: 'Auto-Accept Edits' },
     { value: 'yolo', label: 'YOLO' },

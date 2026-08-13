@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -49,7 +49,7 @@ const collectFiles = (rootPath: string) =>
 const artifactPaths = (rootPath: string) => ({
   graphPath: path.join(rootPath, '.store', 'graph.json'),
   summaryPath: path.join(rootPath, '.tomni', 'understand', 'summary.json'),
-  staleMarkerPaths: ['.tomni', '.omni', '.aionui'].map((dir) => path.join(rootPath, dir, 'understand', 'stale.json')),
+  staleMarkerPaths: ['.tomni', '.omni', '.tomny'].map((dir) => path.join(rootPath, dir, 'understand', 'stale.json')),
 });
 
 const readGraph = async (filePath: string): Promise<KnowledgeGraph | null> => {
@@ -476,21 +476,21 @@ describe('live knowledge graph lifecycle', () => {
     await expect(Promise.all(paths.staleMarkerPaths.map((marker) => fs.stat(marker)))).resolves.toHaveLength(3);
   });
 
-  it('reads .omni and .aionui stale markers as migration fallbacks but prefers .tomni', async () => {
+  it('reads .omni and .tomny stale markers as migration fallbacks but prefers .tomni', async () => {
     const root = await makeTempRepo();
     await fs.writeFile(path.join(root, 'src', 'a.ts'), 'export const a = 1;\n');
     const builder = createKnowledgeGraphBuilder({ chat: async () => '[]', collectFiles, now: () => 1 });
     const graph = await builder.build(root, 'live-structural', { summaryCap: 0 });
     const omni = path.join(root, '.omni', 'understand', 'stale.json');
-    const aionui = path.join(root, '.aionui', 'understand', 'stale.json');
+    const tomny = path.join(root, '.tomny', 'understand', 'stale.json');
     const tomni = path.join(root, '.tomni', 'understand', 'stale.json');
     await fs.mkdir(path.dirname(omni), { recursive: true });
     await fs.writeFile(omni, JSON.stringify({ paths: ['src/a.ts'] }));
 
     expect((await assessGraphFreshness(graph, { collectFiles })).markerChanged).toEqual(['src/a.ts']);
     await fs.rm(omni);
-    await fs.mkdir(path.dirname(aionui), { recursive: true });
-    await fs.writeFile(aionui, JSON.stringify({ paths: ['src/legacy.ts'] }));
+    await fs.mkdir(path.dirname(tomny), { recursive: true });
+    await fs.writeFile(tomny, JSON.stringify({ paths: ['src/legacy.ts'] }));
     expect((await assessGraphFreshness(graph, { collectFiles })).markerChanged).toEqual(['src/legacy.ts']);
     await fs.mkdir(path.dirname(tomni), { recursive: true });
     await fs.writeFile(tomni, JSON.stringify({ paths: [] }));

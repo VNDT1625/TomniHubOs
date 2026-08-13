@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -57,7 +57,7 @@ export const withIdeMemorySection = (sessionId: string, existingRules?: string):
 export type BuildWorkspacePrimerInput = {
   /** Absolute path of the workspace folder. */
   rootPath: string;
-  /** Project rules lines (from `.aionrules` / `AGENTS.md` / `.cursorrules`). */
+  /** Project rules lines (from `.tomnyrules` / `AGENTS.md` / `.cursorrules`). */
   rules: readonly string[];
   /** Whether Planning Mode is on for this workspace. */
   planningEnabled: boolean;

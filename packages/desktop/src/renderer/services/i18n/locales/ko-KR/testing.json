@@ -98,7 +98,7 @@
   "core": {
     "tab": "Core Test",
     "title": "Experimental AI response core",
-    "subtitle": "AionCore 실행 파일 없이 Codex app-server와 ACP 호환 CLI를 직접 검증합니다.",
+    "subtitle": "Tomny Core 실행 파일 없이 Codex app-server와 ACP 호환 CLI를 직접 검증합니다.",
     "transportNotice": "직접 멀티 CLI Core",
     "loadFailed": "Could not load agents.",
     "selectTarget": "Select an AI target",

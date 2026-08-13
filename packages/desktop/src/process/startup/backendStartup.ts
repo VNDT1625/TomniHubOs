@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -32,7 +32,7 @@ export async function startBackendOrExit(options: StartBackendOrExitOptions): Pr
     if (isBackendStartupCancelledError(error)) {
       return { ok: false };
     }
-    options.logError?.('[TomniCore] Failed to start the legacy compatibility backend:', error);
+    options.logError?.('[TomnyCore] Failed to start the legacy compatibility backend:', error);
     await options.captureFailure(error);
     if (options.exitOnFailure ?? true) {
       options.exitApp(1);

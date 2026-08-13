@@ -174,6 +174,10 @@ describe('resolved attachment adapter delivery', () => {
       source: { type: 'opaque', provider: 'tomny-artifact-store', ref: 'artifact_image_1' },
     });
 
+  const allowImageSecurity = {
+    imageSecurityScanner: vi.fn(async () => ({ decision: 'allow' as const, findings: [] })),
+  };
+
   const fakeStore = (readBytes = vi.fn(async () => new Uint8Array([1, 2, 3]))): PersistentAttachmentArtifactStore => ({
     put: vi.fn(),
     putBytes: vi.fn(),
@@ -191,11 +195,23 @@ describe('resolved attachment adapter delivery', () => {
     const resolved = await resolveAttachmentDelivery(
       envelope(storedImage()),
       { nativeKinds: ['image'], callableTools: [] },
-      store
+      store,
+      allowImageSecurity
     );
 
     expect(resolved.native[0]?.bytes).toEqual(new Uint8Array([1, 2, 3]));
     expect(resolved.native[0]?.artifact.source).toEqual({ type: 'opaque', provider: 'tomny-artifact-store' });
+  });
+
+  it('blocks sensitive native images before adapter delivery', async () => {
+    await expect(
+      resolveAttachmentDelivery(envelope(storedImage()), { nativeKinds: ['image'], callableTools: [] }, fakeStore(), {
+        imageSecurityScanner: async () => ({
+          decision: 'block',
+          findings: [{ name: 'mat khau', type: 'password', confidence: 'high' }],
+        }),
+      })
+    ).rejects.toThrow('blocked by local image security: password');
   });
 
   it('does not read image bytes when only advertising the explicit Tomny analysis tool', async () => {
@@ -214,7 +230,8 @@ describe('resolved attachment adapter delivery', () => {
     const native = await resolveAttachmentDelivery(
       envelope(storedImage()),
       { nativeKinds: ['image'], callableTools: [] },
-      fakeStore()
+      fakeStore(),
+      allowImageSecurity
     );
     const blocks = buildAcpPromptBlocks('inspect', native);
 
@@ -225,7 +242,8 @@ describe('resolved attachment adapter delivery', () => {
     const native = await resolveAttachmentDelivery(
       envelope(storedImage()),
       { nativeKinds: ['image'], callableTools: [] },
-      fakeStore()
+      fakeStore(),
+      allowImageSecurity
     );
     let materializedPath = '';
     await withCodexTurnInput('inspect', native, async (input) => {

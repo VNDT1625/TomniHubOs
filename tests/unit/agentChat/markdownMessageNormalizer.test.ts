@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -28,7 +28,7 @@ describe('normalizeChatMessagesForMarkdown', () => {
     );
 
     expect(extract).toHaveBeenCalledWith({ kind: 'file', path: 'C:\\Users\\Me\\Documents\\report.docx' });
-    expect(messages[0].content).toContain('## AionUi extracted file context');
+    expect(messages[0].content).toContain('## Tomny extracted file context');
     expect(messages[0].content).toContain('# Report');
     expect(messages[0].content).toContain('via: markitdown');
   });
@@ -61,7 +61,7 @@ describe('normalizeChatMessagesForMarkdown', () => {
     const content = messages[0].content;
     expect(extract).toHaveBeenCalledWith({ kind: 'html', html, title: 'Long HTML content' });
     expect(Array.isArray(content)).toBe(true);
-    expect(Array.isArray(content) ? content[0].text : '').toContain('## AionUi Markdown-normalized content');
+    expect(Array.isArray(content) ? content[0].text : '').toContain('## Tomny Markdown-normalized content');
     expect(Array.isArray(content) ? content[0].text : '').toContain('# Title');
   });
 });

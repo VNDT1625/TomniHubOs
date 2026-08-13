@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -18,7 +18,9 @@ describe('build-with-builder', () => {
       scripts: Record<string, string>;
     };
 
-    expect(packageJson.scripts['prepare:dev']).toBe('bun run prepare:tomny && bun run prepare:runtime');
+    expect(packageJson.scripts['prepare:dev']).toBe(
+      'bun run prepare:tomny && bun run prepare:runtime && bun run prepare:model-gateway'
+    );
     expect(
       ['dev', 'start', 'start:multi', 'cli'].map((name) =>
         packageJson.scripts[name]?.startsWith('bun run prepare:dev &&')
@@ -48,7 +50,7 @@ describe('build-with-builder', () => {
       expectedArch: 'x64',
     },
   ])('builds bundled Tomny Core for $expectedArch with args $args', ({ args, expectedArch }) => {
-    const tempDir = mkdtempSync(join(tmpdir(), 'aionui-build-test-'));
+    const tempDir = mkdtempSync(join(tmpdir(), 'tomny-build-test-'));
     const hookPath = join(tempDir, 'hook.cjs');
     const callsPath = join(tempDir, 'prepare-calls.json');
 
@@ -69,7 +71,7 @@ const path = require('node:path');
 const originalLoad = Module._load;
 
 function recordPrepareCall(options) {
-  const callsPath = process.env.AIONUI_PREPARE_CALLS_FILE;
+  const callsPath = process.env.TOMNY_PREPARE_CALLS_FILE;
   const calls = fs.existsSync(callsPath) ? JSON.parse(fs.readFileSync(callsPath, 'utf8')) : [];
   calls.push(options ?? null);
   fs.writeFileSync(callsPath, JSON.stringify(calls));
@@ -119,8 +121,8 @@ childProcess.execSync = function mockedExecSync(command) {
         encoding: 'utf8',
         env: {
           ...process.env,
-          AIONUI_PREPARE_CALLS_FILE: callsPath,
-          AIONUI_SKIP_PACK_CLEANUP: '1',
+          TOMNY_PREPARE_CALLS_FILE: callsPath,
+          TOMNY_SKIP_PACK_CLEANUP: '1',
           NODE_OPTIONS: [process.env.NODE_OPTIONS, `--require=${hookPath}`].filter(Boolean).join(' '),
         },
       });

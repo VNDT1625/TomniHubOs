@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -219,7 +219,7 @@ describe('cloudWorkspaceRelay', () => {
   });
 
   it('collects publishable local files while excluding heavy workspace noise and binary content', async () => {
-    const root = await mkdtemp(path.join(tmpdir(), 'aionui-cloud-publish-'));
+    const root = await mkdtemp(path.join(tmpdir(), 'tomny-cloud-publish-'));
     try {
       await mkdir(path.join(root, 'src'), { recursive: true });
       await mkdir(path.join(root, 'node_modules', 'pkg'), { recursive: true });
@@ -246,7 +246,7 @@ describe('cloudWorkspaceRelay', () => {
       baseUrl: 'https://relay.example.com',
       token: 'token',
       repoName: 'Security',
-      workspacePath: 'C:/Users/MyPC/AppData/Roaming/AionUi-Dev/remote-ide/hash',
+      workspacePath: 'C:/Users/MyPC/AppData/Roaming/Tomny-Dev/remote-ide/hash',
       backend: {
         listDir: async () => [],
         readFile: async () => '',

@@ -1,11 +1,11 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
 import type { ApplicablePreset, ResourceBudget, ResourceMode } from '@process/resource/leaseTypes';
-import AionScrollArea from '@/renderer/components/base/AionScrollArea';
+import TomnyScrollArea from '@/renderer/components/base/TomnyScrollArea';
 import { useSettingsViewMode } from '@/renderer/components/settings/SettingsModal/settingsViewContext';
 import { Message, Spin } from '@arco-design/web-react';
 import { Components } from '@icon-park/react';
@@ -66,7 +66,7 @@ const ResourceDashboard: React.FC = () => {
         <p className='m-0 mt-4px text-13px text-t-secondary'>{t('resource.subtitle')}</p>
       </header>
 
-      <AionScrollArea className='flex-1 min-h-0 pb-16px' disableOverflow={isPageMode}>
+      <TomnyScrollArea className='flex-1 min-h-0 pb-16px' disableOverflow={isPageMode}>
         <div className='flex flex-col gap-24px'>
           {/* System observation — the whole-machine view the user asked for. */}
           <SystemInsightPanel />
@@ -111,7 +111,7 @@ const ResourceDashboard: React.FC = () => {
             )}
           </section>
         </div>
-      </AionScrollArea>
+      </TomnyScrollArea>
     </div>
   );
 };

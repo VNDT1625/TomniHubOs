@@ -1,28 +1,24 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { buildPlanningGuard } from '@/renderer/pages/studio/ide/planningGuard';
-import { ideClient } from '@/renderer/pages/studio/ide/ideClient';
+import { buildPlanningGuard } from '@/renderer/services/planningGuard';
+import { coreIdeClient } from '@/renderer/services/coreIdeClient';
 
-vi.mock('@/renderer/pages/studio/ide/ideClient', () => ({
-  ideClient: {
+vi.mock('@/renderer/services/coreIdeClient', () => ({
+  coreIdeClient: {
     specStatus: vi.fn(),
     specTaskList: vi.fn(),
     specTaskClaim: vi.fn(),
-    gitStatus: vi.fn(),
-    mtuiPolicyCheck: vi.fn(),
   },
 }));
 
-const mockedSpecStatus = vi.mocked(ideClient.specStatus);
-const mockedSpecTaskList = vi.mocked(ideClient.specTaskList);
-const mockedSpecTaskClaim = vi.mocked(ideClient.specTaskClaim);
-const mockedGitStatus = vi.mocked(ideClient.gitStatus);
-const mockedMtuiPolicyCheck = vi.mocked(ideClient.mtuiPolicyCheck);
+const mockedSpecStatus = vi.mocked(coreIdeClient.specStatus);
+const mockedSpecTaskList = vi.mocked(coreIdeClient.specTaskList);
+const mockedSpecTaskClaim = vi.mocked(coreIdeClient.specTaskClaim);
 
 describe('buildPlanningGuard', () => {
   beforeEach(() => {
@@ -30,32 +26,16 @@ describe('buildPlanningGuard', () => {
     mockedSpecStatus.mockReset();
     mockedSpecTaskList.mockReset();
     mockedSpecTaskClaim.mockReset();
-    mockedGitStatus.mockReset();
-    mockedMtuiPolicyCheck.mockReset();
     // Default: spec status resolves to a non-existent spec so the /execute
     // lifecycle gate is a no-op unless a test overrides it.
     mockedSpecStatus.mockResolvedValue({ ok: false, error: 'no spec' });
-    mockedGitStatus.mockResolvedValue({ ok: true, data: [] });
-    mockedMtuiPolicyCheck.mockResolvedValue({
-      ok: true,
-      data: {
-        strict: true,
-        clean: true,
-        changedCount: 0,
-        baselineCount: 0,
-        sessionBaselineCount: 0,
-        autoSessionCreated: false,
-        violationCount: 0,
-        violationsTruncated: false,
-        violations: [],
-      },
-    });
+
     mockedSpecTaskClaim.mockResolvedValue({
       ok: true,
       data: {
         rootPath: '/repo',
         slug: 'fix-login',
-        specDir: '/repo/.aionui/specs/fix-login',
+        specDir: '/repo/.tomny/specs/fix-login',
         activeTaskId: 't003-implement',
         nextTaskId: null,
         updatedAt: 11,
@@ -77,18 +57,11 @@ describe('buildPlanningGuard', () => {
   });
 
   it('does not block ordinary chat for pre-existing changed files', async () => {
-    mockedGitStatus.mockResolvedValue({
-      ok: true,
-      data: [{ path: 'src/a.ts', status: 'M', staged: false }],
-    });
-
     const message = await buildPlanningGuard('/repo', 'fix login');
 
     expect(message).toBe('fix login');
     expect(mockedSpecStatus).not.toHaveBeenCalled();
     expect(mockedSpecTaskList).not.toHaveBeenCalled();
-    expect(mockedGitStatus).not.toHaveBeenCalled();
-    expect(mockedMtuiPolicyCheck).not.toHaveBeenCalled();
   });
 
   it('checks spec lifecycle state without injecting plan prompt when Planning Mode is on', async () => {
@@ -99,7 +72,7 @@ describe('buildPlanningGuard', () => {
         rootPath: '/repo',
         exists: true,
         slug: 'fix-login',
-        specDir: '/repo/.aionui/specs/fix-login',
+        specDir: '/repo/.tomny/specs/fix-login',
         files: {
           'requirements.md': true,
           'design.md': true,
@@ -121,7 +94,7 @@ describe('buildPlanningGuard', () => {
       data: {
         rootPath: '/repo',
         slug: 'fix-login',
-        specDir: '/repo/.aionui/specs/fix-login',
+        specDir: '/repo/.tomny/specs/fix-login',
         activeTaskId: 't003-implement',
         nextTaskId: 't004-verify',
         updatedAt: 11,
@@ -173,7 +146,7 @@ describe('buildPlanningGuard', () => {
         exists: true,
         hasAnySpec: true,
         slug: 'fix-login',
-        specDir: '/repo/.aionui/specs/fix-login',
+        specDir: '/repo/.tomny/specs/fix-login',
         phase: 'execution',
         approvals: { requirements: true, design: true, tasks: true },
         files: {
@@ -191,7 +164,7 @@ describe('buildPlanningGuard', () => {
       data: {
         rootPath: '/repo',
         slug: 'fix-login',
-        specDir: '/repo/.aionui/specs/fix-login',
+        specDir: '/repo/.tomny/specs/fix-login',
         activeTaskId: 't003-implement',
         nextTaskId: null,
         updatedAt: 11,
@@ -217,9 +190,9 @@ describe('buildPlanningGuard', () => {
       },
     });
 
-    const message = await buildPlanningGuard('/repo', '/execute @.aionui/specs/fix-login/ 1.1 focus UI');
+    const message = await buildPlanningGuard('/repo', '/execute @.tomny/specs/fix-login/ 1.1 focus UI');
     expect(mockedSpecTaskClaim).toHaveBeenCalledWith('/repo', 'fix-login', '1.1', 'chat-agent');
-    expect(message).toBe('/execute @.aionui/specs/fix-login/ 1.1 focus UI');
+    expect(message).toBe('/execute @.tomny/specs/fix-login/ 1.1 focus UI');
     expect(message).not.toContain('prefer the provided mtui/IDE tools');
   });
 
@@ -231,7 +204,7 @@ describe('buildPlanningGuard', () => {
         exists: true,
         hasAnySpec: true,
         slug: 'fix-login',
-        specDir: '/repo/.aionui/specs/fix-login',
+        specDir: '/repo/.tomny/specs/fix-login',
         phase: 'tasks',
         approvals: { requirements: true, design: true, tasks: false },
         files: {
@@ -245,7 +218,7 @@ describe('buildPlanningGuard', () => {
       },
     });
 
-    await expect(buildPlanningGuard('/repo', '/execute @.aionui/specs/fix-login/')).rejects.toThrow(
+    await expect(buildPlanningGuard('/repo', '/execute @.tomny/specs/fix-login/')).rejects.toThrow(
       'Approve the requirements, design, and tasks gates before running /execute.'
     );
     expect(mockedSpecTaskClaim).not.toHaveBeenCalled();

@@ -12,7 +12,7 @@
 ```bash
 # Clone the repository
 git clone https://github.com/VNDT1625/OmniAgent.git
-cd AionUi
+cd Tomny
 
 # Install dependencies
 bun install
@@ -105,17 +105,17 @@ bun start
 
 ## Multi-Instance Development
 
-When you have two clones of the repository (e.g. `AionUi` and `AionUi-refactor`) and need to run both simultaneously, the second instance can be started with:
+When you have two clones of the repository (e.g. `Tomny` and `Tomny-refactor`) and need to run both simultaneously, the second instance can be started with:
 
 ```bash
 bun run start:multi
 ```
 
-This sets `AIONUI_MULTI_INSTANCE=1`, which:
+This sets `TOMNIUI_MULTI_INSTANCE=1`, which:
 
 - Skips the Electron single-instance lock
-- Uses a separate userData directory (`AionUi-Dev-2`) to avoid database and config conflicts
-- Isolates data/config symlink paths (`~/.aionui-dev-2`, `~/.aionui-config-dev-2`)
+- Uses a separate userData directory (`Tomny-Dev-2`) to avoid database and config conflicts
+- Isolates data/config symlink paths (`~/.tomni-dev-2`, `~/.tomni-config-dev-2`)
 - Vite renderer, CDP, and WebUI proxy ports auto-increment to avoid collisions
 
 > **Note:** The multi-instance WebUI defaults to port 25810 (instead of 25809). When accessing WebUI in a browser, use an **incognito/private window** for the second instance — both instances share the `localhost` cookie jar, and their JWT secrets differ, causing authentication failures if the same browser session is reused.
@@ -140,7 +140,7 @@ prek run --from-ref origin/main --to-ref HEAD
 
 ## Build System
 
-AionUi uses **electron-vite** for fast bundling:
+Tomny uses **electron-vite** for fast bundling:
 
 - **Main process**: bundled with Vite (ESM)
 - **Renderer process**: bundled with Vite (React + TypeScript)

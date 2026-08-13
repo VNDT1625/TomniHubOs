@@ -1,4 +1,9 @@
-# Tomni Hub Agent OS — Package Platform Design
+# Tomny Hub Agent OS — Package Platform Design
+
+> **Design conformance:** [Tomny Hub OS Visual Design System](tomni-hub-visual-design.md) là nguồn
+> sự thật cho typography, glass, spacing, control, popup và responsive. Mock ASCII bên dưới
+> chỉ mô tả information architecture; không được dùng để tạo một visual system khác.
+
 
 > **Trạng thái:** Design đề xuất  
 > **Phạm vi:** Base OS, package model, Studio Suite, creator workflow và marketplace  
@@ -6,13 +11,13 @@
 
 ## 1. Tầm nhìn
 
-Tomni chuyển từ một ứng dụng Electron chứa sẵn mọi tính năng thành một **Hub Agent OS** có thể mở rộng:
+Tomny chuyển từ một ứng dụng Electron chứa sẵn mọi tính năng thành một **Hub Agent OS** có thể mở rộng:
 
 - bản cài gốc chỉ chứa shell và dịch vụ hệ thống cần thiết;
 - app và năng lực chuyên môn được tải theo nhu cầu;
 - người dùng có thể tạo app ngay trong Studio, chạy thử trực tiếp trên Home và public lên Store;
 - Store hỗ trợ nội dung miễn phí hoặc trả phí;
-- mọi nội dung cài thêm phải tuân theo manifest, permission, sandbox và quy trình kiểm duyệt của Tomni.
+- mọi nội dung cài thêm phải tuân theo manifest, permission, sandbox và quy trình kiểm duyệt của Tomny.
 
 Vòng lặp sản phẩm chính:
 
@@ -24,7 +29,7 @@ Home → Store → Cài/Mở → Studio tạo nội dung → Chạy ở Home →
 
 1. **Base chỉ chứa thứ cần để OS hoạt động.** Công cụ chuyên môn phải có thể tách khỏi installer.
 2. **Một package là một đơn vị cài đặt.** Một package có thể đóng góp nhiều module và surface.
-3. **App không có quyền trực tiếp với hệ điều hành.** Mọi quyền đi qua Tomni Capability Bridge.
+3. **App không có quyền trực tiếp với hệ điều hành.** Mọi quyền đi qua Tomny Capability Bridge.
 4. **Local development là trạng thái hạng nhất.** App đang làm xuất hiện trong Home mà chưa cần publish.
 5. **Không thực thi code Store không tin cậy trong Electron main process.** UI và worker phải chạy trong sandbox phù hợp.
 6. **Mọi package đều có vòng đời đầy đủ:** cài, bật/tắt, cập nhật, rollback và gỡ.
@@ -85,7 +90,7 @@ Gói giao diện không phải app độc lập. UI Package có ba scope:
 - `app`: giao diện dành cho danh sách app tương thích;
 - `universal`: áp dụng cho Hub và các app đã opt-in vào cùng design-token contract.
 
-UI Package chỉ được phép dùng API token/component do Tomni cung cấp. Không được inject script hoặc sửa DOM tùy ý của Hub hay app khác. Mọi thay đổi phải có preview, apply, rollback và compatibility range.
+UI Package chỉ được phép dùng API token/component do Tomny cung cấp. Không được inject script hoặc sửa DOM tùy ý của Hub hay app khác. Mọi thay đổi phải có preview, apply, rollback và compatibility range.
 
 ### 4.3 Agent Capsule
 
@@ -122,9 +127,9 @@ Module không phải package con độc lập. Module chỉ là contribution c�
 
 ### 5.1 Studio Suite
 
-Studio được phân phối dưới dạng `com.tomni.studio` và tải một lần. Package dự kiến chứa:
+Studio được phân phối dưới dạng `com.tomny.studio` và tải một lần. Package dự kiến chứa:
 
-- **IDE & App Builder** — viết code, tạo Tomni app/package và quản lý project;
+- **IDE & App Builder** — viết code, tạo Tomny app/package và quản lý project;
 - **Universal Editor** — mở và chỉnh sửa tài liệu được hỗ trợ;
 - **UI Designer** — VIU, canvas, prototype và app surface design;
 - **Media Studio** — tạo/chỉnh sửa video và media;
@@ -148,11 +153,11 @@ Manifest rút gọn:
 ```json
 {
   schemaVersion: 1,
-  id: com.tomni.studio,
+  id: com.tomny.studio,
   type: app,
   bundleKind: suite,
   version: 1.0.0,
-  engines: { tomni: >=1.0.0 },
+  engines: { tomny: >=1.0.0 },
   modules: [
     { id: ide, surface: studio/ide, pinnable: true },
     { id: editor, surface: studio/editor, pinnable: true },
@@ -251,7 +256,7 @@ Mọi package cần tối thiểu:
 
 - ID toàn cục và publisher ID;
 - type;
-- version và Tomni compatibility range;
+- version và Tomny compatibility range;
 - artifact URL, size, integrity và signature;
 - entrypoints/module contributions;
 - permissions;
@@ -261,7 +266,7 @@ Mọi package cần tối thiểu:
 - pricing entitlement requirement;
 - locales, icon và Store metadata.
 
-Package chỉ gọi API từ Tomni SDK. Các contribution được App Registry đăng ký theo manifest; package không tự sửa Router, sidebar hay system settings.
+Package chỉ gọi API từ Tomny SDK. Các contribution được App Registry đăng ký theo manifest; package không tự sửa Router, sidebar hay system settings.
 
 ## 9. Cài đặt và runtime
 
@@ -304,7 +309,7 @@ Yêu cầu vòng đời:
 
 Không cho public package:
 
-- chứa malware, miner, spyware hoặc cơ chế persistence ngoài Tomni;
+- chứa malware, miner, spyware hoặc cơ chế persistence ngoài Tomny;
 - đánh cắp credential, secret hoặc dữ liệu người dùng;
 - né permission/sandbox;
 - vi phạm bản quyền hoặc giả mạo publisher;
@@ -316,13 +321,25 @@ Store cần cơ chế report, takedown, suspension, appeal, refund và emergency
 
 ## 11. UI Package compatibility
 
-Tomni cung cấp `Tomni Design Tokens` theo version. App chọn một trong ba mức:
+[Tomny Hub OS Visual Design System](tomni-hub-visual-design.md) là contract visual chuẩn. Tomny
+cung cấp versioned design tokens cho typography, color, glass, spacing, radius, control rhythm
+và motion. App chọn một trong ba mức:
 
-- `none`: giữ nguyên UI app;
-- `tokens`: nhận màu, typography, spacing và radius tương thích;
-- `components`: dùng Tomni component contract nên nhận theme sâu hơn.
+- `none`: app chỉ nhận shell/chrome chung, nội dung bên trong không bị UI Package thay đổi;
+- `tokens`: app opt-in nhận semantic tokens, gồm shared glass và reduced-transparency fallback;
+- `components`: app dùng Tomny component contract nên nhận theme sâu hơn.
 
-UI Package khai báo token version và danh sách app hỗ trợ. Khi app không tương thích, Store không cho apply vào app đó. System UI luôn có preview và nút hoàn tác về theme an toàn mặc định.
+UI Package khai báo scope `system`, `app` hoặc `universal`, token version và danh sách app hỗ
+trợ. Store không cho apply vào app không tương thích. Mọi lần apply phải có preview, compatibility
+warning và rollback về theme an toàn mặc định.
+
+UI Package không được:
+
+- inject script hoặc sửa DOM tùy ý;
+- thay information architecture/bố cục Home đã khóa;
+- ghi đè global selector ngoài namespace đã cấp;
+- làm mất focus, contrast, reduced-motion hoặc reduced-transparency;
+- thay UI của app chưa opt-in.
 
 ## 12. Ranh giới kiến trúc Electron
 
@@ -354,7 +371,7 @@ Renderer không được đọc filesystem/package trực tiếp. Main process k
 
 ### Phase 3 — Creator Mode
 
-- template và Tomni SDK;
+- template và Tomny SDK;
 - development app record trên Home;
 - sandbox hot reload;
 - build, validation và local signing.
@@ -376,7 +393,7 @@ Renderer không được đọc filesystem/package trực tiếp. Main process k
 
 Thiết kế được xem là hiện thực hóa khi:
 
-- Tomni khởi động và dùng được Home/Store khi chưa cài package tùy chọn;
+- Tomny khởi động và dùng được Home/Store khi chưa cài package tùy chọn;
 - app tải từ Store tự xuất hiện trên Home sau khi cài;
 - Studio được tải một lần và cung cấp nhiều module;
 - app đang làm trong IDE xuất hiện trên Home với badge Development;

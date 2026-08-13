@@ -1,11 +1,19 @@
-# Tomni Home Hub — UI đã chốt
+# Tomny Home Hub — UI đã chốt
+
+> **Design conformance:** [Tomny Hub OS Visual Design System](tomni-hub-visual-design.md) là nguồn
+> sự thật cho typography, glass, spacing, control, popup và responsive. Mock ASCII bên dưới
+> chỉ mô tả information architecture; không được dùng để tạo một visual system khác.
+
 
 > Trạng thái: Đã chốt định hướng UX cơ bản  
 > Ngày cập nhật: 2026-07-20
 
+
+
+
 ## 1. Mục tiêu
 
-Trang Home là trung tâm điều hành của Tomni Agentic Hub, không phải giao diện chat-first.
+Trang Home là trung tâm điều hành của Tomny Agentic Hub, không phải giao diện chat-first.
 Người dùng có thể:
 
 - bắt đầu yêu cầu nhanh qua thanh chat;
@@ -19,24 +27,24 @@ Người dùng có thể:
 
 ```text
 ┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
-│ ◈ TOMNI                    🔍 Tìm ứng dụng, workspace, prompt, model, cài đặt...                 🔔 4        │
+│ ◈ TOMNY                    🔍 Tìm ứng dụng, workspace, prompt, model, cài đặt...                 🔔 4        │
 ├──────────────────────┬─────────────────────────────────────────────────────────────┬─────────────────────────┤
 │                      │                                                             │ Trạng thái              │
 │ ◉  Home              │                  Hôm nay bạn muốn làm gì?                  │                         │
 │ ◎  Quản lý           │                                                             │ ┌──────────────────────┐│
 │ ◫  Runs              │   ┌─────────────────────────────────────────────────────┐   │ │ Công việc           ││
-│ ◈  Sản phẩm          │   │ 🤖 Tomni Agentic │ ● │ ◈ │ ◇ │ ◆ │ ＋             │   │ │ 5 đang thực hiện    ││
+│ ◈  Sản phẩm          │   │ 🤖 Tomny Agentic │ ● │ ◈ │ ◇ │ ◆ │ ＋             │   │ │ 5 đang thực hiện    ││
 │ ◷  Lịch sử           │   ├─────────────────────────────────────────────────────┤   │ │ 2 chờ duyệt · 68%  →││
-│ ⚙  Cài đặt           │   │ Tomni Agentic, gửi tin nhắn, tải tệp...            │   │ └──────────────────────┘│
+│ ⚙  Cài đặt           │   │ Tomny Agentic, gửi tin nhắn, tải tệp...            │   │ └──────────────────────┘│
 │ TEAM / COMPANY     ＋ │   │                                                     │   │                         │
-│ ▾ Tomni Company      │   │ ＋               ⚡ Super   cx/gpt-5.6 ▼       ➜  │   │ ┌──────────────────────┐│
+│ ▾ Tomny Company      │   │ ＋               ⚡ Super   cx/gpt-5.6 ▼       ➜  │   │ ┌──────────────────────┐│
 │   Product Team       │   ├─────────────────────────────────────────────────────┤   │ │ Thông báo           ││
 │   Security Team      │   │ □ Làm việc trong workspace ▼                       │   │ │ 4 chưa đọc          ││
 │                      │   └─────────────────────────────────────────────────────┘   │ │ Browser · Chat     →││
 │ WORKSPACES         ＋ │                                                             │ └──────────────────────┘│
-│ ▾ AionUi             │   Apps                                             Show all ⌄│                         │
+│ ▾ Tomny Hub OS             │   Apps                                             Show all ⌄│                         │
 │   AI Security        │                                                             │ ┌──────────────────────┐│
-│   Tomni Design       │   ┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐│ │ Models              ││
+│   Tomny Design       │   ┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐│ │ Models              ││
 │                      │   │ ◉ Chat  ◇ Mail  │ │ ◫ Studio ◇ Docs│ │ ◇ IDE    ◇ Git  ││ │ ● OpenAI            ││
 │ APPS               ＋ │   │ ◇ Browser ◇ AI │ │ ◇ Video  ◇ Data│ │ ◇ Terminal ◇ Test││ │ ● Anthropic         ││
 │ ◇ Chat               │   └─────────────────┘ └─────────────────┘ └─────────────────┘│ │ ◐ OpenRouter        ││
@@ -46,7 +54,7 @@ Người dùng có thể:
 │ ◇ Automation         │   ┌────────────────────┐ ┌────────────────────┐ ┌───────────┐│ ┌──────────────────────┐│
 │                      │   │ ◇ IDE              │ │ ◉ Chat             │ │ ◫ Studio  ││ │ Hệ thống           ││
 │                      │   │ Cải tổ frontend    │ │ Phân tích Security │ │ Slide dự án││ │ CPU 34% · RAM 58%  ││
-│ ＋ Store              │   │ AionUi · 18 phút  →│ │ 1 giờ trước      → │ │ Hôm qua  →││ │ GPU 21% · Queue 6  ││
+│ ＋ Store              │   │ Tomny Hub OS · 18 phút  →│ │ 1 giờ trước      → │ │ Hôm qua  →││ │ GPU 21% · Queue 6  ││
 │                      │   └────────────────────┘ └────────────────────┘ └───────────┘│ │ Core ổn định      →││
 │ ┌──────────────────┐ │                                                             │ └──────────────────────┘│
 │ │ TD  Thuận Nguyễn │ │                                                             │                         │
@@ -58,56 +66,40 @@ Người dùng có thể:
 
 ## 3. Điều hướng bên trái
 
-Thứ tự đã chốt:
+Thứ tự đã khóa theo HubHome hiện hành:
 
-1. Home
-2. Quản lý
-3. Runs
-4. Sản phẩm
-5. Lịch sử
-6. Cài đặt
-7. Team / Company
-8. Workspaces
-9. Apps
-10. Store
-11. Account
+1. Logo + nút thu gọn/mở rộng;
+2. Home;
+3. Quản lý;
+4. Sản phẩm;
+5. Lịch sử;
+6. Company;
+7. Ứng dụng ghim;
+8. Workspaces;
+9. spacer;
+10. Store;
+11. Account.
 
-Không dùng nhóm “Gần đây” riêng trong sidebar. **Quản lý** thay cho **Tasks** vì Tasks chỉ là một phần của Manager hiện tại. **Sản phẩm** thay cho **Artifacts** ở lớp giao diện. Lịch sử nằm gần Sản phẩm để giữ đúng tầng thông tin của Hub.
+Không có `Runs` hoặc `Cài đặt` như một primary nav row riêng. Cài đặt mở từ quick settings
+hoặc account; run/task được quản lý trong Quản lý và các surface liên quan. Không dùng nhóm
+“Gần đây” trong sidebar.
 
-### Team / Company
+### Company và Workspaces
 
-- nằm trên Workspaces;
-- cho phép chuyển company hoặc team;
-- có thể thu gọn;
-- mỗi workspace có thể thuộc cá nhân, team hoặc company.
+- Company là route cấp Hub, không phải app ghim mặc định.
+- Workspaces là section riêng, có thể thu gọn và có child row.
+- Mỗi workspace có thể thuộc cá nhân, team hoặc company.
 
-### Apps
+### Ứng dụng ghim
 
-- Nhóm **Apps** ở sidebar trái chỉ hiển thị các app người dùng đã ghim để truy cập nhanh.
-- Ví dụ: Chat, IDE, Browser, Studio và Automation.
-- **Quản lý** là trang cấp Hub nên không xuất hiện như một app Manager ghim mặc định.
-- Người dùng có thể ghim, bỏ ghim và sắp xếp lại thứ tự app.
-- **Store** nằm cuối nhóm app để tìm và cài thêm app hoặc package.
-
-### Apps ở trục giữa
-
-- Hiển thị thư viện app trực quan theo từng category, không lặp lại dạng danh sách ghim ở sidebar.
-- Tiêu đề bên trái là **Apps**; bộ lọc bên phải là **Show all**.
-- Mỗi category là một khung chứa nhiều biểu tượng app, ví dụ Communication, Creation và Developer Tools.
-- Nhấn app để mở; nhấn category hoặc **Show all** để xem thư viện đầy đủ.
-- Không dùng hàng **Ứng dụng đã ghim** riêng ở trục giữa vì app ghim đã nằm ở sidebar.
+- Chỉ hiển thị app người dùng đã ghim, ví dụ Chat, IDE, Studio, Terminal và Git.
+- Người dùng có thể ghim, bỏ ghim và sắp xếp lại.
+- Store là card riêng ở cuối sidebar, không nằm trong danh sách app ghim.
 
 ### Account
 
-Hiển thị thu gọn giống ChatGPT:
-
-```text
-┌──────────────────┐
-│ TD  Thuận Nguyễn │
-│     Duy          │
-│     Plus       ⋯ │
-└──────────────────┘
-```
+Account là control đầy đủ ở cuối sidebar, ngay dưới Store. Khi sidebar thu gọn chỉ hiển thị
+avatar. Click mở quick account popup và có hành động mở Settings đầy đủ.
 
 ## 4. Header
 
@@ -145,10 +137,10 @@ Không dùng chuông cho tin nhắn từ app.
 
 Thanh chat giữ đúng tinh thần hiện tại:
 
-- hàng chọn Tomni Agentic và agent nhanh;
+- một selector gộp agent/CLI/model: phần trên chọn Tomny Agentic, Tomny CLI hoặc CLI tương thích;
+  phần dưới chọn model của agent/CLI đang dùng;
 - nhập tin nhắn hoặc tải tệp;
-- nút thêm capability;
-- chọn model;
+- nút thêm capability/package và tool nhanh;
 - chọn workspace hoặc dự án;
 - nút gửi;
 - nút **Super** là hành động quan trọng và phải nổi bật.
@@ -162,15 +154,15 @@ Thanh chat giữ đúng tinh thần hiện tại:
 
 ### Tiếp tục
 
-Chỉ hiển thị ba thẻ để giữ Home gọn trong một màn hình desktop.
+Hiển thị tối đa bốn thẻ ở desktop; giảm số cột theo viewport để Home vẫn gọn và không cắt nội dung.
 
 ```text
 Tiếp tục                                                     Xem tất cả →
 
 ┌──────────────────────────┐ ┌──────────────────────────┐ ┌──────────────────────────┐
 │ ◇ IDE                    │ │ ◉ Chat                   │ │ ◫ Studio                 │
-│ Cải tổ frontend Tomni    │ │ Phân tích AI Security   │ │ Slide thuyết trình       │
-│ AionUi · 18 phút trước  →│ │ 1 giờ trước            →│ │ Hôm qua                →│
+│ Cải tổ frontend Tomny    │ │ Phân tích AI Security   │ │ Slide thuyết trình       │
+│ Tomny Hub OS · 18 phút trước  →│ │ 1 giờ trước            →│ │ Hôm qua                →│
 └──────────────────────────┘ └──────────────────────────┘ └──────────────────────────┘
 ```
 
@@ -184,9 +176,9 @@ Phần này chỉ chứa nơi người dùng có thể quay lại ngay:
 
 Không hiển thị agent, hàng đợi hoặc cảnh báo hệ thống tại đây.
 
-## 6. Tab Trạng thái bên phải
+## 6. Status rail bên phải
 
-Tab trạng thái gồm bốn ô chính:
+Status rail gồm bốn card tóm tắt:
 
 1. Công việc
 2. Thông báo
@@ -210,7 +202,7 @@ Khi bấm vào, mở popup chi tiết:
 ```text
 ┌──────────────────── Công việc ────────────────────┐
 │                                                   │
-│ Cải tổ frontend Tomni                       68%   │
+│ Cải tổ frontend Tomny                       68%   │
 │ Codex Agent · Đang chỉnh sửa GuidPage             │
 │ ███████████████████░░░░░░                          │
 │                                                   │
@@ -316,6 +308,10 @@ Bao gồm:
 - Chuông hệ thống và Thông báo ứng dụng là hai luồng riêng.
 - Công việc là đơn vị chính; agent, tiến độ, duyệt và hàng đợi nằm bên trong công việc.
 - Super phải luôn nổi bật trong thanh chat.
+
+- Sidebar rộng 220 px, collapsed 64 px; rail 256 px và chỉ hiện từ 1180 px.
+- Dưới 1180 px, dữ liệu rail vẫn mở qua popup/shortcut; dưới 760 px sidebar là drawer.
+- Card, popup và control dùng shared glass/control rhythm; không tạo CSS visual riêng cho Home.
 
 ## 8. Tài liệu liên quan
 

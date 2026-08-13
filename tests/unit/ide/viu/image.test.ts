@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -13,7 +13,7 @@ import { analyzeImageProject } from '@/process/ide/viu/image';
 
 describe('Viu image reconstruction evidence', () => {
   it('keeps the raster reference and emits editable regions with explicit z-confidence limits', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'aionui-viu-image-'));
+    const directory = await mkdtemp(join(tmpdir(), 'tomny-viu-image-'));
     const imagePath = join(directory, 'landing.png');
     try {
       await sharp({
@@ -44,7 +44,7 @@ describe('Viu image reconstruction evidence', () => {
   });
 
   it('rejects non-image extensions before decoding bytes', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'aionui-viu-image-'));
+    const directory = await mkdtemp(join(tmpdir(), 'tomny-viu-image-'));
     const textPath = join(directory, 'reference.txt');
     try {
       await writeFile(textPath, 'not an image', 'utf8');

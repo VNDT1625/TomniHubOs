@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -12,6 +12,7 @@ import { initWindowControlsBridge } from './windowControlsBridge';
 import { initNotificationBridge } from './notificationBridge';
 import { initOmniGatewayBridge } from '@process/omni-gateway/omniGatewayIpc';
 import { initWebuiBridge } from './webuiBridge';
+import { registerFoundationBridge } from './foundationBridge';
 import { registerResourceBridge } from '@process/resource/resourceBridge';
 import { getResourceCoordinator } from '@process/resource/resourceCoordinator';
 import { registerSystemInfoBridge } from '@process/system/systemInfoBridge';
@@ -38,6 +39,13 @@ import { registerStudioDocxBridge } from '@process/studio/studioDocxBridge';
 import { registerStudioOfficeBridge } from '@process/studio/studioOfficeBridge';
 import { registerOnlyOfficeBridge } from '@process/studio/onlyOfficeBridge';
 import { registerWorkspaceBridge } from '@process/workspace/workspaceBridge';
+import {
+  activateProductionWindowsCreatorSandbox,
+  disposeProductionCreatorPreviewBridge,
+  registerCreatorPreviewBridge,
+  registerProductionCreatorPreviewBridge,
+} from '@process/workspace/creatorPreviewBridge';
+import type { WindowsCreatorSandboxProductionConfiguration } from '@process/extensions/windowsSandboxActivation';
 import { registerManagerBridge } from '@process/manager/managerBridge';
 import { getManagerServices } from '@process/manager/managerWiring';
 import { registerNewsBridge } from '@process/news/newsBridge';
@@ -113,15 +121,22 @@ import {
 import { registerExperimentalCoreBridge } from '@process/experimentalCore/experimentalCoreBridge';
 import { registerAgentMeshBridge } from '@process/agentRuntime/agentMesh/ipc';
 import { getSharedAgentMeshService } from '@process/agentRuntime/agentMesh/mcp/meshService';
+import { registerPackageManagerBridge } from '@process/extensions/package-manager';
 
 import { JsonTeamStore, registerTeamBridge } from '@process/team';
 import path from 'node:path';
-import { app } from 'electron';
+import { app, ipcMain } from 'electron';
 import { getApplicationMainWindow } from './applicationBridge';
 
-export type BridgeDependencies = Record<string, never>;
+export type BridgeDependencies = {
+  /** Omit until release signing and the live revocation authority are available. */
+  windowsCreatorSandbox?: WindowsCreatorSandboxProductionConfiguration;
+};
 
-export function initAllBridges(_deps: BridgeDependencies = {}): void {
+export function initAllBridges(deps: BridgeDependencies = {}): void {
+  registerPackageManagerBridge();
+  console.log('[Bridge] Package platform bridge registered.');
+
   initDialogBridge();
   initApplicationBridge();
   initWindowControlsBridge();
@@ -154,9 +169,9 @@ export function initAllBridges(_deps: BridgeDependencies = {}): void {
 
   try {
     registerAgentCatalogBridge();
-    console.log('[Bridge] Tomni assistant and agent catalogs registered.');
+    console.log('[Bridge] Tomny assistant and agent catalogs registered.');
   } catch (error) {
-    console.error('[Bridge] Failed to register Tomni assistant and agent catalogs:', error);
+    console.error('[Bridge] Failed to register Tomny assistant and agent catalogs:', error);
   }
 
   try {
@@ -169,9 +184,16 @@ export function initAllBridges(_deps: BridgeDependencies = {}): void {
     console.error('[Bridge] Failed to register native platform drivers:', error);
   }
 
-  // Tomni native bridges (Task 15.1 wiring). Each registration is isolated
+  // Tomny native bridges (Task 15.1 wiring). Each registration is isolated
   // so a failure in one cannot silently prevent the others from registering
   // (which would leave a renderer page hanging on an unanswered invoke).
+  try {
+    registerFoundationBridge();
+    console.log('[Bridge] Foundation RunKernel bridge registered.');
+  } catch (error) {
+    console.error('[Bridge] Failed to register Foundation bridge:', error);
+  }
+
   try {
     registerResourceBridge();
     getResourceCoordinator()
@@ -304,7 +326,7 @@ export function initAllBridges(_deps: BridgeDependencies = {}): void {
   }
 
   try {
-    // Studio binary-safe file write (Yêu cầu 2a). The aioncore /api/fs/write
+    // Studio binary-safe file write (Yêu cầu 2a). The tomnycore /api/fs/write
     // persists data as literal text (no base64 decode), so saving an edited
     // binary file (e.g. a .docx ZIP) needs this Node-side raw-bytes writer.
     registerStudioFsBridge();
@@ -351,6 +373,30 @@ export function initAllBridges(_deps: BridgeDependencies = {}): void {
     console.log('[Bridge] Workspace bridge registered.');
   } catch (error) {
     console.error('[Bridge] Failed to register Workspace bridge:', error);
+  }
+
+  try {
+    // Keep the legacy generic adapter fail-closed because it discards Electron
+    // sender metadata. The native route below preserves the main-frame sender,
+    // enforces main-owned project claims and still rejects opens until a trusted
+    // OS sandbox driver is explicitly registered.
+    registerCreatorPreviewBridge();
+    registerProductionCreatorPreviewBridge({
+      coordinator: getResourceCoordinator(),
+      ipcMain,
+      getMainWindow: getApplicationMainWindow,
+    });
+    if (deps.windowsCreatorSandbox) {
+      void activateProductionWindowsCreatorSandbox(deps.windowsCreatorSandbox).then((result) => {
+        if (result.state === 'unavailable') {
+          console.warn(`[Bridge] Windows Creator Sandbox remains unavailable: ${result.code}`);
+        }
+      });
+    }
+    app.once('before-quit', () => void disposeProductionCreatorPreviewBridge());
+    console.log('[Bridge] Creator preview native contract registered in fail-closed mode.');
+  } catch (error) {
+    console.error('[Bridge] Failed to register Creator preview contract:', error);
   }
 
   try {
@@ -690,7 +736,7 @@ export function initAllBridges(_deps: BridgeDependencies = {}): void {
   }
 
   try {
-    // Music Studio (Tomni music). Persistence + offline render/export for
+    // Music Studio (Tomny music). Persistence + offline render/export for
     // the music-core engine. Safe to register unconditionally: it only exposes
     // music.* channels the gated /music page calls. Without this the Music
     // Studio page's save/render would have no provider.

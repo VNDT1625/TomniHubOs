@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "tomny.qlora-recipe.v1",
+  "recipeVersion": 1,
+  "id": "tomny-qwen35-08b-security-rtx3050",
+  "version": "2026-07-25.2",
+  "promotionStatus": "candidate-only",
+  "purpose": "security",
+  "dataset": {
+    "datasetId": "tomny-core-adapters-synthetic",
+    "datasetVersion": "2026-07-25.v2",
+    "manifestSha256": "59f0cb64f23854abb6b0938f3af3205b9b0f77bf0230bd7f60aaae0b42013406"
+  },
+  "baseModel": {
+    "modelId": "Qwen/Qwen3.5-0.8B",
+    "revision": "2fc06364715b967f1860aea9cf38778875588b17",
+    "contentSha256": "ff3a07808a9e83627e69a07131fdec45c60973f23cc5617204d173461ec65fe6"
+  },
+  "seed": 20260725,
+  "hardwareProfile": {
+    "profile": "rtx-3050-4gb",
+    "gpuModel": "NVIDIA GeForce RTX 3050 Laptop GPU",
+    "maxVramGiB": 4,
+    "sequentialOnly": true,
+    "finiteGradientSmokePassed": true
+  },
+  "qualityLimitations": [
+    "Only the final transformer block is adapted; benchmark uplift may trail wider target profiles.",
+    "Synthetic machine-validated data supports candidate evaluation only and requires independent human review before pilot."
+  ],
+  "training": {
+    "maxSteps": 600,
+    "maxLength": 256,
+    "rank": 8,
+    "loraAlpha": 16,
+    "gradientAccumulationSteps": 8,
+    "learningRate": 0.0001,
+    "warmupRatio": 0.05,
+    "targetProfile": "last-block",
+    "loggingSteps": 5,
+    "evalSteps": 50,
+    "saveSteps": 50,
+    "earlyStoppingPatience": 3,
+    "earlyStoppingThreshold": 0.001,
+    "maxValidationRegression": 0.0
+  }
+}

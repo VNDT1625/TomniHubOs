@@ -73,7 +73,7 @@ export type AgentMeshServiceOptions = {
   defaultMaxConcurrent?: number;
 };
 
-/** Durable-session registry for Team/Company orchestration. No AionCore dependency. */
+/** Durable-session registry for Team/Company orchestration. No the legacy core dependency. */
 export class AgentMeshService {
   private readonly sessions = new Map<string, AgentMeshController>();
   private readonly messageHandlers = new Map<string, AgentMeshMessageHandler>();

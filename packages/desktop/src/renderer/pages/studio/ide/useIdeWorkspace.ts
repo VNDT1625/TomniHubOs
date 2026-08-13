@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -13,7 +13,7 @@
  *  - **Files**: a lazily-loaded file tree + the active file path the editor
  *    opens. Crucially, ALL filesystem access goes through the IDE's Node-`fs`
  *    bridge ({@link ideClient}: `ide.list-dir`/`ide.read-file`/…), NOT the
- *    aioncore `/api/fs/*` bridge — the latter is scoped to a conversation
+ *    tomnycore `/api/fs/*` bridge — the latter is scoped to a conversation
  *    workspace and cannot see a folder the user opens from anywhere on disk.
  *    (This was why the tree showed empty and the AI saw empty files.)
  *  - **Stats**: the intra-repo import graph (via `ide.scan-repo`) — feeds the

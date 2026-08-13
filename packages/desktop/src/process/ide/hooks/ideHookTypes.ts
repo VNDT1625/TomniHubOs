@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -9,7 +9,7 @@
  * IDE events (a file saved/created/deleted, or a manual trigger) by either
  * asking the IDE Chat agent a prompt or running a shell command.
  *
- * This mirrors the idea of Kiro's own agent hooks but lives INSIDE AionUi's
+ * This mirrors the idea of Kiro's own agent hooks but lives INSIDE Tomny's
  * Studio › IDE, scoped per workspace folder. Definitions are persisted as JSON
  * so they survive restarts.
  *

@@ -1,6 +1,6 @@
 import React from 'react';
-import { Button, Typography, Tooltip, Link } from '@arco-design/web-react';
-import { IconDownload, IconRefresh } from '@arco-design/web-react/icon';
+import { Button, Input, Typography, Tooltip, Link } from '@arco-design/web-react';
+import { IconDelete, IconDownload, IconRefresh } from '@arco-design/web-react/icon';
 import { useTranslation } from 'react-i18next';
 import ModalWrapper from '@/renderer/components/base/ModalWrapper';
 import { useHubAgents } from '@/renderer/hooks/agent/useHubAgents';
@@ -11,16 +11,28 @@ import { openExternalUrl } from '@/renderer/utils/platform';
 interface AgentHubModalProps {
   visible: boolean;
   onCancel: () => void;
+  scope?: 'agents' | 'all';
 }
 
-const AION_HUB_REPO_URL = 'https://github.com/VNDT1625/OmniAgent';
+const TOMNY_HUB_REPO_URL = 'https://github.com/VNDT1625/OmniAgent';
 
-export const AgentHubModal: React.FC<AgentHubModalProps> = ({ visible, onCancel }) => {
+export const AgentHubModal: React.FC<AgentHubModalProps> = ({ visible, onCancel, scope = 'agents' }) => {
   const { t } = useTranslation();
-  const { agents, loading, error, install, retryInstall, update } = useHubAgents();
+  const [query, setQuery] = React.useState('');
+  const { agents, loading, error, install, retryInstall, update, uninstall } = useHubAgents({ scope });
+  const filteredAgents = React.useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    if (!normalizedQuery) return agents;
+    return agents.filter((agent) =>
+      [agent.display_name, agent.description, agent.author, ...(agent.tags ?? [])]
+        .join(' ')
+        .toLowerCase()
+        .includes(normalizedQuery)
+    );
+  }, [agents, query]);
   const actionButtonClassName = '!min-w-80px !rounded-9px !px-10px';
-  const openAionHubRepo = () => {
-    void openExternalUrl(AION_HUB_REPO_URL).catch(console.error);
+  const openTomnyAgentHubRepo = () => {
+    void openExternalUrl(TOMNY_HUB_REPO_URL).catch(console.error);
   };
 
   const renderActionBtn = (agent: IHubAgentItem) => {
@@ -38,7 +50,6 @@ export const AgentHubModal: React.FC<AgentHubModalProps> = ({ visible, onCancel 
           </Button>
         );
       case 'installing':
-      case 'uninstalling':
         return (
           <Button type='primary' size='small' loading disabled className={actionButtonClassName}>
             {t('settings.agentManagement.marketInstalling', { defaultValue: 'Installing...' })}
@@ -46,8 +57,24 @@ export const AgentHubModal: React.FC<AgentHubModalProps> = ({ visible, onCancel 
         );
       case 'installed':
         return (
-          <Button size='small' type='secondary' disabled className={actionButtonClassName}>
-            {t('settings.installed', { defaultValue: 'Installed' })}
+          <div className='flex items-center gap-6px'>
+            <Button size='small' type='secondary' disabled className={actionButtonClassName}>
+              {t('settings.installed', { defaultValue: 'Installed' })}
+            </Button>
+            <Button
+              size='small'
+              type='text'
+              status='danger'
+              icon={<IconDelete />}
+              aria-label={t('settings.removeFromAssistant', { defaultValue: 'Uninstall' })}
+              onClick={() => void uninstall(agent.name)}
+            />
+          </div>
+        );
+      case 'uninstalling':
+        return (
+          <Button type='secondary' size='small' loading disabled className={actionButtonClassName}>
+            {t('settings.mcpRemoveStarted', { defaultValue: 'Uninstalling...' })}
           </Button>
         );
       case 'install_failed':
@@ -83,7 +110,11 @@ export const AgentHubModal: React.FC<AgentHubModalProps> = ({ visible, onCancel 
 
   return (
     <ModalWrapper
-      title={t('settings.agentManagement.installFromMarket')}
+      title={
+        scope === 'all'
+          ? t('guid.hubHome.shell.store', { defaultValue: 'Tomny Store' })
+          : t('settings.agentManagement.installFromMarket')
+      }
       visible={visible}
       onCancel={onCancel}
       footer={null}
@@ -98,9 +129,9 @@ export const AgentHubModal: React.FC<AgentHubModalProps> = ({ visible, onCancel 
               defaultValue: 'Want a new Agent listed here?',
             })}
           </Typography.Text>
-          <Link className='text-12px leading-18px' onClick={openAionHubRepo}>
+          <Link className='text-12px leading-18px' onClick={openTomnyAgentHubRepo}>
             {t('settings.agentManagement.marketContributionAction', {
-              defaultValue: 'Open a PR on AionHub',
+              defaultValue: 'Open a PR on Tomny Agent Hub',
             })}
           </Link>
         </div>
@@ -124,45 +155,66 @@ export const AgentHubModal: React.FC<AgentHubModalProps> = ({ visible, onCancel 
             </Typography.Text>
           </div>
         ) : (
-          <div data-testid='agent-hub-grid' className='grid grid-cols-1 gap-10px sm:grid-cols-2 lg:grid-cols-4'>
-            {agents.map((agent) => {
-              const logo = resolveAgentLogo({
-                icon: agent.icon,
-                backend: agent.contributes?.acpAdapters?.[0],
-              });
+          <>
+            <Input.Search
+              allowClear
+              value={query}
+              onChange={setQuery}
+              placeholder={t('guid.hubHome.shell.searchPlaceholder', { defaultValue: 'Search packages...' })}
+              className='mb-12px max-w-360px'
+            />
+            {filteredAgents.length === 0 ? (
+              <div className='flex items-center justify-center py-32px text-center'>
+                <Typography.Text type='secondary' className='text-13px text-t-secondary'>
+                  {t('settings.agentManagement.marketEmpty', { defaultValue: 'No matching packages found.' })}
+                </Typography.Text>
+              </div>
+            ) : (
+              <div data-testid='agent-hub-grid' className='grid grid-cols-1 gap-10px sm:grid-cols-2 lg:grid-cols-4'>
+                {filteredAgents.map((agent) => {
+                  const logo = resolveAgentLogo({
+                    icon: agent.icon,
+                    backend: agent.contributes?.acpAdapters?.[0],
+                  });
 
-              return (
-                <div
-                  key={agent.name}
-                  data-testid='agent-hub-card'
-                  className='flex min-h-[144px] flex-col rounded-12px border border-solid border-[var(--color-border-2)] bg-[var(--color-bg-2)] p-10px transition-colors hover:border-[var(--color-border-3)]'
-                >
-                  <Typography.Text
-                    bold
-                    className='mb-6px block min-h-36px text-center text-13px leading-18px line-clamp-2'
-                  >
-                    {agent.display_name}
-                  </Typography.Text>
+                  return (
+                    <div
+                      key={agent.name}
+                      data-testid='agent-hub-card'
+                      className='flex min-h-[144px] flex-col rounded-12px border border-solid border-[var(--color-border-2)] bg-[var(--color-bg-2)] p-10px transition-colors hover:border-[var(--color-border-3)]'
+                    >
+                      <Typography.Text
+                        bold
+                        className='mb-6px block min-h-36px text-center text-13px leading-18px line-clamp-2'
+                      >
+                        {agent.display_name}
+                      </Typography.Text>
 
-                  <div className='mb-6px flex h-40px items-center justify-center'>
-                    {logo ? (
-                      <img src={logo} alt={agent.display_name} className='h-36px w-36px rounded-10px object-contain' />
-                    ) : (
-                      <div className='flex h-36px w-36px items-center justify-center rounded-10px bg-fill-2 text-16px font-bold text-t-secondary'>
-                        {agent.display_name.charAt(0)}
+                      <div className='mb-6px flex h-40px items-center justify-center'>
+                        {logo ? (
+                          <img
+                            src={logo}
+                            alt={agent.display_name}
+                            className='h-36px w-36px rounded-10px object-contain'
+                          />
+                        ) : (
+                          <div className='flex h-36px w-36px items-center justify-center rounded-10px bg-fill-2 text-16px font-bold text-t-secondary'>
+                            {agent.display_name.charAt(0)}
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
 
-                  <Typography.Text className='mb-10px block min-h-28px text-center text-11px leading-15px text-t-secondary line-clamp-2'>
-                    {agent.description}
-                  </Typography.Text>
+                      <Typography.Text className='mb-10px block min-h-28px text-center text-11px leading-15px text-t-secondary line-clamp-2'>
+                        {agent.description}
+                      </Typography.Text>
 
-                  <div className='mt-auto flex justify-center'>{renderActionBtn(agent)}</div>
-                </div>
-              );
-            })}
-          </div>
+                      <div className='mt-auto flex justify-center'>{renderActionBtn(agent)}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </>
         )}
       </div>
     </ModalWrapper>

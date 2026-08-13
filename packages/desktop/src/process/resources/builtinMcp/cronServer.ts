@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -8,7 +8,7 @@
  * Built-in Cron (Scheduled Tasks) MCP server — the **Agent plane** for the
  * scheduled-tasks feature.
  *
- * Every other Tomni capability (resource, company, browser-control, testing,
+ * Every other Tomny capability (resource, company, browser-control, testing,
  * manager, tool-selector) exposes a built-in MCP server so an agent can use it,
  * while the matching UI plane (`renderer/pages/cron/`) drives the *same* state.
  * Scheduling was the one capability with **no** agent-facing tools — this server
@@ -179,7 +179,7 @@ Input:
 - prompt: the instruction the agent runs each time (required)
 - schedule: 5-field cron expression, or "" for manual-only (required)
 - scheduleDescription: human-readable description of the cadence (optional; defaults to the expression)
-- agentType: execution engine, e.g. "claude" | "gemini" | "codex" | "aionrs" (optional; defaults to "claude")
+- agentType: execution engine, e.g. "claude" | "gemini" | "codex" | "tomnyagentic" (optional; defaults to "claude")
 - executionMode: "new_conversation" (default) | "existing"
 - conversationId: bind to an existing conversation (optional; required only for executionMode "existing")
 - modelId: specific model id for the agent (optional)
@@ -190,7 +190,10 @@ Returns the created task summary including its new id.`,
       prompt: z.string().describe('The instruction the agent runs on each trigger.'),
       schedule: z.string().describe('5-field cron expression (e.g. "0 9 * * *"); "" for manual-only.'),
       scheduleDescription: z.string().optional().describe('Human-readable cadence description.'),
-      agentType: z.string().optional().describe('Execution engine (claude/gemini/codex/aionrs/…). Default "claude".'),
+      agentType: z
+        .string()
+        .optional()
+        .describe('Execution engine (claude/gemini/codex/tomnyagentic/…). Default "claude".'),
       executionMode: z.enum(['new_conversation', 'existing']).optional().describe('Default "new_conversation".'),
       conversationId: z
         .string()

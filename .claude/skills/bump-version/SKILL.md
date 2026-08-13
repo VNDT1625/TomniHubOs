@@ -1,18 +1,18 @@
 ---
 name: bump-version
-description: Use when bumping the AionUi version: query AionCore release, verify artifacts, update package.json, generate CHANGELOG, branch, commit, push, create PR, wait for merge, tag release.
+description: Use when bumping the TomniHubOS version: query TomniCore release, verify artifacts, update package.json, generate CHANGELOG, branch, commit, push, create PR, wait for merge, tag release.
 ---
 
 # Bump Version
 
-Automate the AionUi release preparation: query AionCore release → verify artifacts → update versions → generate CHANGELOG → branch → PR → tag.
+Automate the TomniHubOS release preparation: query TomniCore release → verify artifacts → update versions → generate CHANGELOG → branch → PR → tag.
 
 **Usage:** `/bump-version [version] [flags]`
 
-- `/bump-version` — auto patch + latest AionCore
-- `/bump-version 2.2.0` — explicit AionUi version + latest AionCore
+- `/bump-version` — auto patch + latest TomniCore
+- `/bump-version 2.2.0` — explicit TomniHubOS version + latest TomniCore
 - `/bump-version 2.2.0 --core v0.1.12` — explicit both versions
-- `/bump-version --skip-core` — pure frontend release (don't touch aioncoreVersion)
+- `/bump-version --skip-core` — pure frontend release (don't touch tomnicoreVersion)
 
 ## Workflow
 
@@ -34,16 +34,16 @@ git pull --rebase origin main
 
 Fails → Stop: "Failed to pull latest code. Please resolve conflicts or network issues first."
 
-### Step 3: Determine AionUi Target Version
+### Step 3: Determine TomniHubOS Target Version
 
 Read `package.json` → extract `version` field.
 
 - **Argument provided** → use as-is
 - **No argument** → parse `major.minor.patch`, increment `patch` by 1
 
-Display: "Bumping AionUi: {current} → {target}"
+Display: "Bumping TomniHubOS: {current} → {target}"
 
-### Step 4: Query AionCore Latest Release
+### Step 4: Query TomniCore Latest Release
 
 **Skip entirely if `--skip-core` is set.**
 
@@ -52,10 +52,10 @@ gh release view --repo VNDT1625/OmniAgent --json tagName,body
 ```
 
 - If `--core <version>` provided → use that tag instead of latest
-- Display the AionCore version and ask user to confirm before continuing
-- Also read current `aioncoreVersion` from `package.json` — if it already matches the queried version, warn the user and ask whether to proceed or use `--skip-core`
+- Display the TomniCore version and ask user to confirm before continuing
+- Also read current `tomnicoreVersion` from `package.json` — if it already matches the queried version, warn the user and ask whether to proceed or use `--skip-core`
 
-### Step 5: Verify AionCore Artifacts
+### Step 5: Verify TomniCore Artifacts
 
 **Skip if `--skip-core`.**
 
@@ -65,22 +65,22 @@ gh release view <tag> --repo VNDT1625/OmniAgent --json assets --jq '.assets[].na
 
 Verify all 7 expected assets exist:
 
-- `aioncore-<tag>-x86_64-unknown-linux-gnu.tar.gz`
-- `aioncore-<tag>-aarch64-unknown-linux-gnu.tar.gz`
-- `aioncore-<tag>-x86_64-apple-darwin.tar.gz`
-- `aioncore-<tag>-aarch64-apple-darwin.tar.gz`
-- `aioncore-<tag>-x86_64-pc-windows-msvc.zip`
-- `aioncore-<tag>-aarch64-pc-windows-msvc.zip`
-- `aioncore-checksums.txt`
+- `tomnicore-<tag>-x86_64-unknown-linux-gnu.tar.gz`
+- `tomnicore-<tag>-aarch64-unknown-linux-gnu.tar.gz`
+- `tomnicore-<tag>-x86_64-apple-darwin.tar.gz`
+- `tomnicore-<tag>-aarch64-apple-darwin.tar.gz`
+- `tomnicore-<tag>-x86_64-pc-windows-msvc.zip`
+- `tomnicore-<tag>-aarch64-pc-windows-msvc.zip`
+- `tomnicore-checksums.txt`
 
-Missing → Stop: "AionCore {tag} is missing artifacts: {list}. Wait for CI to complete or check for build failures."
+Missing → Stop: "TomniCore {tag} is missing artifacts: {list}. Wait for CI to complete or check for build failures."
 
 ### Step 6: Update package.json
 
 Use Edit tool to replace:
 
 - `"version": "{current}"` → `"version": "{target}"`
-- `"aioncoreVersion": "{old}"` → `"aioncoreVersion": "{new core tag}"` (skip if `--skip-core`)
+- `"tomnicoreVersion": "{old}"` → `"tomnicoreVersion": "{new core tag}"` (skip if `--skip-core`)
 
 ### Step 7: Generate CHANGELOG Entry
 
@@ -103,7 +103,7 @@ git log v{previous}..HEAD --oneline --no-merges --format="%s"
 - Group by type (Features, Bug Fixes, Refactoring, Performance, Styling)
 - Format each as: `- **scope:** description (#PR)`
 
-#### 7c: Collect AionCore Changes
+#### 7c: Collect TomniCore Changes
 
 From step 4's release body (already in conventional-changelog format from release-please). Parse into same grouped format.
 
@@ -172,7 +172,7 @@ Fails → Stop: "Tests failed. Please fix before bumping."
 ```bash
 git checkout -b chore/bump-version-{target}
 git add package.json CHANGELOG.md
-git commit -m "chore: bump version to {target} and aioncore to {core tag}"
+git commit -m "chore: bump version to {target} and tomnicore to {core tag}"
 just push -u origin chore/bump-version-{target}
 ```
 
@@ -233,11 +233,11 @@ Display: "Tag v{target} created and pushed. Release build triggered! Action: {ru
 ```
  1. Must be on clean main
  2. git pull --rebase
- 3. Determine AionUi target version (patch+1 or explicit)
- 4. Query AionCore latest release (or --core / --skip-core)
- 5. Verify AionCore artifacts (7 files)
- 6. Edit package.json (version + aioncoreVersion)
- 7. Generate CHANGELOG entry (frontend commits + AionCore release body)
+ 3. Determine TomniHubOS target version (patch+1 or explicit)
+ 4. Query TomniCore latest release (or --core / --skip-core)
+ 5. Verify TomniCore artifacts (7 files)
+ 6. Edit package.json (version + tomnicoreVersion)
+ 7. Generate CHANGELOG entry (frontend commits + TomniCore release body)
  8. lint + format + tsc
  9. vitest run
 10. branch → commit → push

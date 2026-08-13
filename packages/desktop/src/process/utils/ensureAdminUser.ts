@@ -1,10 +1,10 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  *
  * One-shot boot-time migration: move legacy admin credentials from
- * webui.config.json into aioncore's SQLite `users` table.
+ * webui.config.json into tomnycore's SQLite `users` table.
  *
  * Runs after backendManager.start() resolves, before any window opens, for
  * every launch mode (desktop / --webui / --resetpass). Idempotent — re-running

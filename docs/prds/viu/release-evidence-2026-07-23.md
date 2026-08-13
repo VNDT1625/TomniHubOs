@@ -32,8 +32,8 @@ Status: **release gate passed for the agreed VIU V1 authoring and Team Preview s
 
 Coverage reports are written locally under:
 
-- `.aionrs/viu-renderer-coverage-release/`
-- `.aionrs/team-preview-coverage-final/`
+- `.tomnirs/viu-renderer-coverage-release/`
+- `.tomnirs/team-preview-coverage-final/`
 
 ## User path versus agent path
 

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -24,7 +24,7 @@ import type { WeatherForecast } from '@process/news/newsBridge';
 
 const { Text } = Typography;
 
-const STORAGE_KEY = 'aionui.news.weatherLocation';
+const STORAGE_KEY = 'tomny.news.weatherLocation';
 
 /** Map a WMO weather code to an Icon-Park icon. */
 const weatherIcon = (code: number, size = '20'): React.ReactElement => {

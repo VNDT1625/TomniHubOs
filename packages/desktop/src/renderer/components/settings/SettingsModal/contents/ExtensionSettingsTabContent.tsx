@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -49,7 +49,7 @@ const ExtensionSettingsTabContent: React.FC<ExtensionSettingsTabContentProps> = 
 
       frameWindow.postMessage(
         {
-          type: 'aion:init',
+          type: 'tomny:init',
           locale: i18n.language,
           extensionName,
           translations,
@@ -72,7 +72,7 @@ const ExtensionSettingsTabContent: React.FC<ExtensionSettingsTabContentProps> = 
       const data = event.data as { type?: string; reqId?: string } | undefined;
       if (!data) return;
 
-      if (data.type === 'aion:get-locale') {
+      if (data.type === 'tomny:get-locale') {
         void postLocaleInit();
         return;
       }

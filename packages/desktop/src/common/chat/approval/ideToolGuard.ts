@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -22,14 +22,17 @@
  * way for the agent to act on the repo is through trusted Tomny tools.
  *
  * This module is intentionally PURE (no DOM, no ipc, no React) so it can be unit
- * tested in isolation and reused by every platform handler (acp, aionrs, …).
+ * tested in isolation and reused by every platform handler (acp, tomnyagentic, …).
  */
 
 /** The localStorage key prefix under which Strict IDE Mode is toggled per root. */
 export const IDE_STRICT_MODE_PREFIX = 'studio.ide.strict.';
 
 /** Custom ACP adapter used by IDE conversations to deny native Claude tools before execution. */
-export const STRICT_IDE_CLAUDE_AGENT_NAME = 'AionUi Strict Claude';
+export const STRICT_IDE_CLAUDE_AGENT_NAME = 'Tomny Strict Claude';
+export const LEGACY_STRICT_IDE_CLAUDE_AGENT_NAME = 'Tomny Strict Claude';
+export const isStrictIdeClaudeAgentName = (name: string): boolean =>
+  name === STRICT_IDE_CLAUDE_AGENT_NAME || name === LEGACY_STRICT_IDE_CLAUDE_AGENT_NAME;
 export const STRICT_IDE_CLAUDE_AGENT_DESCRIPTION =
   'Claude ACP adapter for Strict IDE Mode. Native filesystem and shell tools are disabled before execution.';
 
@@ -121,7 +124,7 @@ const isNativeLikeTool = (rawName: string | undefined): boolean => {
 };
 
 /** MCP server names whose trusted tools may be auto-approved by the IDE plane. */
-const ALLOWED_MCP_SERVERS = ['aionui-ide', 'builtin-ide', 'aionui-tool-selector', 'aionui-browser-control'] as const;
+const ALLOWED_MCP_SERVERS = ['tomny-ide', 'builtin-ide', 'tomny-tool-selector', 'tomny-browser-control'] as const;
 
 /**
  * Mandatory remap table: a backend's native tool name → the built-in `ide_*`
@@ -364,11 +367,11 @@ export const evaluateStrictModePermission = (
 };
 
 // ---------------------------------------------------------------------------
-// Confirmation-shaped requests (aionrs legacy path)
+// Confirmation-shaped requests (tomnyagentic legacy path)
 // ---------------------------------------------------------------------------
 
 /**
- * The aionrs backend emits a Confirmation-shaped permission payload whose
+ * The tomnyagentic backend emits a Confirmation-shaped permission payload whose
  * options are `{ label, value }` (no ACP `kind`), and whose tool identity is
  * carried by `title` / `action` / `command_type`. This evaluates that shape.
  */
@@ -393,9 +396,9 @@ const pickConfirmationReject = (confirmation: GuardConfirmation): unknown | null
 };
 
 /**
- * Evaluate a Confirmation-shaped (aionrs) permission request under Strict IDE
+ * Evaluate a Confirmation-shaped (tomnyagentic) permission request under Strict IDE
  * Mode. Mirrors {@link evaluateStrictModePermission} but for the legacy shape.
- * The reject "key" returned is the option `value` (what aionrs expects back).
+ * The reject "key" returned is the option `value` (what tomnyagentic expects back).
  */
 export const evaluateStrictModeConfirmation = (
   enabled: boolean,

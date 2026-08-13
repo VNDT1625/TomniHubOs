@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -11,7 +11,7 @@
  * analysis: root cause, a fix explanation, a unified diff, and a risk level.
  *
  * The provider call mirrors `company/companyGenerator.ts` exactly: the provider
- * list (with a usable `api_key`) is read from the native Tomni provider catalog
+ * list (with a usable `api_key`) is read from the native Tomny provider catalog
  * and the request is issued directly against the OpenAI-compatible
  * `/chat/completions` endpoint via `fetch` (not through `ClientFactory`, which
  * expects camelCase `apiKey` and throws outside the chat pipeline). Nothing is
@@ -69,7 +69,7 @@ const firstApiKey = (apiKeys: string): string =>
 
 /** The system instruction defining the analyzer's job + strict output shape. */
 const SYSTEM_PROMPT = [
-  'You are a senior software engineer analysing a bug report from an Electron + TypeScript desktop app (Tomni, evolved from AionUi).',
+  'You are a senior software engineer analysing a bug report from an Electron + TypeScript desktop app (Tomny Hub Agent OS).',
   'Given the error and the relevant source snippets, identify the ROOT CAUSE and propose a MINIMAL, safe fix.',
   'Respond with exactly ONE JSON object (optionally inside a ```json fenced block) and nothing else, with this shape:',
   '{',

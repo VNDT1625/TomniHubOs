@@ -90,7 +90,7 @@ fn write_summary_with_source_snapshot(
 }
 
 #[test]
-fn understand_context_prefers_canonical_tomni_summary_over_legacy_aionui() {
+fn understand_context_prefers_canonical_tomni_summary_over_legacy_tomny() {
     let repo = tempfile::tempdir().unwrap();
     let src = repo.path().join("src");
     std::fs::create_dir_all(&src).unwrap();
@@ -113,7 +113,7 @@ fn understand_context_prefers_canonical_tomni_summary_over_legacy_aionui() {
     );
     write_summary(
         repo.path(),
-        ".aionui",
+        ".tomny",
         100,
         vec![summary_file(
             "src/legacy.ts",
@@ -146,7 +146,7 @@ fn understand_context_never_returns_a_missing_cached_candidate() {
 
     write_summary(
         repo.path(),
-        ".aionui",
+        ".tomny",
         100,
         vec![
             summary_file(
@@ -191,7 +191,7 @@ fn ignored_tmp_stale_marker_does_not_make_current_candidate_globally_stale() {
 
     write_summary(
         repo.path(),
-        ".aionui",
+        ".tomny",
         100,
         vec![summary_file(
             "src/live.ts",
@@ -201,7 +201,7 @@ fn ignored_tmp_stale_marker_does_not_make_current_candidate_globally_stale() {
     );
     std::fs::write(
         repo.path()
-            .join(".aionui")
+            .join(".tomny")
             .join("understand")
             .join("stale.json"),
         serde_json::json!({ "paths": [".tmp/generated.ts"] }).to_string(),
@@ -391,7 +391,7 @@ fn canonical_live_marker_invalidates_legacy_cache_until_canonical_rebuild() {
             Some(&fingerprint_of(current_source)),
         ),
     ];
-    write_summary(repo.path(), ".aionui", future, files.clone());
+    write_summary(repo.path(), ".tomny", future, files.clone());
     let canonical_marker = repo.path().join(".tomni/understand/stale.json");
     std::fs::create_dir_all(canonical_marker.parent().unwrap()).unwrap();
     std::fs::write(

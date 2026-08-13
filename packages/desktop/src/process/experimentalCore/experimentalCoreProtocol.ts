@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -50,7 +50,7 @@ export const buildExperimentalSessionKey = (identity: ExperimentalSessionIdentit
     identity.surface ?? 'chat',
   ]);
 
-/** A normalized response fragment, independent from aioncore wire details. */
+/** A normalized response fragment, independent from tomnycore wire details. */
 export type NormalizedTransportMessage =
   | { type: 'delta'; text: string; mode: 'append' | 'replace' }
   | { type: 'status'; text: string }
@@ -59,7 +59,7 @@ export type NormalizedTransportMessage =
 /** Map the current catalog taxonomy onto the four public core adapters. */
 export const classifyExperimentalTarget = (agent: ExperimentalAgentIdentity): ExperimentalTargetKind => {
   if (agent.agent_type === 'remote') return 'remote';
-  if (agent.agent_type === 'aionrs') return 'builtin';
+  if (agent.agent_type === 'tomnyagentic') return 'builtin';
   if (agent.agent_source === 'custom') return 'cli';
   return 'acp';
 };

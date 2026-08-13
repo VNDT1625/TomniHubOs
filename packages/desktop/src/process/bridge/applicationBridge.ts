@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -11,6 +11,8 @@ import { ProcessConfig } from '@process/utils/initStorage';
 import { getZoomFactor, setZoomFactor } from '@process/utils/zoom';
 import { getCdpStatus, updateCdpConfig } from '@process/utils/configureChromium';
 import { getGpuStatus, setGpuUserOverride } from '@process/utils/gpuRecovery';
+
+import { requestAppRestart } from '@process/startup/appTermination';
 import { initApplicationBridgeCore } from './applicationBridgeCore';
 import { getDefaultBrowserStatus, setAsDefaultBrowser } from './defaultBrowser';
 import type { IStartOnBootStatus } from '@/common/adapter/ipcBridge';
@@ -164,7 +166,16 @@ export function initApplicationBridge(): void {
     return Promise.resolve();
   });
   ipcBridge.shell.openExternal.provider(async (url) => {
-    await electronShell.openExternal(url);
+    try {
+      await electronShell.openExternal(url);
+    } catch (error) {
+      if (/^chatgpt:/i.test(url)) {
+        const fallbackUrl = url.replace(/^chatgpt:\/\/?/i, 'https://chatgpt.com/');
+        await electronShell.openExternal(fallbackUrl);
+        return;
+      }
+      throw error;
+    }
   });
   ipcBridge.shell.checkToolInstalled.provider(async ({ tool }) => {
     if (!/^[A-Za-z0-9._-]+$/u.test(tool)) return false;
@@ -216,8 +227,7 @@ export function initApplicationBridge(): void {
     // Backend subprocess shutdown is handled by backendManager.stop() in the
     // main window's before-quit hook; agent children are killed transitively
     // when backend exits.
-    app.relaunch();
-    app.exit(0);
+    requestAppRestart();
   });
 
   ipcBridge.application.isDevToolsOpened.provider(() => {

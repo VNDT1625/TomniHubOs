@@ -56,6 +56,7 @@ export async function startWebHost(opts: WebHostOptions): Promise<WebHostHandle>
       backendPort: backendHandle.port,
       port: opts.port,
       allowRemote: opts.allowRemote ?? false,
+      localApiHandler: opts.createLocalApiHandler?.(backendHandle.port),
 
       ...(opts.backend.kind === 'useExistingGateway' ? { upstreamToken: opts.backend.sessionToken } : {}),
     });

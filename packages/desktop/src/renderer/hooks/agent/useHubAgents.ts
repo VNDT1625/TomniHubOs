@@ -4,7 +4,7 @@ import type { IHubAgentItem } from '@/common/types/agent/hub';
 import { ipcBridge } from '@/common';
 import { DETECTED_AGENTS_SWR_KEY } from '@renderer/utils/model/agentTypes';
 
-export function useHubAgents() {
+export function useHubAgents(options: { scope?: 'agents' | 'all' } = {}) {
   const [agents, setAgents] = useState<IHubAgentItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>();
@@ -16,7 +16,10 @@ export function useHubAgents() {
       const extensionList = await ipcBridge.hub.getExtensionList.invoke();
       if (extensionList) {
         // Filter agents
-        const agentExtensions = extensionList.filter((ext: IHubAgentItem) => ext.hubs?.includes('acpAdapters'));
+        const agentExtensions =
+          options.scope === 'all'
+            ? extensionList
+            : extensionList.filter((ext: IHubAgentItem) => ext.hubs?.includes('acpAdapters'));
         setAgents(agentExtensions);
       }
     } catch (err) {
@@ -24,7 +27,7 @@ export function useHubAgents() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [options.scope]);
 
   useEffect(() => {
     fetchAgents();
@@ -81,6 +84,14 @@ export function useHubAgents() {
     }
   };
 
+  const uninstall = async (name: string) => {
+    try {
+      await ipcBridge.hub.uninstall.invoke({ name });
+    } catch (err) {
+      console.error('Uninstall failed:', err);
+    }
+  };
+
   return {
     agents,
     loading,
@@ -89,5 +100,6 @@ export function useHubAgents() {
     install,
     retryInstall,
     update,
+    uninstall,
   };
 }

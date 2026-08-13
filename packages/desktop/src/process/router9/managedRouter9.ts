@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2026 Tomni
+ * Copyright 2026 Tomny
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -10,7 +10,7 @@ import { randomBytes } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 
-// Keep Tomni's owned gateway separate from a user's standalone 9Router
+// Keep Tomny's owned gateway separate from a user's standalone 9Router
 // installation, whose conventional port is 20128.
 const DEFAULT_PORT = 20129;
 // First boot may initialize SQLite and compile native fallbacks before the
@@ -18,6 +18,9 @@ const DEFAULT_PORT = 20129;
 const START_TIMEOUT_MS = 120_000;
 const POLL_INTERVAL_MS = 250;
 const MANAGEMENT_TIMEOUT_MS = 10_000;
+
+const STOP_TIMEOUT_MS = 2_000;
+const FORCE_STOP_TIMEOUT_MS = 2_000;
 const SECRET_FILE = 'model-gateway-secrets.json';
 const PREFERENCES_FILE = 'model-gateway-preferences.json';
 
@@ -34,7 +37,7 @@ type PersistedSecrets = {
 };
 
 type ManagedRouter9Preferences = {
-  schemaVersion: 1;
+  schemaVersion: 2;
   autoStart: boolean;
 };
 
@@ -133,6 +136,88 @@ type ManagedRouter9Deps = {
   fetch: typeof fetch;
   newSecret: () => string;
   spawn: (command: string, args: string[], options: SpawnOptions) => ChildProcess;
+  stopChild: (child: ChildProcess) => Promise<void>;
+};
+
+const hasExited = (child: ChildProcess): boolean =>
+  child.exitCode !== null && child.exitCode !== undefined
+    ? true
+    : child.signalCode !== null && child.signalCode !== undefined;
+
+const waitForExit = (child: ChildProcess, timeoutMs: number): Promise<boolean> =>
+  new Promise((resolve) => {
+    if (hasExited(child)) {
+      resolve(true);
+      return;
+    }
+    const onExit = (): void => {
+      clearTimeout(timeoutId);
+      resolve(true);
+    };
+    const timeoutId = setTimeout(() => {
+      child.removeListener('exit', onExit);
+      resolve(hasExited(child));
+    }, timeoutMs);
+    child.once('exit', onExit);
+  });
+
+const stopChild = async (child: ChildProcess): Promise<void> => {
+  if (hasExited(child)) return;
+  const gracefulExit = waitForExit(child, STOP_TIMEOUT_MS);
+  try {
+    child.kill();
+  } catch {
+    // Continue to the process-tree fallback below.
+  }
+  if (await gracefulExit) return;
+
+  const pid = child.pid;
+  if (process.platform === 'win32' && pid) {
+    await new Promise<void>((resolve) => {
+      const killer = spawn('taskkill.exe', ['/PID', String(pid), '/T', '/F'], {
+        windowsHide: true,
+        stdio: 'ignore',
+      });
+      let timeoutId: NodeJS.Timeout | undefined;
+      let finished = false;
+      const finish = (): void => {
+        if (finished) return;
+        finished = true;
+        if (timeoutId) clearTimeout(timeoutId);
+        resolve();
+      };
+      killer.once('error', finish);
+      killer.once('exit', finish);
+      timeoutId = setTimeout(() => {
+        try {
+          killer.kill();
+        } catch {
+          // The owned gateway exit probe below remains authoritative.
+        }
+        finish();
+      }, FORCE_STOP_TIMEOUT_MS);
+    });
+  } else if (pid) {
+    try {
+      process.kill(-pid, 'SIGKILL');
+    } catch {
+      try {
+        child.kill('SIGKILL');
+      } catch {
+        // The final exit probe below decides whether termination succeeded.
+      }
+    }
+  } else {
+    try {
+      child.kill('SIGKILL');
+    } catch {
+      // The final exit probe below decides whether termination succeeded.
+    }
+  }
+
+  if (!(await waitForExit(child, FORCE_STOP_TIMEOUT_MS))) {
+    throw new Error(`Model gateway process ${pid ?? 'unknown'} did not terminate.`);
+  }
 };
 
 const defaultDeps: ManagedRouter9Deps = {
@@ -142,6 +227,7 @@ const defaultDeps: ManagedRouter9Deps = {
   fetch,
   newSecret: () => randomBytes(32).toString('base64url'),
   spawn: (command, args, options) => spawn(command, args, options),
+  stopChild,
 };
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
@@ -165,6 +251,8 @@ export class ManagedRouter9Service {
   #dashboardWindow: BrowserWindow | undefined;
   #logTail: string[] = [];
   #startPromise: Promise<ManagedRouter9Status> | undefined;
+  #stopPromise: Promise<ManagedRouter9Status> | undefined;
+  #shuttingDown = false;
 
   constructor(deps: Partial<ManagedRouter9Deps> = {}) {
     this.#deps = { ...defaultDeps, ...deps };
@@ -192,15 +280,24 @@ export class ManagedRouter9Service {
 
   async #preferences(): Promise<ManagedRouter9Preferences> {
     try {
-      const value = JSON.parse(
-        await fs.readFile(path.join(this.#dataDir(), PREFERENCES_FILE), 'utf8')
-      ) as Partial<ManagedRouter9Preferences>;
-      return { schemaVersion: 1, autoStart: value.autoStart === true };
+      const value = JSON.parse(await fs.readFile(path.join(this.#dataDir(), PREFERENCES_FILE), 'utf8')) as {
+        schemaVersion?: unknown;
+        autoStart?: unknown;
+      };
+      if (value.schemaVersion === 2) {
+        return { schemaVersion: 2, autoStart: value.autoStart === true };
+      }
+      if (value.schemaVersion === 1) {
+        const migrated: ManagedRouter9Preferences = { schemaVersion: 2, autoStart: false };
+        await this.#writePreferences(migrated);
+        return migrated;
+      }
+      return { schemaVersion: 2, autoStart: false };
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
         console.warn('[ModelGateway] Ignoring invalid preferences:', error);
       }
-      return { schemaVersion: 1, autoStart: false };
+      return { schemaVersion: 2, autoStart: false };
     }
   }
 
@@ -222,7 +319,7 @@ export class ManagedRouter9Service {
       if (parsed.dashboardPassword && parsed.jwtSecret && parsed.apiKeySecret) return parsed;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-        throw new Error('Tomni model-gateway credentials could not be decrypted safely.', { cause: error });
+        throw new Error('Tomny model-gateway credentials could not be decrypted safely.', { cause: error });
       }
     }
 
@@ -257,7 +354,7 @@ export class ManagedRouter9Service {
     try {
       const response = await this.#deps.fetch(`${this.#origin()}/api/auth/status`, {
         signal: AbortSignal.timeout(1_500),
-        headers: { 'user-agent': 'Tomni-Model-Gateway/1' },
+        headers: { 'user-agent': 'Tomny-Model-Gateway/1' },
       });
       return response.ok;
     } catch {
@@ -287,7 +384,7 @@ export class ManagedRouter9Service {
   }
 
   async setAutoStart(autoStart: boolean): Promise<ManagedRouter9Status> {
-    await this.#writePreferences({ schemaVersion: 1, autoStart });
+    await this.#writePreferences({ schemaVersion: 2, autoStart });
     return this.status();
   }
 
@@ -297,6 +394,7 @@ export class ManagedRouter9Service {
   }
 
   start(): Promise<ManagedRouter9Status> {
+    if (this.#shuttingDown) return Promise.reject(new Error('Model gateway is shutting down.'));
     if (this.#startPromise) return this.#startPromise;
     this.#startPromise = this.#start().finally(() => {
       this.#startPromise = undefined;
@@ -305,14 +403,18 @@ export class ManagedRouter9Service {
   }
 
   async #start(): Promise<ManagedRouter9Status> {
-    if (await this.#probe()) return this.status();
+    if (this.#shuttingDown) throw new Error('Model gateway is shutting down.');
+    const alreadyRunning = await this.#probe();
+    if (this.#shuttingDown) throw new Error('Model gateway is shutting down.');
+    if (alreadyRunning) return this.status();
     const manifest = await this.#manifest();
     if (!manifest) {
-      throw new Error('Bundled model gateway is missing. Run `bun run prepare:model-gateway`, then restart Tomni.');
+      throw new Error('Bundled model gateway is missing. Run `bun run prepare:model-gateway`, then restart Tomny.');
     }
     const entry = path.join(this.#runtimeDir(), manifest.entry || 'custom-server.js');
     await fs.access(entry);
     const secrets = await this.#secrets();
+    if (this.#shuttingDown) throw new Error('Model gateway is shutting down.');
     this.#state = 'starting';
     this.#lastError = undefined;
     this.#cookie = undefined;
@@ -336,9 +438,8 @@ export class ManagedRouter9Service {
       detached: true,
       stdio: 'ignore',
     });
-    // The gateway serves standalone CLIs and Codex Desktop, so its lifetime must
-    // not be tied to Tomni's Electron process. Explicit Stop still terminates it.
-    child.unref();
+    // Keep the owned child referenced so normal Electron shutdown cannot finish
+    // before the shared cleanup terminates its detached process group.
     this.#child = child;
     child.once('exit', (code, signal) => {
       if (this.#child !== child) return;
@@ -353,7 +454,9 @@ export class ManagedRouter9Service {
     const deadline = Date.now() + START_TIMEOUT_MS;
     while (Date.now() < deadline) {
       // eslint-disable-next-line no-await-in-loop -- readiness probes must be sequential.
-      if (await this.#probe()) {
+      const ready = await this.#probe();
+      if (this.#shuttingDown) throw new Error('Model gateway is shutting down.');
+      if (ready) {
         this.#state = 'running';
         // eslint-disable-next-line no-await-in-loop -- login follows the successful probe.
         await this.#login();
@@ -368,21 +471,44 @@ export class ManagedRouter9Service {
     throw new Error(this.#lastError);
   }
 
-  async stop(): Promise<ManagedRouter9Status> {
+  stop(): Promise<ManagedRouter9Status> {
+    if (this.#stopPromise) return this.#stopPromise;
+    this.#stopPromise = this.#stop().finally(() => {
+      this.#stopPromise = undefined;
+    });
+    return this.#stopPromise;
+  }
+
+  async #stop(): Promise<ManagedRouter9Status> {
     const child = this.#child;
-    this.#child = undefined;
     this.#cookie = undefined;
     this.#dashboardWindow?.close();
     this.#dashboardWindow = undefined;
     this.#state = 'stopped';
-    if (child && !child.killed) {
-      child.kill();
-      await Promise.race([
-        new Promise<void>((resolve) => child.once('exit', () => resolve())),
-        sleep(3_000).then((): undefined => undefined),
-      ]);
+    if (child) {
+      await this.#deps.stopChild(child);
+      if (this.#child === child) this.#child = undefined;
     }
     return this.status();
+  }
+
+  async shutdown(): Promise<ManagedRouter9Status> {
+    this.#shuttingDown = true;
+    const starting = this.#startPromise;
+    let firstStopError: unknown;
+    try {
+      await this.stop();
+    } catch (error) {
+      firstStopError = error;
+    }
+    await starting?.catch((): undefined => undefined);
+    try {
+      return await this.stop();
+    } catch (error) {
+      const failures = firstStopError === undefined ? [error] : [firstStopError, error];
+      // eslint-disable-next-line preserve-caught-error -- AggregateError retains both termination failures.
+      throw new AggregateError(failures, 'Failed to stop the owned model gateway process.', { cause: error });
+    }
   }
 
   async #login(): Promise<string> {
@@ -490,7 +616,7 @@ export class ManagedRouter9Service {
             height: 780,
             minWidth: 900,
             minHeight: 620,
-            title: 'Tomni Model Gateway',
+            title: 'Tomny Model Gateway',
             show: false,
             webPreferences: {
               contextIsolation: true,

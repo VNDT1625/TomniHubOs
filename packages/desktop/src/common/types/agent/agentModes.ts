@@ -1,11 +1,11 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
 import { CODEX_MODE_NATIVE_FULL_ACCESS, CODEX_MODE_READ_ONLY } from '@/common/types/codex/codexModes';
-import { isTomniAgentBackend } from '@/common/utils/buildAgentConversationParams';
+import { isTomnyAgentBackend } from '@/common/utils/buildAgentConversationParams';
 
 /**
  * Full-auto (YOLO) mode ID per backend.
@@ -16,7 +16,7 @@ const FULL_AUTO_MODE: Record<string, string> = {
   qwen: 'yolo',
   opencode: 'build',
   gemini: 'yolo',
-  aionrs: 'yolo',
+  tomnyagentic: 'yolo',
   codex: CODEX_MODE_NATIVE_FULL_ACCESS,
   cursor: 'agent',
   snow: 'yolo',
@@ -30,7 +30,7 @@ const FULL_AUTO_MODE: Record<string, string> = {
  */
 export function getFullAutoMode(backend: string | undefined): string {
   if (!backend) return 'yolo';
-  if (isTomniAgentBackend(backend)) return FULL_AUTO_MODE.aionrs;
+  if (isTomnyAgentBackend(backend)) return FULL_AUTO_MODE.tomnyagentic;
   return FULL_AUTO_MODE[backend] || 'yolo';
 }
 
@@ -50,7 +50,7 @@ const ASK_MODE: Record<string, string> = {
   qwen: 'default',
   opencode: 'plan',
   gemini: 'default',
-  aionrs: 'default',
+  tomnyagentic: 'default',
   codex: CODEX_MODE_READ_ONLY,
   cursor: 'ask',
   snow: 'default',
@@ -65,6 +65,6 @@ const ASK_MODE: Record<string, string> = {
  */
 export function getAskMode(backend: string | undefined): string | undefined {
   if (!backend) return undefined;
-  if (isTomniAgentBackend(backend)) return ASK_MODE.aionrs;
+  if (isTomnyAgentBackend(backend)) return ASK_MODE.tomnyagentic;
   return ASK_MODE[backend];
 }

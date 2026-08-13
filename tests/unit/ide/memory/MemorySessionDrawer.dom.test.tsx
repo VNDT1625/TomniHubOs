@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -33,8 +33,8 @@ vi.mock('@/renderer/pages/studio/ide/memory/useIdeMemory', () => ({
   useIdeMemory: () => hookValue,
 }));
 
-vi.mock('@/renderer/pages/studio/ide/memory/AionrsContextPanel', () => ({
-  default: () => <div data-testid='aionrs-context-panel'>context panel</div>,
+vi.mock('@/renderer/pages/studio/ide/memory/TomnyAgenticContextPanel', () => ({
+  default: () => <div data-testid='tomnyagentic-context-panel'>context panel</div>,
 }));
 
 vi.mock('@/renderer/pages/studio/ide/memory/RepoSecretContextPanel', () => ({
@@ -119,7 +119,7 @@ describe('MemorySessionDrawer', () => {
     expect(screen.getByText('ide.memory.empty')).toBeInTheDocument();
   });
 
-  it('shows Context for AionRS and Tomni compatibility conversations', () => {
+  it('shows Context for Tomny CLI and Tomny compatibility conversations', () => {
     const { rerender } = render(
       <MemorySessionDrawer memId='ide-mem-1' conversationId='conv-1' conversationType='acp' visible onClose={vi.fn()} />
     );
@@ -129,13 +129,13 @@ describe('MemorySessionDrawer', () => {
       <MemorySessionDrawer
         memId='ide-mem-1'
         conversationId='conv-1'
-        conversationType='aionrs'
+        conversationType='tomnyagentic'
         visible
         onClose={vi.fn()}
       />
     );
     fireEvent.click(screen.getByText('ide.memory.tabs.context'));
-    expect(screen.getByTestId('aionrs-context-panel')).toBeInTheDocument();
+    expect(screen.getByTestId('tomnyagentic-context-panel')).toBeInTheDocument();
 
     rerender(
       <MemorySessionDrawer

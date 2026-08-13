@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -171,7 +171,7 @@ export type KnowledgeContextRequest = {
   rootPath: string;
   /** The user request to focus the pack on. */
   request: string;
-  /** Project rules to prepend (e.g. from `.aionrules`). Optional. */
+  /** Project rules to prepend (e.g. from `.tomnyrules`). Optional. */
   rules?: string[];
   /** Include the latest regression diff as changed-boost context. Default true. */
   includeDiff?: boolean;
@@ -458,7 +458,7 @@ const isFileNotFound = (error: unknown): boolean => (error as NodeJS.ErrnoExcept
 const graphArtifactPaths = (rootPath: string) => ({
   graphPath: path.join(resolveStorageDir(), graphFileName(rootPath)),
   summaryPath: path.join(rootPath, '.tomni', 'understand', 'summary.json'),
-  staleMarkerPaths: ['.tomni', '.omni', '.aionui'].map((dir) => path.join(rootPath, dir, 'understand', 'stale.json')),
+  staleMarkerPaths: ['.tomni', '.omni', '.tomny'].map((dir) => path.join(rootPath, dir, 'understand', 'stale.json')),
 });
 
 /** Publish the graph + canonical MTUI summary, then clear migration stale markers. */

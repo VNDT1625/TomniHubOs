@@ -24,9 +24,9 @@ fn write_flow_summary(root: &Path) {
             &["normalizeChatMessagesForMarkdown"],
         ),
         summary_file(
-            "packages/desktop/src/renderer/pages/conversation/platforms/aionrs/AionrsSendBox.tsx",
+            "packages/desktop/src/renderer/pages/conversation/platforms/tomnyagentic/TomnyAgenticSendBox.tsx",
             "React UI entry point for flow_anchor_9f.",
-            &["AionrsSendBox", "executeCommand"],
+            &["TomnyAgenticSendBox", "executeCommand"],
         ),
         summary_file(
             "packages/desktop/src/renderer/pages/conversation/platforms/acp/AcpSendBox.tsx",
@@ -54,14 +54,14 @@ fn write_flow_summary(root: &Path) {
             &["NativeConversationService", "send", "runtime.start"],
         ),
         summary_file(
-            "packages/desktop/src/renderer/pages/conversation/platforms/aionrs/useAionrsMessage.ts",
+            "packages/desktop/src/renderer/pages/conversation/platforms/tomnyagentic/useTomnyAgenticMessage.ts",
             "Consumes completion events and updates local presentation state.",
-            &["useAionrsMessage", "responseStream"],
+            &["useTomnyAgenticMessage", "responseStream"],
         ),
     ];
     let edges = serde_json::json!([
         {
-            "from": "packages/desktop/src/renderer/pages/conversation/platforms/aionrs/AionrsSendBox.tsx",
+            "from": "packages/desktop/src/renderer/pages/conversation/platforms/tomnyagentic/TomnyAgenticSendBox.tsx",
             "to": "packages/desktop/src/common/adapter/ipcBridge.ts"
         },
         {
@@ -73,7 +73,7 @@ fn write_flow_summary(root: &Path) {
             "to": "packages/desktop/src/process/services/database/nativeConversation/service.ts"
         },
         {
-            "from": "packages/desktop/src/renderer/pages/conversation/platforms/aionrs/useAionrsMessage.ts",
+            "from": "packages/desktop/src/renderer/pages/conversation/platforms/tomnyagentic/useTomnyAgenticMessage.ts",
             "to": "packages/desktop/src/common/adapter/ipcBridge.ts"
         }
     ]);
@@ -117,8 +117,8 @@ fn materialize_sources(root: &Path) {
 fn write_realistic_flow_summary(root: &Path) {
     let files = vec![
         summary_file(
-            "packages/desktop/src/renderer/pages/conversation/platforms/aionrs/AionrsSendBox.tsx",
-            "`AionrsSendBox.tsx` is a typescriptreact file that renders user interface.",
+            "packages/desktop/src/renderer/pages/conversation/platforms/tomnyagentic/TomnyAgenticSendBox.tsx",
+            "`TomnyAgenticSendBox.tsx` is a typescriptreact file that renders user interface.",
             &[],
         ),
         summary_file(
@@ -148,9 +148,9 @@ fn write_realistic_flow_summary(root: &Path) {
             ],
         ),
         summary_file(
-            "packages/desktop/src/renderer/pages/conversation/platforms/aionrs/useAionrsMessage.ts",
+            "packages/desktop/src/renderer/pages/conversation/platforms/tomnyagentic/useTomnyAgenticMessage.ts",
             "Consumes native conversation completion events.",
-            &["useAionrsMessage", "responseStream.on"],
+            &["useTomnyAgenticMessage", "responseStream.on"],
         ),
         summary_file(
             "packages/desktop/src/process/services/agentChat/index.ts",
@@ -190,7 +190,7 @@ fn write_realistic_flow_summary(root: &Path) {
     ];
     let edges = serde_json::json!([
         {
-            "from": "packages/desktop/src/renderer/pages/conversation/platforms/aionrs/AionrsSendBox.tsx",
+            "from": "packages/desktop/src/renderer/pages/conversation/platforms/tomnyagentic/TomnyAgenticSendBox.tsx",
             "to": "packages/desktop/src/common/index.ts"
         },
         {
@@ -206,7 +206,7 @@ fn write_realistic_flow_summary(root: &Path) {
             "to": "packages/desktop/src/process/services/database/nativeConversation/service.ts"
         },
         {
-            "from": "packages/desktop/src/renderer/pages/conversation/platforms/aionrs/useAionrsMessage.ts",
+            "from": "packages/desktop/src/renderer/pages/conversation/platforms/tomnyagentic/useTomnyAgenticMessage.ts",
             "to": "packages/desktop/src/common/adapter/ipcBridge.ts"
         },
         {
@@ -254,11 +254,11 @@ fn assert_flow_recall(root: &Path, query: &str) {
         .map(|candidate| candidate.path.as_str())
         .collect::<Vec<_>>();
     let gold = [
-        "packages/desktop/src/renderer/pages/conversation/platforms/aionrs/AionrsSendBox.tsx",
+        "packages/desktop/src/renderer/pages/conversation/platforms/tomnyagentic/TomnyAgenticSendBox.tsx",
         "packages/desktop/src/common/adapter/ipcBridge.ts",
         "packages/desktop/src/process/services/database/nativeConversation/bridge.ts",
         "packages/desktop/src/process/services/database/nativeConversation/service.ts",
-        "packages/desktop/src/renderer/pages/conversation/platforms/aionrs/useAionrsMessage.ts",
+        "packages/desktop/src/renderer/pages/conversation/platforms/tomnyagentic/useTomnyAgenticMessage.ts",
     ];
     let recalled = gold.iter().filter(|path| paths.contains(path)).count();
     assert_eq!(
@@ -310,11 +310,11 @@ fn context_expands_exact_flow_anchors_over_file_graph() {
         .map(|candidate| candidate.path.as_str())
         .collect::<Vec<_>>();
     let expected = [
-        "packages/desktop/src/renderer/pages/conversation/platforms/aionrs/AionrsSendBox.tsx",
+        "packages/desktop/src/renderer/pages/conversation/platforms/tomnyagentic/TomnyAgenticSendBox.tsx",
         "packages/desktop/src/common/adapter/ipcBridge.ts",
         "packages/desktop/src/process/services/database/nativeConversation/bridge.ts",
         "packages/desktop/src/process/services/database/nativeConversation/service.ts",
-        "packages/desktop/src/renderer/pages/conversation/platforms/aionrs/useAionrsMessage.ts",
+        "packages/desktop/src/renderer/pages/conversation/platforms/tomnyagentic/useTomnyAgenticMessage.ts",
     ];
 
     assert!(
@@ -353,11 +353,11 @@ fn vietnamese_flow_intent_keeps_the_same_graph_route() {
         .collect::<Vec<_>>();
 
     for expected in [
-        "packages/desktop/src/renderer/pages/conversation/platforms/aionrs/AionrsSendBox.tsx",
+        "packages/desktop/src/renderer/pages/conversation/platforms/tomnyagentic/TomnyAgenticSendBox.tsx",
         "packages/desktop/src/common/adapter/ipcBridge.ts",
         "packages/desktop/src/process/services/database/nativeConversation/bridge.ts",
         "packages/desktop/src/process/services/database/nativeConversation/service.ts",
-        "packages/desktop/src/renderer/pages/conversation/platforms/aionrs/useAionrsMessage.ts",
+        "packages/desktop/src/renderer/pages/conversation/platforms/tomnyagentic/useTomnyAgenticMessage.ts",
     ] {
         assert!(
             paths.contains(&expected),

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -106,7 +106,7 @@ export const MANDATORY_PIPELINE = [
 export const RECOVERY_AND_RULES = [
   'Phục hồi khi treo (terminal treo / lỗi server / hang): đóng/kill tiến trình kẹt (KHÔNG kill app người dùng đang dùng), chờ ~5 phút cho tài nguyên giải phóng, rồi tự tiếp tục đúng pha đang dở (đọc `.kiro/status.md`), không làm lại từ đầu; treo lặp 2 lần cùng bước thì đánh dấu [-] và đi tiếp.',
   'Tự chủ (autonomous-run): KHÔNG hỏi lại người dùng — mọi quyết định tự quyết theo phương án hợp lý nhất và ghi 1 dòng lý do vào `.kiro/status.md`. Một lỗi tự sửa tối đa 2 lần; không xong thì đánh dấu task [-], ghi "Lỗi cần người dùng xử lý", rồi tiếp task kế tiếp — KHÔNG dừng cả phiên.',
-  'An toàn: KHÔNG commit/push trừ khi yêu cầu nêu rõ; KHÔNG xóa dữ liệu hàng loạt; KHÔNG đụng production; KHÔNG dùng Claude/computer-use để test UI. Chỉ dừng hẳn khi gặp quyết định kiến trúc lớn không thể tự quyết an toàn (vd buộc sửa Rust backend aioncore).',
+  'An toàn: KHÔNG commit/push trừ khi yêu cầu nêu rõ; KHÔNG xóa dữ liệu hàng loạt; KHÔNG đụng production; KHÔNG dùng Claude/computer-use để test UI. Chỉ dừng hẳn khi gặp quyết định kiến trúc lớn không thể tự quyết an toàn (vd buộc sửa Rust backend tomnycore).',
   'Cập nhật trạng thái task ([ ] → [x] hoặc [-]) ngay khi xong mỗi sub-task; trả lời người dùng bằng tiếng Việt, giữ tiếng Anh cho code/định danh/commit/key i18n.',
   GOAL_STATUS_CONTRACT,
 ].join('\n');

@@ -1,4 +1,4 @@
-/** Tomni-owned speech transcription transport for desktop and gateway callers. */
+/** Tomny-owned speech transcription transport for desktop and gateway callers. */
 import { ipcBridge } from '@/common';
 import type {
   SpeechToTextAudioBuffer,
@@ -16,7 +16,7 @@ const toBytes = (input: SpeechToTextAudioBuffer): Uint8Array => {
   if (Array.isArray(input)) return Uint8Array.from(input);
   return Uint8Array.from(
     Object.entries(input)
-      .sort(([left], [right]) => Number(left) - Number(right))
+      .toSorted(([left], [right]) => Number(left) - Number(right))
       .map(([, value]) => value)
   );
 };

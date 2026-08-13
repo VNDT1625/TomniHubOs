@@ -96,7 +96,7 @@ async function runModeVerificationCycle(
   }
 }
 
-const BACKENDS = ['gemini', 'aionrs', 'codex', 'claude'] as const;
+const BACKENDS = ['gemini', 'tomnyagentic', 'codex', 'claude'] as const;
 
 test.describe('Guid Mode → Conversation Sync', () => {
   for (const backend of BACKENDS) {

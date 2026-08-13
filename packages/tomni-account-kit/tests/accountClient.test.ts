@@ -7,7 +7,7 @@ describe('mock account client', () => {
     const registered = await client.register({
       email: 'owner@example.com',
       displayName: 'Owner',
-      password: 'Tomni@2026',
+      password: 'Tomny@2026',
     });
     expect(registered.ok).toBe(true);
     if (!registered.ok) return;
@@ -17,7 +17,7 @@ describe('mock account client', () => {
 
     const signedIn = await client.login({
       email: 'owner@example.com',
-      password: 'Tomni@2026',
+      password: 'Tomny@2026',
       remember: true,
     });
     expect(signedIn.ok).toBe(true);

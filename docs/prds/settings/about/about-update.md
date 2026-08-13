@@ -12,7 +12,7 @@
 **正常流程**（用户视角）：
 
 1. 用户打开「设置 → 关于」页面
-2. 页面顶部居中显示应用名 "AionUi"（h3 标题）
+2. 页面顶部居中显示应用名 "Tomny"（h3 标题）
 3. 下方显示应用描述（通过 i18n 系统，随语言设置变化）
 4. 显示当前版本号 badge（格式 `v{x.y.z}`），版本号来自打包时的 `package.json`
 5. 版本号旁有 GitHub 图标，点击在系统浏览器中打开项目仓库 `https://github.com/VNDT1625/OmniAgent`
@@ -24,7 +24,7 @@
 
 **验收标准**：
 
-- [ ] 显示应用名 "AionUi"
+- [ ] 显示应用名 "Tomny"
 - [ ] 显示应用描述（通过 i18n 系统，随语言设置变化）
 - [ ] 版本号格式为 `v{x.y.z}`，与 `package.json` 一致
 - [ ] GitHub 图标点击打开项目仓库页面
@@ -518,7 +518,7 @@
 │ 渲染进程 (Renderer)                                      │
 │                                                          │
 │  AboutModalContent                                       │
-│    ├─ CustomEvent('aionui-open-update-modal')            │
+│    ├─ CustomEvent('tomni-open-update-modal')            │
 │    └─ localStorage('update.includePrerelease')           │
 │                                                          │
 │  UpdateModal                                             │

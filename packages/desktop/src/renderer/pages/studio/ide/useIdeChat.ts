@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -96,14 +96,14 @@ const MAX_TABS = 12;
  * Mode still hard-enforces the remap (`ideToolGuard`) regardless.
  */
 const IDE_TOOL_PREFERENCE_NOTE =
-  'Prefer AionUi system tools (ide_* and team_*) for repository work. When Strict IDE Mode is enabled, native filesystem and shell tools are blocked; use the specific ide_* tool named in the denial message. Strict Mode does not reroute or execute denied tools. When Strict Mode is disabled, the selected default or YOLO permission mode applies normally.';
+  'Prefer Tomny system tools (ide_* and team_*) for repository work. When Strict IDE Mode is enabled, native filesystem and shell tools are blocked; use the specific ide_* tool named in the denial message. Strict Mode does not reroute or execute denied tools. When Strict Mode is disabled, the selected default or YOLO permission mode applies normally.';
 
 const buildCloudWorkspaceGuide = (cloud: IdeChatCloudWorkspace): string =>
   [
     `Cloud workspace rule: this IDE is mounted from cloud workspace "${cloud.workspaceId}".`,
     `Relay URL: ${cloud.relayBaseUrl}.`,
     `The local path is only a materialized cache: ${cloud.cachePath}.`,
-    'Treat the cloud relay as source of truth. For every repo read/search/edit/test task, use the attached cloud AionUi MCP tools (`ide_*`, `team_claim_file`, `team_edit_file`, `team_write_file`, `ide_command`) instead of native filesystem tools.',
+    'Treat the cloud relay as source of truth. For every repo read/search/edit/test task, use the attached cloud Tomny MCP tools (`ide_*`, `team_claim_file`, `team_edit_file`, `team_write_file`, `ide_command`) instead of native filesystem tools.',
     'Before changing an existing file, claim it with `team_claim_file`; release it with `team_release_file` when finished. If a lease is held by another client, report that conflict instead of overwriting.',
   ].join('\n');
 
@@ -137,7 +137,8 @@ export const resolveIdeChatActiveIdAfterClose = (tabs: readonly IdeChatTab[], cl
 
 /** What the caller picks when opening a new tab. */
 export type IdeChatLauncher =
-  { kind: 'cli'; agent: AgentMetadata } | { kind: 'preset'; assistant: Assistant; language: string };
+  | { kind: 'cli'; agent: AgentMetadata }
+  | { kind: 'preset'; assistant: Assistant; language: string };
 
 export type IdeChatCloudWorkspace = {
   workspaceId: string;
@@ -263,7 +264,7 @@ const buildWorkspacePrimer = (
   });
 
 /**
- * Resolve the built-in IDE MCP server (`aionui-ide`, an in-process SSE host
+ * Resolve the built-in IDE MCP server (`tomny-ide`, an in-process SSE host
  * registered at boot) as a live session-server snapshot.
  * Attaching it to an IDE chat tab is what actually gives the agent the `ide_*`
  * repo-intelligence tools AND the `ide_memory_*` session-memory tools.
@@ -415,11 +416,13 @@ export const useIdeChat = (rootPath: string | null, options: IdeChatOptions = {}
             );
           }
         });
-        const restored = entries.map(({ conversation, index }): IdeChatTab => ({
-          id: conversation.id,
-          title: conversation.name ?? `Chat ${index + 1}`,
-          memId: ids[index]?.memId ?? newMemId(),
-        }));
+        const restored = entries.map(
+          ({ conversation, index }): IdeChatTab => ({
+            id: conversation.id,
+            title: conversation.name ?? `Chat ${index + 1}`,
+            memId: ids[index]?.memId ?? newMemId(),
+          })
+        );
         setTabs(restored);
         // A create/delete event also triggers this reconciliation. Do not reset
         // a valid user selection to the first tab while it is running.

@@ -73,9 +73,7 @@ describe('MessageOrchestrationProposal', () => {
     expect(screen.getByText('Verifier')).toBeInTheDocument();
     fireEvent.click(screen.getByText('messages.confirm'));
 
-    await waitFor(() =>
-      expect(mocks.resolve).toHaveBeenCalledWith({ proposal_id: 'proposal-1', approved: true })
-    );
+    await waitFor(() => expect(mocks.resolve).toHaveBeenCalledWith({ proposal_id: 'proposal-1', approved: true }));
     expect(await screen.findByText('messages.responseSentSuccessfully')).toBeInTheDocument();
   });
 

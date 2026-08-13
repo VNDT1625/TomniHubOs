@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -8,7 +8,7 @@
  * Wire-contract types for `/api/providers/*`.
  *
  * Direct mirror of the Rust types in
- * `crates/aionui-api-types/src/provider.rs`. Keep in sync with the
+ * `crates/tomny-api-types/src/provider.rs`. Keep in sync with the
  * backend spec.
  */
 

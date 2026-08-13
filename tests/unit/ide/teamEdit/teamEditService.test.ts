@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -346,7 +346,7 @@ describe('teamEditService — immutable VIU preview packages', () => {
   });
 
   it('restores published packages and append-only feedback after a service restart', () => {
-    const directory = mkdtempSync(join(tmpdir(), 'aionui-viu-preview-'));
+    const directory = mkdtempSync(join(tmpdir(), 'tomny-viu-preview-'));
     try {
       const persistence = createTeamPreviewFilePersistence(directory);
       const first = createTeamEditService({ previewPersistence: persistence });
@@ -376,7 +376,7 @@ describe('teamEditService — immutable VIU preview packages', () => {
   });
 
   it('rejects a tampered on-disk preview archive without exposing forged content', () => {
-    const directory = mkdtempSync(join(tmpdir(), 'aionui-viu-preview-tamper-'));
+    const directory = mkdtempSync(join(tmpdir(), 'tomny-viu-preview-tamper-'));
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     try {
       const persistence = createTeamPreviewFilePersistence(directory);

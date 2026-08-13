@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -75,7 +75,7 @@ export type AdapterComponent = React.ComponentType<EditorAdapterProps>;
  * slide/pdf use `'none'`: they open the file in the ONLYOFFICE editor BY PATH
  * (and read their lightweight fallback by path too), so the editor frame must
  * NOT eagerly read the whole file — that both wastes memory and would hit
- * aioncore's read-buffer size limit on large documents.
+ * tomnycore's read-buffer size limit on large documents.
  */
 export const ADAPTER_CONTENT_MODE: Record<EditorAdapterKind, EditorContentMode> = {
   'text-code': 'text',

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -48,7 +48,7 @@ export type AgentChatState = {
 };
 
 /** `sessionStorage` key under which the transcript snapshot is mirrored. */
-const SESSION_KEY = 'aionui.browser.agentChat';
+const SESSION_KEY = 'tomny.browser.agentChat';
 
 /** Generate a short unique id for a message. */
 let counter = 0;

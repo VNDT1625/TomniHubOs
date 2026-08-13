@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -39,7 +39,7 @@ import { Brain, Delete, Lock, Pin, Plus, Refresh } from '@icon-park/react';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { IdeMemoryRecordableKind, SuperMemoryItem, SuperMemoryKind } from '../ideClient';
-import AionrsContextPanel from './AionrsContextPanel';
+import TomnyAgenticContextPanel from './TomnyAgenticContextPanel';
 import RepoSecretContextPanel from './RepoSecretContextPanel';
 
 import { useIdeMemory, type UseIdeMemory } from './useIdeMemory';
@@ -114,7 +114,7 @@ const MemorySessionDrawer: React.FC<MemorySessionDrawerProps> = ({
 }) => {
   const { t } = useTranslation();
   const { snapshot, loading, refresh, clear, remember } = useIdeMemory(memId, visible);
-  const showContext = (conversationType === 'aionrs' || conversationType === 'tomny') && conversationId !== null;
+  const showContext = (conversationType === 'tomnyagentic' || conversationType === 'tomny') && conversationId !== null;
   const showRepositorySecretContext = Boolean(repository);
   const showTabs = showContext || showRepositorySecretContext;
   const [activePane, setActivePane] = useState<'save' | 'context' | 'secret'>('save');
@@ -197,7 +197,7 @@ const MemorySessionDrawer: React.FC<MemorySessionDrawerProps> = ({
             </Tabs>
           ) : null}
           {activePane === 'context' && conversationId ? (
-            <AionrsContextPanel conversationId={conversationId} active={visible} />
+            <TomnyAgenticContextPanel conversationId={conversationId} active={visible} />
           ) : activePane === 'secret' && repository ? (
             <RepoSecretContextPanel repository={repository} active={visible} />
           ) : (

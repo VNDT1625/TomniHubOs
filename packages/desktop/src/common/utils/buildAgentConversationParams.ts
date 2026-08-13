@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -39,12 +39,19 @@ export function resolveAgentBackendKey(agent: { agent_type: string; agent_source
   return agent.backend || agent.agent_type;
 }
 
-/** Built-in Tomni identifiers retained for old conversations and configurations. */
-export const isTomniAgentBackend = (backend: string | undefined): boolean =>
-  backend === 'aionrs' || backend === 'tomny' || backend === 'tomni';
+/** Canonical Tomny CLI backend id used by new configuration and agent-selection records. */
+export const TOMNY_AGENT_BACKEND = 'tomny';
+export const LEGACY_TOMNY_AGENT_BACKENDS = ['tomni', 'tomnyagentic'] as const;
+
+export const isTomnyAgentBackend = (backend: string | undefined): boolean =>
+  backend === TOMNY_AGENT_BACKEND ||
+  LEGACY_TOMNY_AGENT_BACKENDS.includes(backend as (typeof LEGACY_TOMNY_AGENT_BACKENDS)[number]);
+
+/** @deprecated Compatibility alias for downstream extensions compiled against the old symbol. */
+export const isTomniAgentBackend = isTomnyAgentBackend;
 
 export function getConversationTypeForBackend(backend: string): ICreateConversationParams['type'] {
-  if (isTomniAgentBackend(backend)) return 'aionrs';
+  if (isTomnyAgentBackend(backend)) return 'tomnyagentic';
 
   switch (backend) {
     case 'openclaw-gateway':

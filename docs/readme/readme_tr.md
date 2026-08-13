@@ -90,7 +90,7 @@ Omni tam bir AI Agent motoru ile birlikte gelir. CLI Agent'ları ayrı olarak ku
 
 Zaten Claude Code, Codex, Hermes Agent veya OpenClaw kullanıyorsanız, Omni bunları otomatik olarak algılar ve hepsiyle Cowork yapmanıza izin verir — yerleşik Agent ile birlikte.
 
-**Desteklenen Agents:** Yerleşik Agent (sıfır kurulum) • Claude Code • Codex • Qwen Code • Goose AI • OpenClaw • Augment Code • CodeBuddy • Kimi CLI • OpenCode • Factory Droid • GitHub Copilot • Qoder CLI • Mistral Vibe • Nanobot • Tomni Agentic (aionrs, Omni ile birlikte dağıtılan Rust tabanlı arka uç servisi) • Snow CLI • Hermes Agent • Cursor Agent ve daha fazlası
+**Desteklenen Agents:** Yerleşik Agent (sıfır kurulum) • Claude Code • Codex • Qwen Code • Goose AI • OpenClaw • Augment Code • CodeBuddy • Kimi CLI • OpenCode • Factory Droid • GitHub Copilot • Qoder CLI • Mistral Vibe • Nanobot • Tomny Agentic (tomnirs, Omni ile birlikte dağıtılan Rust tabanlı arka uç servisi) • Snow CLI • Hermes Agent • Cursor Agent ve daha fazlası
 
 <p align="center">
   <img src="../../resources/multi-agent支持openclaw.gif" alt="Multi-Agent Cowork" width="800">
@@ -110,8 +110,8 @@ Birden fazla AI Agent'ı organize bir ekip olarak çalıştırın: bir **Leader*
   <img src="../../resources/Omni_team.gif" alt="Team Mode overview" width="800">
 </p>
 
-- **Paralel çoklu agent çalıştırma** — Leader görevleri alt görevlere bölerek paralel çalışan Teammate Agent'lara devreder; her Teammate ACP (Agent Communication Protocol, Omni'nin çoklu agent koordinasyon katmanı), Gemini veya Aionrs aracılığıyla kendi modelini kullanır
-- **Leader orkestrasyonu** — Leader atar, izler ve sonuçları toplar; desteklenen arka uçlar: Claude Code, Codex, Hermes Agent, Gemini, Snow CLI ve Tomni Agentic
+- **Paralel çoklu agent çalıştırma** — Leader görevleri alt görevlere bölerek paralel çalışan Teammate Agent'lara devreder; her Teammate ACP (Agent Communication Protocol, Omni'nin çoklu agent koordinasyon katmanı), Gemini veya Tomnirs aracılığıyla kendi modelini kullanır
+- **Leader orkestrasyonu** — Leader atar, izler ve sonuçları toplar; desteklenen arka uçlar: Claude Code, Codex, Hermes Agent, Gemini, Snow CLI ve Tomny Agentic
 - **Ekip izole çalışma alanı** — tüm Agent'lar aynı klasörü paylaşır; her birinin bekleyen onaylar için kenar çubuğu rozeti ile kendi izin onay iletişim kutusu vardır
 
 <details>
@@ -120,7 +120,7 @@ Birden fazla AI Agent'ı organize bir ekip olarak çalıştırın: bir **Leader*
 <br>
 
 - **Paylaşılan çalışma alanı** — tüm Agent'lar aynı klasörü okur/yazar; dosya paneli süreç boyunca görünür kalır
-- **Desteklenen arka uçlar** — Claude Code, Codex, Gemini, Snow CLI, Tomni Agentic (aionrs); `mcpCapabilities.stdio` ile diğer ACP arka uçları otomatik desteklenir
+- **Desteklenen arka uçlar** — Claude Code, Codex, Gemini, Snow CLI, Tomny Agentic (tomnirs); `mcpCapabilities.stdio` ile diğer ACP arka uçları otomatik desteklenir
 - **Dinamik ölçeklendirme** — ekip çalışırken Teammate ekleyip kaldırabilirsiniz; sessiz Agent'lar otomatik olarak başarısız durumuna yükseltilir ve tek tıkla kaldırılabilir
 - **Ayrıntılı izinler** — her Agent'ın kendi izin onay iletişim kutusu var; kenar çubuğu rozeti bekleyen onayları gösterir
 - **Dosya paylaşımı** — Leader, Teammate'lere dosya eklerini iletebilir

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -491,7 +491,7 @@ export const onDiskKgRefreshDeps: KgRefreshDeps = {
   },
   captureStaleMarkers: (rootPath) =>
     captureStaleMarkerSnapshots(
-      ['.tomni', '.omni', '.aionui'].map((dir) => path.join(rootPath, dir, 'understand', 'stale.json'))
+      ['.tomni', '.omni', '.tomny'].map((dir) => path.join(rootPath, dir, 'understand', 'stale.json'))
     ),
   saveGraph: (graph, options) =>
     persistKnowledgeGraphArtifacts(
@@ -499,7 +499,7 @@ export const onDiskKgRefreshDeps: KgRefreshDeps = {
       {
         graphPath: path.join(resolveStorageDir(), graphFileName(graph.rootPath)),
         summaryPath: path.join(graph.rootPath, '.tomni', 'understand', 'summary.json'),
-        staleMarkerPaths: ['.tomni', '.omni', '.aionui'].map((dir) =>
+        staleMarkerPaths: ['.tomni', '.omni', '.tomny'].map((dir) =>
           path.join(graph.rootPath, dir, 'understand', 'stale.json')
         ),
       },

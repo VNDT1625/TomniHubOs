@@ -1,144 +1,174 @@
-/* Default Color Scheme - AOU Purple Theme */
+/* Default Color Scheme - High-Contrast Border & Slate Glass Theme */
 
 /* Light Mode */
 :root,
 [data-color-scheme='default'] {
   /* AOU Brand Colors - Light Mode */
-  --aou-1: #eff0f6;
-  --aou-2: #e5e7f0;
-  --aou-3: #d1d5e5;
-  --aou-4: #b5bcd6;
-  --aou-5: #97a0c5;
-  --aou-6: #7583b2;
-  --aou-7: #596590;
-  --aou-8: #3f4868;
-  --aou-9: #262c41;
-  --aou-10: #0d101c;
+  --aou-1: #f0f3fa;
+  --aou-2: #e2e7f5;
+  --aou-3: #cacedf;
+  --aou-4: #a8b2d1;
+  --aou-5: #8594c2;
+  --aou-6: #6375b3;
+  --aou-7: #4d5d97;
+  --aou-8: #384577;
+  --aou-9: #222c52;
+  --aou-10: #0d132b;
 
-  /* Background Colors - Light Mode */
-  --bg-base: #ffffff; /* bg-0 - 主背景 */
-  --bg-1: #f9fafb; /* 次级背景 */
-  --bg-2: #f2f3f5; /* 三级背景 */
-  --bg-3: #e5e6eb; /* 边框/分隔 */
-  --bg-4: #c9cdd4;
-  --bg-5: #adb4c1;
-  --bg-6: #86909c; /* 禁用/次要文字 */
-  --bg-8: #4e5969;
-  --bg-9: #1d2129;
-  --bg-10: #0c0e12;
+  /* Background Colors - Light Mode (Crisp Porcelain Canvas) */
+  --bg-base: #f8fafc; /* bg-0 - 主背景 */
+  --bg-1: #ffffff; /* 次级背景 - White panel surfaces */
+  --bg-2: #f1f5f9; /* 三级背景 - Secondary container */
+  --bg-3: #cbd5e1; /* 边框/分隔 - Crisp defined border divider */
+  --bg-4: #94a3b8;
+  --bg-5: #64748b;
+  --bg-6: #475569; /* 禁用/次要文字 */
+  --bg-8: #334155;
+  --bg-9: #1e293b;
+  --bg-10: #0f172a;
 
   /* Interactive State Colors - Light Mode */
-  --bg-hover: #f3f4f6; /* 悬停背景 - 在 bg-1 和 bg-2 之间 */
-  --bg-active: #e5e6eb; /* 激活/按下背景 */
+  --bg-hover: #f1f5f9; /* 悬停背景 */
+  --bg-active: #e2e8f0; /* 激活/按下背景 */
 
   /* Text Colors - Light Mode */
-  --text-primary: #000000; /* 主要文字 */
-  --color-text-1: #000000; /* Arco 主文字 — 与 --text-primary 对齐 */
-  --text-secondary: #454d5f; /* 次要文字 — 加深至 ~7.5:1 对比度 */
-  --text-disabled: #c9cdd4; /* 禁用文字 */
+  --text-primary: #0f172a; /* 主要文字 */
+  --color-text-1: #0f172a; /* Arco 主文字 */
+  --text-secondary: #475569; /* 次要文字 */
+  --text-disabled: #94a3b8; /* 禁用文字 */
 
   /* Semantic Colors - Light Mode */
-  --primary: #165dff;
-  --success: #00b42a;
-  --warning: #ff7d00;
-  --danger: #f53f3f;
-  --info: #165dff;
+  --primary: #2563eb;
+  --success: #059669;
+  --warning: #d97706;
+  --danger: #dc2626;
+  --info: #2563eb;
 
-  /* Border Colors - Light Mode */
-  --border-base: #e5e6eb; /* 基础边框 */
-  --border-light: #f2f3f5; /* 浅色边框 */
+  /* Border Colors - Light Mode (Deeper & More Defined) */
+  --border-base: #cbd5e1; /* 基础边框 - Slate-300 */
+  --border-light: #e2e8f0; /* 浅色边框 - Slate-200 */
+  --color-border-1: #e2e8f0;
+  --color-border-2: #cbd5e1;
+  --color-border-3: #94a3b8;
+  --color-border-4: #64748b;
 
   /* Brand Colors - Light Mode */
-  --brand: #7583b2; /* 品牌色 */
-  --brand-light: #eff0f6; /* 品牌浅色背景 */
-  --brand-hover: #b5bcd6; /* 品牌色悬停 */
+  --brand: #6375b3; /* 品牌色 */
+  --brand-light: #f0f3fa; /* 品牌浅色背景 */
+  --brand-hover: #4d5d97; /* 品牌色悬停 */
 
   /* Message & UI Component Colors - Light Mode */
-  --message-user-bg: #e9efff; /* 用户消息背景（浅蓝） */
-  --message-tips-bg: #f0f4ff; /* 提示信息背景（浅蓝） */
-  --workspace-btn-bg: #eff0f1; /* 工作区按钮背景 */
+  --message-user-bg: #eff6ff; /* 用户消息背景 */
+  --message-tips-bg: #f8fafc; /* 提示信息背景 */
+  --workspace-btn-bg: #f1f5f9; /* 工作区按钮背景 */
 
   /* Special Colors - Light Mode */
-  --fill: #f7f8fa; /* 填充色 */
+  --fill: #f8fafc; /* 填充色 */
   --inverse: #ffffff; /* 反色（黑白切换）*/
 
   /* Custom Colors - Light Mode */
   --dialog-fill-0: #ffffff; /* 对话框填充色 */
-  --text-0: #000000; /* 纯黑文字色 */
+  --text-0: #0f172a; /* 纯黑文字色 */
   --text-white: #ffffff; /* 纯白文字色 */
   --fill-0: #ffffff; /* 填充色 0 */
   --fill-white-to-black: #ffffff; /* 白到黑填充色 */
-  --border-special: var(--bg-3); /* 特殊边框色 */
-  --color-guid-agent-bar: #eaecf7; /* 首页 Agent 选择条背景 - 亮色 */
+  --border-special: #94a3b8; /* 特殊边框色 */
+  --color-guid-agent-bar: #f1f5f9; /* 首页 Agent 选择条背景 - 亮色 */
+
+  /* Translucent Glass & Precision Border Tokens - Light Mode */
+  --surface-glass: rgba(255, 255, 255, 0.85);
+  --surface-glass-raised: rgba(255, 255, 255, 0.95);
+  --surface-glass-subtle: rgba(241, 245, 249, 0.75);
+  --surface-glass-border: #cbd5e1;
+  --surface-glass-border-strong: #2563eb;
+  --surface-glass-shadow-soft:
+    0 4px 16px -2px rgba(15, 23, 42, 0.06), 0 1px 2px 0 rgba(15, 23, 42, 0.04), inset 0 1px 0 0 rgba(255, 255, 255, 0.9);
+  --surface-glass-shadow-raised:
+    0 16px 36px -6px rgba(15, 23, 42, 0.12), 0 4px 12px -2px rgba(15, 23, 42, 0.06),
+    inset 0 1px 0 0 rgba(255, 255, 255, 1);
 }
 
 /* Dark Mode */
 [data-color-scheme='default'][data-theme='dark'] {
   /* AOU Brand Colors - Dark Mode */
-  --aou-1: #2a2a2a;
-  --aou-2: #3d4150;
-  --color-guid-agent-bar: var(--aou-2); /* 首页 Agent 选择条背景 - 暗色沿用 aou-2 */
-  --aou-3: #525a77;
-  --aou-4: #6a749b;
-  --aou-5: #838fba;
-  --aou-6: #a1aacb;
-  --aou-7: #b5bcd6;
-  --aou-8: #d1d5e5;
-  --aou-9: #e5e7f0;
-  --aou-10: #eff0f6;
+  --aou-1: #141727;
+  --aou-2: #1e2238;
+  --color-guid-agent-bar: var(--aou-2);
+  --aou-3: #2d3350;
+  --aou-4: #434b73;
+  --aou-5: #6366f1;
+  --aou-6: #8b5cf6;
+  --aou-7: #a78bfa;
+  --aou-8: #c4b5fd;
+  --aou-9: #ddd6fe;
+  --aou-10: #f5f3ff;
 
-  /* Background Colors - Dark Mode */
-  --bg-base: #0e0e0e; /* 主背景 */
-  --bg-1: #1a1a1a; /* 次级背景 */
-  --bg-2: #262626; /* 三级背景 */
-  --bg-3: #333333; /* 边框/分隔 */
-  --bg-4: #404040;
-  --bg-5: #4d4d4d;
-  --bg-6: #5a5a5a; /* 禁用/次要文字 */
-  --bg-8: #737373;
-  --bg-9: #a6a6a6;
-  --bg-10: #d9d9d9;
+  /* Background Colors - Dark Mode (Midnight Sapphire & Indigo Canvas) */
+  --bg-base: #0d0e17; /* 主背景 - Midnight Sapphire */
+  --bg-1: #131525; /* 次级背景 - Dark Indigo panel */
+  --bg-2: #181b2e; /* 三级背景 - Elevated container */
+  --bg-3: #262a42; /* 边框/分隔 */
+  --bg-4: #353a5b;
+  --bg-5: #4b527a;
+  --bg-6: #7882b0; /* 禁用/次要文字 */
+  --bg-8: #a5b4fc;
+  --bg-9: #c7d2fe;
+  --bg-10: #e0e7ff;
 
   /* Interactive State Colors - Dark Mode */
-  --bg-hover: #1f1f1f; /* 悬停背景 */
-  --bg-active: #2d2d2d; /* 激活/按下背景 */
+  --bg-hover: #1f233a; /* 悬停背景 */
+  --bg-active: #282d4a; /* 激活/按下背景 */
 
   /* Text Colors - Dark Mode */
-  --text-primary: #ffffff; /* 主要文字 */
-  --color-text-1: #ffffff; /* Arco 主文字 — 与 --text-primary 对齐 */
-  --text-secondary: #ced3da; /* 次要文字 — 提亮至 ~11:1 对比度 */
-  --text-disabled: #737373; /* 禁用文字 */
+  --text-primary: #f8fafc; /* 主要文字 */
+  --color-text-1: #f8fafc; /* Arco 主文字 */
+  --text-secondary: #94a3b8; /* 次要文字 */
+  --text-disabled: #475569; /* 禁用文字 */
 
   /* Semantic Colors - Dark Mode */
-  --primary: #4d9fff;
-  --success: #23c343;
-  --warning: #ff9a2e;
-  --danger: #f76560;
-  --info: #4d9fff;
+  --primary: #6366f1;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --info: #6366f1;
 
-  /* Border Colors - Dark Mode */
-  --border-base: #333333; /* 基础边框 */
-  --border-light: #262626; /* 浅色边框 */
+  /* Border Colors - Dark Mode (Sharp Indigo Slate) */
+  --border-base: #262a42; /* 基础边框 */
+  --border-light: #181b2e; /* 浅色边框 */
+  --color-border-1: #181b2e;
+  --color-border-2: #262a42;
+  --color-border-3: #353a5b;
+  --color-border-4: #4b527a;
 
   /* Brand Colors - Dark Mode */
-  --brand: #a1aacb; /* 品牌色 */
-  --brand-light: #3d4150; /* 品牌深色背景 */
-  --brand-hover: #6a749b; /* 品牌色悬停 */
+  --brand: #8b5cf6; /* 品牌 Tím */
+  --brand-light: #1e2238; /* 品牌深色背景 */
+  --brand-hover: #a78bfa; /* 品牌色悬停 */
 
   /* Message & UI Component Colors - Dark Mode */
-  --message-user-bg: #1e2a3a; /* 用户消息背景（深蓝灰） */
-  --message-tips-bg: #1a2333; /* 提示信息背景（深蓝灰） */
-  --workspace-btn-bg: #1f1f1f; /* 工作区按钮背景 */
+  --message-user-bg: #1e2238; /* 用户消息背景 */
+  --message-tips-bg: #141727; /* 提示信息背景 */
+  --workspace-btn-bg: #181b2e; /* 工作区按钮背景 */
 
   /* Special Colors - Dark Mode */
-  --fill: #1a1a1a; /* 填充色 */
+  --fill: #131525; /* 填充色 */
   --inverse: #ffffff; /* 反色（黑白切换）*/
 
   /* Custom Colors - Dark Mode */
-  --dialog-fill-0: #333333; /* 对话框填充色 */
-  --text-0: #ffffff; /* 纯黑文字色（暗色模式下为白色） */
+  --dialog-fill-0: #131525; /* 对话框填充色 */
+  --text-0: #f8fafc; /* 纯黑文字色 */
   --text-white: #ffffff; /* 纯白文字色 */
-  --fill-0: rgba(255, 255, 255, 0.08); /* 填充色 0 - 暗色模式下为半透明白色 */
-  --fill-white-to-black: #000000; /* 白到黑填充色（暗色模式下为黑色） */
-  --border-special: #60677e; /* 特殊边框色 */
+  --fill-0: rgba(255, 255, 255, 0.05); /* 填充色 0 */
+  --fill-white-to-black: #0d0e17; /* 白到黑填充色 */
+  --border-special: #353a5b; /* 特殊边框色 */
+
+  /* Translucent Glass & Precision Border Tokens - Dark Mode */
+  --surface-glass: rgba(19, 21, 37, 0.88);
+  --surface-glass-raised: rgba(24, 27, 46, 0.94);
+  --surface-glass-subtle: rgba(24, 27, 46, 0.65);
+  --surface-glass-border: #262a42;
+  --surface-glass-border-strong: #6366f1;
+  --surface-glass-shadow-soft: 0 6px 20px -4px rgba(0, 0, 0, 0.65), inset 0 1px 0 0 rgba(255, 255, 255, 0.12);
+  --surface-glass-shadow-raised:
+    0 20px 48px -8px rgba(0, 0, 0, 0.8), 0 4px 16px -2px rgba(0, 0, 0, 0.55), inset 0 1px 0 0 rgba(255, 255, 255, 0.16);
 }

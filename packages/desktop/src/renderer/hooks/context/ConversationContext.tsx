@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -28,7 +28,7 @@ export interface ConversationContextValue {
    * Conversation type
    * 会话类型
    */
-  type: 'acp' | 'codex' | 'openclaw-gateway' | 'nanobot' | 'remote' | 'aionrs';
+  type: 'acp' | 'codex' | 'openclaw-gateway' | 'nanobot' | 'remote' | 'tomnyagentic';
 
   /**
    * Cron job ID (if this conversation was created by a scheduled task)

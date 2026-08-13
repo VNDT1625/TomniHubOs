@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -10,7 +10,7 @@ import MonitorPage from './MonitorPage';
 
 /**
  * Bug Monitor settings page (Yêu cầu 6). Registered at `/settings/monitor`;
- * renders inside the shared settings chrome (mirrors the other Tomni pages).
+ * renders inside the shared settings chrome (mirrors the other Tomny pages).
  */
 const MonitorSettings: React.FC = () => {
   return (

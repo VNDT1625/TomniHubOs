@@ -1,12 +1,14 @@
-appId: com.aionui.app
-productName: Tomni
-executableName: Tomni
-copyright: Copyright © 2026 Tomni
+appId: com.tomny.app
+productName: Tomny
+executableName: Tomny
+copyright: Copyright © 2026 Tomny
 
 protocols:
-  - name: Tomni Protocol
+  - name: Tomny Protocol
     schemes:
-      - aionui
+      - tomny
+      - tomni
+      - tomny
 
 asar:
   smartUnpack: true
@@ -51,6 +53,16 @@ files:
   # tree-sitter WASM dependencies
   - node_modules/web-tree-sitter/**/*
   - node_modules/tree-sitter-bash/**/*
+  # Local OCR runtime and WASM core
+  - node_modules/tesseract.js/**/*
+  - node_modules/tesseract.js-core/**/*
+  - node_modules/bmp-js/**/*
+  - node_modules/idb-keyval/**/*
+  - node_modules/is-url/**/*
+  - node_modules/node-fetch/**/*
+  - node_modules/regenerator-runtime/**/*
+  - node_modules/wasm-feature-detect/**/*
+  - node_modules/zlibjs/**/*
   # CRITICAL: Exclude ALL tree-sitter native binaries to prevent signing issues
   - '!**/node_modules/tree-sitter-*/prebuilds/**'
   - '!**/node_modules/tree-sitter-*/build/**'
@@ -109,6 +121,11 @@ extraResources:
     to: .
   - from: resources/app.png
     to: app.png
+  # Offline OCR language models; images never leave the device
+  - from: node_modules/@tesseract.js-data/eng/4.0.0_best_int/eng.traineddata.gz
+    to: ocr/lang/eng.traineddata.gz
+  - from: node_modules/@tesseract.js-data/vie/4.0.0_best_int/vie.traineddata.gz
+    to: ocr/lang/vie.traineddata.gz
 
   # MTUI policy/runtime binary, built for the target platform before packaging
   - from: resources/binaries
@@ -122,7 +139,7 @@ extraResources:
   # Workspace-owned Rust sidecar for durable, process, hashing, and journal services.
   - from: resources/bundled-tomny-runtime
     to: bundled-tomny-runtime
-  # MIT-licensed 9Router core, managed by Tomni as the local model gateway.
+  # MIT-licensed 9Router core, managed by Tomny as the local model gateway.
   - from: resources/bundled-model-gateway
     to: bundled-model-gateway
   - from: resources/hub
@@ -185,17 +202,17 @@ linux:
   icon: resources/app.png
   artifactName: ${productName}-${version}-${os}-${arch}.${ext}
   category: Utility
-  maintainer: Tomni
-  vendor: Tomni
+  maintainer: Tomny
+  vendor: Tomny
   synopsis: ${description}
   description: ${description}
   desktop:
     entry:
-      Name: Tomni
+      Name: Tomny
       Comment: ${description}
       Icon: tomni
       Categories: Office;Utility;
-      MimeType: x-scheme-handler/aionui;
+      MimeType: x-scheme-handler/tomny;
 
 npmRebuild: false
 buildDependenciesFromSource: false
@@ -219,6 +236,9 @@ asarUnpack:
   # tree-sitter WASM files need to be unpacked for fs.readFile access
   - '**/node_modules/web-tree-sitter/**/*'
   - '**/node_modules/tree-sitter-bash/**/*'
+  # Tesseract worker threads and WASM binaries require real filesystem paths
+  - '**/node_modules/tesseract.js/**/*'
+  - '**/node_modules/tesseract.js-core/**/*'
   # Builtin MCP server scripts must be unpacked so external node processes can execute them
   - 'out/main/builtin-mcp-image-gen.js'
   - 'out/main/builtin-mcp-manager.js'

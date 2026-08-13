@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -588,7 +588,7 @@ export const useAcpMessage = (conversation_id: string, options?: { skipWarmup?: 
   // Fetch slash commands via HTTP after warmup completes.
   // WebSocket push of available_commands arrives during warmup when no
   // StreamRelay is listening, so the initial load must come from HTTP.
-  // Mirrors the aionrs pattern: warmup first, then fetch.
+  // Mirrors the tomnyagentic pattern: warmup first, then fetch.
   // In team mode, warmup is deferred to first user input — skip here.
   useEffect(() => {
     if (options?.skipWarmup) return;

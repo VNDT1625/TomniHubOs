@@ -25,7 +25,7 @@ import { createAssistantCatalogStore } from '@process/resources/assistantCatalog
 import { createAgentCatalogStore } from '@process/resources/agentCatalogStore';
 import { readLegacyCatalog } from '@process/services/database/legacyCatalogReader';
 
-describe('Tomni assistant and agent catalog cutover', () => {
+describe('Tomny assistant and agent catalog cutover', () => {
   it('persists assistant CRUD, state and import without legacy HTTP', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'tomni-assistants-'));
     const store = createAssistantCatalogStore(path.join(root, 'assistants.json'));

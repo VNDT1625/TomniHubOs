@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -122,7 +122,7 @@ function getAgentKeyFromJob(job: ICronJob, cliAgents: { backend?: string; agent_
   if (config) {
     if (config.is_preset && config.custom_agent_id) return `preset:${config.custom_agent_id}`;
     // For ACP agents config.backend is the vendor label (e.g. "claude");
-    // for aionrs it's a provider hash — match against the agent list to decide.
+    // for tomnyagentic it's a provider hash — match against the agent list to decide.
     const matched = cliAgents.find((a) => (a.backend || a.agent_type) === config.backend);
     if (matched) return `cli:${config.backend}`;
   }
@@ -222,30 +222,30 @@ const CreateTaskDialog: React.FC<CreateTaskDialogProps> = ({
     return agentId;
   }, [selectedAgent, presetAssistants]);
 
-  const isGeminiMode = resolvedBackend === 'gemini' || resolvedBackend === 'aionrs';
+  const isGeminiMode = resolvedBackend === 'gemini' || resolvedBackend === 'tomnyagentic';
 
-  // Providers compatible with aionrs (Tomny Agentic does not support Google Auth).
+  // Providers compatible with tomnyagentic (Tomny Agentic does not support Google Auth).
   // Computed independent of the current selection so the agent dropdown can
-  // disable the aionrs entry when no provider is configured.
-  const aionrsProviders = useMemo(
+  // disable the tomnyagentic entry when no provider is configured.
+  const tomnyagenticProviders = useMemo(
     () => providers.filter((p) => !p.platform?.toLowerCase().includes('gemini-with-google-auth')),
     [providers]
   );
-  const hasAionrsProvider = aionrsProviders.length > 0;
+  const hasTomnyAgenticProvider = tomnyagenticProviders.length > 0;
 
   const filteredProviders = useMemo(
-    () => (resolvedBackend === 'aionrs' ? aionrsProviders : providers),
-    [resolvedBackend, providers, aionrsProviders]
+    () => (resolvedBackend === 'tomnyagentic' ? tomnyagenticProviders : providers),
+    [resolvedBackend, providers, tomnyagenticProviders]
   );
 
   // Build Gemini current_model from model_id for GuidModelSelector.
-  // For aionrs edit mode, prefer the exact provider_id stored on the job —
+  // For tomnyagentic edit mode, prefer the exact provider_id stored on the job —
   // the same model name may exist across multiple providers, so fuzzy match
   // would pick the wrong provider.
   const geminiCurrentModel = useMemo<TProviderWithModel | undefined>(() => {
-    if (resolvedBackend !== 'aionrs' || !model_id) return undefined;
+    if (resolvedBackend !== 'tomnyagentic' || !model_id) return undefined;
 
-    const editedProviderId = resolvedBackend === 'aionrs' ? editJob?.metadata.agent_config?.backend : undefined;
+    const editedProviderId = resolvedBackend === 'tomnyagentic' ? editJob?.metadata.agent_config?.backend : undefined;
     if (editedProviderId) {
       const byId = filteredProviders.find((p) => p.id === editedProviderId);
       if (byId && getAvailableModels(byId).includes(model_id)) {
@@ -277,25 +277,25 @@ const CreateTaskDialog: React.FC<CreateTaskDialogProps> = ({
 
   // ACP model info derived from the backend `/api/agents` handshake.
   const acpCachedModelInfo = useMemo<AcpModelInfo | null>(() => {
-    if (!resolvedBackend || resolvedBackend === 'gemini' || resolvedBackend === 'aionrs') return null;
+    if (!resolvedBackend || resolvedBackend === 'gemini' || resolvedBackend === 'tomnyagentic') return null;
     const matched = detectedAgents?.find((a) => (a.backend ?? a.agent_type) === resolvedBackend);
     const info = matched?.handshake?.available_models as AcpModelInfo | undefined;
     return info?.available_models?.length ? info : null;
   }, [resolvedBackend, detectedAgents]);
 
-  // Auto-pick the first available model from /api/providers when aionrs is
+  // Auto-pick the first available model from /api/providers when tomnyagentic is
   // selected but none is set yet. Source of truth is the backend provider
   // list — do NOT read from any frontend-cached default.
   useEffect(() => {
-    if (resolvedBackend !== 'aionrs' || model_id) return;
-    for (const provider of aionrsProviders) {
+    if (resolvedBackend !== 'tomnyagentic' || model_id) return;
+    for (const provider of tomnyagenticProviders) {
       const models = getAvailableModels(provider);
       if (models.length > 0) {
         setModelId(models[0]);
         return;
       }
     }
-  }, [resolvedBackend, model_id, aionrsProviders, getAvailableModels]);
+  }, [resolvedBackend, model_id, tomnyagenticProviders, getAvailableModels]);
 
   const showTimePicker = frequency === 'daily' || frequency === 'weekdays' || frequency === 'weekly';
   const showWeekdayPicker = frequency === 'weekly';
@@ -379,18 +379,18 @@ const CreateTaskDialog: React.FC<CreateTaskDialogProps> = ({
       const agent = cliAgents.find((a) => a.backend === agentId || a.agent_type === agentId);
       const backend = (agent?.backend || agent?.agent_type || agentId) as string;
 
-      if (backend === 'aionrs') {
-        // aionrs stores provider_id in `agent_config.backend` and the model
+      if (backend === 'tomnyagentic') {
+        // tomnyagentic stores provider_id in `agent_config.backend` and the model
         // name in `model_id` — different semantic from ACP, where backend is
         // a vendor label. The executor looks up the provider row by this id.
         if (!geminiCurrentModel || !model_id) {
-          throw new Error(t('cron.page.form.aionrsModelRequired'));
+          throw new Error(t('cron.page.form.tomnyagenticModelRequired'));
         }
-        resolvedAgentType = 'aionrs' as ICreateCronJobParams['agent_type'];
+        resolvedAgentType = 'tomnyagentic' as ICreateCronJobParams['agent_type'];
         agent_config = {
           backend: geminiCurrentModel.id as string,
           name: geminiCurrentModel.name,
-          mode: getFullAutoMode('aionrs'),
+          mode: getFullAutoMode('tomnyagentic'),
           model_id,
           workspace,
         };
@@ -579,12 +579,12 @@ const CreateTaskDialog: React.FC<CreateTaskDialogProps> = ({
                       icon: agent.icon,
                       backend: agentKey,
                     });
-                    const disabled = agentKey === 'aionrs' && !hasAionrsProvider;
+                    const disabled = agentKey === 'tomnyagentic' && !hasTomnyAgenticProvider;
                     return (
                       <Option key={`cli:${agentKey}`} value={`cli:${agentKey}`} disabled={disabled}>
                         <div
                           className='flex items-center gap-8px'
-                          title={disabled ? t('cron.page.form.aionrsNoProvider') : undefined}
+                          title={disabled ? t('cron.page.form.tomnyagenticNoProvider') : undefined}
                         >
                           {logo ? (
                             <img src={logo} alt={agent.name} className='w-16px h-16px object-contain' />
@@ -593,7 +593,9 @@ const CreateTaskDialog: React.FC<CreateTaskDialogProps> = ({
                           )}
                           <span>{agent.name}</span>
                           {disabled && (
-                            <span className='text-12px text-t-tertiary'>{t('cron.page.form.aionrsNoProvider')}</span>
+                            <span className='text-12px text-t-tertiary'>
+                              {t('cron.page.form.tomnyagenticNoProvider')}
+                            </span>
                           )}
                         </div>
                       </Option>

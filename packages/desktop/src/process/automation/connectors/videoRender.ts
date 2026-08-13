@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -121,7 +121,7 @@ export const createVideoRenderer = (deps?: VideoRenderDeps): IVideoRenderer => {
       const ffmpegPath = resolveFfmpegPath();
       await fsImpl.mkdir(path.dirname(outputPath), { recursive: true });
 
-      const manifestPath = path.join(os.tmpdir(), `aionui-mv-${randomUUID()}.txt`);
+      const manifestPath = path.join(os.tmpdir(), `tomny-mv-${randomUUID()}.txt`);
       await fsImpl.writeFile(manifestPath, buildConcatManifest(scenes));
 
       const args = [

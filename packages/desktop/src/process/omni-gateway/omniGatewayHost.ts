@@ -1,12 +1,12 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
 /**
  * The Omni External MCP Gateway host — a fixed-port loopback HTTP+SSE server
- * that fronts the internal `aionui-ide` MCP server for EXTERNAL AI hosts
+ * that fronts the internal `tomny-ide` MCP server for EXTERNAL AI hosts
  * (Claude Desktop, Cursor, ChatGPT). Mirrors the in-process pattern used by
  * `ideMcpHost.ts` / `cronMcpHost.ts` but adds two MVP guardrails:
  *

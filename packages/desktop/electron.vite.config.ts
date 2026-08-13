@@ -1,13 +1,29 @@
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite';
 import { execSync } from 'child_process';
-import { readFileSync } from 'fs';
-import { resolve } from 'path';
+import { mkdirSync, readFileSync, writeFileSync } from 'fs';
+import { homedir } from 'os';
+import { isAbsolute, join, relative, resolve, sep } from 'path';
 import { sentryVitePlugin } from '@sentry/vite-plugin';
 import UnoCSS from 'unocss/vite';
 import unoConfig from '../../uno.config.ts';
 import { viteStaticCopy } from 'vite-plugin-static-copy';
+import type { Plugin, ViteDevServer } from 'vite';
+import {
+  DEFAULT_PACKAGE_CATALOG_URL,
+  FIRST_PARTY_PACKAGE_CATALOG,
+  FIRST_PARTY_PACKAGE_SIGNING_POLICIES,
+  FIRST_PARTY_PACKAGE_TRUSTED_KEYS,
+} from './src/common/packages';
+import {
+  createLocalPackageMutationRuntime,
+  createPackageHttpApi,
+  isSameOriginPackageMutationRequest,
+} from './src/process/extensions/package-manager/packageHttpApi';
+import { createPackageManagerService } from './src/process/extensions/package-manager/PackageManagerService';
 
-// Read the real AionUi version from the repo-root package.json.
+import { createRemotePackageCatalogLoader } from './src/process/extensions/package-manager/remoteCatalog';
+
+// Read the real Tomny version from the repo-root package.json.
 // `packages/desktop/package.json` is a workspace-internal placeholder pinned
 // at "0.0.0" — never use it for user-visible version strings.
 const rootPackageJson = JSON.parse(
@@ -22,6 +38,69 @@ function buildMcpServersPlugin() {
     name: 'vite-plugin-build-mcp-servers',
     closeBundle() {
       execSync(`node "${resolve('scripts/build-mcp-servers.js')}"`, { stdio: 'inherit' });
+    },
+  };
+}
+
+function devPackageApiPlugin(): Plugin {
+  let activePort: number | undefined;
+  const artifactPaths = new Map(
+    FIRST_PARTY_PACKAGE_CATALOG.flatMap((entry) => {
+      if (!entry.artifactUrl) return [];
+      const filename = new URL(entry.artifactUrl).pathname.split('/').at(-1);
+      return filename ? [[filename, resolve('store-artifacts', filename)] as const] : [];
+    })
+  );
+  const packageRoot = join(homedir(), '.tomny-web-dev', 'tomny-packages');
+
+  const service = createPackageManagerService({
+    rootDir: packageRoot,
+    appVersion: rootPackageJson.version,
+    catalog: FIRST_PARTY_PACKAGE_CATALOG,
+    trustedKeys: FIRST_PARTY_PACKAGE_TRUSTED_KEYS,
+
+    catalogLoader: createRemotePackageCatalogLoader({
+      url: process.env.TOMNI_STORE_CATALOG_URL ?? DEFAULT_PACKAGE_CATALOG_URL,
+      cachePath: join(packageRoot, 'catalog-cache.json'),
+      fallbackCatalog: FIRST_PARTY_PACKAGE_CATALOG,
+      trustedKeys: FIRST_PARTY_PACKAGE_TRUSTED_KEYS,
+
+      signingPolicies: FIRST_PARTY_PACKAGE_SIGNING_POLICIES,
+    }),
+    resolveArtifactUrl: (url) => {
+      const filename = new URL(url).pathname.split('/').at(-1);
+      return activePort && filename && artifactPaths.has(filename)
+        ? `http://127.0.0.1:${activePort}/api/packages/artifacts/${encodeURIComponent(filename)}`
+        : url;
+    },
+    allowLocalArtifactUrls: true,
+  });
+  const mutation = createLocalPackageMutationRuntime({
+    service,
+    ledgerRootDir: join(packageRoot, 'catalog-action-ledger'),
+  });
+  const handler = createPackageHttpApi({
+    service,
+    mutation,
+    authorize: async () => true,
+    authorizeMutation: isSameOriginPackageMutationRequest,
+    artifactProvider: async (name) => {
+      const artifactPath = artifactPaths.get(name);
+      return artifactPath ? Buffer.from(readFileSync(artifactPath)) : undefined;
+    },
+  });
+  return {
+    name: 'vite-plugin-tomny-package-api',
+    configureServer(server: ViteDevServer) {
+      server.httpServer?.once('listening', () => {
+        const address = server.httpServer?.address();
+        activePort = address && typeof address !== 'string' ? address.port : undefined;
+      });
+      server.middlewares.use((request, response, next) => {
+        void handler(request, response).then((handled) => {
+          if (!handled) next();
+        });
+      });
     },
   };
 }
@@ -76,6 +155,123 @@ const mainAliases = {
   '@xterm/headless': resolve('packages/desktop/src/common/utils/shims/xterm-headless.ts'),
 };
 
+function rendererGraphEvidencePlugin(): Plugin {
+  const repoRoot = resolve(__dirname, '../..');
+  const portable = (moduleId: string): string | undefined => {
+    const cleanId = moduleId.split('?', 1)[0];
+    if (!cleanId || !isAbsolute(cleanId)) return undefined;
+    const relativePath = relative(repoRoot, cleanId).split(sep).join('/');
+    if (!relativePath || relativePath === '..' || relativePath.startsWith('../')) return undefined;
+    return relativePath;
+  };
+  return {
+    name: 'tomni-renderer-graph-evidence',
+    generateBundle(_options, bundle) {
+      const modules = Object.fromEntries(
+        [...this.getModuleIds()]
+          .flatMap((moduleId) => {
+            const id = portable(moduleId);
+            const info = this.getModuleInfo(moduleId);
+            if (!id || !info) return [];
+            const normalize = (ids: readonly string[]) =>
+              ids
+                .flatMap((candidate) => {
+                  const normalized = portable(candidate);
+                  return normalized ? [normalized] : [];
+                })
+                .toSorted();
+            return [
+              [
+                id,
+                {
+                  imports: normalize(info.importedIds),
+                  dynamicImports: normalize(info.dynamicallyImportedIds),
+                  importers: normalize(info.importers),
+                  dynamicImporters: normalize(info.dynamicImporters),
+                  isEntry: info.isEntry,
+                },
+              ] as const,
+            ];
+          })
+          .toSorted(([left], [right]) => left.localeCompare(right))
+      );
+      const outputs = Object.fromEntries(
+        Object.entries(bundle).map(([fileName, output]) => {
+          if (output.type === 'asset') {
+            const bytes =
+              typeof output.source === 'string' ? Buffer.byteLength(output.source) : output.source.byteLength;
+            return [fileName, { type: 'asset', bytes }];
+          }
+          return [
+            fileName,
+            {
+              type: 'chunk',
+              bytes: Buffer.byteLength(output.code),
+              isEntry: output.isEntry,
+              isDynamicEntry: output.isDynamicEntry,
+              modules: Object.fromEntries(
+                Object.entries(output.modules).flatMap(([moduleId, size]) => {
+                  const id = portable(moduleId);
+                  return id ? [[id, size.renderedLength] as const] : [];
+                })
+              ),
+            },
+          ];
+        })
+      );
+      const totalBytes = Object.values(outputs).reduce((sum, output) => sum + output.bytes, 0);
+      const evidence = {
+        schemaVersion: 1,
+        mode: 'production',
+        entry: 'packages/desktop/src/renderer/main.tsx',
+        totalBytes,
+        modules,
+        outputs,
+      };
+      const evidenceDirectory = resolve(repoRoot, 'store-artifacts');
+      mkdirSync(evidenceDirectory, { recursive: true });
+      writeFileSync(
+        resolve(evidenceDirectory, 'base-renderer-metafile.json'),
+        `${JSON.stringify(evidence, null, 2)}\n`
+      );
+      const moduleIds = Object.keys(modules);
+      const outputEntries = Object.entries(outputs);
+      const studioPathModules = moduleIds.filter((id) => id.startsWith('packages/desktop/src/renderer/pages/studio/'));
+      const sharedBaseInfrastructurePaths = new Set([
+        'packages/desktop/src/renderer/pages/studio/ide/codeRelations.ts',
+        'packages/desktop/src/renderer/pages/studio/ide/lspClient.ts',
+        'packages/desktop/src/renderer/pages/studio/studioStorage.ts',
+      ]);
+      const bytesForSuffix = (suffix: string): number =>
+        outputEntries.reduce((sum, [fileName, output]) => sum + (fileName.endsWith(suffix) ? output.bytes : 0), 0);
+      const baseline = {
+        schemaVersion: 1,
+        mode: 'production',
+        methodology: 'Vite production renderer Rollup graph; uncompressed emitted bytes',
+        totalBytes,
+        javascriptBytes: bytesForSuffix('.js'),
+        cssBytes: bytesForSuffix('.css'),
+        otherAssetBytes: totalBytes - bytesForSuffix('.js') - bytesForSuffix('.css'),
+        moduleCount: moduleIds.length,
+        outputCount: outputEntries.length,
+        packageOwnerModules: moduleIds.filter((id) => id.startsWith('packages/desktop/src/renderer/package-apps/')),
+        designOwnerModules: moduleIds.filter((id) =>
+          id.startsWith('packages/desktop/src/renderer/package-apps/design/')
+        ),
+        documentOwnerModules: moduleIds.filter((id) => /package-apps\/(?:Document|document)/.test(id)),
+        viuModules: moduleIds.filter((id) => id.startsWith('packages/desktop/src/renderer/pages/studio/ide/Viu/')),
+        remainingStudioModules: studioPathModules,
+        sharedBaseInfrastructureModules: studioPathModules.filter((id) => sharedBaseInfrastructurePaths.has(id)),
+        optionalStudioModules: studioPathModules.filter((id) => !sharedBaseInfrastructurePaths.has(id)),
+      };
+      writeFileSync(
+        resolve(evidenceDirectory, 'base-renderer-baseline.json'),
+        `${JSON.stringify(baseline, null, 2)}\n`
+      );
+    },
+  };
+}
+
 export default defineConfig(({ mode }) => {
   const isDevelopment = mode === 'development';
   const enableSentrySourceMaps = !isDevelopment && !!process.env.SENTRY_AUTH_TOKEN;
@@ -101,11 +297,11 @@ export default defineConfig(({ mode }) => {
       plugins: [
         // externalizeDepsPlugin replaces our custom getExternalDeps() + pluginExternalizeDynamicImports.
         // 'fix-path' excluded so it gets bundled inline (only 3KB).
-        // '@aionui/web-host' and '@aionui/music-core' excluded so their TS sources (which use
+        // '@tomny/web-host' and '@tomny/music-core' excluded so their TS sources (which use
         // extensionless / ESM ".js" import specifiers) are bundled by esbuild rather than left as
         // `require(...)`, which Node cannot resolve because these workspace-only packages ship no
         // compiled .js files and point `exports` straight at `./src/index.ts`.
-        externalizeDepsPlugin({ exclude: ['fix-path', '@aionui/web-host', '@aionui/music-core'] }),
+        externalizeDepsPlugin({ exclude: ['fix-path', '@tomny/web-host', '@tomny/music-core'] }),
         ...(isDevelopment
           ? [
               {
@@ -196,7 +392,7 @@ export default defineConfig(({ mode }) => {
       publicDir: resolve('public'),
       appType: 'mpa',
       server: {
-        // Default to 5173; when occupied (e.g. another AionUi clone is running),
+        // Default to 5173; when occupied (e.g. another Tomny clone is running),
         // Vite auto-increments to the next available port.
         // electron-vite reads the actual port and sets ELECTRON_RENDERER_URL accordingly.
         port: Number(process.env.TOMNI_DEV_RENDERER_PORT || 5173),
@@ -234,6 +430,9 @@ export default defineConfig(({ mode }) => {
       plugins: [
         UnoCSS(unoConfig),
         iconParkPlugin(),
+
+        ...(process.env.TOMNI_RENDERER_GRAPH_EVIDENCE === '1' ? [rendererGraphEvidencePlugin()] : []),
+        ...(isDevelopment ? [devPackageApiPlugin()] : []),
         ...(enableSentrySourceMaps ? [sentryVitePlugin(sentryPluginOptions)] : []),
       ],
       build: {
@@ -260,9 +459,9 @@ export default defineConfig(({ mode }) => {
       define: {
         'process.env.NODE_ENV': JSON.stringify(mode),
         'process.env.env': JSON.stringify(process.env.env),
-        'process.env.AIONUI_MULTI_INSTANCE': JSON.stringify(process.env.AIONUI_MULTI_INSTANCE ?? ''),
+        'process.env.TOMNY_MULTI_INSTANCE': JSON.stringify(process.env.TOMNY_MULTI_INSTANCE ?? ''),
         'process.env.SENTRY_DSN': JSON.stringify(process.env.SENTRY_DSN ?? ''),
-        // Inject the real AionUi version (root package.json) so renderer code
+        // Inject the real Tomny version (root package.json) so renderer code
         // can show it without importing packages/desktop/package.json, which is
         // a workspace-internal placeholder frozen at "0.0.0".
         __APP_VERSION__: JSON.stringify(rootPackageJson.version),

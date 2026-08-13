@@ -1,13 +1,13 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
 /**
  * Start the in-process Automation MCP host and ensure the MCP catalog has an
  * `sse` entry pointing at its loopback URL — so an agent (Claude Code / ACP,
- * aionrs, …) can create, run, and manage n8n-style workflows as tools.
+ * tomnyagentic, …) can create, run, and manage n8n-style workflows as tools.
  *
  * Mirrors `process/cron/registerCronMcp.ts`. The catalog entry is created
  * `enabled: false` (opt-in per conversation via the MCP picker / "Super"

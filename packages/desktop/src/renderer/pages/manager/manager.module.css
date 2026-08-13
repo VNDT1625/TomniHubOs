@@ -1764,7 +1764,7 @@
 /* ----------------------------------------------------------------------- *
  * Manager surface reset — compact application chrome, not a nested app.
  * This final layer intentionally overrides the earlier vertical-sidebar
- * treatment. The global AionUi sidebar already owns primary navigation; the
+ * treatment. The global Tomny sidebar already owns primary navigation; the
  * Manager only needs a lightweight workspace switcher.
  * ----------------------------------------------------------------------- */
 .root {

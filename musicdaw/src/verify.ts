@@ -2,7 +2,7 @@
  * Framework-agnostic smoke verifier for the core data layer.
  *
  * Why this exists: the real test specs use Vitest (see *.test.ts). While this
- * project lives nested inside the AionUi Vitest monorepo, the parent runner's
+ * project lives nested inside the Tomny Vitest monorepo, the parent runner's
  * config/instance leaks into nested runs. To verify correctness without that
  * conflict, this script uses only node:assert and is executed directly by bun
  * (`bun run src/verify.ts`). Once musicdaw is a standalone repo, `vitest` runs

@@ -1,6 +1,6 @@
 # Viu architecture
 
-## Native AIonUI boundaries
+## Native Tomny boundaries
 
 ```text
 StudioPage
@@ -51,7 +51,7 @@ Cross-origin frames, protected media, closed Shadow DOM, shaders, and Canvas/Web
 
 ## Image path
 
-AIonUI’s visual-artifact analyzer supplies dimensions, colors, coarse geometric regions, and provenance. It does not currently provide OCR or object detection. Viu adds a bounded 6×6 luminance-contrast analysis and exposes the sixteen highest-contrast tiles as editable z-order hints. This is not occlusion or hidden-depth recovery, so confidence is capped below `0.8` and the limitation is stored in the document.
+Tomny’s visual-artifact analyzer supplies dimensions, colors, coarse geometric regions, and provenance. It does not currently provide OCR or object detection. Viu adds a bounded 6×6 luminance-contrast analysis and exposes the sixteen highest-contrast tiles as editable z-order hints. This is not occlusion or hidden-depth recovery, so confidence is capped below `0.8` and the limitation is stored in the document.
 
 ## Agent handoff
 

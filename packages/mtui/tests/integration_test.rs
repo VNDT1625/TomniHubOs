@@ -203,7 +203,7 @@ fn test_understand_stale_marker_accumulates_changed_paths() {
     let first = dir.path().join("first.txt");
     let second = dir.path().join("nested").join("second.txt");
     std::fs::create_dir_all(second.parent().unwrap()).unwrap();
-    let legacy_dir = dir.path().join(".aionui").join("understand");
+    let legacy_dir = dir.path().join(".tomny").join("understand");
     std::fs::create_dir_all(&legacy_dir).unwrap();
     std::fs::write(
         legacy_dir.join("summary.json"),
@@ -622,7 +622,7 @@ fn test_stale_line_replace_requires_confirmation_for_related_symbols_in_same_fil
     let file_path = dir.path().join("symbol_dependency.ts");
     let original = "function foo() {\n  return bar();\n}\n\nfunction bar() {\n  return 1;\n}\n";
     write_file(&file_path, original);
-    let cache_dir = dir.path().join(".aionui").join("understand");
+    let cache_dir = dir.path().join(".tomny").join("understand");
     std::fs::create_dir_all(&cache_dir).unwrap();
     std::fs::write(
         cache_dir.join("summary.json"),
@@ -734,7 +734,7 @@ fn test_stale_confirmation_token_expires_when_new_same_file_edit_arrives() {
     let file_path = dir.path().join("symbol_dependency_expiry.ts");
     let original = "function foo() {\n  return bar();\n}\n\nfunction bar() {\n  return 1;\n}\n";
     write_file(&file_path, original);
-    let cache_dir = dir.path().join(".aionui").join("understand");
+    let cache_dir = dir.path().join(".tomny").join("understand");
     std::fs::create_dir_all(&cache_dir).unwrap();
     std::fs::write(
         cache_dir.join("summary.json"),
@@ -1291,7 +1291,7 @@ fn test_understand_map_intent_preserves_graph_file_metadata() {
         &src.join("transcriptCrawler.ts"),
         "export function crawlSubtitle() { return 'ok'; }\n",
     );
-    let cache_dir = dir.path().join(".aionui").join("understand");
+    let cache_dir = dir.path().join(".tomny").join("understand");
     std::fs::create_dir_all(&cache_dir).unwrap();
     std::fs::write(
         cache_dir.join("summary.json"),

@@ -9,7 +9,7 @@ import { protectedMcpTextContent } from '../security';
 
 import { createDeepResearchPlan, type DeepResearchRequest } from '../research';
 
-export const BUILTIN_AGENT_ORCHESTRATOR_NAME = 'aionui-agent-orchestrator';
+export const BUILTIN_AGENT_ORCHESTRATOR_NAME = 'tomny-agent-orchestrator';
 export const BUILTIN_AGENT_ORCHESTRATOR_ID = 'builtin-agent-orchestrator';
 
 export type AgentOrchestratorExecutionClaims = Readonly<{

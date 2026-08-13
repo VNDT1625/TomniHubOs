@@ -19,7 +19,7 @@
  */
 import { Message } from '@arco-design/web-react';
 import coworkSvg from '@/renderer/assets/icons/cowork.svg';
-import AionScrollArea from '@/renderer/components/base/AionScrollArea';
+import TomnyScrollArea from '@/renderer/components/base/TomnyScrollArea';
 import { useSettingsViewMode } from '@/renderer/components/settings/SettingsModal/settingsViewContext';
 import { useDetectedAgents, useAssistantEditor, useAssistantList } from '@/renderer/hooks/assistant';
 import SettingsPageWrapper from '../components/SettingsPageWrapper';
@@ -120,7 +120,7 @@ const AssistantSettings: React.FC = () => {
     <SettingsPageWrapper>
       <div className='flex flex-col h-full w-full'>
         {messageContext}
-        <AionScrollArea className='flex-1 min-h-0 pb-16px scrollbar-hide' disableOverflow={isPageMode}>
+        <TomnyScrollArea className='flex-1 min-h-0 pb-16px scrollbar-hide' disableOverflow={isPageMode}>
           <AssistantListPanel
             assistants={assistants}
             localeKey={localeKey}
@@ -192,7 +192,7 @@ const AssistantSettings: React.FC = () => {
             setSelectedSkills={editor.setSelectedSkills}
             message={message}
           />
-        </AionScrollArea>
+        </TomnyScrollArea>
       </div>
     </SettingsPageWrapper>
   );

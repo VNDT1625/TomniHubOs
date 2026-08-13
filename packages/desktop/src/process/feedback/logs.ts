@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -8,7 +8,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as zlib from 'node:zlib';
 
-const LOG_SUFFIXES = ['.log', '.aioncore.log', '.aionrs.log'];
+const LOG_SUFFIXES = ['.log', '.tomnycore.log', '.tomnyagentic.log'];
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}/;
 const DEFAULT_LOG_DAYS = 3;
 

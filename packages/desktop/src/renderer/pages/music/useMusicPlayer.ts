@@ -1,12 +1,12 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
 /**
  * Realtime playback for the Music Studio — a thin Tone.js adapter over the
- * headless scheduler in @aionui/music-core. It reads `scheduleProject()` (the
+ * headless scheduler in @tomny/music-core. It reads `scheduleProject()` (the
  * SAME event list the offline renderer + the agent use) and plays it back live
  * through the Web Audio API.
  *
@@ -19,7 +19,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import * as Tone from 'tone';
-import { decodeWav, midiToHz, scheduleProject, songDurationSec, type Project } from '@aionui/music-core';
+import { decodeWav, midiToHz, scheduleProject, songDurationSec, type Project } from '@tomny/music-core';
 import { musicClient } from './musicClient';
 
 export type PlayerState = 'stopped' | 'playing';

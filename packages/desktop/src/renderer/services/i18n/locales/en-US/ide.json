@@ -39,9 +39,60 @@
     "hooks": "Agent Hooks",
     "spec": "Spec",
     "lsp": "Language Servers",
+    "extensions": "Extensions",
     "expbase": "ExpBase",
     "team": "Team",
     "viu": "Viu \u00b7 Visual UI"
+  },
+  "extensions": {
+    "title": "Extensions",
+    "subtitle": "Installed IDE capabilities from trusted packages. Metadata only; optional modules are not executed here.",
+    "installedCount": "{{count}} installed",
+    "refresh": "Refresh",
+    "browseStore": "Browse Store",
+    "activityGroups": "Activity groups",
+    "installedSubtabs": "Installed subtabs",
+    "groupEmpty": "No installed subtabs in this group.",
+    "findExtensions": "Find extensions",
+    "emptyHint": "Install an IDE extension from Store to add capabilities here.",
+    "loading": "Loading extensions",
+    "loadFailed": "Extensions could not be loaded.",
+    "retry": "Retry",
+    "selected": "Selected contribution",
+    "selectedHint": "This contribution is selected. Execution remains subject to IDE policy.",
+    "openPackage": "Open package",
+    "packageLabel": "Package",
+    "moduleLabel": "Module",
+    "activationLabel": "Activation",
+    "activation": {
+      "onOpen": "On open",
+      "onStartup": "On startup"
+    },
+    "runtime": {
+      "open": "Open",
+      "back": "Back to extensions",
+      "title": "{{name}} extension",
+      "policyHint": "Only signed first-party trusted React modules can run here. Other runtimes remain blocked.",
+      "checking": "Checking execution policy",
+      "blockedTitle": "Execution blocked",
+      "sandboxedWebBlocked": "Sandboxed web modules are disabled because network isolation is not yet enforced.",
+      "unsupportedBlocked": "This module does not satisfy the IDE execution policy."
+    },
+
+    "groups": {
+      "codebase": "Codebase",
+      "agentOps": "Agent Ops"
+    },
+    "diagnostics": {
+      "title": "Contribution diagnostics",
+      "redactedHint": "Details are redacted; only diagnostic categories and totals are shown.",
+      "invalidPackage": "Invalid package",
+      "protectedNamespace": "Protected namespace",
+      "dependencyUnavailable": "Dependency unavailable",
+      "hostApiIncompatible": "Host API incompatible",
+      "contributionCollision": "Contribution collision",
+      "danglingReference": "Dangling reference"
+    }
   },
   "viu": {
     "open": "Viu \u00b7 Visual UI",
@@ -219,8 +270,35 @@
           "y": "Y"
         },
 
-
-"image":{"section":"Image","fit":"Fit","fitCover":"Cover","fitContain":"Contain","fitFill":"Stretch","fitNone":"Original\u0020size","fitScaleDown":"Scale\u0020down","crop":"Crop","focalPoint":"Focal\u0020point","flipHorizontal":"Flip\u0020horizontally","flipVertical":"Flip\u0020vertically","reset":"Reset\u0020framing"},"stroke":{"section":"Strokes","add":"Add\u0020stroke","dashPattern":"Dash\u0020pattern","dashOffset":"Dash\u0020offset"},"quality":{"section":"Quality\u0020check","issueCount":"{{count}}\u0020issue(s)","noIssues":"No\u0020quality\u0020issues\u0020found.","error":"Error","warning":"Warning","project":"Project","issue":"{{code}}\u0020\u00b7\u0020{{entityId}}"},
+        "image": {
+          "section": "Image",
+          "fit": "Fit",
+          "fitCover": "Cover",
+          "fitContain": "Contain",
+          "fitFill": "Stretch",
+          "fitNone": "Original\u0020size",
+          "fitScaleDown": "Scale\u0020down",
+          "crop": "Crop",
+          "focalPoint": "Focal\u0020point",
+          "flipHorizontal": "Flip\u0020horizontally",
+          "flipVertical": "Flip\u0020vertically",
+          "reset": "Reset\u0020framing"
+        },
+        "stroke": {
+          "section": "Strokes",
+          "add": "Add\u0020stroke",
+          "dashPattern": "Dash\u0020pattern",
+          "dashOffset": "Dash\u0020offset"
+        },
+        "quality": {
+          "section": "Quality\u0020check",
+          "issueCount": "{{count}}\u0020issue(s)",
+          "noIssues": "No\u0020quality\u0020issues\u0020found.",
+          "error": "Error",
+          "warning": "Warning",
+          "project": "Project",
+          "issue": "{{code}}\u0020\u00b7\u0020{{entityId}}"
+        },
         "layout": {
           "section": "Auto layout",
           "mode": "Direction",
@@ -433,7 +511,25 @@
           "timeline": "Timeline",
           "keyframes": "Keyframes",
           "position": "Position",
-    "presetSmartAnimate":"Smart\u0020animate","createTimeline":"Create\u0020timeline","addTrack":"Add\u0020track","addKeyframe":"Add\u0020keyframe","loop":"Loop","property":"Property","start":"Start","end":"End","pin":"Pin","parallax":"Parallax","scrollBinding":"Scroll\u0020binding","addScrollBinding":"Add\u0020scroll\u0020binding","noTimeline":"No\u0020timeline\u0020yet","x":"X","y":"Y","opacity":"Opacity","scale":"Scale","rotate":"Rotate","blur":"Blur"
+          "presetSmartAnimate": "Smart\u0020animate",
+          "createTimeline": "Create\u0020timeline",
+          "addTrack": "Add\u0020track",
+          "addKeyframe": "Add\u0020keyframe",
+          "loop": "Loop",
+          "property": "Property",
+          "start": "Start",
+          "end": "End",
+          "pin": "Pin",
+          "parallax": "Parallax",
+          "scrollBinding": "Scroll\u0020binding",
+          "addScrollBinding": "Add\u0020scroll\u0020binding",
+          "noTimeline": "No\u0020timeline\u0020yet",
+          "x": "X",
+          "y": "Y",
+          "opacity": "Opacity",
+          "scale": "Scale",
+          "rotate": "Rotate",
+          "blur": "Blur"
         }
       },
       "inspector": {
@@ -1216,17 +1312,17 @@
       "deleteComboKey": "Remove key"
     },
     "context": {
-      "loading": "Loading the AionRS context\u2026",
-      "loadFailed": "Could not load the AionRS context.",
-      "empty": "No AionRS context is available yet.",
-      "exactTitle": "Exact AionRS request context",
-      "exactHint": "Read directly from AionRS after compaction. Internal context is read-only; your custom context is editable.",
+      "loading": "Loading the Tomny Agentic context\u2026",
+      "loadFailed": "Could not load the Tomny Agentic context.",
+      "empty": "No Tomny Agentic context is available yet.",
+      "exactTitle": "Exact Tomny Agentic request context",
+      "exactHint": "Read directly from Tomny Agentic after compaction. Internal context is read-only; your custom context is editable.",
       "messageCount": "{{count}} messages",
       "messageWindow": "{{assistant}} recent AI replies \u00b7 {{sent}} request messages, {{total}} in session",
       "toolCount": "{{count}} tools",
       "maxTokens": "{{count}} max output",
       "customTitle": "Custom context",
-      "customHint": "This text is appended to the system prompt on every AionRS turn.",
+      "customHint": "This text is appended to the system prompt on every Tomny Agentic turn.",
       "customPlaceholder": "Add durable instructions or context for this conversation\u2026",
       "save": "Save context",
       "saved": "Custom context saved.",
@@ -1254,7 +1350,7 @@
       "sessionExpbase": "Session ExpBase (avoid repeated errors)",
       "requestConfig": "Request configuration",
       "branchesTitle": "Context branches ({{count}})",
-      "branchesHint": "Stored outside the prompt. AionRS loads a matching branch only when a specialized task needs it; at most 3 branches and about 3,000 tokens are active.",
+      "branchesHint": "Stored outside the prompt. Tomny Agentic loads a matching branch only when a specialized task needs it; at most 3 branches and about 3,000 tokens are active.",
       "branchesEmpty": "No specialized context branches yet.",
       "branchAdd": "Add branch",
       "branchId": "Stable branch ID",

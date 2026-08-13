@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Tomni
+ * Copyright 2025 Tomny
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -162,7 +162,7 @@ export const startProductionTomniGateway = (deps: ProductionTomniGatewayDeps): P
 };
 
 export const getTomniGatewayEndpoint = async (): Promise<TomniGatewayEndpoint> => {
-  if (!endpointPromise) throw new Error('[TomniGateway] Native gateway has not started.');
+  if (!endpointPromise) throw new Error('[TomnyGateway] Native gateway has not started.');
   return endpointPromise;
 };
 

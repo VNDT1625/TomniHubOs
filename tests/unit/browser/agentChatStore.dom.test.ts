@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  *
  * Tests for the module-level web-agent chat store (Requirement 1, criterion
@@ -102,7 +102,7 @@ describe('agentChatStore — run survives leaving the Browser page', () => {
 
   it('mirrors the transcript to sessionStorage so a reload can restore it', () => {
     emit({ type: 'final', tabId: TAB, text: 'persisted answer' });
-    const raw = window.sessionStorage.getItem('aionui.browser.agentChat');
+    const raw = window.sessionStorage.getItem('tomny.browser.agentChat');
     expect(raw).toBeTruthy();
     const parsed = JSON.parse(raw as string) as Record<string, unknown[]>;
     expect(parsed[TAB]).toHaveLength(1);

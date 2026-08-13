@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -34,16 +34,16 @@ describe('shouldAutoOpenBrowser', () => {
       shouldAutoOpenBrowser({
         allowRemote: false,
         noOpenFlag: true,
-        env: { AIONUI_OPEN_BROWSER: 'true' },
+        env: { TOMNY_OPEN_BROWSER: 'true' },
       })
     ).toBe(false);
   });
 
-  it('honors AIONUI_OPEN_BROWSER=false for local launches', () => {
+  it('honors TOMNY_OPEN_BROWSER=false for local launches', () => {
     expect(
       shouldAutoOpenBrowser({
         allowRemote: false,
-        env: { AIONUI_OPEN_BROWSER: 'false' },
+        env: { TOMNY_OPEN_BROWSER: 'false' },
       })
     ).toBe(false);
   });

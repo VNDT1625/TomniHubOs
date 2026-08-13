@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -11,7 +11,7 @@ import { getConnectorTarget } from './targets';
  * Pure plan engine for the 9Router distribution layer.
  *
  * Given a target tool and a running 9Router endpoint, compute exactly what
- * AionUi would set (env vars / config files / copy-paste fields) so the tool
+ * Tomny would set (env vars / config files / copy-paste fields) so the tool
  * routes through 9Router — "auto convert to the format the app needs". This is
  * the seam the user asked for: every tool wants a different shape, and 9Router
  * does the actual format translation downstream.
@@ -87,7 +87,7 @@ const buildFiles = (target: ConnectorTarget, endpoint: Router9Endpoint, baseUrl:
     // Claude Agent ACP does not use settings.env.ANTHROPIC_MODEL while it
     // builds the model picker: it reads the top-level `model` and
     // `availableModels` settings instead. Keep all three values aligned so the
-    // independently launched Claude CLI and Tomni's ACP chat surface select
+    // independently launched Claude CLI and Tomny's ACP chat surface select
     // the same 9Router model.
     const modelSettings = endpoint.model ? { model: endpoint.model, availableModels: [endpoint.model] } : {};
     return [
@@ -106,7 +106,7 @@ const buildFiles = (target: ConnectorTarget, endpoint: Router9Endpoint, baseUrl:
 
   if (target.id === 'codex') {
     // Codex 0.145+ supports custom providers in ~/.codex/config.toml. The
-    // client key is scoped to Tomni's loopback-only gateway; keeping it in the
+    // client key is scoped to Tomny's loopback-only gateway; keeping it in the
     // provider block enables a real one-click setup for independently-launched
     // Codex sessions. The applier creates a backup before merging.
     const selectedModel = endpoint.model ? `model = ${tomlString(endpoint.model)}\n` : '';
@@ -121,7 +121,7 @@ const buildFiles = (target: ConnectorTarget, endpoint: Router9Endpoint, baseUrl:
         content:
           `${selectedModel}${selectedEffort}model_provider = ${tomlString('tomni_gateway')}\n\n` +
           `[model_providers.tomni_gateway]\n` +
-          `name = "Tomni Model Gateway"\n` +
+          `name = "Tomny Model Gateway"\n` +
           `base_url = ${tomlString(baseUrl)}\n` +
           `wire_api = "responses"\n` +
           `experimental_bearer_token = ${tomlString(endpoint.apiKey)}\n`,

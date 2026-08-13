@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -38,7 +38,7 @@ import type { Workflow, WorkflowNode } from './automationTypes';
 // ---------------------------------------------------------------------------
 
 /** Canonical MCP server name for the built-in Automation server. */
-export const BUILTIN_AUTOMATION_NAME = 'aionui-automation';
+export const BUILTIN_AUTOMATION_NAME = 'tomny-automation';
 
 // ---------------------------------------------------------------------------
 // Deps interface
@@ -123,7 +123,7 @@ export const createAutomationServer = (deps: AutomationServerDeps): McpServer =>
     'automation_get_capabilities',
     'Return the compact automation node catalog. Use this before planning so the agent does not need full source or documentation context.',
     {},
-    async () => jsonResult(getCompactAutomationCapabilities()),
+    async () => jsonResult(getCompactAutomationCapabilities())
   );
 
   server.tool(
@@ -141,7 +141,7 @@ export const createAutomationServer = (deps: AutomationServerDeps): McpServer =>
       } catch (error) {
         return textResult(`Invalid workflow plan: ${describeError(error)}`, true);
       }
-    },
+    }
   );
 
   // -------------------------------------------------------------------------

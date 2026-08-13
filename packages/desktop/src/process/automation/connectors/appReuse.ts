@@ -1,22 +1,22 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
 /**
- * App-reuse connectors — Automation leaf nodes that drive *existing* AionUi
+ * App-reuse connectors — Automation leaf nodes that drive *existing* Tomny
  * features instead of re-implementing them:
  *
  *  - `action.notify`       → a desktop notification.
  *  - `action.manager`      → create a task / note / event in Personal Manager.
  *  - `action.browser`      → run a web-agent task and return its result.
  *  - `action.conversation` → send a message to an agent conversation, await reply.
- *  - `action.cron`         → create a scheduled task (aioncore `/api/cron`).
+ *  - `action.cron`         → create a scheduled task (tomnycore `/api/cron`).
  *  - `action.subworkflow`  → run another saved workflow and return its output.
  *
  * Every capability is injected as a plain async function ({@link AppReuseDeps}),
- * so this module has no direct dependency on Electron, aioncore, or the other
+ * so this module has no direct dependency on Electron, tomnycore, or the other
  * subsystems — the bridge wires the real implementations, tests pass stubs.
  *
  * Process boundary: Main-process (Node.js) module. No DOM APIs.

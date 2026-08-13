@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -106,8 +106,8 @@ const resolvePaths = (repoRoot: string): SidecarPaths => {
   const stateDir = path.join(repoRoot, '.omni-sidecar');
   const logDir = existsSync(path.join(repoRoot, '.omni'))
     ? path.join(repoRoot, '.omni', 'logs')
-    : existsSync(path.join(repoRoot, '.aionui'))
-      ? path.join(repoRoot, '.aionui', 'logs')
+    : existsSync(path.join(repoRoot, '.tomny'))
+      ? path.join(repoRoot, '.tomny', 'logs')
       : path.join(stateDir, 'logs');
   return {
     repoRoot,
@@ -127,16 +127,16 @@ const resolveGatewayDataDir = (): string => {
       ? [
           path.join(
             process.env.APPDATA || path.join(process.env.USERPROFILE || process.cwd(), 'AppData', 'Roaming'),
-            'AionUi-Dev'
+            'Tomny-Dev'
           ),
           path.join(
             process.env.APPDATA || path.join(process.env.USERPROFILE || process.cwd(), 'AppData', 'Roaming'),
-            'AionUi'
+            'Tomny'
           ),
         ]
       : [
-          path.join(process.env.HOME || process.cwd(), '.config', 'AionUi-Dev'),
-          path.join(process.env.HOME || process.cwd(), '.config', 'AionUi'),
+          path.join(process.env.HOME || process.cwd(), '.config', 'Tomny-Dev'),
+          path.join(process.env.HOME || process.cwd(), '.config', 'Tomny'),
         ];
 
   return (
@@ -144,7 +144,7 @@ const resolveGatewayDataDir = (): string => {
       (dir) =>
         existsSync(path.join(dir, 'automation-credentials.json')) ||
         existsSync(path.join(dir, 'omni-gateway-security.json')) ||
-        existsSync(path.join(dir, 'config', 'aionui-config.txt'))
+        existsSync(path.join(dir, 'config', 'tomny-config.txt'))
     ) ?? candidates[0]
   );
 };
@@ -161,7 +161,7 @@ const readOrCreateBearerToken = async (dataDir: string): Promise<{ token: string
   if (envToken) {
     await store.save({
       id: OMNI_GATEWAY_CREDENTIAL_ID,
-      name: 'AionUi External MCP Gateway',
+      name: 'Tomny External MCP Gateway',
       kind: 'token',
       fields: { bearer: envToken },
     });
@@ -178,7 +178,7 @@ const readOrCreateBearerToken = async (dataDir: string): Promise<{ token: string
   const token = randomBytes(OMNI_GATEWAY_TOKEN_BYTES).toString('hex');
   await store.save({
     id: OMNI_GATEWAY_CREDENTIAL_ID,
-    name: 'AionUi External MCP Gateway',
+    name: 'Tomny External MCP Gateway',
     kind: 'token',
     fields: { bearer: token },
   });
@@ -197,7 +197,7 @@ const decodeConfigFile = (raw: string): Record<string, unknown> => {
 };
 
 const readSavedGatewayConfig = async (dataDir: string): Promise<Record<string, unknown>> => {
-  const configPath = path.join(dataDir, 'config', 'aionui-config.txt');
+  const configPath = path.join(dataDir, 'config', 'tomny-config.txt');
   try {
     const allConfig = decodeConfigFile(await readFile(configPath, 'utf-8'));
     const cfg = allConfig['externalMcp.config'];

@@ -1,11 +1,11 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
 /**
- * Registers the IDE MCP server (Agent plane) into the MCP catalog so aioncore's
+ * Registers the IDE MCP server (Agent plane) into the MCP catalog so tomnycore's
  * agent — and any company role granted "IDE powers" (Requirement 9) — can reach
  * it.
  *

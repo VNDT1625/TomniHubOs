@@ -20,7 +20,7 @@ if (Test-Path -LiteralPath $destination) {
 }
 
 New-Item -ItemType Directory -Path $destination -Force | Out-Null
-$copies = @('AionUi-GOLDEN', 'AionUi-Tomny', 'AionUi-Claude', 'AionUi-ChatGPT', 'AionUi-Kiro')
+$copies = @('Tomny-GOLDEN', 'Tomny-Tomny', 'Tomny-Claude', 'Tomny-ChatGPT', 'Tomny-Kiro')
 $excludedDirectories = @(
   'node_modules',
   'out',
@@ -34,8 +34,8 @@ $excludedDirectories = @(
   '.mtui',
   '.git',
   '.tmp',
-  '.aionui',
-  '.aionrs',
+  '.tomny',
+  '.tomnyagentic',
   '.omni',
   'benchmarks',
   'coverage',
@@ -74,4 +74,4 @@ foreach ($name in $copies) {
 }
 
 Write-Host "Created benchmark copies under $destination"
-Write-Host 'Next: apply the identical bug fixture only to AionUi-Tomny, AionUi-Claude and AionUi-Kiro.'
+Write-Host 'Next: apply the identical bug fixture only to Tomny-Tomny, Tomny-Claude and Tomny-Kiro.'

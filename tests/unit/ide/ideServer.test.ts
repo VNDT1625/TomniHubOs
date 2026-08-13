@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -290,12 +290,12 @@ describe('ideServer', () => {
 
   it('covers every causal flow stage before unrelated high-ranked subsystems', async () => {
     const route = [
-      'packages/desktop/src/renderer/pages/conversation/platforms/aionrs/AionrsSendBox.tsx',
+      'packages/desktop/src/renderer/pages/conversation/platforms/tomnyagentic/TomnyAgenticSendBox.tsx',
       'packages/desktop/src/common/adapter/ipcBridge.ts',
       'packages/desktop/src/process/services/database/nativeConversation/bridge.ts',
       'packages/desktop/src/process/services/database/nativeConversation/service.ts',
       'packages/desktop/src/process/services/database/nativeConversation/repository.ts',
-      'packages/desktop/src/renderer/pages/conversation/platforms/aionrs/useAionrsMessage.ts',
+      'packages/desktop/src/renderer/pages/conversation/platforms/tomnyagentic/useTomnyAgenticMessage.ts',
     ];
     const unrelated = [
       'packages/desktop/src/common/adapter/browser.ts',
@@ -335,9 +335,9 @@ describe('ideServer', () => {
       text: filePath.endsWith('package.json')
         ? JSON.stringify({
             name: 'omni-agentic',
-            productName: 'Tomni',
-            description: 'Tomni personal agentic operating system.',
-            author: { name: 'Tomni' },
+            productName: 'Tomny',
+            description: 'Tomny personal agentic operating system.',
+            author: { name: 'Tomny' },
             main: './out/main/index.js',
             workspaces: ['packages/*'],
             scripts: { start: 'electron-vite dev', noise: 'MANIFEST_NOISE' },
@@ -386,8 +386,8 @@ describe('ideServer', () => {
     expect(text).toContain('Verified candidates inspected: 6/6');
     expect(text).toContain('## Verified repository identity');
     expect(text).toContain('"name": "omni-agentic"');
-    expect(text).toContain('"productName": "Tomni"');
-    expect(text).toContain('"author": "Tomni"');
+    expect(text).toContain('"productName": "Tomny"');
+    expect(text).toContain('"author": "Tomny"');
     expect(text).toContain('"main": "./out/main/index.js"');
     expect(text).not.toContain('MANIFEST_NOISE');
     expect(text.match(/^### \[E\d+\]/gm)).toHaveLength(6);

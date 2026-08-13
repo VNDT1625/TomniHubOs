@@ -36,7 +36,7 @@ The score must be reported per viewport and checkpoint together with median/p95 
 
 No backend can recover information that is absent or deliberately inaccessible: hidden geometry behind a single raster, server-only logic, closed Shadow DOM, DRM/protected media, private assets, undisclosed breakpoints, or animation states never observed. Viu must preserve the source as a runtime/raster boundary or request more evidence; it must never convert uncertainty into a false “100% reconstructed” claim.
 
-All percentages in this document are future release targets until the native AIonUI comparator produces reproducible reports. Historical Prewise benchmark output is not accepted as native AIonUI evidence.
+All percentages in this document are future release targets until the native Tomny comparator produces reproducible reports. Historical Prewise benchmark output is not accepted as native Tomny evidence.
 
 ## Release gates
 

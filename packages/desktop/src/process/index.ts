@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -23,7 +23,7 @@ import './services/i18n'; // Initialize i18n for main process
 
 export const initializeProcess = async () => {
   const t0 = performance.now();
-  const mark = (label: string) => console.log(`[AionUi:process] ${label} +${Math.round(performance.now() - t0)}ms`);
+  const mark = (label: string) => console.log(`[Tomny:process] ${label} +${Math.round(performance.now() - t0)}ms`);
 
   await initStorage();
   mark('initStorage');

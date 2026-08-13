@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -17,7 +17,7 @@
  *
  * Team Mode (`/api/teams/*`) can spawn agents but exposes **no REST route** for
  * "deliver a briefing to a teammate" or "await a teammate's result" — those
- * would need new Rust routes in aioncore, which is out of scope (we must not
+ * would need new Rust routes in tomnycore, which is out of scope (we must not
  * modify the backend). So, exactly like the Browser web-agent
  * (`webAgentRunner` + `providerChat`), this engine drives the dialogue
  * **in-process** by calling the user's configured model directly through an

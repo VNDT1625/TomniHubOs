@@ -1,12 +1,12 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
 /**
  * App-function connectors for the Automation feature — the nodes that drive an
- * AionUi sub-app to *produce* an artifact the rest of the pipeline can upload or
+ * Tomny sub-app to *produce* an artifact the rest of the pipeline can upload or
  * publish.
  *
  *  - `action.app.makeVideo`: runs the Make Video pipeline (LLM scene script →

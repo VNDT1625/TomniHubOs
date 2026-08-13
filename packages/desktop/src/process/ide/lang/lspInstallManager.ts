@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -159,7 +159,7 @@ const installNpm = async (server: LspServerInfo): Promise<InstallOutcome> => {
   // A bare package.json so `npm install` treats the prefix as a project root.
   const pkgJson = path.join(prefix, 'package.json');
   if (!fs.existsSync(pkgJson)) {
-    await fsp.writeFile(pkgJson, JSON.stringify({ name: `aionui-lsp-${server.id}`, private: true }, null, 2), 'utf-8');
+    await fsp.writeFile(pkgJson, JSON.stringify({ name: `tomny-lsp-${server.id}`, private: true }, null, 2), 'utf-8');
   }
   await run('npm', ['install', server.npmPackage, '--no-audit', '--no-fund', '--loglevel=error'], prefix);
   const command = resolveNpmBin(prefix, server.npmPackage);

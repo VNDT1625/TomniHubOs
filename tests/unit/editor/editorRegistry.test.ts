@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  *
  * Property + unit tests for renderer/pages/editor/editorRegistry — Property 6
@@ -121,7 +121,7 @@ const randUnknownExtension = (rng: () => number): string => {
  * cannot rescue classification away from the raw-text fallback.
  */
 const randUnknownMime = (rng: () => number): string => {
-  const safeTypes = ['x-aionui', 'blobtype', 'vendor', 'custom', 'unknowntype'];
+  const safeTypes = ['x-tomny', 'blobtype', 'vendor', 'custom', 'unknowntype'];
   for (let attempt = 0; attempt < 50; attempt++) {
     const mime = `${pick(rng, safeTypes)}/${randToken(rng, 3, 10)}`;
     const normalized = mime.toLowerCase();
@@ -129,7 +129,7 @@ const randUnknownMime = (rng: () => number): string => {
     if (KNOWN_MIME_PREFIXES.some((prefix) => normalized.startsWith(prefix))) continue;
     return mime;
   }
-  return 'x-aionui/definitely-unknown';
+  return 'x-tomny/definitely-unknown';
 };
 
 /** Re-case a token to UPPER or an alternating MiXeD case (for case-insensitivity). */

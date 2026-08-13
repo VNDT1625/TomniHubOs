@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -463,16 +463,16 @@ const classifyPersistedSendFailure = (
   if (persistedCode === 'INTERNAL_ERROR') {
     return {
       message,
-      code: 'AIONUI_INTERNAL_ERROR',
-      ownership: 'aionui',
+      code: 'TOMNY_INTERNAL_ERROR',
+      ownership: 'tomny',
       detail: message,
       retryable: true,
       feedback_recommended: true,
     };
   }
 
-  if (persistedCode?.startsWith('AIONUI_')) {
-    return { message, code: persistedCode, ownership: 'aionui', detail: message, retryable: true };
+  if (persistedCode?.startsWith('TOMNY_')) {
+    return { message, code: persistedCode, ownership: 'tomny', detail: message, retryable: true };
   }
   if (persistedCode?.startsWith('USER_AGENT_')) {
     return { message, code: persistedCode, ownership: 'user_agent', detail: message, retryable: true };
@@ -501,8 +501,8 @@ const classifyPersistedSendFailure = (
   if (parsed.source === 'send_failed') {
     return {
       message,
-      code: 'AIONUI_INTERNAL_ERROR',
-      ownership: 'aionui',
+      code: 'TOMNY_INTERNAL_ERROR',
+      ownership: 'tomny',
       detail: message,
       retryable: true,
       feedback_recommended: true,

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  *
  * REAL end-to-end test for the Git Manager runner. Instead of mocking git, this
@@ -46,7 +46,7 @@ describeGit('gitRunner — real git end-to-end (local bare remote)', () => {
   let remoteUrl: string;
 
   beforeAll(() => {
-    root = fs.mkdtempSync(path.join(os.tmpdir(), 'aionui-git-it-'));
+    root = fs.mkdtempSync(path.join(os.tmpdir(), 'tomny-git-it-'));
     bareRemote = path.join(root, 'remote.git');
     workA = path.join(root, 'workA');
     workB = path.join(root, 'workB');
@@ -64,7 +64,7 @@ describeGit('gitRunner — real git end-to-end (local bare remote)', () => {
     }
   });
 
-  const author = { name: 'AionUi Test', email: 'test@aionui.local' };
+  const author = { name: 'Tomny Test', email: 'test@tomny.local' };
 
   it('init + set remote, commit, and PUSH (the "up" / backup direction)', async () => {
     // init a working repo + point origin at the bare remote.
@@ -72,7 +72,7 @@ describeGit('gitRunner — real git end-to-end (local bare remote)', () => {
     expect(init.ok).toBe(true);
 
     // Write a file and commit ALL changes.
-    fs.writeFileSync(path.join(workA, 'README.md'), '# Hello AionUi\n', 'utf-8');
+    fs.writeFileSync(path.join(workA, 'README.md'), '# Hello Tomny\n', 'utf-8');
     const commit = await runner.commitAll(workA, 'feat: initial commit', author);
     expect(commit.ok).toBe(true);
 
@@ -90,7 +90,7 @@ describeGit('gitRunner — real git end-to-end (local bare remote)', () => {
     expect(clone.ok).toBe(true);
     // The cloned working tree has the file we pushed.
     expect(fs.existsSync(path.join(workB, 'README.md'))).toBe(true);
-    expect(fs.readFileSync(path.join(workB, 'README.md'), 'utf-8')).toContain('Hello AionUi');
+    expect(fs.readFileSync(path.join(workB, 'README.md'), 'utf-8')).toContain('Hello Tomny');
   });
 
   it('status + log + changes reflect the real repo state', async () => {
@@ -113,7 +113,7 @@ describeGit('gitRunner — real git end-to-end (local bare remote)', () => {
   });
 
   it('PULL (the "back" direction) updates a clone after the other clone pushes', async () => {
-    const pullRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'aionui-git-pull-it-'));
+    const pullRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'tomny-git-pull-it-'));
     try {
       const pullRemote = path.join(pullRoot, 'remote.git');
       const pullA = path.join(pullRoot, 'workA');

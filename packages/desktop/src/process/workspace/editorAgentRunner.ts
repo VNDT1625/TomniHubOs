@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -18,7 +18,7 @@
  * misapply) and mirrors `webAgentRunner`'s JSON-tool style.
  *
  * Every collaborator (file read/write, the chat call) is injected so the runner
- * is unit-testable without aioncore or the network.
+ * is unit-testable without tomnycore or the network.
  *
  * Process boundary: Main-process (Node.js) module. No DOM APIs.
  */

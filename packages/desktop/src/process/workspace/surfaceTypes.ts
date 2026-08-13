@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -169,6 +169,13 @@ export type SurfaceRunOutcome = {
   answer: string;
   /** Number of tool steps executed. */
   steps: number;
+  /**
+   * A runner may observe that its underlying task was stopped independently of
+   * the workspace AbortSignal (for example, a browser-agent turn cancelled by
+   * its own tab owner). The orchestrator must preserve that outcome rather than
+   * presenting an empty successful answer.
+   */
+  status?: 'stopped';
 };
 
 /**

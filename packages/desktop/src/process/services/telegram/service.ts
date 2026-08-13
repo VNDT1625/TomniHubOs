@@ -174,7 +174,7 @@ export class TelegramChannelService {
     this.state.pairings = this.state.pairings.filter((item) => item.code !== code);
     await this.save();
     this.deps.events.userAuthorized(user);
-    await this.sendTelegram(Number(pairing.platformUserId), 'Pairing approved. You can now chat with Tomni.').catch(
+    await this.sendTelegram(Number(pairing.platformUserId), 'Pairing approved. You can now chat with Tomny.').catch(
       (): void => undefined
     );
   }
@@ -344,7 +344,7 @@ export class TelegramChannelService {
         await this.save();
         this.deps.events.pairingRequested(pairing);
       }
-      await this.sendTelegram(message.chat.id, `Pairing code: ${pairing.code}. Approve it in Tomni settings.`);
+      await this.sendTelegram(message.chat.id, `Pairing code: ${pairing.code}. Approve it in Tomny settings.`);
       return;
     }
     let session = this.state.sessions.find(
@@ -356,7 +356,7 @@ export class TelegramChannelService {
         .map((item) => (typeof item.extra?.workspace === 'string' ? item.extra.workspace : ''))
         .find(Boolean);
       if (!workspace) {
-        await this.sendTelegram(message.chat.id, 'Open Tomni and select a workspace before starting a Telegram agent.');
+        await this.sendTelegram(message.chat.id, 'Open Tomny and select a workspace before starting a Telegram agent.');
         return;
       }
       const settings = await this.deps.readSettings();
@@ -369,7 +369,7 @@ export class TelegramChannelService {
         use_model: '',
       };
       const agent = settings.agent;
-      const type = agent?.backend === 'codex' ? 'codex' : agent?.agent_type === 'acp' ? 'acp' : 'aionrs';
+      const type = agent?.backend === 'codex' ? 'codex' : agent?.agent_type === 'acp' ? 'acp' : 'tomnyagentic';
       const conversation = await this.deps.conversations.create({
         type,
         name: `Telegram · ${authorized.display_name || platformUserId}`,

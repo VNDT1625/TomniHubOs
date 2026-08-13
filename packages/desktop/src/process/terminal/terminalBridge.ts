@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -8,7 +8,7 @@
  * Terminal IPC bridge — exposes the Main-process Terminal manager + scheduler to
  * the renderer (Settings › Terminal page, and later the IDE terminal panel).
  *
- * This is an Electron-native bridge (not an aioncore HTTP route), built with the
+ * This is an Electron-native bridge (not an tomnycore HTTP route), built with the
  * same `@office-ai/platform` `bridge` helper that backs `ipcBridge.ts`. Because
  * `ipcBridge.ts` carries no `terminal` namespace and this feature must not
  * modify it, the typed channels are declared **here** and exported so the

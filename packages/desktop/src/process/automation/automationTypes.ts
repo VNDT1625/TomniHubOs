@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -44,10 +44,10 @@ export type WorkflowNodeKind =
   | 'control.merge'
   | 'control.approval'
   | 'control.stop'
-  // --- App-function nodes: call an AionUi sub-app to produce an artifact ---
+  // --- App-function nodes: call an Tomny sub-app to produce an artifact ---
   | 'action.app.makeVideo'
   | 'action.app.editor'
-  // --- App-reuse nodes (drive existing AionUi features) ---
+  // --- App-reuse nodes (drive existing Tomny features) ---
   | 'action.notify'
   | 'action.manager'
   | 'action.browser'
@@ -536,6 +536,17 @@ export type ApprovalNodeConfig = {
 /** Result returned by the approval provider. */
 export type ApprovalDecision = { approved: boolean; reason?: string };
 
+/** Exact outbound email fields shown to the human before the transport may run. */
+export type EmailApprovalAction = {
+  kind: 'action.email.send';
+  from: string;
+  to: string[];
+  subject: string;
+  body: string;
+  attachArtifact: boolean;
+  attachmentPath: string | null;
+};
+
 /** Request sent by the engine to the approval provider. */
 export type ApprovalRequest = {
   runId: string;
@@ -544,6 +555,10 @@ export type ApprovalRequest = {
   message: string;
   input: unknown;
   timeoutMs?: number;
+  /** Sensitive actions include an immutable, secret-free preview of the exact operation being approved. */
+  action?: EmailApprovalAction;
+  /** Absolute expiry for this one-run approval request. */
+  expiresAt?: number;
 };
 
 // ---------------------------------------------------------------------------

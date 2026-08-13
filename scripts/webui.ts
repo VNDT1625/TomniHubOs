@@ -1,22 +1,22 @@
 #!/usr/bin/env bun
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  *
  * Pure Bun CLI — launches the WebUI (backend + static server + auth) without
  * starting Electron. Replaces the former `electron-vite dev -- --webui` flow.
  *
  * Env vars:
- *   AIONUI_PORT           : static server port (default 33000)
- *   AIONUI_HOST           : listen host; set to 0.0.0.0 to imply --remote
- *   AIONUI_ALLOW_REMOTE   : "1"/"true" to expose to LAN
- *   AIONUI_DATA_DIR       : override userData path (default Electron-compatible)
- *   AIONUI_LOG_DIR        : override log dir (default <dataDir>/logs)
- *   AIONUI_STATIC_DIR     : override static dir (default out/renderer)
- *   AIONUI_BACKEND_BIN    : absolute path to Tomny Core binary (else PATH lookup)
- *   AIONUI_BACKEND_BUNDLED_DIR : dir containing bundled-tomny-core/<plat-arch>/binary
- *   AIONUI_OPEN_BROWSER   : "1"/"true" to force open, "0"/"false" to disable
+ *   TOMNY_PORT           : static server port (default 33000)
+ *   TOMNY_HOST           : listen host; set to 0.0.0.0 to imply --remote
+ *   TOMNY_ALLOW_REMOTE   : "1"/"true" to expose to LAN
+ *   TOMNY_DATA_DIR       : override userData path (default Electron-compatible)
+ *   TOMNY_LOG_DIR        : override log dir (default <dataDir>/logs)
+ *   TOMNY_STATIC_DIR     : override static dir (default out/renderer)
+ *   TOMNY_BACKEND_BIN    : absolute path to Tomny Core binary (else PATH lookup)
+ *   TOMNY_BACKEND_BUNDLED_DIR : dir containing bundled-tomny-core/<plat-arch>/binary
+ *   TOMNY_OPEN_BROWSER   : "1"/"true" to force open, "0"/"false" to disable
  */
 
 import { execSync } from 'child_process';
@@ -24,19 +24,42 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { startWebHost } from '@aionui/web-host';
+import { startWebHost } from '@tomny/web-host';
+import {
+  FIRST_PARTY_PACKAGE_CATALOG,
+  FIRST_PARTY_PACKAGE_SIGNING_POLICIES,
+  FIRST_PARTY_PACKAGE_TRUSTED_KEYS,
+  DEFAULT_PACKAGE_CATALOG_URL,
+} from '../packages/desktop/src/common/packages/index.js';
+import {
+  createLocalPackageMutationRuntime,
+  createPackageHttpApi,
+} from '../packages/desktop/src/process/extensions/package-manager/packageHttpApi.js';
+import { createPackageManagerService } from '../packages/desktop/src/process/extensions/package-manager/PackageManagerService.js';
+
+import { createRemotePackageCatalogLoader } from '../packages/desktop/src/process/extensions/package-manager/remoteCatalog.js';
 import { openBrowserUrl, shouldAutoOpenBrowser } from '../packages/web-cli/src/browser.js';
 
 // Aligned with packages/desktop/src/common/config/constants.ts WEBUI_DEFAULT_PORT.
 const DEFAULT_PORT = (() => {
   if (process.env.NODE_ENV === 'production') return 25808;
-  if (process.env.AIONUI_MULTI_INSTANCE === '1') return 25810;
+  if (process.env.TOMNY_MULTI_INSTANCE === '1') return 25810;
   return 25809;
 })();
 const BACKEND_BINARY = process.platform === 'win32' ? 'tomny-core.exe' : 'tomny-core';
 
 const __filename = fileURLToPath(import.meta.url);
 const repoRoot = path.resolve(path.dirname(__filename), '..');
+
+const LOCAL_PACKAGE_ARTIFACTS = new Map(
+  FIRST_PARTY_PACKAGE_CATALOG.flatMap((entry) => {
+    if (!entry.artifactUrl) return [];
+    const filename = new URL(entry.artifactUrl).pathname.split('/').at(-1);
+    if (!filename) return [];
+    const artifactPath = path.join(repoRoot, 'store-artifacts', filename);
+    return fs.existsSync(artifactPath) ? [[filename, artifactPath] as const] : [];
+  })
+);
 
 const args = process.argv.slice(2);
 const has = (name: string): boolean => args.includes(name);
@@ -51,43 +74,43 @@ const getFlag = (name: string): string | undefined => {
  * Resolve the directory where Tomny Core persists its SQLite DB.
  *
  * `bun run webui` runs **independently of the Electron desktop app** — it must
- * work on hosts that never installed AionUi.app, and its default work dir must
+ * work on hosts that never installed Tomny.app, and its default work dir must
  * NOT collide with Electron's.
  *
  *   --data-dir <path>       CLI override (highest priority)
- *   $AIONUI_DATA_DIR        env override (same effect)
- *   otherwise               ~/.aionui-web         (production)
- *                           ~/.aionui-web-dev     (dev, default)
- *                           ~/.aionui-web-dev-2   (dev + AIONUI_MULTI_INSTANCE=1)
+ *   $TOMNY_DATA_DIR        env override (same effect)
+ *   otherwise               ~/.tomny-web         (production)
+ *                           ~/.tomny-web-dev     (dev, default)
+ *                           ~/.tomny-web-dev-2   (dev + TOMNY_MULTI_INSTANCE=1)
  *
- * Why a dedicated `-web` name, not the same `~/.aionui[-dev]` that Electron
+ * Why a dedicated `-web` name, not the same `~/.tomny[-dev]` that Electron
  * uses: on macOS, Electron's getDataPath() (packages/desktop/src/process/utils/
- * utils.ts) creates `~/.aionui-dev` as a **symlink** to
- * `~/Library/Application Support/AionUi-Dev/aionui` so CLI tools (claude,
+ * utils.ts) creates `~/.tomny-dev` as a **symlink** to
+ * `~/Library/Application Support/Tomny-Dev/tomny` so CLI tools (claude,
  * gemini, qwen…) don't choke on the literal space in "Application Support".
  * If standalone webui runs first on a clean machine, it would create the
  * symlink location as a **real directory** instead. When Electron is later
  * installed, its `ensureCliSafeSymlink` refuses to overwrite a real dir and
  * falls back to returning the space-containing path — and then every ACP
  * agent inside the desktop app starts failing on CLI commands. Using
- * `.aionui-web` keeps standalone webui's data dir off of the path Electron's
+ * `.tomny-web` keeps standalone webui's data dir off of the path Electron's
  * symlink needs.
  *
  * If the user wants the two to share data they opt-in explicitly via
- *   --data-dir ~/.aionui-dev                     (or equivalent on other OSes)
+ *   --data-dir ~/.tomny-dev                     (or equivalent on other OSes)
  * which is safe because by that point Electron has created the symlink and
  * `bun run webui` just follows it.
  */
 function resolveBackendDataDir(): string {
-  const override = getFlag('--data-dir') ?? process.env.AIONUI_DATA_DIR;
+  const override = getFlag('--data-dir') ?? process.env.TOMNY_DATA_DIR;
   if (override && override.trim().length > 0) {
     const resolved = path.resolve(override);
     fs.mkdirSync(resolved, { recursive: true });
     return resolved;
   }
   const suffix =
-    process.env.NODE_ENV === 'production' ? '' : process.env.AIONUI_MULTI_INSTANCE === '1' ? '-dev-2' : '-dev';
-  const dir = path.join(os.homedir(), `.aionui-web${suffix}`);
+    process.env.NODE_ENV === 'production' ? '' : process.env.TOMNY_MULTI_INSTANCE === '1' ? '-dev-2' : '-dev';
+  const dir = path.join(os.homedir(), `.tomny-web${suffix}`);
   fs.mkdirSync(dir, { recursive: true });
   return dir;
 }
@@ -100,36 +123,36 @@ function parseBoolean(v: string | undefined): boolean {
 function resolvePort(): number {
   const cli = getFlag('--port');
   if (cli && /^\d+$/.test(cli)) return Number(cli);
-  const env = process.env.AIONUI_PORT ?? process.env.PORT;
+  const env = process.env.TOMNY_PORT ?? process.env.PORT;
   if (env && /^\d+$/.test(env)) return Number(env);
   return DEFAULT_PORT;
 }
 
 function resolveAllowRemote(): boolean {
   if (has('--remote')) return true;
-  const host = process.env.AIONUI_HOST?.trim();
+  const host = process.env.TOMNY_HOST?.trim();
   if (host && ['0.0.0.0', '::', '::0'].includes(host)) return true;
-  return parseBoolean(process.env.AIONUI_ALLOW_REMOTE ?? process.env.AIONUI_REMOTE);
+  return parseBoolean(process.env.TOMNY_ALLOW_REMOTE ?? process.env.TOMNY_REMOTE);
 }
 
 function resolveStaticDir(): string {
-  if (process.env.AIONUI_STATIC_DIR) return process.env.AIONUI_STATIC_DIR;
+  if (process.env.TOMNY_STATIC_DIR) return process.env.TOMNY_STATIC_DIR;
   const candidate = path.join(repoRoot, 'out', 'renderer');
   if (fs.existsSync(path.join(candidate, 'index.html'))) return candidate;
-  throw new Error(`Renderer assets not found at ${candidate}. Run "bun run package" first, or set AIONUI_STATIC_DIR.`);
+  throw new Error(`Renderer assets not found at ${candidate}. Run "bun run package" first, or set TOMNY_STATIC_DIR.`);
 }
 
 /**
  * Rebuild renderer/main bundles before launching, so that `bun run webui` always
  * serves the latest source. Skipped when:
  *   --no-build flag           : explicit opt-out (e.g., iterating on this script)
- *   $AIONUI_NO_BUILD=1        : env-level opt-out
- *   $AIONUI_STATIC_DIR is set : caller is pointing us at a prebuilt artifact dir
+ *   $TOMNY_NO_BUILD=1        : env-level opt-out
+ *   $TOMNY_STATIC_DIR is set : caller is pointing us at a prebuilt artifact dir
  */
 function runPackageIfNeeded(): void {
   if (has('--no-build')) return;
-  if (parseBoolean(process.env.AIONUI_NO_BUILD)) return;
-  if (process.env.AIONUI_STATIC_DIR) return;
+  if (parseBoolean(process.env.TOMNY_NO_BUILD)) return;
+  if (process.env.TOMNY_STATIC_DIR) return;
   console.log('[webui] running "bun run package" to refresh out/renderer (pass --no-build to skip)...');
   const start = Date.now();
   execSync('bun run package', { cwd: repoRoot, stdio: 'inherit' });
@@ -137,9 +160,9 @@ function runPackageIfNeeded(): void {
 }
 
 function resolveBackendBinary(): string {
-  if (process.env.AIONUI_BACKEND_BIN) return process.env.AIONUI_BACKEND_BIN;
+  if (process.env.TOMNY_BACKEND_BIN) return process.env.TOMNY_BACKEND_BIN;
 
-  const bundledBase = process.env.AIONUI_BACKEND_BUNDLED_DIR ?? path.join(repoRoot, 'resources', 'bundled-tomny-core');
+  const bundledBase = process.env.TOMNY_BACKEND_BUNDLED_DIR ?? path.join(repoRoot, 'resources', 'bundled-tomny-core');
   const runtimeKey = `${process.platform}-${process.arch}`;
   const bundled = path.join(bundledBase, runtimeKey, BACKEND_BINARY);
   if (fs.existsSync(bundled)) return bundled;
@@ -152,9 +175,7 @@ function resolveBackendBinary(): string {
     // fall through
   }
 
-  throw new Error(
-    `Cannot find "${BACKEND_BINARY}". Set AIONUI_BACKEND_BIN, put it on PATH, or place it at ${bundled}.`
-  );
+  throw new Error(`Cannot find "${BACKEND_BINARY}". Set TOMNY_BACKEND_BIN, put it on PATH, or place it at ${bundled}.`);
 }
 
 /**
@@ -212,11 +233,11 @@ async function main(): Promise<void> {
   });
   // One working dir for the whole standalone webui: backend SQLite and chat
   // history live here. Admin credentials live in the backend's users table.
-  // This keeps `bun run webui` fully self-contained on hosts without AionUi.app.
+  // This keeps `bun run webui` fully self-contained on hosts without Tomny.app.
   const workDir = resolveBackendDataDir();
   const staticDir = resolveStaticDir();
   const backendBin = resolveBackendBinary();
-  const logDir = process.env.AIONUI_LOG_DIR ?? path.join(workDir, 'logs');
+  const logDir = process.env.TOMNY_LOG_DIR ?? path.join(workDir, 'logs');
 
   console.log('[webui] work dir   :', workDir);
   console.log('[webui] static dir :', staticDir);
@@ -243,6 +264,62 @@ async function main(): Promise<void> {
       workDir: workDir,
       logDir,
     },
+    createLocalApiHandler: (backendPort) => {
+      const packageRoot = path.join(workDir, 'tomny-packages');
+      const packageService = createPackageManagerService({
+        rootDir: packageRoot,
+        appVersion: '0.0.0',
+        catalog: FIRST_PARTY_PACKAGE_CATALOG,
+        trustedKeys: FIRST_PARTY_PACKAGE_TRUSTED_KEYS,
+
+        catalogLoader: createRemotePackageCatalogLoader({
+          url: process.env.TOMNI_STORE_CATALOG_URL ?? DEFAULT_PACKAGE_CATALOG_URL,
+          cachePath: path.join(workDir, 'tomny-packages', 'catalog-cache.json'),
+          fallbackCatalog: FIRST_PARTY_PACKAGE_CATALOG,
+          trustedKeys: FIRST_PARTY_PACKAGE_TRUSTED_KEYS,
+
+          signingPolicies: FIRST_PARTY_PACKAGE_SIGNING_POLICIES,
+        }),
+        resolveArtifactUrl: (url) => {
+          const filename = new URL(url).pathname.split('/').at(-1);
+          return filename && LOCAL_PACKAGE_ARTIFACTS.has(filename)
+            ? `http://127.0.0.1:${port}/api/packages/artifacts/${encodeURIComponent(filename)}`
+            : url;
+        },
+        allowLocalArtifactUrls: process.env.NODE_ENV !== 'production',
+      });
+      const mutation = createLocalPackageMutationRuntime({
+        service: packageService,
+        ledgerRootDir: path.join(packageRoot, 'catalog-action-ledger'),
+      });
+      return createPackageHttpApi({
+        service: packageService,
+        mutation,
+        artifactProvider: async (name) => {
+          const artifactPath = LOCAL_PACKAGE_ARTIFACTS.get(name);
+          return artifactPath ? fs.promises.readFile(artifactPath) : undefined;
+        },
+        authorize: async (request) => {
+          const response = await fetch(`http://127.0.0.1:${backendPort}/api/auth/user`, {
+            headers: {
+              cookie: request.headers.cookie ?? '',
+            },
+          });
+          return response.ok;
+        },
+        authorizeMutation: (request) => {
+          if (request.headers['sec-fetch-site'] === 'cross-site') return false;
+          const origin = request.headers.origin;
+          if (!origin) return true;
+          try {
+            const hostname = new URL(origin).hostname;
+            return hostname === '127.0.0.1' || hostname === 'localhost' || hostname === '::1';
+          } catch {
+            return false;
+          }
+        },
+      });
+    },
     backend: {
       kind: 'ownBackend',
       resolveBackend: () => backendBin,
@@ -250,7 +327,7 @@ async function main(): Promise<void> {
   });
 
   console.log('');
-  console.log('AionUi WebUI is ready');
+  console.log('Tomny WebUI is ready');
   console.log(`  Local  : ${handle.localUrl}`);
   if (handle.networkUrl) console.log(`  Network: ${handle.networkUrl}`);
 

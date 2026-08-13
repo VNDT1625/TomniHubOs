@@ -1,0 +1,1238 @@
+.hubShell {
+  --hub-canvas: var(--bg-base);
+  --hub-panel: var(--surface-glass);
+  --hub-panel-raised: var(--surface-glass-raised);
+  --hub-panel-soft: var(--surface-glass-subtle);
+  --hub-border: var(--surface-glass-border);
+  --hub-border-active: var(--surface-glass-border-strong);
+  --hub-text: var(--text-primary);
+  --hub-muted: var(--text-secondary);
+  --hub-accent: var(--primary);
+  --hub-accent-soft: color-mix(in srgb, var(--primary) 18%, transparent);
+  --hub-hover: color-mix(in srgb, var(--primary) 10%, transparent);
+  display: grid;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  grid-template-columns: 260px minmax(0, 1fr);
+  grid-template-rows: 68px minmax(0, 1fr) 56px;
+  overflow: hidden;
+  color: var(--hub-text);
+  background:
+    radial-gradient(circle at 52% 18%, color-mix(in srgb, var(--primary) 8%, transparent), transparent 32%),
+    var(--hub-canvas);
+  font-family: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.45;
+  transition: grid-template-columns 180ms ease;
+}
+
+.hubShellCollapsed {
+  grid-template-columns: 72px minmax(0, 1fr);
+}
+
+.sidebar {
+  grid-row: 1 / -1;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 16px 18px;
+  overflow: hidden auto;
+  border-right: 1px solid var(--hub-border);
+  background: color-mix(in srgb, var(--hub-panel-soft) 72%, transparent);
+  backdrop-filter: var(--surface-glass-filter-compact);
+}
+
+.brand {
+  display: flex;
+  height: 70px;
+  flex: 0 0 70px;
+  align-items: center;
+  gap: 12px;
+  padding: 0 8px;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.brand img {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  object-fit: contain;
+}
+
+.brandName,
+.sidebarLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebarToggle {
+  width: 32px !important;
+  height: 32px !important;
+  margin-left: auto;
+  color: var(--hub-muted) !important;
+  background: var(--hub-panel-soft) !important;
+}
+
+.primaryNav,
+.sidebarList {
+  display: grid;
+  gap: 4px;
+}
+
+.navButton,
+.sidebarAppButton,
+.workspaceButton {
+  display: flex !important;
+  width: 100%;
+  height: 40px !important;
+  justify-content: flex-start !important;
+  gap: 10px;
+  padding: 0 12px !important;
+  border: 1px solid transparent !important;
+  border-radius: 9px !important;
+  color: var(--hub-text) !important;
+  font-size: 14px !important;
+}
+
+.navButton :global(.arco-btn-content),
+.sidebarAppButton :global(.arco-btn-content),
+.workspaceButton :global(.arco-btn-content) {
+  min-width: 0;
+  flex: 1;
+  text-align: left;
+}
+
+.navButton :global(.arco-btn-icon),
+.sidebarAppButton :global(.arco-btn-icon),
+.workspaceButton :global(.arco-btn-icon) {
+  display: inline-flex;
+  width: 20px;
+  flex: 0 0 20px;
+  align-items: center;
+  justify-content: center;
+  margin-right: 0 !important;
+}
+
+.navButton:hover,
+.sidebarAppButton:hover,
+.workspaceButton:hover {
+  border-color: var(--hub-border) !important;
+  background: var(--hub-panel-soft) !important;
+}
+
+.navButtonActive {
+  color: var(--hub-text) !important;
+  background: linear-gradient(
+    90deg,
+    var(--hub-accent-soft),
+    color-mix(in srgb, var(--hub-accent) 10%, transparent)
+  ) !important;
+}
+
+.navButtonActive::before {
+  position: absolute;
+  left: 0;
+  width: 3px;
+  height: 22px;
+  border-radius: 0 4px 4px 0;
+  background: var(--hub-accent);
+  content: '';
+}
+
+.sidebarDivider {
+  height: 1px;
+  flex: 0 0 1px;
+  margin: 4px 8px;
+  background: var(--hub-border);
+}
+
+.sidebarSection {
+  display: grid;
+  gap: 6px;
+}
+
+.sidebarSectionHeader {
+  display: flex;
+  height: 30px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px;
+  color: var(--hub-muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.sidebarSectionHeader :global(.arco-btn) {
+  color: var(--hub-muted) !important;
+}
+
+.workspaceMark {
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 7px;
+  color: var(--text-white);
+  background: var(--hub-accent);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.sidebarSpacer {
+  min-height: 16px;
+  flex: 1;
+}
+
+.storeButton {
+  display: flex !important;
+  width: 100%;
+  min-height: 68px !important;
+  justify-content: flex-start !important;
+  gap: 12px;
+  padding: 10px 14px !important;
+  border: 1px solid var(--hub-border) !important;
+  border-radius: 12px !important;
+  color: var(--hub-text) !important;
+  background: color-mix(in srgb, var(--hub-panel) 78%, transparent) !important;
+}
+
+.storeButton:hover {
+  border-color: var(--hub-border-active) !important;
+  background: var(--hub-panel-raised) !important;
+}
+
+.storeButton :global(.arco-btn-content) {
+  min-width: 0;
+  flex: 1;
+}
+
+.storeCopy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+  text-align: left;
+}
+
+.storeCopy strong {
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.storeCopy small {
+  overflow: hidden;
+  color: var(--hub-muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hubShellCollapsed .brand {
+  justify-content: center;
+  padding: 0;
+}
+
+.hubShellCollapsed .brandName,
+.hubShellCollapsed .sidebarLabel,
+.hubShellCollapsed .sidebarSectionHeader,
+.hubShellCollapsed .storeCopy,
+.hubShellCollapsed .storeButton > :global(svg:last-child) {
+  display: none;
+}
+
+.hubShellCollapsed .sidebar {
+  padding-inline: 8px;
+}
+
+.hubShellCollapsed .sidebarToggle {
+  position: absolute;
+  top: 20px;
+  left: 54px;
+  z-index: 2;
+  width: 26px !important;
+  height: 26px !important;
+}
+
+.hubShellCollapsed .navButton,
+.hubShellCollapsed .sidebarAppButton,
+.hubShellCollapsed .workspaceButton {
+  width: 46px;
+  justify-content: center !important;
+  padding: 0 !important;
+}
+
+.hubShellCollapsed .storeButton {
+  width: 46px;
+  min-height: 46px !important;
+  justify-content: center !important;
+  padding: 0 !important;
+}
+
+.topbar {
+  grid-column: 2;
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 20px;
+  padding: 0 24px 0 40px;
+  border-bottom: 1px solid var(--hub-border);
+  background: color-mix(in srgb, var(--hub-canvas) 78%, transparent);
+  backdrop-filter: var(--surface-glass-filter-compact);
+}
+
+.searchTrigger {
+  display: flex !important;
+  width: min(900px, calc(100% - 190px));
+  height: 42px !important;
+  justify-content: flex-start !important;
+  gap: 10px;
+  padding: 0 14px !important;
+  border: 1px solid var(--hub-border) !important;
+  border-radius: 10px !important;
+  color: var(--hub-muted) !important;
+  background: var(--hub-panel-soft) !important;
+}
+
+.searchTrigger :global(.arco-btn-content) {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.searchTrigger span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.searchTrigger kbd {
+  flex: 0 0 auto;
+  color: var(--hub-muted);
+  font: inherit;
+  font-size: 12px;
+}
+
+.searchTriggerActive,
+.searchTrigger:hover {
+  border-color: var(--hub-border-active) !important;
+}
+
+.topbarActions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.topbarButton {
+  width: 38px !important;
+  height: 38px !important;
+  color: var(--hub-text) !important;
+}
+
+.topbarButton:hover {
+  background: var(--hub-panel-soft) !important;
+}
+
+.accountButton {
+  display: flex !important;
+  height: 40px !important;
+  align-items: center;
+  gap: 8px;
+  padding: 0 6px !important;
+  color: var(--hub-text) !important;
+}
+
+.avatar,
+.sidebarAccountAvatar {
+  display: inline-flex;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: var(--text-white);
+  background: var(--hub-accent);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.body {
+  grid-column: 2;
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  overflow: hidden;
+}
+
+.main {
+  min-width: 0;
+  min-height: 0;
+  padding: 28px 40px 36px;
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
+.intro {
+  margin-bottom: 20px;
+}
+
+.intro h1 {
+  margin: 0;
+  color: var(--hub-text);
+  font-size: clamp(27px, 2.25vw, 34px);
+  font-weight: 720;
+  letter-spacing: -0.035em;
+  line-height: 1.18;
+}
+
+:global([data-theme='dark']) .intro h1,
+:global(body[arco-theme='dark']) .intro h1 {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--hub-accent) 68%, var(--hub-text)), var(--hub-text) 58%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+.intro p {
+  margin: 7px 0 0;
+  color: var(--hub-muted);
+  font-size: 15px;
+}
+
+.composer {
+  min-width: 0;
+}
+
+.composer :global(.guid-input-card-shell) {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  border: 1px solid var(--hub-border) !important;
+  border-radius: 14px !important;
+  background: color-mix(in srgb, var(--hub-panel) 82%, transparent) !important;
+  box-shadow: var(--surface-glass-shadow-soft) !important;
+  backdrop-filter: var(--surface-glass-filter-compact);
+}
+
+.composer :global(.guid-input-card-shell:focus-within) {
+  border-color: var(--hub-border-active) !important;
+  box-shadow: var(--surface-glass-shadow-raised) !important;
+}
+
+.composer :global(.arco-textarea) {
+  min-height: 58px !important;
+  color: var(--hub-text) !important;
+  font-size: 14px !important;
+  line-height: 1.5 !important;
+}
+
+.composer :global(.arco-textarea::placeholder) {
+  color: var(--hub-muted) !important;
+}
+
+.composer :global([data-testid='guid-send-btn']),
+.composer :global(.send-button-custom) {
+  width: 44px !important;
+  min-width: 44px !important;
+  height: 44px !important;
+  border: 0 !important;
+  border-radius: 50% !important;
+  color: var(--text-white) !important;
+  background: var(--hub-accent) !important;
+}
+
+.composer :global([data-testid='mode-selector'] .arco-btn),
+.composer :global(.agent-mode-compact-pill) {
+  border-radius: 8px !important;
+}
+
+.quickPromptRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 14px 0 30px;
+}
+
+.quickPromptRow :global(.arco-btn) {
+  height: 40px !important;
+  padding: 0 18px !important;
+  border: 1px solid var(--hub-border) !important;
+  border-radius: 9px !important;
+  color: var(--hub-text) !important;
+  background: color-mix(in srgb, var(--hub-panel-soft) 68%, transparent) !important;
+}
+
+.quickPromptRow :global(.arco-btn:hover) {
+  border-color: var(--hub-border-active) !important;
+  background: var(--hub-panel-raised) !important;
+}
+
+.appsSection,
+.recentSection {
+  min-width: 0;
+}
+
+.recentSection {
+  margin-top: 30px;
+}
+
+.sectionHeading {
+  display: flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.sectionHeading h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 680;
+  letter-spacing: -0.02em;
+}
+
+.sectionHeading :global(.arco-btn) {
+  color: var(--hub-accent) !important;
+}
+
+.inlineAction {
+  display: inline-flex;
+  min-width: 0;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.categoryGrid {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.categoryCard,
+.statusCard {
+  overflow: hidden;
+  border: 1px solid var(--hub-border) !important;
+  border-radius: 13px !important;
+  background: color-mix(in srgb, var(--hub-panel) 78%, transparent) !important;
+  box-shadow: var(--surface-glass-shadow-soft) !important;
+  backdrop-filter: var(--surface-glass-filter-compact);
+}
+
+.categoryCard :global(.arco-card-body) {
+  display: flex;
+  min-height: 190px;
+  flex-direction: column;
+  padding: 18px !important;
+}
+
+.categoryHeader {
+  display: flex !important;
+  width: 100%;
+  height: auto !important;
+  justify-content: flex-start !important;
+  padding: 0 !important;
+  color: var(--hub-text) !important;
+  text-align: left;
+}
+
+.categoryHeader :global(.arco-btn-content) {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+.categoryMark {
+  display: inline-flex;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  background: var(--hub-accent-soft);
+}
+
+.categoryHeader strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 680;
+}
+
+.categoryHeader small,
+.appCopy small,
+.recentContent small {
+  display: block;
+  overflow: hidden;
+  color: var(--hub-muted);
+  font-size: 11px;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.categoryApps {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 22px;
+}
+
+.appRowButton {
+  display: block !important;
+  min-width: 0 !important;
+  height: auto !important;
+  padding: 0 !important;
+  color: var(--hub-text) !important;
+}
+
+.appRowButton :global(.arco-btn-content) {
+  display: block;
+  width: 100%;
+}
+
+.appRow {
+  display: grid;
+  min-width: 0;
+  justify-items: center;
+  gap: 8px;
+}
+
+.appIcon {
+  display: inline-flex;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, currentColor 26%, transparent);
+  border-radius: 11px;
+  color: var(--hub-accent);
+  background: var(--hub-accent-soft);
+  transition:
+    transform 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.appRowButton:hover .appIcon {
+  transform: translateY(-2px);
+  box-shadow: var(--surface-glass-shadow-soft);
+}
+
+.appCopy {
+  display: block;
+  min-width: 0;
+  width: 100%;
+  text-align: center;
+}
+
+.appCopy strong {
+  display: block;
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 620;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.categoryViewAll {
+  width: 26px !important;
+  height: 26px !important;
+  margin: auto auto 0;
+  color: var(--hub-muted) !important;
+  background: var(--hub-panel-soft) !important;
+}
+
+.tonePrimary {
+  color: var(--hub-accent);
+}
+
+.toneInfo {
+  color: var(--info);
+}
+
+.toneSuccess {
+  color: var(--success);
+}
+
+.toneWarning {
+  color: var(--warning);
+}
+
+.toneDanger {
+  color: var(--danger);
+}
+
+.recentGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.recentButton {
+  height: 88px !important;
+  justify-content: flex-start !important;
+  padding: 14px !important;
+  border: 1px solid var(--hub-border) !important;
+  border-radius: 11px !important;
+  color: var(--hub-text) !important;
+  background: color-mix(in srgb, var(--hub-panel) 72%, transparent) !important;
+}
+
+.recentButton:hover {
+  border-color: var(--hub-border-active) !important;
+  background: var(--hub-panel-raised) !important;
+}
+
+.recentButton :global(.arco-btn-content) {
+  width: 100%;
+}
+
+.recentContent {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 10px;
+  text-align: left;
+}
+
+.recentContent > span:last-child {
+  min-width: 0;
+}
+
+.recentContent strong {
+  display: block;
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recentContent small {
+  margin-top: 12px;
+}
+
+.recentEmpty {
+  display: grid;
+  min-height: 84px;
+  place-items: center;
+  border: 1px dashed var(--hub-border);
+  border-radius: 12px;
+  color: var(--hub-muted);
+}
+
+.statusRail {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 24px 18px 0;
+  overflow: hidden auto;
+}
+
+.systemStatusButton {
+  height: 42px !important;
+  padding: 0 14px !important;
+  border: 1px solid var(--hub-border) !important;
+  border-radius: 10px !important;
+  color: var(--hub-text) !important;
+  background: color-mix(in srgb, var(--hub-panel) 78%, transparent) !important;
+}
+
+.statusCard :global(.arco-card-body) {
+  padding: 16px 18px !important;
+}
+
+.statusHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  font-size: 15px;
+  font-weight: 680;
+}
+
+.statusHeading :global(.arco-btn) {
+  color: var(--hub-accent) !important;
+}
+
+.metricList,
+.notificationList,
+.systemGrid {
+  display: grid;
+  gap: 12px;
+}
+
+.metricList > div {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) 116px;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+}
+
+.metricValue {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 34px;
+  align-items: center;
+  gap: 8px;
+  text-align: right;
+}
+
+.metricValue strong {
+  font-size: 12px;
+  font-weight: 520;
+}
+
+.metricTrack,
+.systemTrack {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--hub-panel-soft);
+}
+
+.metricFill,
+.systemFill {
+  display: block;
+  width: 65%;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--success);
+}
+
+.metricFillWarning {
+  width: 40%;
+  background: var(--warning);
+}
+
+.metricFillDanger {
+  width: 10%;
+  background: var(--danger);
+}
+
+.statusDot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  flex: 0 0 8px;
+  border-radius: 50%;
+  background: var(--hub-muted);
+}
+
+.dotSuccess {
+  background: var(--success);
+}
+
+.dotWarning {
+  background: var(--warning);
+}
+
+.dotDanger {
+  background: var(--danger);
+}
+
+.notificationList > div,
+.systemReady,
+.identityRow {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.identityRow {
+  align-items: center;
+}
+
+.statusIcon {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: var(--hub-accent);
+  background: var(--hub-accent-soft);
+}
+
+.notificationList strong,
+.systemReady strong,
+.identityRow strong {
+  display: block;
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 560;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notificationList small,
+.systemReady small,
+.identityRow small {
+  display: block;
+  margin-top: 2px;
+  color: var(--hub-muted);
+  font-size: 10px;
+}
+
+.systemMetric {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr) 34px;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+}
+
+.systemMetricLabel {
+  color: var(--hub-muted);
+}
+
+.systemFillCpu {
+  width: 32%;
+  background: var(--hub-accent);
+}
+
+.systemFillRam {
+  width: 48%;
+  background: var(--hub-accent);
+}
+
+.systemFillStorage {
+  width: 62%;
+  background: var(--hub-accent);
+}
+
+.footer {
+  grid-column: 2;
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+  padding: 0 24px 0 40px;
+  border-top: 1px solid var(--hub-border);
+  color: var(--hub-muted);
+  font-size: 11px;
+}
+
+.footer :global(.arco-btn) {
+  height: 28px !important;
+  padding-inline: 4px !important;
+  color: var(--hub-muted) !important;
+  font-size: 11px !important;
+}
+
+.footerFeedbackButton {
+  margin-right: auto;
+}
+
+.footerStatus {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.hubPopoverPopup.hubPopoverPopup :global(.arco-popover-content) {
+  overflow: hidden;
+  border: 1px solid var(--hub-border) !important;
+  border-radius: 14px !important;
+  background: var(--hub-panel-raised) !important;
+  box-shadow: var(--surface-glass-shadow-raised) !important;
+  backdrop-filter: var(--surface-glass-filter) !important;
+}
+
+.hubPopoverPopup.hubPopoverPopup :global(.arco-popover-inner) {
+  padding: 0 !important;
+}
+
+.hubPopover {
+  width: 300px;
+  padding: 16px;
+  color: var(--hub-text);
+}
+
+.sidebarAccount {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--hub-border);
+}
+
+.sidebarAccountCopy {
+  display: grid;
+  min-width: 0;
+}
+
+.sidebarAccountCopy strong,
+.sidebarAccountCopy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebarAccountCopy small {
+  color: var(--hub-muted);
+  font-size: 11px;
+}
+
+.quickPreferences {
+  display: grid;
+  gap: 10px;
+}
+
+.quickPreferencesHeader {
+  color: var(--hub-muted);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.quickPreferenceGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.quickLanguageGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.quickPreferenceButton {
+  height: 34px !important;
+  border-radius: 8px !important;
+  color: var(--hub-text) !important;
+}
+
+.launcherModal :global(.arco-modal-content),
+.launcherModal :global(.arco-modal-header),
+.launcherModal :global(.arco-modal-body) {
+  color: var(--hub-text);
+  background: var(--hub-panel-raised) !important;
+}
+
+.launcherHint {
+  margin: 0 0 16px;
+  color: var(--hub-muted);
+}
+
+.launcherGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.launcherApp {
+  min-width: 0;
+  height: 66px !important;
+  justify-content: flex-start !important;
+  padding: 10px !important;
+  border: 1px solid var(--hub-border) !important;
+  border-radius: 10px !important;
+  color: var(--hub-text) !important;
+  background: var(--hub-panel-soft) !important;
+}
+
+.launcherAppContent {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+}
+
+.launcherAppContent span:last-child {
+  min-width: 0;
+}
+
+.launcherAppContent strong,
+.launcherAppContent small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.launcherAppContent small {
+  color: var(--hub-muted);
+  font-size: 11px;
+}
+
+@media (max-width: 1320px) {
+  .hubShell {
+    grid-template-columns: 230px minmax(0, 1fr);
+  }
+
+  .hubShellCollapsed {
+    grid-template-columns: 72px minmax(0, 1fr);
+  }
+
+  .body {
+    grid-template-columns: minmax(0, 1fr) 300px;
+  }
+
+  .main {
+    padding-inline: 28px;
+  }
+
+  .categoryApps {
+    gap: 10px;
+  }
+
+  .recentGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1080px) {
+  .body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .statusRail {
+    display: none;
+  }
+
+  .categoryGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .categoryCard:last-child {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 760px) {
+  .hubShell,
+  .hubShellCollapsed {
+    grid-template-columns: 72px minmax(0, 1fr);
+    grid-template-rows: 60px minmax(0, 1fr) 44px;
+  }
+
+  .sidebar {
+    padding-inline: 8px;
+  }
+
+  .brand {
+    height: 60px;
+    flex-basis: 60px;
+    justify-content: center;
+    padding: 0;
+  }
+
+  .brandName,
+  .sidebarLabel,
+  .sidebarSectionHeader,
+  .storeCopy,
+  .storeButton > :global(svg:last-child) {
+    display: none;
+  }
+
+  .sidebarToggle {
+    display: none !important;
+  }
+
+  .navButton,
+  .sidebarAppButton,
+  .workspaceButton,
+  .storeButton {
+    width: 46px;
+    justify-content: center !important;
+    padding: 0 !important;
+  }
+
+  .storeButton {
+    min-height: 46px !important;
+  }
+
+  .topbar {
+    padding: 0 12px 0 16px;
+  }
+
+  .searchTrigger {
+    width: 100%;
+  }
+
+  .searchTrigger kbd,
+  .topbarActions > :first-child {
+    display: none;
+  }
+
+  .main {
+    padding: 22px 16px 28px;
+  }
+
+  .categoryGrid,
+  .recentGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .categoryCard:last-child {
+    grid-column: auto;
+  }
+
+  .footer {
+    padding-inline: 16px;
+  }
+
+  .footer > :not(.footerStatus) {
+    display: none;
+  }
+}
+
+@media (max-width: 520px) {
+  .categoryApps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .quickPromptRow {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .quickPromptRow :global(.arco-btn) {
+    width: 100%;
+    padding-inline: 10px !important;
+  }
+
+  .launcherGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hubShell,
+  .appIcon {
+    transition: none;
+  }
+}

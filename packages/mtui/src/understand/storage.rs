@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 const CANONICAL_METADATA_DIR: &str = ".tomni";
 const MIGRATION_METADATA_DIR: &str = ".omni";
-const LEGACY_METADATA_DIR: &str = ".aionui";
+const LEGACY_METADATA_DIR: &str = ".tomny";
 const UNDERSTAND_DIR: &str = "understand";
 
 fn metadata_root(project_root: &Path) -> PathBuf {
@@ -61,7 +61,7 @@ mod tests {
     #[test]
     fn canonical_summary_wins_when_both_generations_exist() {
         let root = tempfile::tempdir().expect("tempdir");
-        for metadata_dir in [".tomni", ".omni", ".aionui"] {
+        for metadata_dir in [".tomni", ".omni", ".tomny"] {
             let understand = root.path().join(metadata_dir).join("understand");
             std::fs::create_dir_all(&understand).expect("understand directory");
             std::fs::write(understand.join("summary.json"), "{}").expect("summary");
@@ -81,7 +81,7 @@ mod tests {
     fn marker_stays_with_the_selected_summary_generation() {
         let root = tempfile::tempdir().expect("tempdir");
         let canonical = root.path().join(".tomni/understand");
-        let legacy = root.path().join(".aionui/understand");
+        let legacy = root.path().join(".tomny/understand");
         std::fs::create_dir_all(&canonical).expect("canonical directory");
         std::fs::create_dir_all(&legacy).expect("legacy directory");
         std::fs::write(canonical.join("summary.json"), "{}").expect("canonical summary");
@@ -95,7 +95,7 @@ mod tests {
     fn a_new_canonical_marker_invalidates_a_legacy_summary() {
         let root = tempfile::tempdir().expect("tempdir");
         let canonical = root.path().join(".tomni/understand");
-        let legacy = root.path().join(".aionui/understand");
+        let legacy = root.path().join(".tomny/understand");
         std::fs::create_dir_all(&canonical).expect("canonical directory");
         std::fs::create_dir_all(&legacy).expect("legacy directory");
         std::fs::write(canonical.join("stale.json"), "{}").expect("new marker");
@@ -123,7 +123,7 @@ mod tests {
     #[test]
     fn legacy_summary_remains_a_compatibility_fallback() {
         let root = tempfile::tempdir().expect("tempdir");
-        let understand = root.path().join(".aionui").join("understand");
+        let understand = root.path().join(".tomny").join("understand");
         std::fs::create_dir_all(&understand).expect("understand directory");
         std::fs::write(understand.join("summary.json"), "{}").expect("summary");
         std::fs::write(understand.join("stale.json"), "{}").expect("marker");

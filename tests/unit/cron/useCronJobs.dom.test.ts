@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -605,7 +605,7 @@ describe('useCronJobsMap', () => {
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     // Manually set unread
-    localStorage.setItem('aionui_cron_unread', JSON.stringify(['conv-1']));
+    localStorage.setItem('tomny_cron_unread', JSON.stringify(['conv-1']));
     result.current.refetch();
 
     await waitFor(() => {

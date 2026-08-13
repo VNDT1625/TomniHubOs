@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -9,7 +9,7 @@
  * the built-in **Office-editor** MCP server is attached.
  *
  * The editor chat embeds the main `<ChatConversation>` and attaches the
- * `aionui-office-editor` MCP server so a CLI agent (Claude Code / Codex / Gemini)
+ * `tomny-office-editor` MCP server so a CLI agent (Claude Code / Codex / Gemini)
  * can edit the LIVE document the user has open with fast, formatting-preserving
  * tools (`office_*`). Without explicit guidance the agent does not know which
  * file the panel is bound to, nor that the `office_*` tools edit the live editor
@@ -21,7 +21,7 @@
  */
 
 /** Canonical name of the built-in Office-editor MCP server (mirror constant). */
-export const OFFICE_EDITOR_MCP_NAME = 'aionui-office-editor';
+export const OFFICE_EDITOR_MCP_NAME = 'tomny-office-editor';
 
 /**
  * Build the standing-instructions block for the editor chat. The open file path

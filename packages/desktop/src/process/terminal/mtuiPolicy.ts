@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -72,7 +72,7 @@ const IGNORED_POLICY_PATHS = [
   '.tomny/sessions/',
   '.tomni/understand/',
   '.omni/understand/',
-  '.aionui/understand/',
+  '.tomny/understand/',
   'node_modules/',
   'dist/',
   'build/',
@@ -84,7 +84,7 @@ const normalizeRel = (value: string): string => value.replace(/\\/g, '/').replac
 
 const isIgnoredPolicyPath = (relPath: string): boolean => {
   const normalized = normalizeRel(relPath);
-  if (normalized.startsWith('.aionui/specs/') && normalized.includes('/plan/temporary/')) {
+  if (normalized.startsWith('.tomny/specs/') && normalized.includes('/plan/temporary/')) {
     return true;
   }
   if (normalized.startsWith('.kiro/tmp-')) {

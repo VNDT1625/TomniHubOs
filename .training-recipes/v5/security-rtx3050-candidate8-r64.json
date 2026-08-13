@@ -1,0 +1,60 @@
+{
+  "schemaVersion": "tomny.qlora-recipe.v1",
+  "recipeVersion": 8,
+  "id": "tomny-qwen35-08b-security-rtx3050-candidate8-r64",
+  "version": "2026-07-30.8-r64",
+  "promotionStatus": "candidate-only",
+  "purpose": "security",
+  "dataset": {
+    "datasetId": "tomny-security-candidate5-independent",
+    "datasetVersion": "2026-07-29.v5",
+    "manifestSha256": "7e2004f0d150bdcd4e6a2584a4d15732be309b6952ad3d4f9ff6956414d4d455"
+  },
+  "baseModel": {
+    "modelId": "Qwen/Qwen3.5-0.8B",
+    "revision": "2fc06364715b967f1860aea9cf38778875588b17",
+    "contentSha256": "ff3a07808a9e83627e69a07131fdec45c60973f23cc5617204d173461ec65fe6"
+  },
+  "seed": 20260725,
+  "hardwareProfile": {
+    "profile": "rtx-3050-4gb",
+    "gpuModel": "NVIDIA GeForce RTX 3050 Laptop GPU",
+    "maxVramGiB": 4,
+    "sequentialOnly": true,
+    "finiteGradientSmokePassed": true,
+    "finiteGradientSmokeReceipt": {
+      "candidateVersion": "0.1.0-candidate.8-r64-smoke.2",
+      "reportSha256": "809beaf6494542722c92435a4c66ded01abba58bad27cdca4d3e23ccb36d18cb",
+      "manifestSha256": "64e9b5de646694a7b413919f0441781f4dffd15f1205a3eb9bc51140205a8420",
+      "weightSha256": "f1cb6ccddb20c1c6e813dc311129249262e9860fe530fd6bcdc2d9e125e91766",
+      "targetProfile": "last-block",
+      "rank": 64,
+      "steps": 5,
+      "allFinite": true,
+      "peakGpuAllocatedBytes": 2549318144,
+      "peakGpuReservedBytes": 4041211904
+    }
+  },
+  "qualityLimitations": [
+    "Candidate 7 completed all 450 optimization steps, but the old BF16 final-evaluation tolerance rejected a numerically equivalent final pass before artifact export.",
+    "Candidate 8 keeps the strict zero configured validation regression and changes no training data, model capacity, or hyperparameters after the verified smoke.",
+    "The five-step smoke remained finite and inside 4 GiB, but peak reserved VRAM leaves limited headroom; training must remain sequential and resource-gated.",
+    "The immutable test split remains trainer-isolated; a fresh checkpoint-only benchmark is mandatory before any promotion decision."
+  ],
+  "training": {
+    "maxSteps": 450,
+    "maxLength": 256,
+    "rank": 64,
+    "loraAlpha": 128,
+    "gradientAccumulationSteps": 8,
+    "learningRate": 0.0001,
+    "warmupRatio": 0.05,
+    "targetProfile": "last-block",
+    "loggingSteps": 5,
+    "evalSteps": 50,
+    "saveSteps": 50,
+    "earlyStoppingPatience": 3,
+    "earlyStoppingThreshold": 0.001,
+    "maxValidationRegression": 0
+  }
+}

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  *
  * Unit tests for process/utils/migrateAssistants.ts (A11 in N4a).
@@ -102,23 +102,23 @@ describe('migrateAssistants', () => {
       expect(result.description_i18n).toEqual({ zh: '描述' });
     });
 
-    it('rewrites legacy default gemini to current default aionrs', () => {
+    it('rewrites legacy default gemini to current default tomnyagentic', () => {
       // Legacy Electron shipped 'gemini' as the global default; the current
-      // backend default is 'aionrs' (the internal gemini engine was removed).
+      // backend default is 'tomnyagentic' (the internal gemini engine was removed).
       // Treat a legacy 'gemini' value as "no explicit choice" so users who
       // never touched the picker get the current default, not a broken one.
       const result = legacyAssistantToCreateRequest({ id: 'x', presetAgentType: 'gemini' });
-      expect(result.preset_agent_type).toBe('aionrs');
+      expect(result.preset_agent_type).toBe('tomnyagentic');
     });
 
-    it('defaults to aionrs when presetAgentType missing', () => {
+    it('defaults to tomnyagentic when presetAgentType missing', () => {
       const result = legacyAssistantToCreateRequest({ id: 'x' });
-      expect(result.preset_agent_type).toBe('aionrs');
+      expect(result.preset_agent_type).toBe('tomnyagentic');
     });
 
     it('preserves non-default preset_agent_type verbatim', () => {
       // Users who actually picked a backend keep their choice across the
-      // gemini → aionrs default migration.
+      // gemini → tomnyagentic default migration.
       const result = legacyAssistantToCreateRequest({ id: 'x', presetAgentType: 'codex' });
       expect(result.preset_agent_type).toBe('codex');
     });
@@ -208,14 +208,14 @@ describe('migrateAssistants', () => {
     }
 
     it('preserves explicit user choice (codex) across the default change', async () => {
-      // Legacy built-in was set to 'codex'; backend default is 'aionrs'. The
+      // Legacy built-in was set to 'codex'; backend default is 'tomnyagentic'. The
       // migration should PUT an override so the user's choice survives.
       const config = makeConfig({
         assistants: [{ id: 'builtin-word-creator', enabled: true, presetAgentType: 'codex', isBuiltin: true }],
       });
 
       (ipcBridge.assistants.list.invoke as any).mockResolvedValue(
-        builtinListStub([{ id: 'word-creator', preset_agent_type: 'aionrs' }])
+        builtinListStub([{ id: 'word-creator', preset_agent_type: 'tomnyagentic' }])
       );
       (ipcBridge.assistants.update.invoke as any).mockResolvedValue({});
 
@@ -231,13 +231,13 @@ describe('migrateAssistants', () => {
 
     it('does not override when legacy value is the old default (gemini)', async () => {
       // 'gemini' legacy-default must collapse to "no preference" so the user
-      // lands on the new default aionrs, not a broken gemini reference.
+      // lands on the new default tomnyagentic, not a broken gemini reference.
       const config = makeConfig({
         assistants: [{ id: 'builtin-word-creator', enabled: true, presetAgentType: 'gemini', isBuiltin: true }],
       });
 
       (ipcBridge.assistants.list.invoke as any).mockResolvedValue(
-        builtinListStub([{ id: 'word-creator', preset_agent_type: 'aionrs' }])
+        builtinListStub([{ id: 'word-creator', preset_agent_type: 'tomnyagentic' }])
       );
 
       const result = await migrateAssistantsToBackend(config as any);
@@ -247,14 +247,14 @@ describe('migrateAssistants', () => {
     });
 
     it('does not override when legacy value already matches the current default', async () => {
-      // User picked 'aionrs' explicitly (or the legacy default already matched):
+      // User picked 'tomnyagentic' explicitly (or the legacy default already matched):
       // writing an identical override would be a no-op row.
       const config = makeConfig({
-        assistants: [{ id: 'builtin-word-creator', enabled: true, presetAgentType: 'aionrs', isBuiltin: true }],
+        assistants: [{ id: 'builtin-word-creator', enabled: true, presetAgentType: 'tomnyagentic', isBuiltin: true }],
       });
 
       (ipcBridge.assistants.list.invoke as any).mockResolvedValue(
-        builtinListStub([{ id: 'word-creator', preset_agent_type: 'aionrs' }])
+        builtinListStub([{ id: 'word-creator', preset_agent_type: 'tomnyagentic' }])
       );
 
       const result = await migrateAssistantsToBackend(config as any);
@@ -271,7 +271,7 @@ describe('migrateAssistants', () => {
       });
 
       (ipcBridge.assistants.list.invoke as any).mockResolvedValue(
-        builtinListStub([{ id: 'word-creator', preset_agent_type: 'aionrs' }]) // no pdf-to-ppt
+        builtinListStub([{ id: 'word-creator', preset_agent_type: 'tomnyagentic' }]) // no pdf-to-ppt
       );
 
       const result = await migrateAssistantsToBackend(config as any);

@@ -1,13 +1,13 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
 /**
  * The **"Super"** control that lives in the conversation header.
  *
- * Turning Super ON grants the conversation's agent (Claude Code / ACP, aionrs, …)
+ * Turning Super ON grants the conversation's agent (Claude Code / ACP, tomnyagentic, …)
  * the Browser-Control tool set, so the agent can decide — on its own, while you
  * chat normally — to open a live embedded browser tab and operate the web for
  * you. Turning it OFF removes those tools and the chat behaves exactly as before.

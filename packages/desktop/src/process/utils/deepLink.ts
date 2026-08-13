@@ -1,29 +1,30 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
 import type { BrowserWindow } from 'electron';
 import { ipcBridge } from '@/common';
 
-export const PROTOCOL_SCHEME = 'aionui';
+export const PROTOCOL_SCHEME = 'tomny';
+export const LEGACY_TOMNI_PROTOCOL_SCHEME = 'tomni';
+export const LEGACY_PROTOCOL_SCHEME = 'tomny';
+export const PROTOCOL_SCHEMES = [PROTOCOL_SCHEME, LEGACY_TOMNI_PROTOCOL_SCHEME, LEGACY_PROTOCOL_SCHEME] as const;
 
-/** Web schemes AionUi can handle when registered as the OS default browser. */
+/** Web schemes Tomny can handle when registered as the OS default browser. */
 const WEB_SCHEMES = ['http:', 'https:'] as const;
 
-/** True if `arg` looks like a deep-link AionUi can act on (aionui:// or a web URL). */
+/** True when `arg` is a current/legacy Tomny deep link or a web URL. */
 export const isHandledUrlArg = (arg: string): boolean =>
-  arg.startsWith(`${PROTOCOL_SCHEME}://`) || /^https?:\/\//i.test(arg);
+  PROTOCOL_SCHEMES.some((scheme) => arg.startsWith(`${scheme}://`)) || /^https?:\/\//i.test(arg);
 
 /**
- * Parse a URL handed to AionUi into an action and params.
+ * Parse a URL handed to Tomny into an action and params.
  *
  * Two source kinds are supported:
- *   1. `aionui://…` deep links — the existing add-provider / navigate protocol.
- *        - aionui://add-provider?base_url=xxx&api_key=xxx
- *        - aionui://provider/add?v=1&data=<base64 JSON>  (one-api / new-api style)
- *   2. `http(s)://…` web URLs — handed to AionUi by the OS when it is the
+ *   1. `tomny://…` deep links, plus the legacy `tomni://…` and `tomny://…` compatibility aliases.
+ *   2. `http(s)://…` web URLs — handed to Tomny by the OS when it is the
  *      default browser. These map to the `open-url` action so the renderer can
  *      open them in the built-in Browser tab.
  */
@@ -36,7 +37,7 @@ export const parseDeepLinkUrl = (url: string): { action: string; params: Record<
       return { action: 'open-url', params: { url: parsed.toString() } };
     }
 
-    if (parsed.protocol !== `${PROTOCOL_SCHEME}:`) return null;
+    if (!PROTOCOL_SCHEMES.some((scheme) => parsed.protocol === `${scheme}:`)) return null;
 
     const hostname = parsed.hostname || '';
     const pathname = parsed.pathname.replace(/^\/+/, '');

@@ -1,5 +1,20 @@
 /* Settings mobile top nav */
+.settings-page-wrapper {
+  padding: clamp(20px, 3vw, 40px);
+}
+
+.settings-page-content {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--page-section-gap);
+}
+
 @media (max-width: 767px) {
+  .settings-page-wrapper {
+    padding: 14px 16px;
+  }
+
   .settings-mobile-top-nav {
     display: flex;
     gap: 8px;

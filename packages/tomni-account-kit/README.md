@@ -1,6 +1,6 @@
 # @tomni/account-kit
 
-Standalone product-account implementation for Tomni. This package is intentionally **not integrated**
+Standalone product-account implementation for Tomny. This package is intentionally **not integrated**
 with the desktop app, renderer router, main process, backend, database, WebUI authentication, billing,
 or production cloud services.
 
@@ -16,7 +16,7 @@ or production cloud services.
 ## Isolation guarantees
 
 The package has no import from `packages/desktop`, adds no desktop route or menu entry, does not touch
-the Tomni database, and sends no network request. Its storage namespace is
+the Tomny database, and sends no network request. Its storage namespace is
 `tomni-account-kit.prototype.v1`.
 
 ## Run the isolated playground
@@ -38,5 +38,5 @@ bun --cwd packages/tomni-account-kit build
 ## Future integration seam
 
 Create a production implementation of `AccountClientContract`, then mount `AccountPrototypeApp`
-inside the intended Tomni route. Do not reuse the mock password hashing or mock verification codes in
+inside the intended Tomny route. Do not reuse the mock password hashing or mock verification codes in
 production.

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -664,7 +664,7 @@ export const ideClient = {
           () => channels.createDir.invoke({ path: dirPath }),
           FILE_OP_TIMEOUT_MS
         ),
-  /** Load project rules from `.aionrules` / `AGENTS.md` / `.cursorrules` in the repo. */
+  /** Load project rules from `.tomnyrules` / `AGENTS.md` / `.cursorrules` in the repo. */
   rulesLoad: (rootPath: string): Promise<IdeFileResult<string[]>> =>
     isBrowserIdeRpc()
       ? callBrowserIdeRpc<IdeFileResult<string[]>>('ide.rulesLoad', { rootPath })

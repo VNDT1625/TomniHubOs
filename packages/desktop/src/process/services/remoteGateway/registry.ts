@@ -27,7 +27,7 @@ export const startRegisteredTomniRemoteGateway = async (input: {
     host.configure({ language: input.language });
     return host;
   }
-  if (!conversations) throw new Error('Tomni native conversations are not registered.');
+  if (!conversations) throw new Error('Tomny native conversations are not registered.');
   startPromise ??= startTomniRemoteGateway({
     secret: input.secret,
     conversations,

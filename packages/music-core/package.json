@@ -1,5 +1,5 @@
 {
-  "name": "@aionui/music-core",
+  "name": "@tomny/music-core",
   "version": "0.0.0",
   "private": true,
   "description": "Headless music engine: schema, commands, audio analysis (agent ears), theory, render. Shared by the user UI and the agent (MCP) plane.",

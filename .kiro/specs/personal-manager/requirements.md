@@ -1,7 +1,7 @@
 # Requirements Document
 
 > **Tính năng:** **Manager** — Personal Manager (Tasks + Note + Schedule, có AI hỗ trợ).
-> **Dự án:** Tomni Agentic (fork của [AionUi](https://github.com/VNDT1625/OmniAgent), VNDT1625, Apache-2.0).
+> **Dự án:** Tomni Agentic (fork của [TomniHubOS](https://github.com/VNDT1625/OmniAgent), VNDT1625, Apache-2.0).
 > **Tính năng:** **Manager** — một "ứng dụng trong ứng dụng" gồm ba phần: Nhiệm vụ (Tasks), Ghi chú (Note),
 > và Lịch trình cá nhân (Schedule), có AI hỗ trợ tạo/quản lý/tối ưu.
 
@@ -19,8 +19,8 @@ tổ chức công việc hằng ngày trên một màn hình duy nhất. Manager
    cần thiết.
 
 Manager là một tính năng **độc lập** với tám nhóm yêu cầu Tomni Agentic đang phát triển (xem
-`.kiro/specs/aionui-enhancements/`). Nó bám đúng ranh giới kiến trúc của codebase và **không yêu cầu sửa
-aioncore** (xem mục Ràng buộc kiến trúc).
+`.kiro/specs/tomni-enhancements/`). Nó bám đúng ranh giới kiến trúc của codebase và **không yêu cầu sửa
+tomnicore** (xem mục Ràng buộc kiến trúc).
 
 ## Glossary
 
@@ -41,9 +41,9 @@ aioncore** (xem mục Ràng buộc kiến trúc).
 ## Ràng buộc kiến trúc (kế thừa từ Tomni Agentic — BẮT BUỘC)
 
 Các yêu cầu dưới đây PHẢI thoả các ràng buộc sau, giống mọi tính năng Tomni Agentic khác (xem
-`docs/CODEBASE_GUIDE.md` và `.kiro/specs/aionui-enhancements/design.md`):
+`docs/CODEBASE_GUIDE.md` và `.kiro/specs/tomni-enhancements/design.md`):
 
-1. **Không sửa aioncore (Rust binary).** Toàn bộ logic Manager nằm ở `packages/desktop/src/process/**`
+1. **Không sửa tomnicore (Rust binary).** Toàn bộ logic Manager nằm ở `packages/desktop/src/process/**`
    (service Main process, Node.js) và `packages/desktop/src/renderer/**` (UI). Nếu một yêu cầu **bắt buộc**
    phải đụng backend, nó PHẢI được đánh dấu rõ và kèm phương án thay thế không-đụng-backend.
 2. **Lưu trữ cục bộ bằng tệp.** Dữ liệu Manager (tasks, notes, events, cấu hình) lưu trong thư mục dữ liệu
@@ -303,7 +303,7 @@ toàn cục bộ, và tác nhân cũng thao tác được, để dùng liền m�
 ## Phụ thuộc & rủi ro cần chốt ở design
 
 - **Lập lịch nhắc nhở khi app đang chạy và khi đã quá hạn:** dùng scheduler/ticker trong Main process hay
-  tái dùng cron của aioncore? (Cron nằm trong aioncore — nếu tái dùng phải qua HTTP API; nếu tự lập lịch
+  tái dùng cron của tomnicore? (Cron nằm trong tomnicore — nếu tái dùng phải qua HTTP API; nếu tự lập lịch
   trong Main process thì không đụng backend.) → quyết ở `design.md`.
 - **Nguồn dữ liệu thời tiết** (API, có/không cần khoá, xử lý vị trí): chốt ở `design.md`. Đây là phụ thuộc
   mạng ngoài duy nhất của tính năng — cần ghi rõ và cho phép tắt.

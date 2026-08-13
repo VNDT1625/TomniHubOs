@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -34,6 +34,7 @@ describe('visual artifact analyzer', () => {
 
       const artifact = await analyzeVisualArtifact(imagePath, {
         mimeType: 'image/png',
+        ocrMode: 'disabled',
         generatedAt: new Date('2026-01-02T03:04:05.000Z'),
       });
 
@@ -43,7 +44,7 @@ describe('visual artifact analyzer', () => {
       expect(artifact.colors.palette.length).toBeGreaterThan(0);
       expect(artifact.regions.map((region) => region.id)).toContain('canvas');
       expect(artifact.textBlocks).toEqual([]);
-      expect(artifact.provenance.limitations).toContain('ocr-unavailable');
+      expect(artifact.provenance.limitations).toContain('ocr-disabled');
       expect(renderVisualArtifactSemanticText(artifact)).toContain('Image: 320x180');
       expect(renderVisualArtifactMockUi(artifact)).toContain('[dominant-color]');
     } finally {
@@ -51,7 +52,7 @@ describe('visual artifact analyzer', () => {
     }
   });
 
-  it('uses an injected text analyzer without pretending OCR exists by default', async () => {
+  it('uses an injected text analyzer instead of the default local OCR engine', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'visual-artifact-'));
     const imagePath = join(dir, 'text.png');
     try {
@@ -88,4 +89,3 @@ describe('visual artifact analyzer', () => {
     }
   });
 });
-

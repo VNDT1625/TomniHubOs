@@ -98,7 +98,7 @@
   "core": {
     "tab": "Core Test",
     "title": "Experimental AI response core",
-    "subtitle": "Validate direct local transports for Codex app-server and ACP-compatible CLIs without the AionCore executable.",
+    "subtitle": "Validate direct local transports for Codex app-server and ACP-compatible CLIs without the Tomny Core executable.",
     "transportNotice": "Direct multi-CLI core",
     "loadFailed": "Could not load agents.",
     "selectTarget": "Select an AI target",

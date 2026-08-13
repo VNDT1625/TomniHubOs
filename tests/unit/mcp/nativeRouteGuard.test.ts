@@ -2,7 +2,8 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const readSource = (relativePath: string): Promise<string> => readFile(path.resolve(process.cwd(), relativePath), 'utf8');
+const readSource = (relativePath: string): Promise<string> =>
+  readFile(path.resolve(process.cwd(), relativePath), 'utf8');
 
 describe('native MCP route guard', () => {
   it('keeps renderer MCP catalogs off legacy settings and extension HTTP routes', async () => {

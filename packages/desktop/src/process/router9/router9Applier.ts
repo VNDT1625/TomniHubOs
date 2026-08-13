@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -52,6 +52,8 @@ export type Router9ApplierDeps = {
   writeFileAtomic: (p: string, content: string) => Promise<void>;
   backup: (p: string) => Promise<string | undefined>;
   homeDir: () => string;
+  beforeWrite?: (configPath: string, originalContent: string | undefined, appliedContent: string) => Promise<void>;
+  afterWrite?: (configPath: string, appliedContent: string) => Promise<void>;
 };
 
 /** Read a file, resolving `undefined` when it does not exist (ENOENT). */
@@ -124,10 +126,15 @@ export const applyConnectorPlan = async (
       result.files.push({ path: absPath, status: 'skipped' });
       continue;
     }
+    // eslint-disable-next-line no-await-in-loop -- journal must be durable before the config write.
+    await d.beforeWrite?.(absPath, existingRaw, finalContent);
     // eslint-disable-next-line no-await-in-loop -- backup must complete before its corresponding atomic write.
     const backupPath = existingRaw !== undefined ? await d.backup(absPath) : undefined;
     // eslint-disable-next-line no-await-in-loop -- avoid racing writes when a target owns more than one config file.
     await d.writeFileAtomic(absPath, finalContent);
+
+    // eslint-disable-next-line no-await-in-loop -- commit the exact content used by the restore CAS guard.
+    await d.afterWrite?.(absPath, finalContent);
     result.files.push({ path: absPath, status: 'written', backupPath });
   }
 

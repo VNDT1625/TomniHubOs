@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -39,7 +39,7 @@ const ChatSlider: React.FC<{
         messageApi={messageApi}
       ></ChatWorkspace>
     );
-  } else if (conversation?.type === 'aionrs' && conversation.extra?.workspace) {
+  } else if (conversation?.type === 'tomnyagentic' && conversation.extra?.workspace) {
     workspaceNode = (
       <ChatWorkspace
         conversation_id={conversation.id}
@@ -47,7 +47,7 @@ const ChatSlider: React.FC<{
         isTemporaryWorkspace={
           (conversation.extra as { is_temporary_workspace?: boolean } | undefined)?.is_temporary_workspace
         }
-        eventPrefix='aionrs'
+        eventPrefix='tomnyagentic'
         messageApi={messageApi}
       ></ChatWorkspace>
     );

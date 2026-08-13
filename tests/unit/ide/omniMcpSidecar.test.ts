@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -268,6 +268,6 @@ describe('Omni MCP sidecar smoke checks', () => {
     expect(doc).toContain('/ide/mcp');
     expect(doc).toContain('omni_bootstrap_session');
     expect(doc).toContain('public MCP URL');
-    expect(doc).toContain('does not rename `.aionui`');
+    expect(doc).toContain('It does not rename');
   });
 });

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -24,6 +24,8 @@ import { startBackendOrExit } from './process/startup/backendStartup';
 import { resolveCoreBootPolicy } from './process/startup/coreBootPolicy';
 import { classifyBackendStartupFailure } from './process/startup/backendStartupFailure';
 import { installQuitCleanup } from './process/startup/quitCleanup';
+
+import { completeAppTermination, requestAppExit } from './process/startup/appTermination';
 import {
   prepareTelegramRemoteSecret,
   startTelegramRemoteTunnel,
@@ -31,16 +33,21 @@ import {
   syncTelegramRemoteLanguage,
 } from './process/startup/telegramRemoteStartup';
 import { ProcessConfig } from './process/utils/initStorage';
+import {
+  resolveStudioSplitRouteRedirectEnvironment,
+  STUDIO_SPLIT_ROUTE_REDIRECT_BOOTSTRAP_CHANNEL,
+  STUDIO_SPLIT_ROUTE_REDIRECT_ENV_KEY,
+} from './common/packages/studioCompatibility';
 import type { BackendStartupFailureInfo } from './common/types/platform/electron';
 import { registerWindowMaximizeListeners } from '@process/bridge';
-import { BackendLifecycleManager } from '@aionui/web-host';
+import { BackendLifecycleManager } from '@tomny/web-host';
 import { resolveBinaryPath } from '@process/backend';
 import './process/bridge/feedbackBridge';
 import { wasLaunchedAtLogin } from '@process/bridge/applicationBridge';
 import { onLanguageChanged } from './process/bridge/systemSettingsBridge';
 import { setInitialLanguage } from '@process/services/i18n';
 import { setupApplicationMenu } from './process/utils/appMenu';
-import { startWebHost } from '@aionui/web-host';
+import { startWebHost } from '@tomny/web-host';
 import { initializeZoomFactor, setupZoomForWindow } from './process/utils/zoom';
 import {
   MIN_WINDOW_WIDTH,
@@ -54,7 +61,7 @@ import {
   getPendingDeepLinkUrl,
   handleDeepLinkUrl,
   isHandledUrlArg,
-  PROTOCOL_SCHEME,
+  PROTOCOL_SCHEMES,
 } from './process/utils/deepLink';
 import {
   bindMainWindowReferences,
@@ -83,12 +90,12 @@ import electronSquirrelStartup from 'electron-squirrel-startup';
 // Acquire lock early so the second instance quits before doing unnecessary work.
 // When a second instance starts (e.g. from protocol URL), it sends its data
 // to the first instance via second-instance event, then quits.
-const isE2ETestMode = process.env.AIONUI_E2E_TEST === '1';
-const skipSingleInstanceLock = isE2ETestMode || process.env.AIONUI_MULTI_INSTANCE === '1';
+const isE2ETestMode = process.env.TOMNY_E2E_TEST === '1';
+const skipSingleInstanceLock = isE2ETestMode || process.env.TOMNY_MULTI_INSTANCE === '1';
 const deepLinkFromArgv = process.argv.find(isHandledUrlArg);
 const gotTheLock = skipSingleInstanceLock ? true : app.requestSingleInstanceLock({ deepLinkUrl: deepLinkFromArgv });
 if (!gotTheLock) {
-  console.warn('[AionUi] Another instance is already running; current process will exit.');
+  console.warn('[Tomny] Another instance is already running; current process will exit.');
   app.quit();
 } else {
   app.on('second-instance', (_event, argv, _workingDirectory, additionalData) => {
@@ -109,7 +116,7 @@ if (!gotTheLock) {
       showOrCreateMainWindow({
         mainWindow,
         createWindow: () => {
-          console.log('[AionUi] second-instance received with no active main window, recreating main window');
+          console.log('[Tomny] second-instance received with no active main window, recreating main window');
           createWindow();
         },
       });
@@ -224,6 +231,13 @@ ipcMain.on('get-backend-startup-failure', (event) => {
   event.returnValue = backendStartupFailureInfo;
 });
 
+// The operator-controlled environment is read only in the main process and
+// exposed once during preload bootstrap. There is intentionally no renderer
+// setter, remote fetch, or generic configuration channel for this release gate.
+ipcMain.on(STUDIO_SPLIT_ROUTE_REDIRECT_BOOTSTRAP_CHANNEL, (event) => {
+  event.returnValue = resolveStudioSplitRouteRedirectEnvironment(process.env[STUDIO_SPLIT_ROUTE_REDIRECT_ENV_KEY]);
+});
+
 function markBackendStartupFailed(error: unknown): void {
   backendStartupFailed = true;
   backendStartupFailureInfo = classifyBackendStartupFailure(error);
@@ -237,10 +251,10 @@ function registerCronResumeBridge(backendPort: number): void {
     void fetch(`http://127.0.0.1:${backendPort}/api/cron/internal/system-resume`, {
       method: 'POST',
       headers: {
-        'x-aionui-internal': '1',
+        'x-tomny-internal': '1',
       },
     }).catch((error) => {
-      console.error('[AionUi] Failed to notify backend about system resume:', error);
+      console.error('[Tomny] Failed to notify backend about system resume:', error);
     });
   };
 
@@ -263,9 +277,9 @@ const scheduleBackendMigrations = (): void => {
     try {
       const { runBackendMigrations } = await import('./process/utils/runBackendMigrations');
       await runBackendMigrations(ProcessConfig);
-      console.info('[AionUi] runBackendMigrations completed');
+      console.info('[Tomny] runBackendMigrations completed');
     } catch (error) {
-      console.error('[AionUi] Backend migration hook threw:', error);
+      console.error('[Tomny] Backend migration hook threw:', error);
     }
   })();
 };
@@ -295,7 +309,7 @@ function ensureAdminUserOnce(backendPort: number): Promise<void> {
 function markBackendReady(backendPort: number, source: string): void {
   exposeBackendPort(backendPort);
   if (backendStartedOk) return;
-  console.log(`[AionUi] ${source} ready (port=${backendPort})`);
+  console.log(`[Tomny] ${source} ready (port=${backendPort})`);
   registerCronResumeBridge(backendPort);
   backendStartedOk = true;
   backendStartupFailed = false;
@@ -306,7 +320,7 @@ function markBackendReady(backendPort: number, source: string): void {
 }
 
 const createWindow = ({ showOnReady = true }: { showOnReady?: boolean } = {}): void => {
-  console.log('[AionUi] Creating main window...');
+  console.log('[Tomny] Creating main window...');
   const { x: windowX, y: windowY, width: windowWidth, height: windowHeight } = resolveInitialBounds();
 
   // Get app icon for development mode (Windows/Linux need icon in BrowserWindow)
@@ -355,7 +369,7 @@ const createWindow = ({ showOnReady = true }: { showOnReady?: boolean } = {}): v
       webviewTag: true, // 启用 webview 标签用于 HTML 预览 / Enable webview tag for HTML preview
     },
   });
-  console.log(`[AionUi] Main window created (id=${mainWindow.id})`);
+  console.log(`[Tomny] Main window created (id=${mainWindow.id})`);
 
   scheduleStartupLogReport(mainWindow);
 
@@ -365,18 +379,18 @@ const createWindow = ({ showOnReady = true }: { showOnReady?: boolean } = {}): v
   if (showOnReady) {
     const showWindow = () => {
       if (!mainWindow.isDestroyed() && !mainWindow.isVisible()) {
-        console.log('[AionUi] Showing main window');
+        console.log('[Tomny] Showing main window');
         mainWindow.show();
         mainWindow.focus();
       }
     };
     mainWindow.once('ready-to-show', () => {
-      console.log('[AionUi] Window ready-to-show');
+      console.log('[Tomny] Window ready-to-show');
       showWindow();
     });
     // Belt-and-suspenders: also show on did-finish-load in case ready-to-show already fired
     mainWindow.webContents.once('did-finish-load', () => {
-      console.log('[AionUi] Renderer did-finish-load');
+      console.log('[Tomny] Renderer did-finish-load');
       showWindow();
       scheduleBackendMigrations();
     });
@@ -399,7 +413,7 @@ const createWindow = ({ showOnReady = true }: { showOnReady?: boolean } = {}): v
   // 初始化自动更新服务（通过环境变量禁用时跳过，例如 E2E / CI 场景）
   const isCiRuntime = process.env.CI === 'true' || process.env.CI === '1' || process.env.GITHUB_ACTIONS === 'true';
   const disableAutoUpdater =
-    process.env.AIONUI_DISABLE_AUTO_UPDATE === '1' || process.env.AIONUI_E2E_TEST === '1' || isCiRuntime;
+    process.env.TOMNY_DISABLE_AUTO_UPDATE === '1' || process.env.TOMNY_E2E_TEST === '1' || isCiRuntime;
   if (!disableAutoUpdater) {
     Promise.all([import('./process/services/autoUpdaterService'), import('./process/bridge/updateBridge')])
       .then(([{ autoUpdaterService }, { createAutoUpdateStatusBroadcast }]) => {
@@ -416,7 +430,7 @@ const createWindow = ({ showOnReady = true }: { showOnReady?: boolean } = {}): v
         console.error('[App] Failed to initialize autoUpdaterService:', error);
       });
   } else {
-    console.log('[AionUi] Auto-updater disabled via env/CI guard');
+    console.log('[Tomny] Auto-updater disabled via env/CI guard');
   }
 
   // Load the renderer: dev server URL in development, built HTML file in production
@@ -424,51 +438,51 @@ const createWindow = ({ showOnReady = true }: { showOnReady?: boolean } = {}): v
   const fallbackFile = path.join(__dirname, '../renderer/index.html');
 
   if (!app.isPackaged && rendererUrl) {
-    console.log(`[AionUi] Loading renderer URL: ${rendererUrl}`);
+    console.log(`[Tomny] Loading renderer URL: ${rendererUrl}`);
     mainWindow.loadURL(rendererUrl).catch((error) => {
-      console.error('[AionUi] loadURL failed, falling back to file:', error.message || error);
+      console.error('[Tomny] loadURL failed, falling back to file:', error.message || error);
       mainWindow.loadFile(fallbackFile).catch((e2) => {
-        console.error('[AionUi] loadFile fallback also failed:', e2.message || e2);
+        console.error('[Tomny] loadFile fallback also failed:', e2.message || e2);
       });
     });
   } else {
-    console.log(`[AionUi] Loading renderer file: ${fallbackFile}`);
+    console.log(`[Tomny] Loading renderer file: ${fallbackFile}`);
     mainWindow.loadFile(fallbackFile).catch((error) => {
-      console.error('[AionUi] loadFile failed:', error.message || error);
+      console.error('[Tomny] loadFile failed:', error.message || error);
     });
   }
 
   mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
-    console.error('[AionUi] did-fail-load:', { errorCode, errorDescription, validatedURL, isMainFrame });
+    console.error('[Tomny] did-fail-load:', { errorCode, errorDescription, validatedURL, isMainFrame });
   });
 
   mainWindow.webContents.on('render-process-gone', (_event, details) => {
-    console.error('[AionUi] render-process-gone:', details);
+    console.error('[Tomny] render-process-gone:', details);
 
     // Reload the renderer to recover from the crash.
     // The isDestroyed() guard in adapter/main.ts prevents further sends
     // to the dead webContents while the reload is in progress.
     if (!mainWindow.isDestroyed()) {
-      console.log('[AionUi] Attempting to recover from renderer crash by reloading...');
+      console.log('[Tomny] Attempting to recover from renderer crash by reloading...');
 
       if (!app.isPackaged && rendererUrl) {
         mainWindow.loadURL(rendererUrl).catch((error) => {
-          console.error('[AionUi] Recovery loadURL failed:', error.message || error);
+          console.error('[Tomny] Recovery loadURL failed:', error.message || error);
         });
       } else {
         mainWindow.loadFile(fallbackFile).catch((error) => {
-          console.error('[AionUi] Recovery loadFile failed:', error.message || error);
+          console.error('[Tomny] Recovery loadFile failed:', error.message || error);
         });
       }
     }
   });
 
   mainWindow.webContents.on('unresponsive', () => {
-    console.warn('[AionUi] Renderer became unresponsive');
+    console.warn('[Tomny] Renderer became unresponsive');
   });
 
   mainWindow.on('closed', () => {
-    console.log('[AionUi] Main window closed');
+    console.log('[Tomny] Main window closed');
   });
 
   // DevTools is no longer auto-opened at startup.
@@ -496,7 +510,7 @@ const createWindow = ({ showOnReady = true }: { showOnReady?: boolean } = {}): v
 
 const handleAppReady = async (): Promise<void> => {
   const t0 = performance.now();
-  const mark = (label: string) => console.log(`[AionUi:ready] ${label} +${Math.round(performance.now() - t0)}ms`);
+  const mark = (label: string) => console.log(`[Tomny:ready] ${label} +${Math.round(performance.now() - t0)}ms`);
   mark('start');
 
   if (!app.isPackaged) {
@@ -512,7 +526,7 @@ const handleAppReady = async (): Promise<void> => {
   // CLI mode: print app version and exit immediately (used by CI smoke tests)
   if (isVersionMode) {
     console.log(app.getVersion());
-    app.exit(0);
+    requestAppExit(0);
     return;
   }
 
@@ -523,10 +537,10 @@ const handleAppReady = async (): Promise<void> => {
       isWebUIMode,
       isResetPasswordMode,
     });
-    console.info('[TomniCore] Boot mode: ' + coreBootPolicy.mode);
+    console.info('[TomnyCore] Boot mode: ' + coreBootPolicy.mode);
   } catch (error) {
-    console.error('[TomniCore] Invalid core boot policy:', error);
-    app.exit(1);
+    console.error('[TomnyCore] Invalid core boot policy:', error);
+    requestAppExit(1);
     return;
   }
 
@@ -553,27 +567,27 @@ const handleAppReady = async (): Promise<void> => {
     mark('initializeProcess');
   } catch (error) {
     console.error('Failed to initialize process:', error);
-    app.exit(1);
+    requestAppExit(1);
     return;
   }
 
-  // Start the remote surface from Tomni's native conversation gateway. This is
+  // Start the remote surface from Tomny's native conversation gateway. This is
   // intentionally independent from legacy backend readiness and __backendPort.
   prepareTelegramRemoteSecret();
   void ProcessConfig.get('language')
     .then((language) => startTelegramRemoteTunnel(language ?? 'en-US'))
     .then((result) => {
-      if (result.ok) console.log('[TelegramRemote] Tomni-native secure tunnel ready');
+      if (result.ok) console.log('[TelegramRemote] Tomny-native secure tunnel ready');
       else if ('reason' in result)
         console.warn(`[TelegramRemote] native tunnel unavailable (${result.reason})`, result.detail ?? '');
     })
     .catch((error) => console.warn('[TelegramRemote] native gateway failed to start', error));
 
-  // Start aioncore only after initializeProcess(). initStorage may open
+  // Start tomnycore only after initializeProcess(). initStorage may open
   // the legacy Electron SQLite catalog for a one-shot v26 migration and must
   // close it before the backend touches the same file.
   if (!coreBootPolicy.startLegacyBackend) {
-    console.info('[TomniCore] Native TypeScript core ready; legacy HTTP backend was not started.');
+    console.info('[TomnyCore] Native TypeScript core ready; legacy HTTP backend was not started.');
   }
   const captureLegacyBackendFailure = async (error: unknown): Promise<void> => {
     if (coreBootPolicy.requireLegacyBackend) {
@@ -621,7 +635,7 @@ const handleAppReady = async (): Promise<void> => {
     captureFailure: async (error) => {
       await captureLegacyBackendFailure(error);
     },
-    exitApp: (code) => app.exit(code),
+    exitApp: (code) => requestAppExit(code),
     exitOnFailure: coreBootPolicy.requireLegacyBackend,
     logError: console.error,
   });
@@ -646,7 +660,7 @@ const handleAppReady = async (): Promise<void> => {
     initializeZoomFactor(await ProcessConfig.get('ui.zoomFactor'));
     mark('initializeZoomFactor');
   } catch (error) {
-    console.error('[AionUi] Failed to restore zoom factor:', error);
+    console.error('[Tomny] Failed to restore zoom factor:', error);
     initializeZoomFactor(undefined);
   }
 
@@ -654,7 +668,7 @@ const handleAppReady = async (): Promise<void> => {
     loadSavedWindowBounds(await ProcessConfig.get('window.bounds'));
     mark('restoreWindowBounds');
   } catch (error) {
-    console.error('[AionUi] Failed to restore window bounds:', error);
+    console.error('[Tomny] Failed to restore window bounds:', error);
     loadSavedWindowBounds(undefined);
   }
 
@@ -668,7 +682,7 @@ const handleAppReady = async (): Promise<void> => {
 
       app.quit();
     } catch {
-      app.exit(1);
+      requestAppExit(1);
     }
   } else if (isWebUIMode) {
     const userConfigInfo = loadUserWebUIConfig();
@@ -678,18 +692,18 @@ const handleAppReady = async (): Promise<void> => {
     const resolvedPort = resolveWebUIPort(userConfigInfo.config, getSwitchValue);
     const allowRemote = resolveRemoteAccess(userConfigInfo.config, isRemoteMode);
     try {
-      // Inside Electron (`AionUi --webui` or packaged `aionui-web` mode that
+      // Inside Electron (`Tomny --webui` or packaged `tomny-web` mode that
       // launches via the Electron shell), reuse the desktop app's data-dir so
       // that conversations / cron jobs created in any path show up everywhere.
       // Matches the desktop IPC path at line 493 above.
       const { getDataPath } = await import('./process/utils/utils');
       const { getSystemDir } = await import('./process/utils/initStorage');
       const sysDirWebUI = getSystemDir();
-      // M6: Switch to @aionui/web-host
+      // M6: Switch to @tomny/web-host
       const { getTomniGatewayEndpoint } = await import('./process/tomnigateway');
       const gatewayEndpoint = await getTomniGatewayEndpoint();
       if (!gatewayEndpoint) {
-        throw new Error('[WebUI] Cannot start: Tomni Gateway is not running');
+        throw new Error('[WebUI] Cannot start: Tomny Gateway is not running');
       }
 
       const handle = await startWebHost({
@@ -708,7 +722,7 @@ const handleAppReady = async (): Promise<void> => {
         allowRemote,
         dataDir: getDataPath(),
         logDir: sysDirWebUI.logDir,
-        // Expose the same AIONUI_{CACHE,WORK,LOG}_DIR env the desktop IPC path
+        // Expose the same TOMNY_{CACHE,WORK,LOG}_DIR env the desktop IPC path
         // passes at line 493, so /api/system/info reports the symlink workDir
         // instead of the path-with-spaces userData root.
         dirs: {
@@ -725,7 +739,7 @@ const handleAppReady = async (): Promise<void> => {
       console.log(`[WebUI] Headless server started (port=${handle.port}, backendPort=${handle.backendPort})`);
     } catch (err) {
       console.error(`[WebUI] Failed to start server on port ${resolvedPort}:`, err);
-      app.exit(1);
+      requestAppExit(1);
       return;
     }
 
@@ -733,7 +747,7 @@ const handleAppReady = async (): Promise<void> => {
     // On Linux headless (systemd), Electron may attempt to quit when no windows exist.
     app.on('will-quit', (event) => {
       // Only prevent quit if this is an unexpected exit (server still running).
-      // Explicit app.exit() calls bypass will-quit, so they are unaffected.
+      // Explicit termination requests mark the quit as intentional before cleanup completes.
       if (!isExplicitQuit) {
         event.preventDefault();
         console.warn('[WebUI] Prevented unexpected quit — server is still running');
@@ -831,15 +845,17 @@ const handleAppReady = async (): Promise<void> => {
 };
 
 // ============ Protocol Registration ============
-// Register aionui:// as the default protocol client
-if (process.defaultApp) {
-  // Dev mode: need to pass execPath explicitly
-  app.setAsDefaultProtocolClient(PROTOCOL_SCHEME, process.execPath, [path.resolve(process.argv[1])]);
-} else {
-  app.setAsDefaultProtocolClient(PROTOCOL_SCHEME);
+// Register the Tomny protocol and the legacy Tomny alias so existing links keep working.
+for (const protocolScheme of PROTOCOL_SCHEMES) {
+  if (process.defaultApp) {
+    // Dev mode: need to pass execPath explicitly
+    app.setAsDefaultProtocolClient(protocolScheme, process.execPath, [path.resolve(process.argv[1])]);
+  } else {
+    app.setAsDefaultProtocolClient(protocolScheme);
+  }
 }
 
-// macOS: handle aionui:// URLs via the open-url event
+// macOS: handle current and legacy Tomny URLs via the open-url event
 app.on('open-url', (event, url) => {
   event.preventDefault();
   handleDeepLinkUrl(url);
@@ -859,7 +875,7 @@ void app
   .then(handleAppReady)
   .catch((error) => {
     // App initialization failed
-    console.error('[AionUi] App initialization failed:', error);
+    console.error('[Tomny] App initialization failed:', error);
     app.quit();
   });
 
@@ -897,7 +913,7 @@ app.on('activate', () => {
 
 installQuitCleanup({
   onBeforeQuit: (handler) => app.on('before-quit', (event) => handler(event)),
-  quitApp: () => app.quit(),
+  quitApp: completeAppTermination,
   setIsQuitting,
   markExplicitQuit: () => {
     isExplicitQuit = true;
@@ -907,7 +923,11 @@ installQuitCleanup({
     disposeCronResumeListener?.();
     disposeCronResumeListener = null;
   },
-  // Stop both compatibility services. Tomni Gateway owns native REST/WS; the
+  shutdownModelGateway: async () => {
+    const { shutdownRouter9Integration } = await import('./process/router9/router9Lifecycle');
+    await shutdownRouter9Integration();
+  },
+  // Stop both compatibility services. Tomny Gateway owns native REST/WS; the
   // optional legacy process is stopped only when compatibility mode launched it.
   stopBackend: async () => {
     stopTelegramRemoteTunnel();
@@ -924,11 +944,11 @@ installQuitCleanup({
 });
 
 app.on('will-quit', () => {
-  console.log('[AionUi] will-quit — all cleanup should be complete');
+  console.log('[Tomny] will-quit — all cleanup should be complete');
 });
 
 app.on('quit', (_event, exitCode) => {
-  console.log(`[AionUi] quit (exitCode=${exitCode})`);
+  console.log(`[Tomny] quit (exitCode=${exitCode})`);
 });
 
 // In this file you can include the rest of your app's specific main process

@@ -1,13 +1,13 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
 /**
  * Filesystem-backed music project repository (Main process).
  *
- * The renderer-safe @aionui/music-core package intentionally omits any Node fs
+ * The renderer-safe @tomny/music-core package intentionally omits any Node fs
  * code. This module is the desktop-process implementation: one project = one
  * `<Name>.daw/` folder containing `project.json`, `samples/`, and `renders/`.
  * Atomic save (tmp + rename) avoids corrupting project.json on a crash.
@@ -27,7 +27,7 @@ import {
   type Project,
   type ProjectRepo,
   type ProjectSummary,
-} from '@aionui/music-core';
+} from '@tomny/music-core';
 
 const PROJECT_FILE = 'project.json';
 const SAMPLES_DIR = 'samples';

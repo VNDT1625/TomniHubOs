@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -9,7 +9,7 @@
  * repo root and returns them as a string array for the Context Builder.
  *
  * Supported files (checked in priority order, first found wins):
- *   1. `.aionrules`   — Omni-native rules file (Markdown, one rule per line or block)
+ *   1. `.tomnyrules`   — Omni-native rules file (Markdown, one rule per line or block)
  *   2. `AGENTS.md`    — Claude Code / Kiro convention (already used by this repo)
  *   3. `.cursorrules` — Cursor convention (many repos already have this)
  *
@@ -27,7 +27,7 @@
 import * as path from 'node:path';
 
 /** Candidate filenames checked in order (first found wins). */
-const RULES_FILES = ['.aionrules', 'AGENTS.md', '.cursorrules'] as const;
+const RULES_FILES = ['.tomnyrules', 'AGENTS.md', '.cursorrules'] as const;
 
 /** Max bytes read from a rules file (prevents huge files from bloating context). */
 const MAX_BYTES = 32 * 1024; // 32 KB

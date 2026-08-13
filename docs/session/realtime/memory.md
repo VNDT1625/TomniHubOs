@@ -3,7 +3,7 @@
 > Thông tin cần-nhớ để tiếp tục 2 feature: **Realtime Knowledge (RTK)** và **Smart Terminal**
 > (docTerminal + Smart Fix). Cập nhật gần nhất: 2026-06-09.
 > Đọc kèm `docs/session/realtime/status.md` (việc đã/chưa xong) và spec
-> `.aionui/specs/{realtime-knowledge,smart-terminal}/`.
+> `.tomni/specs/{realtime-knowledge,smart-terminal}/`.
 
 ## Quy ước / cạm bẫy quan trọng (đọc trước khi sửa)
 
@@ -34,7 +34,7 @@ realtime/` đang 10 file (ĐẦY — thêm logic mới nên gộp vào file có 
 ## Realtime Knowledge (RTK) — kiến trúc (ĐÃ HOÀN THIỆN core)
 
 Mục tiêu: chống AI trả lời bằng kiến thức lỗi thời (version/price/role/spec/stat...). Backend Main-process
-thuần TS, KHÔNG đụng aioncore.
+thuần TS, KHÔNG đụng tomnicore.
 
 - `process/knowledge/realtime/` (PURE + store + engine): `rtkTypes`, `freshness` (TTL theo
   `volatilityClass`, stale ở 75% TTL), `embeddingText`, `rtkStore` (atomic JSON `userData/knowledge/
@@ -45,7 +45,7 @@ realtime/facts.json`, fs DI), `rtkVectorIndex` (cosine + `Embedder`, fingerprint
   `applyDecision` PURE đẩy giá trị cũ vào `history`).
 - `process/knowledge/`: `rtkEmbedder` (provider embedding model + **hashing fallback** renderer-safe),
   `rtkWiring` (singleton + persist index), `realtimeKnowledgeBridge` (`rtk.list/lookup/refresh/relate`),
-  MCP `aionui-realtime-knowledge` (`rtk_lookup/rtk_record/rtk_refresh`, SSE host + register ở
+  MCP `tomni-realtime-knowledge` (`rtk_lookup/rtk_record/rtk_refresh`, SSE host + register ở
   `runBackendMigrations` qua `ensureRealtimeKnowledgeMcpRegistered`).
 - Renderer: `pages/knowledge/` (inspector `/settings/knowledge`, desktop-only) + i18n `realtimeKnowledge`.
   `superGuidance.withRealtimeKnowledgeRules` dạy agent: lookup trước → verify bằng web tool → record.

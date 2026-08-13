@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -232,7 +232,7 @@ const SendBox: React.FC<{
   const [isSingleLine, setIsSingleLine] = useState(!effectiveDefaultMultiLine);
   const [isInputFocused, setIsInputFocused] = useState(false);
   const isInputActive = isInputFocused;
-  const { activeBorderColor, inactiveBorderColor, activeShadow } = useInputFocusRing();
+  const { activeBorderColor, inactiveBorderColor, activeShadow, idleShadow } = useInputFocusRing();
   const containerRef = useRef<HTMLDivElement>(null);
   const singleLineWidthRef = useRef<number>(0);
   const measurementCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -866,9 +866,9 @@ const SendBox: React.FC<{
   }, []);
 
   useAddEventListener(
-    'aionrs.selected.file.append',
+    'tomnyagentic.selected.file.append',
     (items: FileSelectionItem[]) => {
-      if (conversationContext?.type === 'aionrs') {
+      if (conversationContext?.type === 'tomnyagentic') {
         handleExternalSelectionAppend(items);
       }
     },
@@ -923,8 +923,8 @@ const SendBox: React.FC<{
   const emitSelectedFileAppend = useCallback(
     (item: FileOrFolderItem) => {
       switch (conversationContext?.type) {
-        case 'aionrs':
-          emitter.emit('aionrs.selected.file.append', [item]);
+        case 'tomnyagentic':
+          emitter.emit('tomnyagentic.selected.file.append', [item]);
           break;
         case 'acp':
           emitter.emit('acp.selected.file.append', [item]);
@@ -1456,7 +1456,7 @@ const SendBox: React.FC<{
             : {
                 borderWidth: '1px',
                 borderColor: isInputActive ? activeBorderColor : inactiveBorderColor,
-                boxShadow: isInputActive ? activeShadow : 'none',
+                boxShadow: isInputActive ? activeShadow : idleShadow,
               }),
         }}
         {...dragHandlers}

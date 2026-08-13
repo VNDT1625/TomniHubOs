@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -39,7 +39,7 @@
  * division context is composed into each worker's briefing via
  * {@link ContextLayering.buildDelegationContext}. Every place that performs this
  * flattening is marked with an `// FLATTEN:` comment so it can be upgraded to
- * real nesting if/when aioncore grows a multi-level team API (see the "CẦN
+ * real nesting if/when tomnycore grows a multi-level team API (see the "CẦN
  * BACKEND" note in `design.md`, Yêu cầu 3).
  *
  * ## Concurrency (criterion 3.12)
@@ -56,7 +56,7 @@
  * ## Testability
  *
  * Every heavy collaborator is injected (see {@link CompanyOrchestratorDeps}) so
- * the orchestrator can be unit-tested without aioncore, a live CLI, or disk:
+ * the orchestrator can be unit-tested without tomnycore, a live CLI, or disk:
  * the memory store, the context-layering service, the call-template manager, the
  * resource coordinator, and the {@link TeamGateway} that abstracts the team RPC.
  *
@@ -102,7 +102,7 @@ export type CompanyRole = 'president' | 'division-head' | 'worker';
 /**
  * Which concrete executor backs a role (the user's two sources, plus drafts):
  * - `'cli'`       — an installed CLI engine (claude/codex/gemini/…).
- * - `'assistant'` — an existing AionUi assistant (carries its own rules + model).
+ * - `'assistant'` — an existing Tomny assistant (carries its own rules + model).
  * - `'draft'`     — an assistant the generator proposed but that does not exist
  *   yet; the user accepts a batch of drafts to turn them into real assistants.
  */
@@ -288,7 +288,7 @@ export type CompanyStructureSpec = {
 /**
  * Abstraction over the Team Mode backend so the orchestrator stays decoupled
  * from the concrete `ipcBridge.team.*` (`/api/teams/*`) transport and is
- * unit-testable without aioncore.
+ * unit-testable without tomnycore.
  *
  * Mapping to the **real, located** team API (`common/adapter/ipcBridge.ts`,
  * `common/adapter/teamMapper.ts`):

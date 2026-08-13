@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -28,6 +28,7 @@
  * Electron `app`.
  */
 
+import { randomUUID } from 'node:crypto';
 import { app } from 'electron';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -35,6 +36,7 @@ import type { BudgetAdjustment, ResourceState } from './leaseTypes';
 
 /** Name of the persisted state file inside the app data directory. */
 const RESOURCE_STATE_FILE = 'resource-state.json';
+const RESOURCE_STATE_BACKUP_FILE = `${RESOURCE_STATE_FILE}.bak`;
 
 /**
  * Minimal subset of `fs/promises` used by this module. Declared explicitly so
@@ -44,6 +46,7 @@ export type ResourceStateFs = {
   readFile(filePath: string, encoding: 'utf-8'): Promise<string>;
   writeFile(filePath: string, data: string, options: { encoding: 'utf-8'; mode?: number }): Promise<void>;
   rename(oldPath: string, newPath: string): Promise<void>;
+  unlink?(filePath: string): Promise<void>;
   mkdir(dirPath: string, options: { recursive: true }): Promise<string | undefined>;
 };
 
@@ -52,6 +55,7 @@ const defaultFs: ResourceStateFs = {
   readFile: (filePath, encoding) => fs.promises.readFile(filePath, encoding),
   writeFile: (filePath, data, options) => fs.promises.writeFile(filePath, data, options),
   rename: (oldPath, newPath) => fs.promises.rename(oldPath, newPath),
+  unlink: (filePath) => fs.promises.unlink(filePath),
   mkdir: (dirPath, options) => fs.promises.mkdir(dirPath, options),
 };
 
@@ -88,16 +92,62 @@ const resolveFs = (options?: ResourceStateStoreOptions): ResourceStateFs => opti
 export const getResourceStateFilePath = (options?: ResourceStateStoreOptions): string =>
   path.join(resolveDir(options), RESOURCE_STATE_FILE);
 
-/** Type guard: a parsed JSON value is shaped like a {@link ResourceState}. */
-const isResourceStateShape = (value: unknown): value is ResourceState => {
-  if (value === null || typeof value !== 'object') return false;
-  const candidate = value as Partial<ResourceState>;
+const TASK_KINDS = [
+  'agent',
+  'browser',
+  'emulator',
+  'windowsTest',
+  'patchBuild',
+  'ocr',
+  'transcription',
+  'docConvert',
+  'semanticIndex',
+] as const;
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === 'object' && !Array.isArray(value);
+
+const isFiniteNonNegative = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isFinite(value) && value >= 0;
+
+const isBudgetShape = (value: unknown): boolean => {
+  if (!isRecord(value) || !isRecord(value.maxConcurrent)) return false;
+  const maxConcurrent = value.maxConcurrent;
   return (
-    typeof candidate.budget === 'object' &&
-    candidate.budget !== null &&
-    Array.isArray(candidate.active) &&
-    Array.isArray(candidate.queued) &&
-    Array.isArray(candidate.lastAdjustments)
+    isFiniteNonNegative(value.maxTotalMemoryMB) &&
+    isFiniteNonNegative(value.reserveForUserMB) &&
+    TASK_KINDS.every((kind) => {
+      const limit = maxConcurrent[kind];
+      return Number.isInteger(limit) && isFiniteNonNegative(limit);
+    })
+  );
+};
+
+const isBudgetAdjustmentShape = (value: unknown): boolean =>
+  isRecord(value) &&
+  isFiniteNonNegative(value.at) &&
+  typeof value.reason === 'string' &&
+  isBudgetShape(value.from) &&
+  isBudgetShape(value.to);
+
+/**
+ * Validate the fields that survive a restart. Active leases and queued work are
+ * deliberately discarded by the coordinator, but an invalid persisted budget or
+ * history must never influence the next process.
+ */
+const isResourceStateShape = (value: unknown): value is ResourceState => {
+  if (!isRecord(value)) return false;
+  return (
+    (value.mode === 'detailed' || value.mode === 'suggest') &&
+    (value.preset === 'saver' ||
+      value.preset === 'balanced' ||
+      value.preset === 'performance' ||
+      value.preset === 'custom') &&
+    isBudgetShape(value.budget) &&
+    Array.isArray(value.active) &&
+    Array.isArray(value.queued) &&
+    Array.isArray(value.lastAdjustments) &&
+    value.lastAdjustments.every(isBudgetAdjustmentShape)
   );
 };
 
@@ -107,27 +157,32 @@ const isFileNotFound = (error: unknown): boolean => (error as NodeJS.ErrnoExcept
  * Load the persisted {@link ResourceState} from disk.
  *
  * Returns `options.defaultState` (or `undefined` when none is provided) if the
- * file does not exist yet, if it cannot be read, or if it contains malformed /
- * unexpected JSON. Parse and read errors are handled gracefully — a corrupt
- * file never throws, so a fresh state can take over.
+ * primary file and its recovery copy cannot provide valid state. Parse and read
+ * errors are handled gracefully — a corrupt file never throws.
  */
 export const loadResourceState = async (options?: ResourceStateLoadOptions): Promise<ResourceState | undefined> => {
   const fallback = options?.defaultState;
   const filePath = getResourceStateFilePath(options);
+  const fsImpl = resolveFs(options);
   try {
-    const raw = await resolveFs(options).readFile(filePath, 'utf-8');
+    const raw = await fsImpl.readFile(filePath, 'utf-8');
     const parsed: unknown = JSON.parse(raw);
-    if (!isResourceStateShape(parsed)) {
-      console.warn('[Resource] resource-state.json has unexpected shape; using default state');
-      return fallback;
-    }
-    return parsed;
+    if (isResourceStateShape(parsed)) return parsed;
+    console.warn('[Resource] resource-state.json has unexpected shape; using default state');
   } catch (error) {
     if (!isFileNotFound(error)) {
       console.warn('[Resource] Failed to read resource-state.json; using default state:', error);
     }
-    return fallback;
   }
+
+  try {
+    const raw = await fsImpl.readFile(path.join(resolveDir(options), RESOURCE_STATE_BACKUP_FILE), 'utf-8');
+    const parsed: unknown = JSON.parse(raw);
+    if (isResourceStateShape(parsed)) return parsed;
+  } catch {
+    // The recovery copy is unavailable or invalid, so use the supplied fallback.
+  }
+  return fallback;
 };
 
 /**
@@ -138,15 +193,41 @@ export const loadResourceState = async (options?: ResourceStateLoadOptions): Pro
  * created if needed.
  */
 export const saveResourceState = async (state: ResourceState, options?: ResourceStateStoreOptions): Promise<void> => {
+  if (!isResourceStateShape(state)) {
+    throw new TypeError('Cannot persist an invalid resource state.');
+  }
+
   const dir = resolveDir(options);
   const fsImpl = resolveFs(options);
   const filePath = path.join(dir, RESOURCE_STATE_FILE);
-  const tmpPath = `${filePath}.tmp`;
+  const tmpPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
+  const backupPath = path.join(dir, RESOURCE_STATE_BACKUP_FILE);
+  const backupTmpPath = `${backupPath}.${process.pid}.${randomUUID()}.tmp`;
 
   await fsImpl.mkdir(dir, { recursive: true });
   const payload = JSON.stringify(state, null, 2) + '\n';
-  await fsImpl.writeFile(tmpPath, payload, { encoding: 'utf-8', mode: 0o600 });
-  await fsImpl.rename(tmpPath, filePath);
+  try {
+    await fsImpl.writeFile(tmpPath, payload, { encoding: 'utf-8', mode: 0o600 });
+    await fsImpl.rename(tmpPath, filePath);
+  } catch (error) {
+    try {
+      await fsImpl.unlink?.(tmpPath);
+    } catch {
+      // Preserve the primary write or rename error if best-effort cleanup also fails.
+    }
+    throw error;
+  }
+
+  try {
+    await fsImpl.writeFile(backupTmpPath, payload, { encoding: 'utf-8', mode: 0o600 });
+    await fsImpl.rename(backupTmpPath, backupPath);
+  } catch {
+    try {
+      await fsImpl.unlink?.(backupTmpPath);
+    } catch {
+      // The committed primary state remains usable if recovery-file cleanup also fails.
+    }
+  }
 };
 
 /**

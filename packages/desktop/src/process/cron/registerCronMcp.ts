@@ -1,13 +1,13 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
 /**
  * Start the in-process Cron MCP host and ensure the MCP catalog has an `sse`
  * server entry pointing at its loopback URL — so an agent (Claude Code / ACP,
- * aionrs, …) can connect and manage the user's scheduled tasks as tools.
+ * tomnyagentic, …) can connect and manage the user's scheduled tasks as tools.
  *
  * Mirrors `process/testing/registerTestingMcp.ts` and
  * `process/browser/registerBrowserControlMcp.ts`. The catalog entry is created

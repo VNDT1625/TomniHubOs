@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -1174,7 +1174,7 @@ export const tomnyMcpInjectionCommand = (url: string, name = TOMNY_TOOL_SERVER_N
 });
 
 const tomnyCompatibleMcpServer = (server: CoreMcpServer): CoreMcpServer => {
-  if (server.transport !== 'streamable_http' || server.name.trim().toLowerCase() !== 'aionui-ide') return server;
+  if (server.transport !== 'streamable_http' || server.name.trim().toLowerCase() !== 'tomny-ide') return server;
   try {
     const endpoint = new URL(server.url);
     const loopback = ['127.0.0.1', 'localhost', '[::1]'].includes(endpoint.hostname.toLowerCase());
@@ -1231,7 +1231,7 @@ export const tomnySurfaceSystemPrompt = (
     '[TomnyExactSurfacePrompt]',
     `[TomnyToolCatalog] ${toolCatalog.mode}`,
     `[TomnyToolPatterns] ${patterns.join(',')}`,
-    `You are Tomny on AionUi ${surface}; project: ${cwd}`,
+    `You are Tomny Agentic in Tomny ${surface}; project: ${cwd}`,
     'Use StartAction only for tool/external turns, never casual chat. Once open, do not nest it.',
     'Use ToolSearch only for another exact schema; otherwise call loaded tools directly.',
     'For flow/bug/logic/purpose, call ide_research once; use its fresh Wiki test profile; follow up only for explicit gaps.',

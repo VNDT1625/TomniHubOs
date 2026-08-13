@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -112,7 +112,7 @@ async function main() {
 
   server.tool(
     BUILTIN_SYSTEM_TOOL_NAME,
-    `READ-ONLY tool that reports the host computer's status from AionUi's System Insight feature.
+    `READ-ONLY tool that reports the host computer's status from Tomny's System Insight feature.
 
 Use this INSTEAD of running shell commands (top, ps, wmic, systeminfo, free, df, ...) to inspect the machine. It returns a single JSON snapshot plus a short text assessment:
 - os / hostname / cpu (model, cores, speed) / gpus / totalMemoryMB / disks / versions — the static host profile

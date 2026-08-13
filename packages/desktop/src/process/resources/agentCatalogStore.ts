@@ -21,7 +21,7 @@ const targetToAgent = (target: Awaited<ReturnType<typeof detectCoreTargets>>[num
   name: target.name,
   description: target.detail,
   backend: target.id,
-  agent_type: target.id === 'tomny' ? 'aionrs' : target.protocol === 'tomny-remote-v1' ? 'remote' : 'acp',
+  agent_type: target.id === 'tomny' ? 'tomnyagentic' : target.protocol === 'tomny-remote-v1' ? 'remote' : 'acp',
   agent_source: 'builtin',
   enabled: true,
   available: target.available,

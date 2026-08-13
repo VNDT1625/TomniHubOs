@@ -38,7 +38,11 @@ const stringValues = (input: unknown): string[] => {
   if (!input || typeof input !== 'object') return [];
   const record = input as Record<string, unknown>;
   return Object.values(record).flatMap((value) =>
-    typeof value === 'string' ? [value] : Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
+    typeof value === 'string'
+      ? [value]
+      : Array.isArray(value)
+        ? value.filter((item): item is string => typeof item === 'string')
+        : []
   );
 };
 
@@ -47,7 +51,12 @@ export const actionQueryText = (tool: string, input: unknown): string | undefine
   if (!input || typeof input !== 'object') return undefined;
   const record = input as Record<string, unknown>;
   const intent = typeof record.intent === 'string' ? record.intent : undefined;
-  const target = typeof record.target === 'string' ? record.target : typeof record.targetFile === 'string' ? record.targetFile : undefined;
+  const target =
+    typeof record.target === 'string'
+      ? record.target
+      : typeof record.targetFile === 'string'
+        ? record.targetFile
+        : undefined;
   if (tool === 'ide_research' && (intent || target)) {
     return clean([intent, target ? `target=${target}` : undefined].filter(Boolean).join(' | '));
   }
@@ -55,14 +64,17 @@ export const actionQueryText = (tool: string, input: unknown): string | undefine
   return query ? clean(query) : undefined;
 };
 
-const filePattern = /(?:^|[`"'\s([])((?:[A-Za-z0-9_.-]+[\\/])+[A-Za-z0-9_.-]+\.(?:ts|tsx|js|jsx|mjs|cjs|rs|json|md|css|scss|sql|toml|yaml|yml))(?:[`"'\s):\],]|$)/gi;
+const filePattern =
+  /(?:^|[`"'\s([])((?:[A-Za-z0-9_.-]+[\\/])+[A-Za-z0-9_.-]+\.(?:ts|tsx|js|jsx|mjs|cjs|rs|json|md|css|scss|sql|toml|yaml|yml))(?:[`"'\s):\],]|$)/gi;
 
 const collectFiles = (text: string, ledger: ActionEvidenceLedger): void => {
   for (const match of text.matchAll(filePattern)) addUnique(ledger.files, match[1]);
 };
 
 const collectSymbols = (text: string, ledger: ActionEvidenceLedger): void => {
-  for (const match of text.matchAll(/\b(?:symbol|symbols|symbol\/role|function|class)\s*[:=]\s*[`']?([A-Za-z_$][\w$]*(?:(?:::|\.)[A-Za-z_$][\w$]*)?)/gi)) {
+  for (const match of text.matchAll(
+    /\b(?:symbol|symbols|symbol\/role|function|class)\s*[:=]\s*[`']?([A-Za-z_$][\w$]*(?:(?:::|\.)[A-Za-z_$][\w$]*)?)/gi
+  )) {
     addUnique(ledger.symbols, match[1]);
   }
 };
@@ -70,7 +82,9 @@ const collectSymbols = (text: string, ledger: ActionEvidenceLedger): void => {
 const collectEvidence = (text: string, ledger: ActionEvidenceLedger): void => {
   const lines = text.split(/\r?\n/).map(clean).filter(Boolean);
   const relevant = lines.filter((line) =>
-    /(?:^#{1,4}\s|\b(?:evidence|status|finding|verified|risk|error|candidate|flow|mapped)\b|\.(?:ts|tsx|js|jsx|rs|json)\b)/i.test(line)
+    /(?:^#{1,4}\s|\b(?:evidence|status|finding|verified|risk|error|candidate|flow|mapped)\b|\.(?:ts|tsx|js|jsx|rs|json)\b)/i.test(
+      line
+    )
   );
   // Do not persist arbitrary tool output when it has no evidence markers.
   // This is the boundary that keeps raw transcripts out of Save.

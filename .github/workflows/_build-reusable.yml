@@ -26,7 +26,7 @@ on:
 
 env:
   BUN_INSTALL_REGISTRY: 'https://registry.npmjs.org/'
-  AIONUI_HUB_TAG: 'dist-ebc6a2b'
+  TOMNY_HUB_TAG: 'dist-ebc6a2b'
 
 jobs:
   code-quality:
@@ -317,8 +317,8 @@ jobs:
         run: bun run prepare:core
         env:
           # Source commit and version are pinned in repo-root package.json.
-          AIONUI_BACKEND_PLATFORM: ${{ startsWith(matrix.platform, 'windows') && 'win32' || startsWith(matrix.platform, 'macos') && 'darwin' || 'linux' }}
-          AIONUI_BACKEND_ARCH: ${{ matrix.arch }}
+          TOMNY_BACKEND_PLATFORM: ${{ startsWith(matrix.platform, 'windows') && 'win32' || startsWith(matrix.platform, 'macos') && 'darwin' || 'linux' }}
+          TOMNY_BACKEND_ARCH: ${{ matrix.arch }}
           CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
           CC_aarch64_unknown_linux_gnu: aarch64-linux-gnu-gcc
           CXX_aarch64_unknown_linux_gnu: aarch64-linux-gnu-g++
@@ -642,8 +642,8 @@ jobs:
             out/*.msi
             out/*.dmg
             out/*.deb
-            out/AionUi-*-win32-*.zip
-            out/AionUi-*-mac-*.zip
+            out/Tomny-*-win32-*.zip
+            out/Tomny-*-mac-*.zip
             out/*.yml
           if-no-files-found: warn
           retention-days: 7

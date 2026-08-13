@@ -1,11 +1,11 @@
 // hooks/useTheme.ts
 import { configService } from '@/common/config/configService';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 export type Theme = 'light' | 'dark';
 
 const DEFAULT_THEME: Theme = 'light';
-const THEME_CACHE_KEY = '__aionui_theme';
+const THEME_CACHE_KEY = '__tomny_theme';
 
 const applyThemeToDom = (value: Theme) => {
   document.documentElement.setAttribute('data-theme', value);
@@ -16,7 +16,7 @@ const readCachedTheme = (): Theme => {
   try {
     const cached = localStorage.getItem(THEME_CACHE_KEY);
     if (cached === 'light' || cached === 'dark') return cached;
-  } catch (_e) {
+  } catch {
     /* noop */
   }
   return DEFAULT_THEME;
@@ -33,7 +33,7 @@ const initTheme = async (): Promise<Theme> => {
     applyThemeToDom(theme);
     try {
       localStorage.setItem(THEME_CACHE_KEY, theme);
-    } catch (_e) {
+    } catch {
       /* noop */
     }
     return theme;
@@ -50,14 +50,15 @@ if (typeof window !== 'undefined') {
 }
 
 const useTheme = (): [Theme, (theme: Theme) => Promise<void>] => {
-  const [theme, setThemeState] = useState<Theme>(DEFAULT_THEME);
+  const [theme, setThemeState] = useState<Theme>(readCachedTheme);
+  const userChangedThemeRef = useRef(false);
 
   // Apply theme to document
   const applyTheme = useCallback((newTheme: Theme) => {
     applyThemeToDom(newTheme);
     try {
       localStorage.setItem(THEME_CACHE_KEY, newTheme);
-    } catch (_e) {
+    } catch {
       /* noop */
     }
   }, []);
@@ -65,18 +66,16 @@ const useTheme = (): [Theme, (theme: Theme) => Promise<void>] => {
   // Set theme with persistence
   const setTheme = useCallback(
     async (newTheme: Theme) => {
+      userChangedThemeRef.current = true;
+      setThemeState(newTheme);
+      applyTheme(newTheme);
       try {
-        setThemeState(newTheme);
-        applyTheme(newTheme);
         await configService.set('theme', newTheme);
       } catch (error) {
         console.error('Failed to save theme:', error);
-        // Revert on error
-        setThemeState(theme);
-        applyTheme(theme);
       }
     },
-    [theme, applyTheme]
+    [applyTheme]
   );
 
   // Initialize theme state from the early initialization
@@ -84,13 +83,15 @@ const useTheme = (): [Theme, (theme: Theme) => Promise<void>] => {
     if (initialThemePromise) {
       initialThemePromise
         .then((initialTheme) => {
+          if (userChangedThemeRef.current) return;
           setThemeState(initialTheme);
+          applyTheme(initialTheme);
         })
         .catch((error) => {
           console.error('Failed to initialize theme:', error);
         });
     }
-  }, []);
+  }, [applyTheme]);
 
   return [theme, setTheme];
 };

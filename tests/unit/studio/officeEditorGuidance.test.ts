@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -18,7 +18,7 @@ import {
 
 describe('officeEditorGuidance', () => {
   it('exposes the canonical Office-editor server name', () => {
-    expect(OFFICE_EDITOR_MCP_NAME).toBe('aionui-office-editor');
+    expect(OFFICE_EDITOR_MCP_NAME).toBe('tomny-office-editor');
   });
 
   it('embeds the open file path in the rules', () => {

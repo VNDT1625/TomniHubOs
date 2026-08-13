@@ -59,7 +59,9 @@ const normalizeTransport = (value: unknown, typeHint?: unknown): IMcpServerTrans
   if (type === 'stdio') {
     const command = asString(record.command);
     if (!command) return undefined;
-    const args = Array.isArray(record.args) ? record.args.filter((item): item is string => typeof item === 'string') : [];
+    const args = Array.isArray(record.args)
+      ? record.args.filter((item): item is string => typeof item === 'string')
+      : [];
     return { type, command, args, env: stringRecord(record.env) };
   }
   if (type === 'sse' || type === 'http' || type === 'streamable_http') {
@@ -75,7 +77,9 @@ const normalizeTools = (value: unknown): IMcpTool[] | undefined => {
   return Array.isArray(parsed) ? (parsed.filter((item) => asRecord(item)) as IMcpTool[]) : undefined;
 };
 
-const normalizeServer = (value: unknown): (Partial<IMcpServer> & Pick<IMcpServer, 'name' | 'transport'>) | undefined => {
+const normalizeServer = (
+  value: unknown
+): (Partial<IMcpServer> & Pick<IMcpServer, 'name' | 'transport'>) | undefined => {
   const row = asRecord(value);
   if (!row) return undefined;
   if (row.deleted_at !== null && row.deleted_at !== undefined) return undefined;
@@ -166,7 +170,9 @@ export const readLegacyMcpSources = async (
 ): Promise<Array<Partial<IMcpServer> & Pick<IMcpServer, 'name' | 'transport'>>> => {
   const openDatabase = options.openDatabase ?? defaultOpenDatabase;
   const databaseRows = (
-    await Promise.all((options.databasePaths ?? []).map((databasePath) => readDatabaseServers(databasePath, openDatabase)))
+    await Promise.all(
+      (options.databasePaths ?? []).map((databasePath) => readDatabaseServers(databasePath, openDatabase))
+    )
   ).flat();
   let configRows: unknown[] = [];
   try {

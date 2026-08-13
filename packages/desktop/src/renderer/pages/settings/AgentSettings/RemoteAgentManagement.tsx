@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -22,7 +22,7 @@ import {
   Tag,
   Typography,
 } from '@arco-design/web-react';
-import AionModal from '@/renderer/components/base/AionModal';
+import TomnyModal from '@/renderer/components/base/TomnyModal';
 import { Attention, Edit, Plus, ReduceOne, Robot, Speed } from '@icon-park/react';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -216,7 +216,7 @@ const RemoteAgentFormModal: React.FC<{
   // Render pairing waiting UI
   if (pairingState === 'pending' || pairingState === 'timeout') {
     return (
-      <AionModal
+      <TomnyModal
         visible={visible}
         onCancel={handleCancelPairing}
         header={{
@@ -259,12 +259,12 @@ const RemoteAgentFormModal: React.FC<{
             </>
           )}
         </div>
-      </AionModal>
+      </TomnyModal>
     );
   }
 
   return (
-    <AionModal
+    <TomnyModal
       visible={visible}
       onCancel={onClose}
       header={{
@@ -402,7 +402,7 @@ const RemoteAgentFormModal: React.FC<{
           </Button>
         </Form>
       </div>
-    </AionModal>
+    </TomnyModal>
   );
 };
 

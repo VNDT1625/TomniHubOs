@@ -350,6 +350,49 @@
   border-color: #3a3a3a;
 }
 
+.guidInputCardHub {
+  overflow: visible;
+  border-radius: 18px;
+  background: transparent;
+}
+
+.guidInputInnerHub {
+  position: relative;
+  min-height: 96px;
+  padding: 14px 14px 12px !important;
+  overflow: hidden;
+  border-color: color-mix(in srgb, var(--color-border-3) 78%, transparent);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--bg-2) 86%, transparent) !important;
+  box-shadow:
+    0 1px 0 color-mix(in srgb, var(--color-white) 16%, transparent) inset,
+    0 12px 32px color-mix(in srgb, var(--color-text-1) 6%, transparent);
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    background-color 180ms ease,
+    transform 180ms ease !important;
+}
+
+.guidInputCardHub:focus-within .guidInputInnerHub {
+  border-color: color-mix(in srgb, rgb(var(--primary-6)) 68%, var(--color-border-3));
+  background: color-mix(in srgb, var(--bg-2) 92%, transparent) !important;
+  box-shadow:
+    0 1px 0 color-mix(in srgb, var(--color-white) 20%, transparent) inset,
+    0 0 0 3px color-mix(in srgb, rgb(var(--primary-6)) 12%, transparent),
+    0 16px 38px color-mix(in srgb, var(--color-text-1) 8%, transparent);
+}
+
+.guidInputTextAreaHub {
+  min-height: 34px !important;
+  padding-left: 4px !important;
+  color: var(--text-primary) !important;
+  font-size: 14px !important;
+  line-height: 1.55 !important;
+}
+
 .actionRow {
   display: flex;
   align-items: flex-end;
@@ -357,6 +400,211 @@
   width: 100%;
   gap: 8px;
   margin-top: auto;
+}
+
+.actionRowHub {
+  align-items: center;
+  min-width: 0;
+  min-height: 34px;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.actionHubPrimary,
+.actionHubSecondary {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.actionHubPrimary {
+  overflow-x: auto;
+  overflow-y: hidden;
+  flex: 1 1 auto;
+  gap: 6px;
+  scrollbar-width: none;
+}
+
+.actionHubPrimary::-webkit-scrollbar {
+  display: none;
+}
+
+.actionHubPrimary > * {
+  flex: 0 0 auto;
+}
+
+.actionHubSecondary {
+  flex: 0 0 auto;
+  gap: 3px;
+  margin-left: auto;
+}
+
+.actionHubSuper {
+  height: 30px;
+  flex: 0 0 auto;
+  padding: 0 10px;
+  border-color: var(--hub-accent, rgb(var(--primary-6))) !important;
+  border-radius: 8px;
+  color: var(--text-white) !important;
+  background: var(--hub-accent, rgb(var(--primary-6))) !important;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--hub-accent, rgb(var(--primary-6))) 22%, transparent);
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease,
+    background-color 160ms ease;
+}
+
+.actionHubSuper:hover {
+  border-color: var(--hub-accent-hover, rgb(var(--primary-7))) !important;
+  background: var(--hub-accent-hover, rgb(var(--primary-7))) !important;
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--hub-accent, rgb(var(--primary-6))) 28%, transparent);
+  transform: translateY(-1px);
+}
+
+.actionHubAgent {
+  height: 30px !important;
+  min-width: 0 !important;
+  width: 116px;
+  max-width: 116px;
+  flex: 0 1 116px;
+  padding: 0 9px !important;
+  border-color: var(--hub-border, var(--color-border-2)) !important;
+  border-radius: 8px !important;
+  color: var(--hub-text, var(--text-primary)) !important;
+  background: color-mix(in srgb, var(--hub-surface, var(--bg-2)) 84%, transparent) !important;
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--color-white) 10%, transparent) inset !important;
+  backdrop-filter: blur(12px);
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease,
+    transform 160ms ease;
+}
+
+.actionHubAgent:hover {
+  border-color: var(--hub-border-strong, var(--color-border-3)) !important;
+  background: var(--hub-surface-subtle, var(--bg-hover)) !important;
+  transform: translateY(-1px);
+}
+
+.actionHubAgent :global(.arco-btn-content) {
+  min-width: 0;
+  width: 100%;
+}
+
+.actionHubAgentContent,
+.actionHubAgentMenuItem {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+}
+
+.actionHubAgentMenuItem {
+  min-width: 136px;
+}
+
+.actionHubAgentModelPopover {
+  width: 236px;
+  max-width: min(236px, calc(100vw - 24px));
+  padding: 8px;
+  border: 1px solid var(--hub-border, var(--color-border-2));
+  border-radius: 12px;
+  background: var(--hub-glass-surface, var(--bg-2));
+  box-shadow: var(--hub-card-shadow, 0 14px 36px color-mix(in srgb, var(--color-black) 22%, transparent));
+  backdrop-filter: blur(18px);
+}
+
+.actionHubAgentModelSection + .actionHubAgentModelSection {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--hub-border, var(--color-border-2));
+}
+
+.actionHubAgentModelHeading {
+  display: block;
+  margin: 0 4px 5px;
+  color: var(--hub-text-muted, var(--text-secondary));
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  line-height: 14px;
+  text-transform: uppercase;
+}
+
+.actionHubAgentMenu {
+  max-height: 136px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.actionHubAgentMenu :global(.arco-menu-item) {
+  min-height: 30px;
+  margin: 1px 0;
+  padding: 0 8px;
+  border-radius: 7px;
+  color: var(--hub-text, var(--text-primary));
+  font-size: 12px;
+}
+
+.actionHubAgentMenuItem {
+  width: 100%;
+  min-width: 0;
+}
+
+.actionHubAgentMenuItem > span:last-child {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.actionHubAgentModelControl {
+  min-width: 0;
+}
+
+.actionHubAgentModelControl :global(.sendbox-model-btn) {
+  width: 100%;
+  max-width: none;
+}
+
+.actionHubAgentLogo {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 15px;
+  object-fit: contain;
+}
+
+.actionHubAgentLabel {
+  overflow: hidden;
+  min-width: 0;
+  flex: 1;
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.actionHubIcon {
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  color: var(--text-secondary) !important;
+  background: transparent !important;
+  border-color: transparent !important;
+  border-radius: 8px !important;
+  transition:
+    color 150ms ease,
+    background-color 150ms ease,
+    transform 150ms ease;
+}
+
+.actionHubIcon:hover {
+  color: var(--text-primary) !important;
+  background: var(--bg-hover) !important;
+  transform: translateY(-1px);
 }
 
 .actionTools {
@@ -376,11 +624,66 @@
 
 /* 方案E：模型 + 权限各自独立 tb-btn，中间有竖线分隔 */
 .actionConfigGroup {
-  display: inline-flex;
-  align-items: center;
-  gap: 0;
+  display: grid;
+  overflow: visible;
   min-width: 0;
-  flex: 0 1 auto;
+  width: 100%;
+  max-width: 216px;
+  flex: 0 1 216px;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: center;
+  gap: 5px;
+}
+
+.actionConfigGroup[data-has-mode='true'] {
+  grid-template-columns: minmax(0, 1.12fr) minmax(0, 0.88fr);
+}
+
+.actionConfigItem {
+  display: inline-flex;
+  overflow: hidden;
+  box-sizing: border-box;
+  width: 130px !important;
+  min-width: 0 !important;
+  max-width: 130px !important;
+  flex: 0 1 130px !important;
+}
+
+.actionConfigItem > :global(*) {
+  display: inline-flex;
+  overflow: hidden;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  flex: 0 1 100% !important;
+}
+
+.actionConfigItem :global(.sendbox-model-btn) {
+  overflow: hidden;
+  box-sizing: border-box;
+  width: 100% !important;
+  height: 30px !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  flex: 0 1 100% !important;
+  padding-inline: 8px !important;
+  border: 1px solid var(--hub-border, var(--color-border-2)) !important;
+  border-radius: 8px !important;
+  color: var(--hub-text-muted, var(--text-secondary)) !important;
+  background: color-mix(in srgb, var(--hub-surface, var(--bg-2)) 76%, transparent) !important;
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--color-white) 8%, transparent) inset !important;
+  backdrop-filter: blur(12px);
+  transition:
+    border-color 150ms ease,
+    color 150ms ease,
+    background-color 150ms ease !important;
+}
+
+.actionConfigItem :global(.sendbox-model-btn:hover),
+.actionConfigItem :global(.sendbox-model-btn:focus-visible) {
+  border-color: var(--hub-border-strong, var(--color-border-3)) !important;
+  color: var(--hub-text, var(--text-primary)) !important;
+  background: var(--hub-surface-subtle, var(--bg-hover)) !important;
 }
 
 /* 首页输入框右下「模型 / 模式」按钮：与对话框 .sendbox-tools/.sendbox-actions 同款 */
@@ -402,12 +705,42 @@
   color: var(--text-primary) !important;
 }
 
-.actionConfigGroup :global(.sendbox-model-btn .arco-btn-content) {
+.actionConfigItem :global(.sendbox-model-btn .arco-btn-content) {
+  display: flex;
+  overflow: hidden;
+  width: 100%;
+  min-width: 0;
   gap: 0 !important;
 }
 
-.actionConfigGroup :global(.sendbox-model-btn .arco-btn-content > span:first-child) {
+.actionConfigItem :global(.sendbox-model-btn .arco-btn-content > span:first-child) {
+  display: flex;
+  overflow: hidden;
+  width: 100%;
+  min-width: 0;
   gap: 4px !important;
+}
+
+.actionConfigItem :global(.sendbox-model-btn .arco-btn-content > span:first-child > span:not(.shrink-0)) {
+  overflow: hidden;
+  min-width: 0;
+  flex: 1 1 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The shared selector uses duplicated off-screen text for its hover marquee.
+   Compact Hub pills stay static and ellipsized so their copies never collide. */
+.actionConfigMode :global(.agent-mode-compact-pill .arco-btn-content > span > span:nth-child(2) > span:first-child),
+.actionConfigMode :global(.agent-mode-compact-pill .arco-btn-content > span > span:nth-child(2) > span:last-child) {
+  display: none !important;
+}
+
+.actionConfigMode :global(.agent-mode-compact-pill .arco-btn-content > span > span:nth-child(2) > span:nth-child(2)) {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .actionSubmit {
@@ -1051,5 +1384,53 @@
 
   .presetAgentTagName {
     max-width: 100px;
+  }
+}
+
+@media (max-width: 560px) {
+  .actionRowHub {
+    min-height: 68px;
+    flex-wrap: wrap;
+    align-content: flex-end;
+    gap: 6px;
+    overflow: visible;
+  }
+
+  .actionHubPrimary {
+    width: 100%;
+    flex: 1 0 100%;
+  }
+
+  .actionHubSecondary {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+
+@media (max-width: 420px) {
+  .actionHubAgent {
+    max-width: 94px;
+    flex-basis: 94px;
+  }
+
+  .actionConfigGroup {
+    max-width: 184px;
+    flex-basis: 184px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .guidInputInnerHub,
+  .actionHubSuper,
+  .actionHubAgent,
+  .actionHubIcon,
+  .actionConfigItem :global(.sendbox-model-btn) {
+    transition: none !important;
+  }
+
+  .actionHubSuper:hover,
+  .actionHubAgent:hover,
+  .actionHubIcon:hover {
+    transform: none;
   }
 }

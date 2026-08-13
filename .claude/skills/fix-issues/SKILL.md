@@ -68,7 +68,7 @@ In daemon mode (`limit > 0`), load the skip list to avoid re-analyzing issues th
 triaged in previous sessions. The skip list is stored at:
 
 ```
-~/.aionui-fix-issues/skip-list.json
+~/.tomni-fix-issues/skip-list.json
 ```
 
 Format:
@@ -613,7 +613,7 @@ See [references/report-template.md](references/report-template.md) for the exact
 
 #### Step 3.1: Update Skip List (Daemon Mode Only)
 
-In daemon mode (`limit > 0`), after the summary report, update `~/.aionui-fix-issues/skip-list.json`
+In daemon mode (`limit > 0`), after the summary report, update `~/.tomni-fix-issues/skip-list.json`
 with all issues that were **skipped** in this session.
 
 **TTL by classification:**

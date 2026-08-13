@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -8,14 +8,14 @@
  * Tests for the Music MCP server (agent plane) — drives the tools through an
  * in-memory MCP client over the SDK's linked in-process transport, against fake
  * deps. Verifies the agent can build music and "listen" via MCP, all routed
- * through @aionui/music-core's dispatchTool.
+ * through @tomny/music-core's dispatchTool.
  */
 
 import { describe, expect, it, vi } from 'vitest';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { createMusicServer, type MusicServerDeps } from '@/process/music/musicMcpServer';
-import { chordFromMidi, createProject, type Project } from '@aionui/music-core';
+import { chordFromMidi, createProject, type Project } from '@tomny/music-core';
 
 const SR = 44100;
 

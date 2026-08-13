@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -14,7 +14,7 @@
  * ever runs without explicit user intent.
  */
 
-const GOAL_VERIFY_PREFIX = 'aionui.goal.verify.';
+const GOAL_VERIFY_PREFIX = 'tomny.goal.verify.';
 
 const keyFor = (conversationId: string): string => `${GOAL_VERIFY_PREFIX}${conversationId}`;
 

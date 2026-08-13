@@ -424,7 +424,7 @@ export const createRepoSecretStore = (options?: {
       return vault.entries
         .filter((entry) => entry.repository === root)
         .map((entry) => metadata(vault, entry))
-        .sort((left, right) => left.alias.localeCompare(right.alias));
+        .toSorted((left, right) => left.alias.localeCompare(right.alias));
     },
     async listCombos(repository) {
       const root = normalizeRepository(repository);
@@ -432,7 +432,7 @@ export const createRepoSecretStore = (options?: {
       return vault.combos
         .filter((combo) => combo.repository === root)
         .map((combo) => comboMetadata(vault, combo))
-        .sort((left, right) => left.comboLabel.localeCompare(right.comboLabel));
+        .toSorted((left, right) => left.comboLabel.localeCompare(right.comboLabel));
     },
     async listScopes() {
       const vault = await load();
@@ -455,7 +455,7 @@ export const createRepoSecretStore = (options?: {
             ),
           };
         })
-        .sort((left, right) => right.updatedAt - left.updatedAt || left.repository.localeCompare(right.repository));
+        .toSorted((left, right) => right.updatedAt - left.updatedAt || left.repository.localeCompare(right.repository));
     },
     async listCoreRecoveryCandidates() {
       const vault = await load();

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  *
  * Unit tests for the pure intra-repo import-graph builder. Every case exercises
@@ -216,7 +216,7 @@ describe('collectRepoFiles', () => {
         '/repo',
         [
           { name: 'z.ts', fullPath: '/repo/z.ts', isDir: false },
-          { name: '.aionui', fullPath: '/repo/.aionui', isDir: true },
+          { name: '.tomny', fullPath: '/repo/.tomny', isDir: true },
           { name: '.omni', fullPath: '/repo/.omni', isDir: true },
           { name: 'src', fullPath: '/repo/src', isDir: true },
           { name: 'target', fullPath: '/repo/target', isDir: true },
@@ -232,7 +232,7 @@ describe('collectRepoFiles', () => {
           { name: '.turbo', fullPath: '/repo/src/.turbo', isDir: true },
         ],
       ],
-      ['/repo/.aionui', [{ name: 'ignored.ts', fullPath: '/repo/.aionui/ignored.ts', isDir: false }]],
+      ['/repo/.tomny', [{ name: 'ignored.ts', fullPath: '/repo/.tomny/ignored.ts', isDir: false }]],
       ['/repo/.omni', [{ name: 'wiki', fullPath: '/repo/.omni/wiki', isDir: true }]],
       [
         '/repo/.omni/wiki',

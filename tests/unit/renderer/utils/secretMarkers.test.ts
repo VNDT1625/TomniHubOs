@@ -10,9 +10,7 @@ describe('secretMarkers', () => {
   });
 
   it('recognizes the marker pattern emitted in an assistant answer for local reveal', () => {
-    expect(getSecretMarkers('TEST là {{secret:TEST}}.')).toEqual([
-      { alias: 'TEST', marker: '{{secret:TEST}}' },
-    ]);
+    expect(getSecretMarkers('TEST là {{secret:TEST}}.')).toEqual([{ alias: 'TEST', marker: '{{secret:TEST}}' }]);
   });
 
   it('keeps unresolved markers opaque and inserts only explicitly revealed values', () => {

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -83,7 +83,7 @@ const DingTalkConfigForm: React.FC<DingTalkConfigFormProps> = ({ pluginStatus, m
     backend?: string;
     name?: string;
     id?: string;
-  }>({ agent_type: 'aionrs' });
+  }>({ agent_type: 'tomnyagentic' });
 
   // Load pending pairings
   const loadPendingPairings = useCallback(async () => {
@@ -143,7 +143,7 @@ const DingTalkConfigForm: React.FC<DingTalkConfigFormProps> = ({ pluginStatus, m
           const agentType =
             typeof s.agent_type === 'string'
               ? s.agent_type
-              : backend && ['aionrs', 'tomni-cli', 'openclaw-gateway', 'nanobot', 'remote'].includes(backend)
+              : backend && ['tomnyagentic', 'tomni-cli', 'openclaw-gateway', 'nanobot', 'remote'].includes(backend)
                 ? backend
                 : 'acp';
           setSelectedAgent({
@@ -155,7 +155,7 @@ const DingTalkConfigForm: React.FC<DingTalkConfigFormProps> = ({ pluginStatus, m
           });
         } else if (typeof saved === 'string') {
           const backend = saved as string;
-          const agentType = ['aionrs', 'tomni-cli', 'openclaw-gateway', 'nanobot', 'remote'].includes(backend)
+          const agentType = ['tomnyagentic', 'tomni-cli', 'openclaw-gateway', 'nanobot', 'remote'].includes(backend)
             ? backend
             : 'acp';
           setSelectedAgent({ agent_type: agentType, backend });
@@ -340,13 +340,13 @@ const DingTalkConfigForm: React.FC<DingTalkConfigFormProps> = ({ pluginStatus, m
   };
 
   const hasExistingUsers = authorizedUsers.length > 0;
-  const showModelSelector = selectedAgent.agent_type === 'aionrs';
+  const showModelSelector = selectedAgent.agent_type === 'tomnyagentic';
   const agentOptions: Array<{
     agent_type: string;
     backend?: string;
     name: string;
     id?: string;
-  }> = availableAgents.length > 0 ? availableAgents : [{ agent_type: 'aionrs', name: 'Tomny Agentic' }];
+  }> = availableAgents.length > 0 ? availableAgents : [{ agent_type: 'tomnyagentic', name: 'Tomny Agentic' }];
 
   return (
     <div className='flex flex-col gap-24px'>
@@ -525,7 +525,7 @@ const DingTalkConfigForm: React.FC<DingTalkConfigFormProps> = ({ pluginStatus, m
                         setSelectedAgent(next);
                         void persistSelectedAgent(next);
 
-                        if (next.agent_type === 'aionrs') {
+                        if (next.agent_type === 'tomnyagentic') {
                           const savedModel = configService.get('assistant.dingtalk.defaultModel');
                           const providers = modelSelection.providers;
                           const savedProviderExists = savedModel?.id && providers.some((p) => p.id === savedModel.id);

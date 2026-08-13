@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  *
  * Node-environment tests for feedbackBridge's IPC handlers.
@@ -35,7 +35,7 @@ vi.mock('electron', () => ({
     },
   },
   app: {
-    getPath: vi.fn(() => '/tmp/aionui-test-logs-nonexistent'),
+    getPath: vi.fn(() => '/tmp/tomny-test-logs-nonexistent'),
     getVersion: vi.fn(() => '0.0.0'),
   },
   BrowserWindow: {
@@ -131,11 +131,11 @@ describe('feedbackBridge — capture-screenshot', () => {
 
 describe('feedback logs', () => {
   it('collects the same recent three log days used by user feedback reports', () => {
-    const logsDir = mkdtempSync(path.join(tmpdir(), 'aionui-feedback-logs-'));
+    const logsDir = mkdtempSync(path.join(tmpdir(), 'tomny-feedback-logs-'));
     try {
       writeFileSync(path.join(logsDir, '2026-05-25.log'), 'today frontend\n');
-      writeFileSync(path.join(logsDir, '2026-05-25.aioncore.log'), 'today backend\n');
-      writeFileSync(path.join(logsDir, '2026-05-24.aionrs.log'), 'yesterday rust\n');
+      writeFileSync(path.join(logsDir, '2026-05-25.tomnycore.log'), 'today backend\n');
+      writeFileSync(path.join(logsDir, '2026-05-24.tomnyagentic.log'), 'yesterday rust\n');
       writeFileSync(path.join(logsDir, '2026-05-23.log'), 'third day frontend\n');
       writeFileSync(path.join(logsDir, '2026-05-22.log'), 'too old frontend\n');
       writeFileSync(path.join(logsDir, '2026-05-25.txt'), 'not a log\n');

@@ -1,13 +1,13 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
 /**
  * Shared, pure types for the spec-driven workflow analyzer (Kiro-grade).
  *
- * These types describe the result of analyzing a `.aionui/specs/<slug>/`
+ * These types describe the result of analyzing a `.tomny/specs/<slug>/`
  * directory: EARS requirement validation, Req↔Task↔Test traceability, and
  * phase-gate / Definition-of-Done readiness.
  *

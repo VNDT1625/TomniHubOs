@@ -1,13 +1,14 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { ipcBridge, type AionrsContextResult, type AionrsContextSnapshot } from '@/common';
+import { ipcBridge, type TomnyAgenticContextResult, type TomnyAgenticContextSnapshot } from '@/common';
 import { sessionChannels } from '@/common/types/agent/sessionChannels';
 import type { ExperimentalCoreEvent } from '@process/experimentalCore/experimentalCoreRuntime';
 import { publishTomniRemoteEvent } from '@process/services/remoteGateway/registry';
+import { executeAfterOutboundInspection } from '@process/services/security';
 import { getSessionMemoryStore } from '@process/ide/memory/sessionMemoryStore';
 import { NativeConversationRepository } from './repository';
 import {
@@ -18,7 +19,9 @@ import {
 
 let registered = false;
 
-const settleContextRequest = async (operation: () => Promise<AionrsContextSnapshot>): Promise<AionrsContextResult> => {
+const settleContextRequest = async (
+  operation: () => Promise<TomnyAgenticContextSnapshot>
+): Promise<TomnyAgenticContextResult> => {
   try {
     return { ok: true, data: await operation() };
   } catch (error) {
@@ -68,15 +71,56 @@ export const registerNativeConversationBridge = (input: {
   ipcBridge.conversation.update.provider(({ id, updates, merge_extra }) => service.update(id, updates, merge_extra));
   ipcBridge.conversation.reset.provider(({ id }) => (id ? service.reset(id) : Promise.resolve()));
   ipcBridge.conversation.warmup.provider(() => service.initialize());
-  ipcBridge.conversation.getAionrsContext.provider(({ conversation_id }) =>
-    settleContextRequest(() => service.getAionrsContext(conversation_id))
+  ipcBridge.conversation.getTomnyAgenticContext.provider(({ conversation_id }) =>
+    settleContextRequest(() => service.getTomnyAgenticContext(conversation_id))
   );
-  ipcBridge.conversation.updateAionrsContext.provider(({ conversation_id, custom_context, context_branches }) =>
-    settleContextRequest(() => service.updateAionrsContext(conversation_id, custom_context, context_branches))
+  ipcBridge.conversation.updateTomnyAgenticContext.provider(({ conversation_id, custom_context, context_branches }) =>
+    settleContextRequest(() => service.updateTomnyAgenticContext(conversation_id, custom_context, context_branches))
   );
   ipcBridge.conversation.stop.provider(({ conversation_id }) => service.cancel(conversation_id));
   ipcBridge.conversation.activeCount.provider(() => Promise.resolve({ count: service.activeCount() }));
-  ipcBridge.conversation.sendMessage.provider((params) => service.send(params));
+  ipcBridge.conversation.sendMessage.provider(async (params) => {
+    const requestId = `conversation:${params.conversation_id}:${crypto.randomUUID()}`;
+    const parts = [
+      { id: 'input', text: params.input, role: 'user' as const, source: 'user' as const },
+      ...(params.model_input === undefined
+        ? []
+        : [{ id: 'model-input', text: params.model_input, role: 'user' as const, source: 'generated' as const }]),
+    ];
+    const result = await executeAfterOutboundInspection(
+      {
+        schemaVersion: 1,
+        requestId,
+        runId: params.conversation_id,
+        actorId: 'local-user',
+        surface: 'chat',
+        target: { kind: 'conversation-provider', id: 'native-runtime' },
+        parts,
+        requestedCapability: 'outbound.text.send',
+        sensitivity: 'normal',
+      },
+      {
+        allowSanitize: true,
+        requireApprovalForFindings: false,
+        policyVersion: 'outbound-text-v1',
+      },
+      async (safeParts) => {
+        const safeInput = safeParts.find((part) => part.id === 'input')?.text;
+        const safeModelInput = safeParts.find((part) => part.id === 'model-input')?.text;
+        if (safeInput === undefined) throw new Error('Outbound inspection returned no safe user input.');
+        return service.send({ ...params, input: safeInput, model_input: safeModelInput });
+      }
+    );
+    if (!result.value) throw new Error(`OUTBOUND_SECURITY_${result.inspection.reasonCode.toUpperCase()}`);
+    return {
+      ...result.value,
+      inspection: {
+        decision: result.inspection.decision as 'allow' | 'sanitize',
+        reasonCode: result.inspection.reasonCode as 'no_sensitive_data' | 'sanitized_secret',
+        findingTypes: result.inspection.findings.map((finding) => finding.type),
+      },
+    };
+  });
   ipcBridge.conversation.resolveNativePermission.provider(({ permission_id, approved, lifetime }) =>
     service.resolvePermission(permission_id, approved, lifetime)
   );

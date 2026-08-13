@@ -53,12 +53,12 @@ export const createDemoState = (): InternalAccountState => {
     authStatus: 'signedIn',
     currentSessionId: 'ses_current',
     user,
-    credentialHash: demoPasswordHash('Tomni@2026'),
+    credentialHash: demoPasswordHash('Tomny@2026'),
     sessions: [
       {
         id: 'ses_current',
         deviceId: 'dev_windows',
-        label: 'Tomni Desktop',
+        label: 'Tomny Desktop',
         platform: 'Windows 11',
         location: 'Thành phố Hồ Chí Minh',
         ipAddress: '192.168.1.24',
@@ -70,7 +70,7 @@ export const createDemoState = (): InternalAccountState => {
       {
         id: 'ses_mobile',
         deviceId: 'dev_iphone',
-        label: 'Tomni Mobile',
+        label: 'Tomny Mobile',
         platform: 'iOS',
         location: 'Thành phố Hồ Chí Minh',
         ipAddress: '10.10.0.12',
@@ -117,7 +117,7 @@ export const createDemoState = (): InternalAccountState => {
     },
     organization: {
       id: 'org_tomni_lab',
-      name: 'Tomni Lab',
+      name: 'Tomny Lab',
       slug: 'tomni-lab',
       members: [
         {
@@ -140,7 +140,7 @@ export const createDemoState = (): InternalAccountState => {
       {
         id: 'aud_demo_1',
         type: 'session.created',
-        label: 'Phiên đăng nhập trên Tomni Desktop',
+        label: 'Phiên đăng nhập trên Tomny Desktop',
         createdAt: timestamp - 86_400_000 * 3,
       },
       {

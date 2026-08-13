@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -58,7 +58,7 @@ describe('registry', () => {
     expect(getConnectorTarget('nope')).toBeUndefined();
   });
 
-  it('maps connector targets to their matching Tomni chat preference keys', () => {
+  it('maps connector targets to their matching Tomny chat preference keys', () => {
     expect(getConnectorTarget('claude-code')?.agentPreferenceKey).toBe('claude');
     expect(getConnectorTarget('codex')?.agentPreferenceKey).toBe('codex');
     expect(getConnectorTarget('kiro')?.agentPreferenceKey).toBe('kiro');

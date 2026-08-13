@@ -1,0 +1,200 @@
+import { createHash, generateKeyPairSync } from 'node:crypto';
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
+
+import { tmpdir } from 'node:os';
+import { describe, expect, it } from 'vitest';
+
+import { DEVELOPMENT_SIGNING_KEY_ID, loadPackageSigningKey } from '../../../scripts/package-apps/signing';
+import { FIRST_PARTY_PACKAGE_CATALOG, FIRST_PARTY_PACKAGE_TRUSTED_KEYS, parsePackageManifest } from '@/common/packages';
+import {
+  packageArtifactManifestsMatch,
+  readArtifactManifest,
+  verifyArtifactSignature,
+} from '../../../packages/desktop/src/process/extensions/package-manager/artifactSecurity';
+
+type PackageBundle = {
+  format: 'tomni-package-bundle-v1';
+  manifest: unknown;
+  files: Record<string, string>;
+};
+
+const PACKAGE_IDS = [
+  'com.tomni.design-studio',
+  'com.tomni.document-studio',
+  'com.tomni.ide',
+  'com.tomni.studio',
+] as const;
+
+const integrityFor = (files: Record<string, string>): { integrity: string; sizeBytes: number } => {
+  const hash = createHash('sha256');
+  let sizeBytes = 0;
+  for (const [relativePath, encoded] of Object.entries(files).toSorted(([left], [right]) =>
+    left.localeCompare(right)
+  )) {
+    const content = Buffer.from(encoded, 'base64');
+    hash.update(relativePath);
+    hash.update('\0');
+    hash.update(content);
+    hash.update('\0');
+    sizeBytes += content.byteLength;
+  }
+  return { integrity: `sha256-${hash.digest('hex')}`, sizeBytes };
+};
+
+type SourceMetafile = {
+  entry: string;
+  inputs: Record<string, unknown>;
+};
+
+const expectPortableSourceClosure = (metafile: SourceMetafile): string[] => {
+  const inputs = Object.keys(metafile.inputs).map((input) => input.replaceAll('\\', '/'));
+  expect(inputs).toEqual(inputs.toSorted());
+  expect(new Set(inputs).size).toBe(inputs.length);
+  expect(inputs).toContain(metafile.entry);
+  expect(
+    inputs.every(
+      (input) =>
+        !input.includes('\0') &&
+        !input.startsWith('/') &&
+        !/^[a-z]:/i.test(input) &&
+        input !== '..' &&
+        !input.startsWith('../') &&
+        !input.startsWith('node_modules/')
+    )
+  ).toBe(true);
+  return inputs.map((input) => input.toLowerCase());
+};
+
+describe('first-party package signing policy', () => {
+  it('rejects an oversized on-disk package manifest before reading it into memory', async () => {
+    const packageRoot = await fs.mkdtemp(path.join(tmpdir(), 'tomni-oversized-manifest-'));
+    await fs.writeFile(path.join(packageRoot, 'tomny-package.json'), ' '.repeat(256 * 1024 + 1));
+
+    await expect(readArtifactManifest(packageRoot)).rejects.toThrow(/manifest exceeds the size limit/i);
+
+    await fs.rm(packageRoot, { recursive: true, force: true });
+  });
+
+  it('rejects a production build when no explicit private key is configured', async () => {
+    const signingRoot = await fs.mkdtemp(path.join(tmpdir(), 'tomni-signing-empty-'));
+    await expect(loadPackageSigningKey({ env: {}, signingRoot })).rejects.toThrow(
+      /TOMNI_PACKAGE_SIGNING_PRIVATE_KEY_PATH/
+    );
+    await expect(fs.readdir(signingRoot)).resolves.toEqual([]);
+    await fs.rm(signingRoot, { recursive: true, force: true });
+  });
+
+  it('rejects a different Ed25519 key under the production key id', async () => {
+    const signingRoot = await fs.mkdtemp(path.join(tmpdir(), 'tomni-signing-wrong-anchor-'));
+    const privateKeyPath = path.join(signingRoot, 'wrong.private.pem');
+    const pair = generateKeyPairSync('ed25519');
+    await fs.writeFile(privateKeyPath, pair.privateKey.export({ format: 'pem', type: 'pkcs8' }).toString());
+    await expect(
+      loadPackageSigningKey({ env: { TOMNI_PACKAGE_SIGNING_PRIVATE_KEY_PATH: privateKeyPath }, signingRoot })
+    ).rejects.toThrow(/committed trust anchor/);
+    await fs.rm(signingRoot, { recursive: true, force: true });
+  });
+
+  it('isolates opt-in development signing behind a non-production key id', async () => {
+    const signingRoot = await fs.mkdtemp(path.join(tmpdir(), 'tomni-signing-dev-'));
+    const signingKey = await loadPackageSigningKey({ env: { TOMNI_PACKAGE_DEV_SIGNING: '1' }, signingRoot });
+    expect(signingKey).toMatchObject({ keyId: DEVELOPMENT_SIGNING_KEY_ID, production: false });
+    expect(DEVELOPMENT_SIGNING_KEY_ID).not.toBe('tomni-store-2026-02');
+    await expect(fs.readdir(signingRoot)).resolves.toContain(`${DEVELOPMENT_SIGNING_KEY_ID}.private.pem`);
+    await fs.rm(signingRoot, { recursive: true, force: true });
+  });
+});
+
+describe('signed first-party app package artifacts', () => {
+  for (const packageId of PACKAGE_IDS) {
+    it(`ships a verifiable independently downloadable ${packageId} bundle`, async () => {
+      const catalogEntry = FIRST_PARTY_PACKAGE_CATALOG.find((entry) => entry.manifest.id === packageId);
+      expect(catalogEntry?.delivery).toBe('downloaded-package');
+      expect(catalogEntry?.trust).toBe('signed-first-party');
+      const artifactName = new URL(catalogEntry!.artifactUrl!).pathname.split('/').at(-1)!;
+      const content = await fs.readFile(path.resolve('store-artifacts', artifactName), 'utf8');
+      const bundle = JSON.parse(content) as PackageBundle;
+      const manifest = parsePackageManifest(bundle.manifest);
+
+      expect(bundle.format).toBe('tomni-package-bundle-v1');
+      expect(packageArtifactManifestsMatch(catalogEntry!.manifest, manifest)).toBe(true);
+      expect(() => verifyArtifactSignature(manifest, FIRST_PARTY_PACKAGE_TRUSTED_KEYS)).not.toThrow();
+      expect(integrityFor(bundle.files)).toEqual({
+        integrity: manifest.artifact?.integrity,
+        sizeBytes: manifest.artifact?.sizeBytes,
+      });
+      const javascript = Buffer.from(bundle.files['app.js']!, 'base64').toString('utf8');
+      expect(Buffer.byteLength(javascript)).toBeGreaterThan(1024 * 1024);
+      expect(Buffer.from(bundle.files['style.css']!, 'base64').byteLength).toBeGreaterThan(1024);
+
+      if (packageId === 'com.tomni.design-studio') {
+        const metafile = JSON.parse(
+          Buffer.from(bundle.files['metafile.json']!, 'base64').toString('utf8')
+        ) as SourceMetafile;
+        const sourceInputs = expectPortableSourceClosure(metafile);
+        const excludedOwnerPaths = [
+          '/package-apps/document',
+          '/package-apps/ide.tsx',
+          '/package-apps/studio.tsx',
+          '/pages/conversation/',
+          '/pages/editor/',
+          '/pages/music/',
+          '/pages/studio/automation/',
+          '/pages/studio/components/',
+          '/pages/studio/makevideo/',
+        ];
+        const excludedIdeSource = sourceInputs.some(
+          (input) => input.includes('/pages/studio/ide/') && !input.includes('/pages/studio/ide/viu/')
+        );
+        const excludedBundleMarkers = [
+          'automationview',
+          'chatconversation',
+          'documentstudiopage',
+          'expbasepanel',
+          'ideworkspace',
+          'musicstudio',
+          'quicktestpanel',
+          'teameditclient',
+        ];
+
+        expect(metafile.entry).toBe('packages/desktop/src/renderer/package-apps/design/index.tsx');
+        expect(excludedIdeSource).toBe(false);
+        expect(sourceInputs.some((input) => excludedOwnerPaths.some((owner) => input.includes(owner)))).toBe(false);
+        expect(excludedBundleMarkers.some((marker) => javascript.toLowerCase().includes(marker))).toBe(false);
+        expect(manifest.engines.tomni).toBe('>=1.0.0');
+        expect(manifest.permissions).toEqual(['workspace.read', 'workspace.write']);
+        expect(manifest.dependencies).toEqual([]);
+        expect(manifest.artifact?.sizeBytes).toBeLessThan(10 * 1024 * 1024);
+      }
+
+      if (packageId === 'com.tomni.document-studio') {
+        const metafile = JSON.parse(
+          Buffer.from(bundle.files['metafile.json']!, 'base64').toString('utf8')
+        ) as SourceMetafile;
+        const sourceInputs = expectPortableSourceClosure(metafile);
+        const excludedOwnerPaths = [
+          '/pages/conversation/',
+          '/pages/music/',
+          '/pages/studio/automation/',
+          '/pages/studio/ide/',
+          '/pages/studio/makevideo/',
+        ];
+        const excludedBundleMarkers = [
+          'automationview',
+          'chatconversation',
+          'ideworkspace',
+          'musicstudio',
+          'previewprovider',
+          'studiopage',
+          'viucanvas',
+        ];
+
+        expect(metafile.entry).toBe('packages/desktop/src/renderer/package-apps/documentStudio.tsx');
+        expect(sourceInputs.some((input) => excludedOwnerPaths.some((owner) => input.includes(owner)))).toBe(false);
+        expect(excludedBundleMarkers.some((marker) => javascript.toLowerCase().includes(marker))).toBe(false);
+        expect(manifest.artifact?.sizeBytes).toBeLessThan(10 * 1024 * 1024);
+      }
+    });
+  }
+});

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  *
  * Unit tests for the built-in Cron MCP server (Scheduled Tasks — Agent plane).
@@ -8,7 +8,7 @@
  * The server factory is driven through a real in-memory MCP client/server pair
  * (the SDK's linked transport), so we exercise the actual tool registration,
  * input schemas and result envelopes — not just the handler bodies. The cron
- * service is faked, so no live aioncore backend is required.
+ * service is faked, so no live tomnycore backend is required.
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';

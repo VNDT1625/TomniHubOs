@@ -54,7 +54,7 @@ afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 
-describe('Tomni model-gateway overlay', () => {
+describe('Tomny model-gateway overlay', () => {
   it('adds session attribution, measurement provenance and the breakdown route', async () => {
     const root = await fixture();
 

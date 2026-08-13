@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -243,7 +243,8 @@ export class CoreCutoverService {
       throw new Error(
         `Core cutover import failed and ${rollbackFailures.length ? 'rollback was incomplete' : 'was rolled back'}: ${
           error instanceof Error ? error.message : String(error)
-        }.${detail}`
+        }.${detail}`,
+        { cause: error }
       );
     }
     return {

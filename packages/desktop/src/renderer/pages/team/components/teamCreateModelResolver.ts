@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -13,11 +13,11 @@ import { getAgents } from '@/renderer/hooks/agent/useAgents';
  *
  * Backend `service.rs` consumes `input.model` verbatim with no default, so an
  * empty or backend-name-only value (e.g. "gemini") ends up persisted as
- * `use_model: null`. Downstream, GeminiSendBox / AionrsSendBox gate the
+ * `use_model: null`. Downstream, GeminiSendBox / TomnyAgenticSendBox gate the
  * textarea on `current_model?.useModel` and render disabled. See mnemo #297.
  *
  * This resolver reads the user's configured default model for provider-based
- * agents (gemini / aionrs) from ConfigStorage and falls back to a sensible
+ * agents (gemini / tomnyagentic) from ConfigStorage and falls back to a sensible
  * CLI default when no preference is set.
  *
  * For ACP backends (claude, codex, acp) the model is resolved from the
@@ -35,8 +35,8 @@ export async function resolveDefaultTeamAgentModel(params: {
     return resolveGeminiDefaultModel();
   }
 
-  if (conversation_type === 'aionrs' || agent_type === 'aionrs') {
-    return resolveAionrsDefaultModel();
+  if (conversation_type === 'tomnyagentic' || agent_type === 'tomnyagentic') {
+    return resolveTomnyAgenticDefaultModel();
   }
 
   return resolveAcpDefaultModel(agent_type);
@@ -66,8 +66,8 @@ async function resolveGeminiDefaultModel(): Promise<string> {
   return 'auto';
 }
 
-async function resolveAionrsDefaultModel(): Promise<string> {
-  const saved = configService.get('aionrs.defaultModel');
+async function resolveTomnyAgenticDefaultModel(): Promise<string> {
+  const saved = configService.get('tomnyagentic.defaultModel');
   if (saved && typeof saved === 'object' && typeof saved.use_model === 'string' && saved.use_model.length > 0) {
     return saved.use_model;
   }

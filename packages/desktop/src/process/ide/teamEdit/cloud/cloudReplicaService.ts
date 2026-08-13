@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -47,7 +47,7 @@ const EXCLUDED_DIRS = new Set([
   '.git',
   '.hg',
   '.svn',
-  '.aionui',
+  '.tomny',
   'node_modules',
   'dist',
   'out',
@@ -90,7 +90,7 @@ const serializeError = (error: unknown): string => (error instanceof Error ? err
 
 const atomicWrite = async (filePath: string, content: string | Buffer): Promise<void> => {
   await fs.mkdir(path.dirname(filePath), { recursive: true });
-  const temp = `${filePath}.aionui-${randomUUID()}.tmp`;
+  const temp = `${filePath}.tomny-${randomUUID()}.tmp`;
   await fs.writeFile(temp, content);
   await fs.rename(temp, filePath);
 };

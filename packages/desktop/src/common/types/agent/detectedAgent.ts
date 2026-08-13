@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -24,7 +24,7 @@ export type RemoteAgentProtocol = 'openclaw' | 'zeroclaw' | 'acp';
 export type RemoteAgentAuthType = 'bearer' | 'password' | 'none';
 
 /** Execution engine kinds — each uses a different protocol or runtime */
-export type DetectedAgentKind = 'acp' | 'remote' | 'aionrs' | 'openclaw-gateway' | 'nanobot';
+export type DetectedAgentKind = 'acp' | 'remote' | 'tomnyagentic' | 'openclaw-gateway' | 'nanobot';
 
 /** Kind-specific fields mapping */
 type KindFields = {
@@ -52,7 +52,7 @@ type KindFields = {
     authType: RemoteAgentAuthType;
   };
 
-  aionrs: {
+  tomnyagentic: {
     /** Resolved CLI binary path */
     cli_path?: string;
     /** Binary version string */
@@ -90,7 +90,7 @@ export type DetectedAgent<K extends DetectedAgentKind = DetectedAgentKind> = {
 // Convenience aliases
 export type AcpDetectedAgent = DetectedAgent<'acp'>;
 export type RemoteDetectedAgent = DetectedAgent<'remote'>;
-export type AionrsDetectedAgent = DetectedAgent<'aionrs'>;
+export type TomnyAgenticDetectedAgent = DetectedAgent<'tomnyagentic'>;
 export type NanobotDetectedAgent = DetectedAgent<'nanobot'>;
 export type OpenClawDetectedAgent = DetectedAgent<'openclaw-gateway'>;
 

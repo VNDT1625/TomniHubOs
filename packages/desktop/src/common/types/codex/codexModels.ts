@@ -1,13 +1,13 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
 /**
- * Default Codex model list maintained by AionUi.
+ * Default Codex model list maintained by Tomny.
  * These are known models that Codex CLI supports.
- * Validation is done by Codex CLI itself — AionUi only passes the model name.
+ * Validation is done by Codex CLI itself — Tomny only passes the model name.
  *
  * The first entry is used as the default when the user hasn't made a selection.
  */

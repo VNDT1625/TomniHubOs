@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -249,7 +249,7 @@ const getAutomationServices = (): AutomationServices => {
       getRules: (companyId) => companyServices.configStore.getRules(companyId),
       conversation: companyServices.conversation,
     },
-    // App-reuse capabilities — drive existing AionUi features. A workflow id box
+    // App-reuse capabilities — drive existing Tomny features. A workflow id box
     // lets `action.subworkflow` run another saved workflow (set after the engine
     // exists, below, to avoid a chicken-and-egg with the engine reference).
     appReuse: {

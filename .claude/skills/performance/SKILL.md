@@ -1,7 +1,7 @@
 ---
 name: performance
 description: |
-  Performance & resource (RAM/CPU/GPU) optimization for this Electron + React + aioncore app.
+  Performance & resource (RAM/CPU/GPU) optimization for this Electron + React + tomnicore app.
   Use when: (1) App feels laggy or freezes, (2) High memory/CPU/GPU usage, (3) Slow startup,
   (4) Many concurrent heavy tasks (agents, browser, testing, OCR, transcription, patch builds),
   (5) Tuning the ResourceCoordinator (Requirement 5), (6) Before claiming a perf fix is done.
@@ -20,7 +20,7 @@ RAM/CPU/GPU under control so the app never lags the user's machine, in line with
 
 ## Architecture context (read first)
 
-- **Three runtimes**: Main process (Node/Electron), Renderer (React 19, Chromium), and **aioncore** (Rust binary holding business logic). Each has different memory/CPU profiles — identify WHICH one is hot before optimizing.
+- **Three runtimes**: Main process (Node/Electron), Renderer (React 19, Chromium), and **tomnicore** (Rust binary holding business logic). Each has different memory/CPU profiles — identify WHICH one is hot before optimizing.
 - **Heavy work must go through `ResourceCoordinator`**: every heavy task (`agent | browser | emulator | windowsTest | patchBuild | ocr | transcription | docConvert | semanticIndex`) calls `requestLease()` before running and `releaseLease()` after. A leaked lease = phantom memory budget consumed. Verify lease accounting first when concurrency feels wrong.
 - **Workers**: CPU/GPU-heavy or risky work (OCR, transcription, ffmpeg, patch build) runs in worker child processes — never block Main/Renderer.
 
@@ -38,7 +38,7 @@ and OS task manager to attribute RAM/GPU per process. Never optimize without a b
 
 ## Diagnosis order (per runtime)
 
-1. **Attribute**: which process holds the RAM/CPU/GPU? (Electron Main vs Renderer vs aioncore vs a worker)
+1. **Attribute**: which process holds the RAM/CPU/GPU? (Electron Main vs Renderer vs tomnicore vs a worker)
 2. **Reproduce + measure** a baseline number.
 3. **Find root cause** (systematic-debugging Phase 1). Common culprits below.
 4. **One change at a time**, re-measure, keep only what helps.
@@ -52,7 +52,7 @@ and OS task manager to attribute RAM/GPU per process. Never optimize without a b
 - Avoid large in-memory blobs (media, file contents) in component state; stream or window them.
 - Heavy editor/preview (Monaco, PDF, media) — mount on demand, dispose on close.
 
-## Main process & aioncore checklist
+## Main process & tomnicore checklist
 
 - **Leases**: confirm every heavy task has exactly one `requestLease` and one matching `releaseLease` (incl. error/cancel paths). Leaked leases starve the budget and cause queue stalls.
 - **Concurrency**: let `ResourceCoordinator` gate parallelism by free RAM; do NOT spawn unbounded agents/workers. Queue instead of overload (Property 3).

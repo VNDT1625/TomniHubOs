@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -21,7 +21,7 @@
  * The design (`design.md`, Yêu cầu 5) names the `systeminformation` package for
  * GPU and disk reads. However, `systeminformation` is **not** a declared
  * dependency of this project — it only appears in the lockfile as a transitive
- * dependency of `@office-ai/aioncli-core`, so importing it directly here would
+ * dependency of the CLI provider runtime, so importing it directly here would
  * rely on an undeclared package. To avoid silently adding a new dependency, this
  * module instead reads what it can from Node built-ins:
  *
@@ -60,6 +60,9 @@ const bytesToMB = (bytes: number): number => {
   if (!Number.isFinite(bytes) || bytes <= 0) return 0;
   return Math.round(bytes / BYTES_PER_MB);
 };
+
+const toNonNegativeCoreCount = (value: number): number =>
+  Number.isFinite(value) && value > 0 ? Math.trunc(value) : 0;
 
 /**
  * The set of low-level system reads the probe depends on. Declared explicitly
@@ -140,8 +143,8 @@ export const createSystemProbe = (deps?: Partial<SystemProbeDeps>): (() => Promi
 
     return {
       totalMemMB: bytesToMB(resolved.getTotalMemBytes()),
-      cpuCores: Math.max(0, Math.trunc(resolved.getCpuCoreCount())),
-      hasDiscreteGPU,
+      cpuCores: toNonNegativeCoreCount(resolved.getCpuCoreCount()),
+      hasDiscreteGPU: hasDiscreteGPU === true,
       freeDiskMB: bytesToMB(freeDiskBytes),
     };
   };

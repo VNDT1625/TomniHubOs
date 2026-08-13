@@ -1,11 +1,11 @@
 {
-  "name": "@aionui/desktop",
+  "name": "@tomny/desktop",
   "version": "0.0.0",
   "private": true,
-  "description": "Tomni Agentic desktop Electron application",
+  "description": "Tomny Agentic desktop Electron application",
   "main": "../../out/main/index.js",
   "dependencies": {
-    "@aionui/web-host": "workspace:*",
+    "@tomny/web-host": "workspace:*",
     "docx-preview": "^0.3.7",
     "pptx-preview": "^1.0.7"
   }

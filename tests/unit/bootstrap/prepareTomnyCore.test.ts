@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -137,15 +137,15 @@ describe('Tomny Core source builder', () => {
 
   it('brands the executable, command, and log without rewriting the compatibility API', () => {
     const sourceDir = mkdtempSync(join(tmpdir(), 'tomny-core-branding-'));
-    const appDir = join(sourceDir, 'crates', 'aionui-app', 'src');
+    const appDir = join(sourceDir, 'crates', 'tomny-app', 'src');
     const bootstrapDir = join(appDir, 'bootstrap');
     mkdirSync(bootstrapDir, { recursive: true });
     const cliPath = join(appDir, 'cli.rs');
     const tracingPath = join(bootstrapDir, 'tracing_init.rs');
-    const cargoPath = join(sourceDir, 'crates', 'aionui-app', 'Cargo.toml');
-    writeFileSync(cliPath, '#[command(name = "aioncore", about = "AionUi Backend Server", version)]');
-    writeFileSync(tracingPath, '.filename_suffix("aioncore.log")');
-    writeFileSync(cargoPath, '[[bin]]\r\nname = "aioncore"\r\npath = "src/main.rs"\r\n');
+    const cargoPath = join(sourceDir, 'crates', 'tomny-app', 'Cargo.toml');
+    writeFileSync(cliPath, '#[command(name = "tomnycore", about = "Tomny Backend Server", version)]');
+    writeFileSync(tracingPath, '.filename_suffix("tomnycore.log")');
+    writeFileSync(cargoPath, '[[bin]]\r\nname = "tomnycore"\r\npath = "src/main.rs"\r\n');
 
     patchTomnyBranding(sourceDir);
 
@@ -156,7 +156,7 @@ describe('Tomny Core source builder', () => {
 
   it('normalizes file API relative paths on Windows source checkouts', () => {
     const sourceDir = mkdtempSync(join(tmpdir(), 'tomny-core-compatibility-'));
-    const fileDir = join(sourceDir, 'crates', 'aionui-file', 'src');
+    const fileDir = join(sourceDir, 'crates', 'tomny-file', 'src');
     mkdirSync(fileDir, { recursive: true });
     const servicePath = join(fileDir, 'service.rs');
     writeFileSync(

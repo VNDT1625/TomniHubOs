@@ -64,8 +64,8 @@ export function filterTeamSupportedAgents(agents: TeamAgentOption[]): TeamAgentO
 
 export function resolveConversationType(
   backend: string
-): 'acp' | 'aionrs' | 'codex' | 'openclaw-gateway' | 'nanobot' | 'remote' {
-  if (backend === 'aionrs') return 'aionrs';
+): 'acp' | 'tomnyagentic' | 'codex' | 'openclaw-gateway' | 'nanobot' | 'remote' {
+  if (backend === 'tomnyagentic') return 'tomnyagentic';
   if (backend === 'codex') return 'acp';
   if (backend === 'openclaw-gateway') return 'openclaw-gateway';
   if (backend === 'nanobot') return 'nanobot';

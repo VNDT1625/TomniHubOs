@@ -1,8 +1,8 @@
 {
-  "name": "@aionui/shared-scripts",
+  "name": "@tomny/shared-scripts",
   "version": "0.0.0",
   "private": true,
-  "description": "Shared build scripts for AionUi packages",
+  "description": "Shared build scripts for Tomny packages",
   "type": "commonjs",
   "exports": {
     "./prepare-tomny-core": "./src/prepare-tomny-core.js",

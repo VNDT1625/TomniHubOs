@@ -29,7 +29,7 @@ const normalize = (input: CreateAssistantRequest, id = input.id?.trim() || rando
   avatar: input.avatar,
   enabled: true,
   sort_order: 0,
-  preset_agent_type: input.preset_agent_type ?? 'aionrs',
+  preset_agent_type: input.preset_agent_type ?? 'tomnyagentic',
   enabled_skills: input.enabled_skills ?? [],
   custom_skill_names: input.custom_skill_names ?? [],
   disabled_builtin_skills: input.disabled_builtin_skills ?? [],

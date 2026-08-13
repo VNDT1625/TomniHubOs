@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -563,7 +563,7 @@ const normalizeConnectRequest = (req: CloudWorkspaceConnectRequest): CloudWorksp
     workspaceId,
     token,
     clientId: randomUUID(),
-    displayName: req.displayName?.trim() || 'AionUi',
+    displayName: req.displayName?.trim() || 'Tomny',
   };
 };
 

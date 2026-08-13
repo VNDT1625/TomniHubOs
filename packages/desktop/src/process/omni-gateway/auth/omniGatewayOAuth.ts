@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -137,7 +137,7 @@ const consentPage = (params: { clientName: string; scope: string; fields: Record
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Authorize access — AionUi</title>
+  <title>Authorize access — Tomny</title>
   <style>
     :root { color-scheme: light dark; }
     body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 0; min-height: 100vh;
@@ -158,7 +158,7 @@ const consentPage = (params: { clientName: string; scope: string; fields: Record
 <body>
   <main class="card">
     <h1>Authorize access</h1>
-    <p><span class="client">${esc(params.clientName)}</span> wants to connect to your AionUi workspace through the External MCP Gateway.</p>
+    <p><span class="client">${esc(params.clientName)}</span> wants to connect to your Tomny workspace through the External MCP Gateway.</p>
     ${scopeLine}
     <p>Approving lets this client call the IDE tools you have enabled, over your secure tunnel, until you revoke it in Settings.</p>
     <form method="post" action="${OMNI_OAUTH_PREFIX}/authorize">

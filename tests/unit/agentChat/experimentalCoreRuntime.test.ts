@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -87,21 +87,21 @@ describe('experimental direct core runtime', () => {
 
   it('discovers Super hosts from every registered surface without hard-coded surface names', () => {
     const activeSurface = {
-      capabilities: [{ kind: 'mcp', serverName: 'aionui-ide' }],
+      capabilities: [{ kind: 'mcp', serverName: 'tomny-ide' }],
     } as never;
     const registry = {
       list: () => [
-        { capabilities: [{ kind: 'mcp', serverName: 'aionui-ide' }] },
-        { capabilities: [{ kind: 'mcp', serverName: 'aionui-browser-control' }] },
+        { capabilities: [{ kind: 'mcp', serverName: 'tomny-ide' }] },
+        { capabilities: [{ kind: 'mcp', serverName: 'tomny-browser-control' }] },
         // A manifest can be registered before its host; it must not break Super.
-        { capabilities: [{ kind: 'mcp', serverName: 'aionui-future-surface' }] },
+        { capabilities: [{ kind: 'mcp', serverName: 'tomny-future-surface' }] },
       ],
     } as never;
 
-    expect(resolveCoreCapabilityServerNames(activeSurface, registry, false, ['aionui-ide'])).toEqual(['aionui-ide']);
+    expect(resolveCoreCapabilityServerNames(activeSurface, registry, false, ['tomny-ide'])).toEqual(['tomny-ide']);
     expect(
-      resolveCoreCapabilityServerNames(activeSurface, registry, true, ['aionui-ide', 'aionui-browser-control'])
-    ).toEqual(['aionui-ide', 'aionui-browser-control']);
+      resolveCoreCapabilityServerNames(activeSurface, registry, true, ['tomny-ide', 'tomny-browser-control'])
+    ).toEqual(['tomny-ide', 'tomny-browser-control']);
   });
 
   it('keeps action-history reads locked to the current session id', async () => {
@@ -194,7 +194,7 @@ describe('experimental direct core runtime', () => {
     });
   });
 
-  it('lists direct targets and models without aioncore collaborators', async () => {
+  it('lists direct targets and models without tomnycore collaborators', async () => {
     await expect(runtime.listTargets()).resolves.toEqual([
       expect.objectContaining({ id: 'codex', available: true, defaultModelKey: 'gpt::medium' }),
     ]);
@@ -216,7 +216,7 @@ describe('experimental direct core runtime', () => {
     ]);
   });
 
-  it('runs a selected Company through a direct adapter without AionCore', async () => {
+  it('runs a selected Company through a direct adapter without TomnyCore', async () => {
     const companyRunner = {
       run: vi.fn(async (input: CompanyCoreRunInput) => {
         await input.chat({
@@ -1446,7 +1446,7 @@ describe('experimental direct core runtime', () => {
       })
     );
     expect(resolveCapabilityHosts).toHaveBeenCalledWith(
-      ['aionui-tool-selector', 'aionui-music'],
+      ['tomny-tool-selector', 'tomny-music'],
       [{ name: 'session-tools', transport: 'sse', url: 'http://127.0.0.1/session/sse' }],
       {
         sessionId: surfaceRun.sessionId,
@@ -1461,8 +1461,8 @@ describe('experimental direct core runtime', () => {
         surface: 'music',
         prompt: expect.stringContaining('music_*'),
         mcpServers: [
-          { name: 'aionui-tool-selector', url: 'http://127.0.0.1/mcp' },
-          { name: 'aionui-music', url: 'http://127.0.0.1/mcp' },
+          { name: 'tomny-tool-selector', url: 'http://127.0.0.1/mcp' },
+          { name: 'tomny-music', url: 'http://127.0.0.1/mcp' },
           { name: 'session-tools', transport: 'sse', url: 'http://127.0.0.1/session/sse' },
         ],
       })
@@ -1577,7 +1577,7 @@ describe('experimental direct core runtime', () => {
         hostContext = context;
         return [
           {
-            name: 'aionui-secret-context',
+            name: 'tomny-secret-context',
             url: 'http://127.0.0.1:43123/sse',
             headers: [{ name: 'Authorization', value: 'Bearer runtime-attestation' }],
           },
@@ -1624,7 +1624,7 @@ describe('experimental direct core runtime', () => {
 
     await vi.waitFor(() => expect(secretEvents.some((event) => event.type === 'completed')).toBe(true));
     expect(resolveCapabilityHosts).toHaveBeenCalledWith(
-      expect.arrayContaining(['aionui-secret-context']),
+      expect.arrayContaining(['tomny-secret-context']),
       [],
       expect.any(Object)
     );
@@ -1640,7 +1640,7 @@ describe('experimental direct core runtime', () => {
     const resolveCapabilityHosts = vi.fn(
       async (_names: string[], _sessionServers: CoreRunInput['mcpServers'], _context: CoreCapabilityHostContext) => [
         {
-          name: 'aionui-secret-context',
+          name: 'tomny-secret-context',
           url: 'https://untrusted.example/sse',
           headers: [{ name: 'Authorization', value: 'Bearer spoofed' }],
         },

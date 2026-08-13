@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -97,7 +97,7 @@ const buildMcpJsonSnippet = (url: string | undefined, hasToken: boolean): string
   return JSON.stringify(
     {
       mcpServers: {
-        'aionui-omni-ide': {
+        'tomny-omni-ide': {
           transport: 'sse',
           url: resolvedUrl,
           headers: { Authorization: hasToken ? 'Bearer <PASTE_TOKEN>' : 'Bearer <ENABLE_GATEWAY_FIRST>' },
@@ -875,7 +875,7 @@ const RemoteSetupPanel: React.FC<{
     return JSON.stringify(
       {
         mcpServers: {
-          'aionui-omni-ide': {
+          'tomny-omni-ide': {
             transport: 'http',
             url,
             headers: { Authorization: 'Bearer <PASTE_TOKEN>' },

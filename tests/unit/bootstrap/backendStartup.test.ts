@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -17,7 +17,7 @@ describe('resolveCoreBootPolicy', () => {
     });
   });
 
-  it('allows an explicit native-only Tomni Core boot after compatibility features are no longer needed', () => {
+  it('allows an explicit native-only Tomny Core boot after compatibility features are no longer needed', () => {
     expect(resolveCoreBootPolicy({ requestedMode: 'tomny' })).toEqual({
       mode: 'tomny',
       startLegacyBackend: false,
@@ -42,7 +42,7 @@ describe('resolveCoreBootPolicy', () => {
   });
 
   it('rejects invalid modes instead of silently selecting a backend', () => {
-    expect(() => resolveCoreBootPolicy({ requestedMode: 'future' })).toThrow('Invalid Tomni Core boot mode');
+    expect(() => resolveCoreBootPolicy({ requestedMode: 'future' })).toThrow('Invalid Tomny Core boot mode');
   });
 
   it('keeps the legacy backend optional for WebUI in default compatibility mode', () => {
@@ -116,7 +116,7 @@ describe('startBackendOrExit', () => {
   });
 
   it('captures startup failure and exits without registering a backend port by default', async () => {
-    const error = new Error('aioncore failed to start within timeout');
+    const error = new Error('tomnycore failed to start within timeout');
     const calls: string[] = [];
     const onStarted = vi.fn();
     const captureFailure = vi.fn(async () => {
@@ -140,7 +140,7 @@ describe('startBackendOrExit', () => {
     });
 
     expect(result).toEqual({ ok: false });
-    expect(logError).toHaveBeenCalledWith('[TomniCore] Failed to start the legacy compatibility backend:', error);
+    expect(logError).toHaveBeenCalledWith('[TomnyCore] Failed to start the legacy compatibility backend:', error);
     expect(captureFailure).toHaveBeenCalledWith(error);
     expect(exitApp).toHaveBeenCalledWith(1);
     expect(calls).toEqual(['capture-start', 'capture-end', 'exit']);
@@ -148,7 +148,7 @@ describe('startBackendOrExit', () => {
   });
 
   it('captures startup failure without dialog or exit when exitOnFailure is disabled', async () => {
-    const error = new Error('aioncore exited before health check passed');
+    const error = new Error('tomnycore exited before health check passed');
     const onStarted = vi.fn();
     const captureFailure = vi.fn();
     const exitApp = vi.fn();
@@ -166,14 +166,14 @@ describe('startBackendOrExit', () => {
     });
 
     expect(result).toEqual({ ok: false });
-    expect(logError).toHaveBeenCalledWith('[TomniCore] Failed to start the legacy compatibility backend:', error);
+    expect(logError).toHaveBeenCalledWith('[TomnyCore] Failed to start the legacy compatibility backend:', error);
     expect(captureFailure).toHaveBeenCalledWith(error);
     expect(exitApp).not.toHaveBeenCalled();
     expect(onStarted).not.toHaveBeenCalled();
   });
 
   it('does not capture or exit when backend startup is cancelled by shutdown', async () => {
-    const error = new Error('aioncore startup cancelled');
+    const error = new Error('tomnycore startup cancelled');
     error.name = 'BackendStartupCancelledError';
     const onStarted = vi.fn();
     const captureFailure = vi.fn();

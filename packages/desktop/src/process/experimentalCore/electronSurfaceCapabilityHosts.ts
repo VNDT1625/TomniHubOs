@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -26,7 +26,7 @@ type SurfaceCapabilityHostRegistration = {
   cache: boolean;
 };
 
-const SUPER_CAPABILITY_SERVER_NAME = 'aionui-browser-control';
+const SUPER_CAPABILITY_SERVER_NAME = 'tomny-browser-control';
 
 /** Dynamic host registry: adding a future surface does not require adapter changes. */
 export class ElectronSurfaceCapabilityHosts {
@@ -153,22 +153,22 @@ export const createElectronSurfaceCapabilityHosts = (vault?: SecretVault): Elect
     false,
     false
   );
-  registry.register('aionui-ide', async () => {
+  registry.register('tomny-ide', async () => {
     const host = await startIdeMcpHost({ buildServer: buildIdeServer });
 
-    return { name: 'aionui-ide', transport: 'streamable_http', url: host.mcpUrl };
+    return { name: 'tomny-ide', transport: 'streamable_http', url: host.mcpUrl };
   });
-  registry.register('aionui-browser-control', async () => {
+  registry.register('tomny-browser-control', async () => {
     const host = await startBrowserControl(() => BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]);
-    return { name: 'aionui-browser-control', url: host.url };
+    return { name: 'tomny-browser-control', url: host.url };
   });
-  registry.register('aionui-office-editor', async () => {
+  registry.register('tomny-office-editor', async () => {
     const host = await startOfficeEditor();
-    return { name: 'aionui-office-editor', url: host.url };
+    return { name: 'tomny-office-editor', url: host.url };
   });
-  registry.register('aionui-music', async () => {
+  registry.register('tomny-music', async () => {
     const host = await startMusic();
-    return { name: 'aionui-music', url: host.url };
+    return { name: 'tomny-music', url: host.url };
   });
   return registry;
 };

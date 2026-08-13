@@ -1,11 +1,11 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { AuthType } from '@office-ai/aioncli-core';
+import { AuthType } from '@/common/utils/platformAuthType';
 import { getAuthTypeFromPlatform, getProviderAuthType } from '@/common/utils/platformAuthType';
 
 vi.mock('@/common/utils/platformConstants', () => ({

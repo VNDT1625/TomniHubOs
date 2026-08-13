@@ -42,11 +42,11 @@ export const ensureLegacyMcpImported = (service: McpRegistry = getMcpRegistry())
     .then(async (servers) => {
       const imported = await service.importMany(servers);
       if (imported.length > 0) {
-        console.info('[Tomni] Imported %d MCP servers from read-only legacy sources.', imported.length);
+        console.info('[Tomny] Imported %d MCP servers from read-only legacy sources.', imported.length);
       }
     })
     .catch((error: unknown) => {
-      console.warn('[Tomni] Legacy MCP import was skipped:', error);
+      console.warn('[Tomny] Legacy MCP import was skipped:', error);
     });
   return legacyImportPromise;
 };

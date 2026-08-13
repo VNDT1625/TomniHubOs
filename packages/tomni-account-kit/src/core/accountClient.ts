@@ -162,7 +162,7 @@ export class MockAccountClient implements AccountClientContract {
     this.state.sessions.unshift({
       id: sessionId,
       deviceId,
-      label: 'Tomni Account Preview',
+      label: 'Tomny Account Preview',
       platform: 'Browser',
       location: 'Local prototype',
       ipAddress: '127.0.0.1',

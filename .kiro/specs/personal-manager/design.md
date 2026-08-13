@@ -1,7 +1,7 @@
 # Design Document
 
 > **Tính năng:** **Manager** — Personal Manager (Tasks + Note + Schedule, có AI hỗ trợ).
-> **Dự án:** Tomni Agentic (fork của [AionUi](https://github.com/VNDT1625/OmniAgent), VNDT1625, Apache-2.0).
+> **Dự án:** Tomni Agentic (fork của [TomniHubOS](https://github.com/VNDT1625/OmniAgent), VNDT1625, Apache-2.0).
 > **Spec liên quan:** [`requirements.md`](./requirements.md)
 > **Cập nhật:** 2026-05-31
 
@@ -9,7 +9,7 @@
 
 Manager là một "ứng dụng trong ứng dụng" cấp cao (top-level app, như Studio) gồm ba phần: **Tasks**,
 **Note**, **Schedule**. Thiết kế bám đúng ba sự thật kiến trúc của codebase (xem `docs/CODEBASE_GUIDE.md`
-và `.kiro/specs/aionui-enhancements/design.md`) và **không sửa aioncore**:
+và `.kiro/specs/tomni-enhancements/design.md`) và **không sửa tomnicore**:
 
 1. **Logic ở Main process (Node.js).** Một service `managerStore` giữ toàn bộ dữ liệu (tasks, notes,
    events, settings) dưới dạng **tệp JSON cục bộ** trong thư mục `userData`, dùng đúng pattern ghi atomic
@@ -79,7 +79,7 @@ và `.kiro/specs/aionui-enhancements/design.md`) và **không sửa aioncore**:
    `managerBridge` (UI) và `managerServer` (MCP, tiến trình node riêng) đều đọc/ghi cùng file đó — giống
    cách `resourceBridge`/`resourceServer` chia sẻ `resource-state.json`. MCP server nhận đường dẫn thư mục
    dữ liệu qua biến môi trường (mirror `RESOURCE_STATE_DIR_ENV_KEY`).
-3. **Nhắc nhở tự lập lịch trong Main process — KHÔNG đụng cron aioncore.** `reminderScheduler` là một
+3. **Nhắc nhở tự lập lịch trong Main process — KHÔNG đụng cron tomnicore.** `reminderScheduler` là một
    ticker `setInterval` trong Main process: mỗi phút quét các nhắc nhở tới hạn, phát qua `showNotification`
    (notificationBridge có sẵn). Nhắc nhở quá hạn khi app không chạy được "bắt kịp" (catch-up) ngay khi
    service khởi động: quét mọi reminder có `fireAt <= now` và `firedAt == null`, phát rồi đánh dấu đã phát.
@@ -271,7 +271,7 @@ Mọi handler bọc `safe()` (luôn resolve envelope). Tạo bằng `bridge.buil
 ### Agent plane — `process/resources/builtinMcp/managerServer.ts`
 
 - Standalone stdio node process (mirror `imageGenServer.ts`/resource server). Nhận thư mục dữ liệu qua env
-  `AIONUI_MANAGER_DATA_DIR` (mirror `RESOURCE_STATE_DIR_ENV_KEY`).
+  `TOMNIUI_MANAGER_DATA_DIR` (mirror `RESOURCE_STATE_DIR_ENV_KEY`).
 - Dựng `managerStore` trỏ vào cùng `manager-data.json` (cùng nguồn với UI plane).
 - Tools (snake_case như convention built-in): `manager_list_tasks`, `manager_add_task`,
   `manager_update_task`, `manager_add_note`, `manager_list_events`, `manager_add_event`. (Đọc/ghi trực
@@ -399,7 +399,7 @@ Mọi lời gọi AI nặng (parse ảnh, optimize) PHẢI `requestLease`/`relea
 
 ## Phụ thuộc đã chốt
 
-- **Nhắc nhở:** tự lập lịch trong Main process (`reminderScheduler`), **không** dùng cron aioncore → không
+- **Nhắc nhở:** tự lập lịch trong Main process (`reminderScheduler`), **không** dùng cron tomnicore → không
   đụng backend. Catch-up xử lý nhắc quá hạn khi app tắt.
 - **Thời tiết:** **Open-Meteo** (miễn phí, không cần khoá API), có thể tắt trong `ManagerSettings`. Degrade
   an toàn khi offline/lỗi/thiếu địa điểm.

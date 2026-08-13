@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -33,7 +33,7 @@ import type { SkillResource } from '@process/resources/nativePlatform/skillCatal
 export const BUILTIN_TOOL_SELECTOR_ID = 'builtin-tool-selector';
 
 /** Canonical name of the built-in Tool-Selector MCP server (consumed by Task 15.1). */
-export const BUILTIN_TOOL_SELECTOR_NAME = 'aionui-tool-selector';
+export const BUILTIN_TOOL_SELECTOR_NAME = 'tomny-tool-selector';
 
 /** Injected collaborators for {@link createToolSelectorServer}. */
 export type ToolSelectorServerDeps = {

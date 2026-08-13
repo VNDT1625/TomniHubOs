@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -153,7 +153,7 @@ export type QuickRunOptions = {
    * Grace window (ms) before the GUESSED fallback port may be probed. Until it
    * elapses (or the server prints its own URL), only the real printed URL is
    * accepted — so we never grab whatever already holds the default port (e.g.
-   * AionUi's own dev server on 5173) while the test server is still booting.
+   * Tomny's own dev server on 5173) while the test server is still booting.
    */
   fallbackGraceMs?: number;
 };
@@ -193,7 +193,7 @@ const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout
  * Scan terminal output for the dev server's REAL URL. Dev servers (Vite, Next,
  * CRA, Astro…) print a line like `Local: http://localhost:5174/`. We must read
  * this rather than trust the planned port, because the planned port can be taken
- * by another process (e.g. AionUi itself runs Vite on 5173), in which case the
+ * by another process (e.g. Tomny itself runs Vite on 5173), in which case the
  * server silently moves to the next free port — and navigating to the planned
  * URL would open the WRONG app. ANSI escapes are stripped first.
  */
@@ -419,7 +419,7 @@ export const useQuickRun = (rootPath: string | null, options: QuickRunOptions = 
    * Wait for the web app to be reachable, resolving the URL the tracer should
    * open. Crucially this does NOT trust the guessed port: a dev server (Vite,
    * etc.) silently moves to the next free port when its default is taken (e.g.
-   * AionUi itself already holds 5173, so the test app lands on 5174). We watch
+   * Tomny itself already holds 5173, so the test app lands on 5174). We watch
    * the terminal's own output for the URL it actually printed and prefer that;
    * the guessed `fallbackUrl` is only probed as a backstop. Returns the live URL
    * or null on timeout.
@@ -442,7 +442,7 @@ export const useQuickRun = (rootPath: string | null, options: QuickRunOptions = 
         // 2) Backstop: the GUESSED url (framework default port). Only probed
         // AFTER a grace window in which no real URL was printed — otherwise we
         // race the test server's startup and grab whatever ALREADY holds that
-        // port (e.g. AionUi's own dev server on 5173), opening the wrong app.
+        // port (e.g. Tomny's own dev server on 5173), opening the wrong app.
         // Once the server prints its own line, (1) wins and we never reach here.
         const graceElapsed = Date.now() - startedAt >= fallbackGraceMs;
         if (fallbackUrl && graceElapsed && !printed) {

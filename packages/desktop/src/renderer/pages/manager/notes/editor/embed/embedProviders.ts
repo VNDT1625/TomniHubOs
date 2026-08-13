@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -148,7 +148,7 @@ const codesandbox = (u: URL): EmbedInfo | null => {
 
 /** Figma: official embed endpoint wraps the file/proto URL. */
 const figma = (u: URL): EmbedInfo => {
-  const src = `https://www.figma.com/embed?embed_host=aionui&url=${encodeURIComponent(u.href)}`;
+  const src = `https://www.figma.com/embed?embed_host=tomny&url=${encodeURIComponent(u.href)}`;
   return iframe('figma', src, u.href, 16 / 10, true);
 };
 

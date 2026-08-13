@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -14,7 +14,7 @@
  * tabs). It therefore cannot run in a separate `node` process. Instead we host
  * it **in the Main process** on a loopback HTTP server using the MCP SDK's
  * dependency-free {@link SSEServerTransport}, and register it in the MCP catalog
- * as an `sse` server pointing at the loopback URL — so aioncore's agent reaches
+ * as an `sse` server pointing at the loopback URL — so tomnycore's agent reaches
  * it like any other MCP server (the design's "Agent plane").
  *
  * Both planes (this MCP host + the `testingBridge` UI plane) share the SAME

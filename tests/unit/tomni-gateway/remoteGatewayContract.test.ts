@@ -19,7 +19,7 @@ afterEach(async () => {
   host = undefined;
 });
 
-describe('Tomni remote gateway contract', () => {
+describe('Tomny remote gateway contract', () => {
   it('is loopback native, fail-closed, and delegates chat without /api legacy calls', async () => {
     const conversations = port();
     const events = new TomniRemoteEventBroker();

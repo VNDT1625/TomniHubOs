@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -63,7 +63,7 @@ if (isWebUI || isResetPassword) {
 // so chrome-devtools-mcp and other CDP clients can connect to this Electron app.
 //
 // Default port: 9230 (avoids conflict with common CDP ports).
-// Override via AIONUI_CDP_PORT env variable. Set to "0" to disable.
+// Override via TOMNY_CDP_PORT env variable. Set to "0" to disable.
 //
 // Configuration file: userData/cdp.config.json
 // - enabled: boolean - whether CDP is enabled (default: true in dev mode, false in production)
@@ -71,13 +71,13 @@ if (isWebUI || isResetPassword) {
 //
 // Multi-instance support: a file-based registry tracks all active instances
 // so each one gets a unique port and MCP tools can discover them all.
-// Registry file: ~/.aionui-cdp-registry.json
+// Registry file: ~/.tomny-cdp-registry.json
 // ---------------------------------------------------------------------------
 
 export const DEFAULT_CDP_PORT = 9230;
 export const CDP_PORT_RANGE_START = 9230;
 export const CDP_PORT_RANGE_END = 9250;
-const CDP_REGISTRY_FILE = path.join(os.homedir(), '.aionui-cdp-registry.json');
+const CDP_REGISTRY_FILE = path.join(os.homedir(), '.tomny-cdp-registry.json');
 const CDP_CONFIG_FILE = 'cdp.config.json';
 
 /** CDP configuration stored in userData directory */
@@ -164,7 +164,7 @@ function findAvailablePort(preferredPort: number): number {
   }
 
   console.log(
-    `[CDP] Port ${preferredPort} is occupied by another AionUi instance, scanning range ${CDP_PORT_RANGE_START}-${CDP_PORT_RANGE_END}`
+    `[CDP] Port ${preferredPort} is occupied by another Tomny instance, scanning range ${CDP_PORT_RANGE_START}-${CDP_PORT_RANGE_END}`
   );
 
   for (let p = CDP_PORT_RANGE_START; p <= CDP_PORT_RANGE_END; p++) {
@@ -175,7 +175,7 @@ function findAvailablePort(preferredPort: number): number {
   }
 
   console.warn(
-    `[CDP] All ports in range ${CDP_PORT_RANGE_START}-${CDP_PORT_RANGE_END} are used by active AionUi instances, trying ${preferredPort}`
+    `[CDP] All ports in range ${CDP_PORT_RANGE_START}-${CDP_PORT_RANGE_END} are used by active Tomny instances, trying ${preferredPort}`
   );
   return preferredPort;
 }
@@ -248,7 +248,7 @@ export function saveCdpConfig(config: CdpConfig): void {
  * Returns null if explicitly disabled via env.
  */
 function resolveCdpPortFromEnv(): number | null | undefined {
-  const envVal = process.env.AIONUI_CDP_PORT;
+  const envVal = process.env.TOMNY_CDP_PORT;
   if (envVal === '0' || envVal === 'false') return null;
   if (envVal) {
     const parsed = Number(envVal);
@@ -262,7 +262,7 @@ function resolveCdpPortFromEnv(): number | null | undefined {
  * Priority: env variable > config file > default (dev mode: true, production: false)
  */
 function shouldEnableCdp(config: CdpConfig): boolean {
-  const envVal = process.env.AIONUI_CDP_PORT;
+  const envVal = process.env.TOMNY_CDP_PORT;
   if (envVal === '0' || envVal === 'false') return false;
   if (envVal) return true;
 

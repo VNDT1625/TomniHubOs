@@ -3,7 +3,7 @@ import path from 'node:path';
 import type { IMcpServer, IMcpServerTransport } from '@/common/config/storage';
 import { getDataPath } from '@process/utils';
 
-const MANIFEST_NAMES = new Set(['tomni-extension.json', 'aion-extension.json']);
+const MANIFEST_NAMES = new Set(['tomni-extension.json', 'tomny-extension.json']);
 const MAX_SCAN_DEPTH = 3;
 
 type UnknownRecord = Record<string, unknown>;

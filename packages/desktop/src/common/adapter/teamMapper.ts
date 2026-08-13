@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -48,7 +48,7 @@ function toWorkspaceMode(raw: string | undefined): WorkspaceMode {
   return VALID_WORKSPACE_MODES.has(raw as WorkspaceMode) ? (raw as WorkspaceMode) : 'shared';
 }
 
-const NON_ACP_BACKENDS = new Set(['aionrs', 'openclaw-gateway', 'nanobot', 'remote']);
+const NON_ACP_BACKENDS = new Set(['tomnyagentic', 'openclaw-gateway', 'nanobot', 'remote']);
 
 function resolveConversationType(backend: string): string {
   return NON_ACP_BACKENDS.has(backend) ? backend : 'acp';

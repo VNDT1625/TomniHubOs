@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -45,7 +45,7 @@ import {
 import { validateOfficeApiScript } from '@/common/types/office/officeApiScript';
 
 /** Canonical MCP server name for the built-in Office-editor server. */
-export const BUILTIN_OFFICE_EDITOR_NAME = 'aionui-office-editor';
+export const BUILTIN_OFFICE_EDITOR_NAME = 'tomny-office-editor';
 
 /** Stable identifier (parity with the other built-in server constants). */
 export const BUILTIN_OFFICE_EDITOR_ID = 'builtin-office-editor';

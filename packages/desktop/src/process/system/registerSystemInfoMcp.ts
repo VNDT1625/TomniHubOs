@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -34,7 +34,7 @@ import { getBuiltinMcpScriptPath } from '../utils/initStorage';
 /** Human-readable description shown for the System MCP server in the catalog. */
 const SYSTEM_MCP_DESCRIPTION =
   "Read the host computer's status (CPU, RAM, GPU, disks, network, versions and the heaviest running " +
-  'processes) from AionUi System Insight. Use it instead of running shell commands like top / ps / wmic / ' +
+  'processes) from Tomny System Insight. Use it instead of running shell commands like top / ps / wmic / ' +
   'systeminfo to inspect the machine. Read-only.';
 
 /** Build the stdio transport for the bundled standalone System MCP script. */
@@ -62,7 +62,7 @@ const isSameStdioTransport = (left: IMcpServerTransportStdio, right: IMcpServerT
 };
 
 /**
- * Ensure the catalog has the `aionui-system` stdio entry, creating or refreshing
+ * Ensure the catalog has the `tomny-system` stdio entry, creating or refreshing
  * it as needed.
  *
  * @returns `true` when the catalog reflects the bundled server, `false` on any

@@ -1,12 +1,17 @@
-# Tomni Hub Agent OS — Evolutionary Migration Design
+# Tomny Hub Agent OS — Evolutionary Migration Design
+
+> **Design conformance:** [Tomny Hub OS Visual Design System](tomni-hub-visual-design.md) là nguồn
+> sự thật cho typography, glass, spacing, control, popup và responsive. Mock ASCII bên dưới
+> chỉ mô tả information architecture; không được dùng để tạo một visual system khác.
+
 
 > **Trạng thái:** Design đề xuất  
-> **Mục tiêu:** chuyển AionUi/Tomni hiện tại thành Hub Agent OS mà không big-bang rewrite  
+> **Mục tiêu:** chuyển app Tomny hiện tại thành Hub Agent OS mà không big-bang rewrite
 > **Chiến lược:** compatibility-first, strangler migration, package activation theo từng lát dọc
 
 ## 1. Quyết định điều hành
 
-Tomni không được xây lại từ đầu. Hệ thống hiện tại đã có các năng lực mạnh về agent runtime, IDE, Studio, automation, browser, context, model/CLI adapter, MCP và secret firewall. Migration phải **đóng gói, chuẩn hóa contract và thay đổi cách kích hoạt**, không viết lại logic đã hoạt động tốt.
+Tomny không được xây lại từ đầu. Hệ thống hiện tại đã có các năng lực mạnh về agent runtime, IDE, Studio, automation, browser, context, model/CLI adapter, MCP và secret firewall. Migration phải **đóng gói, chuẩn hóa contract và thay đổi cách kích hoạt**, không viết lại logic đã hoạt động tốt.
 
 Trình tự đúng:
 
@@ -36,7 +41,7 @@ Package hóa và refactor nội bộ là hai việc khác nhau. Không thực hi
 ## 3. Phi mục tiêu
 
 - Không đổi toàn bộ framework UI hoặc kiến trúc Electron.
-- Không thay toàn bộ AionCore/Tomni runtime trong cùng dự án migration package.
+- Không thay toàn bộ Tomny Core và agent runtime trong cùng dự án migration package.
 - Không di chuyển hàng loạt file chỉ để tạo cảm giác module hóa.
 - Không tách mọi route thành package riêng.
 - Không public marketplace third-party trước khi sandbox và permission contract đạt yêu cầu.
@@ -330,7 +335,7 @@ Signature chỉ chứng minh nguồn gốc; permission và sandbox mới giới 
 
 ### Phase 5 — Creator Mode
 
-- Tomni SDK và templates;
+- Tomny SDK và templates;
 - development app record xuất hiện trên Home;
 - local sandbox và hot reload;
 - build/validate/sign local artifact;

@@ -12,7 +12,8 @@ export const createSlackTransport = (fetchImpl: typeof fetch = fetch): TokenChan
       headers: { authorization: `Bearer ${token}` },
     });
     const body = (await response.json()) as SlackAuth;
-    if (!response.ok || body.ok !== true) throw new Error(body.error || `Slack authentication failed (${response.status}).`);
+    if (!response.ok || body.ok !== true)
+      throw new Error(body.error || `Slack authentication failed (${response.status}).`);
     return { identity: body.user || body.team };
   },
 });
@@ -25,7 +26,8 @@ export const createDiscordTransport = (fetchImpl: typeof fetch = fetch): TokenCh
       headers: { authorization: `Bot ${token}` },
     });
     const body = (await response.json()) as DiscordUser;
-    if (!response.ok || !body.id) throw new Error(body.message || `Discord authentication failed (${response.status}).`);
+    if (!response.ok || !body.id)
+      throw new Error(body.message || `Discord authentication failed (${response.status}).`);
     return { identity: body.username || body.global_name || body.id };
   },
 });

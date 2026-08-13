@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -72,7 +72,7 @@ export const exportFinalVideo = async (
   const fsImpl = deps?.fs ?? defaultFs;
 
   const ffmpegPath = resolveFfmpegPath(deps?.ffmpegPath);
-  const tmpDir = path.join(os.tmpdir(), `aionui-export-${randomUUID()}`);
+  const tmpDir = path.join(os.tmpdir(), `tomny-export-${randomUUID()}`);
   await fsImpl.mkdir(tmpDir, { recursive: true });
 
   try {

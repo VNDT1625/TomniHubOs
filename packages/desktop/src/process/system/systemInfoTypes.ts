@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -86,7 +86,7 @@ export type NetworkInterfaceInfo = {
 
 /** Runtime/build versions of the embedding stack. */
 export type RuntimeVersions = {
-  /** AionUi app version (`app.getVersion()`). */
+  /** Tomny app version (`app.getVersion()`). */
   app: string;
   /** Electron version (`process.versions.electron`). */
   electron: string;

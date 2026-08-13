@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -52,7 +52,7 @@ export type StaticProbeDeps = {
   getGpuInfo: () => Promise<unknown>;
   /** Free + total bytes for a probe path (best-effort `fs.statfs`). */
   getDiskInfo: (probePath: string) => Promise<{ totalBytes: number; freeBytes: number }>;
-  /** AionUi application version string. */
+  /** Tomny application version string. */
   getAppVersion: () => string;
   /** Filesystem paths to probe for disk capacity. */
   diskProbePaths: () => string[];

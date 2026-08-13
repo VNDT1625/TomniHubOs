@@ -97,10 +97,13 @@ function localDevPath(runtimeKey: string, binaryName: string): string | null {
   const isElectronDev = (process as NodeJS.Process & { defaultApp?: boolean }).defaultApp === true;
   if (!isElectronDev) return null;
 
-  const localDir = join(process.cwd(), '.aionui', 'local-tomny-core', runtimeKey);
-  const nextDevCandidate = join(localDir, process.platform === 'win32' ? 'aioncore-dev-next.exe' : 'aioncore-dev-next');
+  const localDir = join(process.cwd(), '.tomny', 'local-tomny-core', runtimeKey);
+  const nextDevCandidate = join(
+    localDir,
+    process.platform === 'win32' ? 'tomnycore-dev-next.exe' : 'tomnycore-dev-next'
+  );
   if (existsSync(nextDevCandidate)) return nextDevCandidate;
-  const devCandidate = join(localDir, process.platform === 'win32' ? 'aioncore-dev.exe' : 'aioncore-dev');
+  const devCandidate = join(localDir, process.platform === 'win32' ? 'tomnycore-dev.exe' : 'tomnycore-dev');
   if (existsSync(devCandidate)) return devCandidate;
 
   const candidate = join(localDir, binaryName);

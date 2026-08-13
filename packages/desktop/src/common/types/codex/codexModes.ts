@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -8,7 +8,7 @@ export const CODEX_MODE_READ_ONLY = 'read-only';
 export const CODEX_MODE_NATIVE_DEFAULT = 'auto';
 export const CODEX_MODE_NATIVE_FULL_ACCESS = 'full-access';
 
-// Legacy AionUi values kept for backward compatibility with persisted config.
+// Legacy Tomny values kept for backward compatibility with persisted config.
 // Only consumed internally by normalizeCodexMode, no external callers.
 const CODEX_MODE_AUTO_EDIT = 'autoEdit';
 const CODEX_MODE_FULL_AUTO = 'yolo';

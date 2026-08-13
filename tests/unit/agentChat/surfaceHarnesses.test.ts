@@ -55,7 +55,7 @@ describe('surface harness prompts', () => {
     expect(prompt.length).toBeLessThan(900);
     expect(prompt).toContain('persistent ToolMap summary');
     expect(prompt).not.toContain('surface-owned nested schema');
-    expect(prompt).not.toContain('aionui-ide');
+    expect(prompt).not.toContain('tomny-ide');
   });
 
   it('turns one Deliverables prompt into bounded specialist research jobs', () => {

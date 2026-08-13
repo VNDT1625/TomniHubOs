@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -10,7 +10,7 @@
  * 1. Refreshes the conversation list (so the converted conversation disappears)
  * 2. Navigates to the newly created team page
  *
- * This handles the case where an agent's `aion_create_team` tool call converts
+ * This handles the case where an agent's `tomny_create_team` tool call converts
  * a single-chat conversation into a team — the user should be seamlessly
  * redirected without manual refresh.
  */

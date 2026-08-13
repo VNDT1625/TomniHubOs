@@ -123,29 +123,29 @@
       "send_feedback": "Send feedback with logs so the team can investigate."
     },
     "ownership": {
-      "aionui": "App",
+      "tomny": "App",
       "user_agent": "Agent",
       "user_llm_provider": "Model provider",
       "unknown_upstream": "Upstream"
     },
     "codes": {
-      "AIONUI_STREAM_BROKEN": {
+      "TOMNY_STREAM_BROKEN": {
         "title": "Response stream was interrupted",
         "body": "The app accepted your message but the response stream ended unexpectedly. Please retry; if it happens again, send feedback."
       },
-      "AIONUI_STATE_INCONSISTENT": {
+      "TOMNY_STATE_INCONSISTENT": {
         "title": "Conversation state is out of sync",
         "body": "The conversation state is out of sync. Restart this chat or reload the app before retrying."
       },
-      "AIONUI_PERMISSION_ERROR": {
+      "TOMNY_PERMISSION_ERROR": {
         "title": "Could not access the requested resource",
         "body": "A local permission or filesystem check failed. Check the project path and app permissions, then retry."
       },
-      "AIONUI_INTERNAL_ERROR": {
+      "TOMNY_INTERNAL_ERROR": {
         "title": "Request failed in the app",
         "body": "The request failed while the app was processing it. Please retry once; if it repeats, send feedback."
       },
-      "AIONUI_CONVERSATION_BUSY": {
+      "TOMNY_CONVERSATION_BUSY": {
         "title": "Conversation is busy",
         "body": "Another response is still running. Wait for it to finish before sending a new message."
       },

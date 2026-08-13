@@ -1,13 +1,13 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
 /**
  * Embedder resolution for Realtime Knowledge.
  *
- * Prefers the user's configured embedding model (resolved from the native Tomni provider catalog,
+ * Prefers the user's configured embedding model (resolved from the native Tomny provider catalog,
  * mirroring `ide/knowledgeGraphBridge.ts`); when none is configured it falls back
  * to a deterministic LOCAL hashing embedder so semantic lookup still works
  * offline without a model. The fallback is a bag-of-words term-frequency hash —

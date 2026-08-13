@@ -65,4 +65,4 @@ Every layer records:
 
 Viu treats browser measurements and visual evidence as the source of truth. A model may improve semantics and design direction, but it must not invent measured geometry. See [fidelity.md](./fidelity.md) for acceptance rules and [roadmap.md](./roadmap.md) for the work required beyond the current foundation.
 
-The former Prewise M0–M12 implementation, API/codegen/MCP tools, reports, and benchmark outputs were removed from Prewise during this migration. Their evidence does not certify the native AIonUI implementation; AIonUI needs its own comparator and benchmark gates.
+The former Prewise M0–M12 implementation, API/codegen/MCP tools, reports, and benchmark outputs were removed from Prewise during this migration. Their evidence does not certify the native Tomny implementation; Tomny needs its own comparator and benchmark gates.

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -23,7 +23,7 @@
  *
  * `design.md` lists these capabilities with dotted names (`browser.open`,
  * `browser.readText`, …). Like the existing built-in servers
- * (`aionui_image_generation`, `company_create`, `resource_status`) we expose
+ * (`tomny_image_generation`, `company_create`, `resource_status`) we expose
  * them in **snake_case** (`browser_open`, `browser_read_text`, …): MCP tools are
  * surfaced to the model as function-calling tools, whose names must match
  * `^[a-zA-Z0-9_-]+$`, so a dot separator would break OpenAI/Gemini function
@@ -91,7 +91,7 @@ import { runUiAudit, type UiAuditFinding, type UiAuditReport, type UiAuditSeveri
 export const BUILTIN_BROWSER_CONTROL_ID = 'builtin-browser-control';
 
 /** Canonical name of the built-in Browser-Control MCP server (consumed by Task 15.1). */
-export const BUILTIN_BROWSER_CONTROL_NAME = 'aionui-browser-control';
+export const BUILTIN_BROWSER_CONTROL_NAME = 'tomny-browser-control';
 
 /**
  * The live `WebContents` of a managed tab, derived structurally from

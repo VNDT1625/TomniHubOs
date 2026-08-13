@@ -1,5 +1,5 @@
 /**
- * @aionui/music-core — headless music engine.
+ * @tomny/music-core — headless music engine.
  *
  * Pure TypeScript: schema, engine commands, scheduler/render, audio analysis
  * (the agent's "ears"), music theory, vocal-tune planning, producer brain, and

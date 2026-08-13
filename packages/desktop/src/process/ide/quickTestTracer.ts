@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -353,7 +353,7 @@ const parseDomMarker = (message: string, at: number): TraceEvent | null => {
   return null;
 };
 
-const INTERACTION_BINDING = '__aionuiQuickTestEmit';
+const INTERACTION_BINDING = '__tomnyQuickTestEmit';
 
 const parseBindingInteraction = (
   params: Record<string, unknown>,
@@ -396,9 +396,9 @@ const parseBindingInteraction = (
  * the guard, so re-running this re-binds on the new page.
  */
 const DOM_LISTENER_SCRIPT = `
-(function installAionUiQuickTestListeners() {
-  if (window.__aionuiQuickTestListeningV2) return true;
-  window.__aionuiQuickTestListeningV2 = true;
+(function installTomnyQuickTestListeners() {
+  if (window.__tomnyQuickTestListeningV2) return true;
+  window.__tomnyQuickTestListeningV2 = true;
 
   var lastInputValues = new WeakMap();
 
@@ -428,8 +428,8 @@ const DOM_LISTENER_SCRIPT = `
   function emit(kind, data) {
     var payload = JSON.stringify(Object.assign({ kind: kind }, data));
     try {
-      if (typeof window.__aionuiQuickTestEmit === 'function') {
-        window.__aionuiQuickTestEmit(payload);
+      if (typeof window.__tomnyQuickTestEmit === 'function') {
+        window.__tomnyQuickTestEmit(payload);
         return;
       }
     } catch (_) {}

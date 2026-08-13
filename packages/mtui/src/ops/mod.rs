@@ -3127,7 +3127,7 @@ fn resolve_spec_temporary_dir(project_root: &Path, spec: &str) -> Result<PathBuf
         .trim_end_matches('/')
         .to_string();
     let slug = normalized
-        .split(".aionui/specs/")
+        .split(".tomny/specs/")
         .last()
         .unwrap_or(&normalized)
         .split('/')
@@ -3142,11 +3142,11 @@ fn resolve_spec_temporary_dir(project_root: &Path, spec: &str) -> Result<PathBuf
     {
         return Err(MtuiError::InvalidArgument {
             message: "Invalid spec slug".to_string(),
-            suggestion: "Use --spec <slug> or --spec .aionui/specs/<slug>/".to_string(),
+            suggestion: "Use --spec <slug> or --spec .tomny/specs/<slug>/".to_string(),
         });
     }
     Ok(project_root
-        .join(".aionui")
+        .join(".tomny")
         .join("specs")
         .join(slug)
         .join("plan")
@@ -3724,7 +3724,7 @@ mod tests {
     #[test]
     fn summary_cache_uses_canonical_then_migration_then_legacy_generation() {
         let temp = tempfile::tempdir().expect("tempdir");
-        let summaries = [(".aionui", 1_u64), (".omni", 2_u64), (".tomni", 3_u64)];
+        let summaries = [(".tomny", 1_u64), (".omni", 2_u64), (".tomni", 3_u64)];
         for (metadata_dir, built_at) in summaries {
             let understand = temp.path().join(metadata_dir).join("understand");
             std::fs::create_dir_all(&understand).expect("create understand directory");

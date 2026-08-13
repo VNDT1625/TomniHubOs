@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -395,7 +395,7 @@ export const registerExperimentalCoreBridge = (agentMeshService: AgentMeshServic
     },
   });
   const scheduledReady = scheduledService.start();
-  void scheduledReady.catch((error) => console.error('[TomniCore] Scheduled task startup failed:', error));
+  void scheduledReady.catch((error) => console.error('[TomnyCore] Scheduled task startup failed:', error));
   void scheduledReady
     .then(() =>
       startProductionTomniGateway({
@@ -413,8 +413,8 @@ export const registerExperimentalCoreBridge = (agentMeshService: AgentMeshServic
         },
       })
     )
-    .then((endpoint) => console.log(`[TomniGateway] Listening on ${endpoint.url}.`))
-    .catch((error) => console.error('[TomniGateway] Startup failed:', error));
+    .then((endpoint) => console.log(`[TomnyGateway] Listening on ${endpoint.url}.`))
+    .catch((error) => console.error('[TomnyGateway] Startup failed:', error));
   legacyCronAdapter = new LegacyCronAdapter({
     service: scheduledService,
     ready: scheduledReady,

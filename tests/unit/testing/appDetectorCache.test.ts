@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  *
  * Tests the appDetector cache (Yêu cầu 2b — UX): after detecting how to run a
@@ -15,7 +15,7 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Isolated userData dir per run so the cache file is real but disposable.
-const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'aionui-detect-cache-'));
+const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'tomny-detect-cache-'));
 vi.mock('electron', () => ({ app: { getPath: () => userData } }));
 
 const listReadyProviders = vi.fn();

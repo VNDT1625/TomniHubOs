@@ -166,7 +166,7 @@ nào ra, và duyệt ngay tại đó.
 
 #### Tiêu chí chấp nhận
 
-1. KHÔNG được sửa Rust backend (aioncore). Mọi điều phối nằm ở Main process (`process/company/`), UI ở
+1. KHÔNG được sửa Rust backend (tomnicore). Mọi điều phối nằm ở Main process (`process/company/`), UI ở
    renderer (`pages/company/`), giao tiếp qua IPC bridge có sẵn + HTTP/WS conversation sẵn có.
 2. Engine PHẢI dọn tài nguyên: huỷ phiên → release mọi lease, đóng/để lại conversation hợp lý, không treo.
 3. Tác nhân thực thi chạy trong workspace của conversation; engine KHÔNG tự ý xoá dữ liệu ngoài workspace.
@@ -196,6 +196,6 @@ và AI tự cấp lúc dựng cơ cấu, còn tôi sửa được chi tiết nà
 
 ## Ngoài phạm vi (lần này)
 
-- Sửa aioncore để có route mailbox/await teammate gốc (dùng conversation.sendMessage + turn.completed thay thế).
+- Sửa tomnicore để có route mailbox/await teammate gốc (dùng conversation.sendMessage + turn.completed thay thế).
 - Đa máy/đa tiến trình phân tán (chỉ trong một app instance).
 - Tự động merge code song song nhiều worker vào cùng file (Phase sau; lần này worker làm trên task/file tách biệt).

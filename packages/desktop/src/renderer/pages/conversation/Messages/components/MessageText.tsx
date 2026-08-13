@@ -1,11 +1,11 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
 import type { IMessageText } from '@/common/chat/chatLib';
-import { AIONUI_FILES_MARKER } from '@/common/config/constants';
+import { TOMNY_FILES_MARKER } from '@/common/config/constants';
 import { useConversationContextSafe } from '@/renderer/hooks/context/ConversationContext';
 import { useLayoutContext } from '@/renderer/hooks/context/LayoutContext';
 import { iconColors } from '@/renderer/styles/colors';
@@ -23,7 +23,7 @@ import { stripThinkTags, hasThinkTags } from '@renderer/utils/chat/thinkTagFilte
 import { stripTokenWatermarkNotice } from '@/common/chat/chatLib';
 import { stripSkillSuggest, hasSkillSuggest } from '@renderer/utils/chat/skillSuggestParser';
 import { getSecretMarkers, renderSecretMarkers } from '@renderer/utils/chat/secretMarkers';
-import { ideClient } from '@/renderer/pages/studio/ide/ideClient';
+import { coreIdeClient } from '@/renderer/services/coreIdeClient';
 import { usePreviewContext } from '@/renderer/pages/conversation/Preview';
 
 /**
@@ -55,12 +55,12 @@ import TeammateMessageAvatar from './TeammateMessageAvatar';
 const CODE_STYLE = { marginTop: 4, marginBlock: 4 };
 
 const parseFileMarker = (content: string) => {
-  const markerIndex = content.indexOf(AIONUI_FILES_MARKER);
+  const markerIndex = content.indexOf(TOMNY_FILES_MARKER);
   if (markerIndex === -1) {
     return { text: content, files: [] as string[] };
   }
   const text = content.slice(0, markerIndex).trimEnd();
-  const afterMarker = content.slice(markerIndex + AIONUI_FILES_MARKER.length).trim();
+  const afterMarker = content.slice(markerIndex + TOMNY_FILES_MARKER.length).trim();
   const files = afterMarker
     ? afterMarker
         .split('\n')
@@ -407,7 +407,7 @@ const MessageText: React.FC<{ message: IMessageText }> = ({ message }) => {
     }
 
     setRevealingSecret('all');
-    const response = await ideClient
+    const response = await coreIdeClient
       .repoSecretRenderMarkers(conversationContext.workspace, text)
       .catch((cause): { ok: false; error: string } => ({
         ok: false,

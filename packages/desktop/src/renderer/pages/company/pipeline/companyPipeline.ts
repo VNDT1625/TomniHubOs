@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -122,7 +122,7 @@ export const runCompany = (input: RunCompanyInput): CompanyRunHandle => {
 
   // --- Real executor deps: resolve a conversation + drive a turn ------------
   // Concurrency is bounded renderer-side by a small semaphore (the heavy CLI
-  // work itself runs in aioncore's own process, which the backend manages; the
+  // work itself runs in tomnycore's own process, which the backend manages; the
   // renderer resource bridge does not expose leasing). This caps how many agent
   // turns we drive at once so a big company does not fan out unbounded. The
   // default scales with the host's core count instead of a fixed number, so a

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -8,7 +8,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ipcBridge } from '@/common';
-import { STRICT_IDE_CLAUDE_AGENT_NAME } from '@/common/chat/approval/ideToolGuard';
+import { isStrictIdeClaudeAgentName } from '@/common/chat/approval/ideToolGuard';
 import type { Assistant } from '@/common/types/agent/assistantTypes';
 import { getAskMode } from '@/common/types/agent/agentModes';
 import { resolveAgentBackendKey } from '@/common/utils/buildAgentConversationParams';
@@ -73,13 +73,13 @@ const buildRemoteRules = (peer: RemoteIdeConnection): string => {
   const isCloud = typeof cloudPeer.relayBaseUrl === 'string' && cloudPeer.relayBaseUrl.length > 0;
   return [
     isCloud
-      ? `You are connected to an AionUi CLOUD workspace named "${cloudPeer.workspaceId || peer.repoName}".`
-      : `You are connected to a REMOTE AionUi team workspace named "${peer.repoName}".`,
+      ? `You are connected to an Tomny CLOUD workspace named "${cloudPeer.workspaceId || peer.repoName}".`
+      : `You are connected to a REMOTE Tomny team workspace named "${peer.repoName}".`,
     `Your local cwd is a scratch launcher folder: ${peer.workspacePath}. It is not the repository.`,
     isCloud
       ? `The cloud relay is the repository source of truth: ${cloudPeer.relayBaseUrl}.`
-      : 'The host AionUi app is the repository source of truth.',
-    'Use only the attached aionui-remote-ide MCP tools for repository work.',
+      : 'The host Tomny app is the repository source of truth.',
+    'Use only the attached tomny-remote-ide MCP tools for repository work.',
     'Use repo-relative paths. Examples: `package.json`, `packages/desktop/src/main.ts`.',
     'Read/list/search with `ide_list_dir`, `ide_glob`, `ide_read_file`, `ide_search`, `ide_grep`, `ide_find_definition`, and `ide_find_references`.',
     'Analyze/navigate with `ide_scan_repo`, `ide_summary`, `ide_info`, `ide_compass`, `ide_context`, `ide_map`, `ide_analyze`, and `ide_compact`.',
@@ -145,7 +145,7 @@ export const useRemoteIdeChat = (peer: RemoteIdeConnection): UseRemoteIdeChat =>
         if (backend === 'claude') {
           const agents = await ipcBridge.acpConversation.getAvailableAgents.invoke();
           const strictAgent = agents.find(
-            (agent) => agent.name === STRICT_IDE_CLAUDE_AGENT_NAME && agent.agent_source === 'custom' && agent.available
+            (agent) => isStrictIdeClaudeAgentName(agent.name) && agent.agent_source === 'custom' && agent.available
           );
           if (strictAgent) {
             const strictParams = await buildCliAgentParams(strictAgent, peer.workspacePath);

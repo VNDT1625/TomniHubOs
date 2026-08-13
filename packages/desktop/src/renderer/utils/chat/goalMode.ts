@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -12,7 +12,7 @@ import type { GoalCommandVariant } from '@/common/chat/slash/goalCommand';
  * reloads and applies to every turn of that conversation until turned off.
  */
 
-const GOAL_MODE_PREFIX = 'aionui.goal.mode.';
+const GOAL_MODE_PREFIX = 'tomny.goal.mode.';
 
 export type GoalModeState = {
   variant: GoalCommandVariant;

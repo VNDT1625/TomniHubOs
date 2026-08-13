@@ -44,7 +44,7 @@ async function pickAvailableBackend(page: import('@playwright/test').Page): Prom
       const backends = await page
         .locator(AGENT_PILL)
         .evaluateAll((els) => els.map((el) => el.getAttribute('data-agent-backend')).filter(Boolean));
-      const preferred = ['gemini', 'claude', 'codex', 'aionrs'].find((backend) => backends.includes(backend));
+      const preferred = ['gemini', 'claude', 'codex', 'tomnyagentic'].find((backend) => backends.includes(backend));
       const found = preferred ?? backends[0] ?? null;
       if (found) return found;
     }

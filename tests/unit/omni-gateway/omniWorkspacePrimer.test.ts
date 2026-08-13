@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  *
  * Unit tests for the shared workspace-primer builder. Pure string assertions:
@@ -12,7 +12,7 @@ import { describe, expect, it } from 'vitest';
 import { buildIdeMemorySection, buildWorkspacePrimer, withIdeMemorySection } from '@/process/ide/workspacePrimer';
 
 const baseInput = {
-  rootPath: '/repo/AionUi',
+  rootPath: '/repo/Tomny',
   rules: ['First rule', 'Second rule'] as const,
   planningEnabled: false,
   sessionMemoryId: 'sess-42',
@@ -22,7 +22,7 @@ describe('buildWorkspacePrimer', () => {
   it('emits the workspace guide + project rules + session memory blocks', () => {
     const primer = buildWorkspacePrimer(baseInput);
     expect(primer).toContain('## IDE workspace guide');
-    expect(primer).toContain('Workspace root: /repo/AionUi');
+    expect(primer).toContain('Workspace root: /repo/Tomny');
     expect(primer).toContain('## Project rules');
     expect(primer).toContain('- First rule');
     expect(primer).toContain('## Session memory (your restart-resilient Save)');

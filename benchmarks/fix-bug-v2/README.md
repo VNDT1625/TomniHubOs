@@ -3,7 +3,7 @@
 Repository để chạy agent:
 
 ```text
-C:\Bench\AionUi-route-ranking-v2\AionUi-Buggy
+C:\Bench\TomniHubOS-route-ranking-v2\TomniHubOS-Buggy
 ```
 
 Đây là một lỗi khác case `status >= 400`: Quick Test đã nhận đúng HTTP 404, nhưng
@@ -33,7 +33,7 @@ Trước khi sửa, tạo một phép tái hiện nhỏ, deterministic và chạ
 Không nói cho agent biết evaluator hoặc đáp án. Chạy evaluator từ repository gốc:
 
 ```powershell
-C:\NDT\PJ\AionUi\benchmarks\fix-bug-v2\evaluate-run.ps1 -TargetRoot C:\Bench\AionUi-route-ranking-v2\AionUi-Buggy
+C:\NDT\PJ\TomniHubOS\benchmarks\fix-bug-v2\evaluate-run.ps1 -TargetRoot C:\Bench\TomniHubOS-route-ranking-v2\TomniHubOS-Buggy
 ```
 
 Trạng thái ban đầu hợp lệ phải có:
@@ -54,16 +54,15 @@ typecheckPass: true
 
 ## Chấm điểm /10
 
-| Tiêu chí | Điểm |
-|---|---:|
-| Xác định đúng nguyên nhân false-positive và giới hạn 8 slices | 2.0 |
-| Truy vết đúng RuntimeTrace → graph matching → ContextPack | 1.5 |
-| Hiểu đúng nhánh screenshot độc lập | 1.0 |
-| Có reproduction thất bại trước sửa | 1.0 |
-| Fix đúng billing, loại API nhiễu, không phá mapping khác | 2.5 |
-| Regression test + focused test + typecheck | 1.5 |
-| Diff nhỏ, báo cáo có bằng chứng | 0.5 |
+| Tiêu chí                                                      | Điểm |
+| ------------------------------------------------------------- | ---: |
+| Xác định đúng nguyên nhân false-positive và giới hạn 8 slices |  2.0 |
+| Truy vết đúng RuntimeTrace → graph matching → ContextPack     |  1.5 |
+| Hiểu đúng nhánh screenshot độc lập                            |  1.0 |
+| Có reproduction thất bại trước sửa                            |  1.0 |
+| Fix đúng billing, loại API nhiễu, không phá mapping khác      |  2.5 |
+| Regression test + focused test + typecheck                    |  1.5 |
+| Diff nhỏ, báo cáo có bằng chứng                               |  0.5 |
 
 Nếu `correctBillingMapped=false`, điểm Fix tối đa 0.5/2.5. Nếu không có phép tái hiện
 trước sửa, tổng điểm tối đa 8.5.
-

@@ -104,8 +104,8 @@
       "selectFolder": "Вибрати папку",
       "clearFolder": "Очистити",
       "model": "Модель",
-      "aionrsModelRequired": "Виберіть модель для Tomny Agentic",
-      "aionrsNoProvider": "Немає доступних моделей"
+      "tomnyagenticModelRequired": "Виберіть модель для Tomny Agentic",
+      "tomnyagenticNoProvider": "Немає доступних моделей"
     },
     "freq": {
       "manual": "Вручну",

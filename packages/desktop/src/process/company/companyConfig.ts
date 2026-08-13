@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -287,7 +287,7 @@ const normaliseAssignment = (value: unknown): RoleAssignment | undefined => {
 
   const assignment: RoleAssignment = { kind, refId, label };
   // A CLI manages its own model — the company-level model only applies to the
-  // `aionrs` backend. Dropping it for `cli` avoids showing/persisting a bogus
+  // `tomnyagentic` backend. Dropping it for `cli` avoids showing/persisting a bogus
   // model id (e.g. one the designer invented) next to a CLI role.
   const model = kind === 'cli' ? undefined : (asNonEmptyString(value.model) ?? draft?.model);
   if (model) assignment.model = model;
@@ -574,7 +574,7 @@ export type GenerateFn = (prompt: string) => Promise<string>;
 export type AvailableAgents = {
   /** Installed CLI engines (id + display name). */
   clis: Array<{ id: string; name: string }>;
-  /** Existing AionUi assistants (id + name + optional model). */
+  /** Existing Tomny assistants (id + name + optional model). */
   assistants: Array<{ id: string; name: string; model?: string }>;
   /** Valid base-engine ids a draft assistant may run on (`preset_agent_type`). */
   engineIds: string[];

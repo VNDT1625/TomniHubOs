@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -37,7 +37,7 @@
  *   Windows). True per-session isolation needs a native `CreateDesktop` module
  *   we do not bundle, so a Windows run drives the SHARED desktop (app launched
  *   minimized, targeted by window handle). Enabled by default on Windows so it
- *   is click-to-run; set `AIONUI_DISABLE_WINDOWS_TEST=1` to refuse Windows.
+ *   is click-to-run; set `TOMNY_DISABLE_WINDOWS_TEST=1` to refuse Windows.
  *
  * Everything heavy is still injected into the orchestrator, so the unit tests in
  * `tests/unit/testing/` keep driving it with fakes. Process boundary:
@@ -256,12 +256,12 @@ const androidDisplayBackend: DisplayBackend = {
  * desktop: the app launches minimized and the engine targets it by window
  * handle (not global input), so it stays out of the user's way as much as
  * possible. This is enabled by default on Windows so the feature is
- * click-to-run; set `AIONUI_DISABLE_WINDOWS_TEST=1` to turn it off (then the
+ * click-to-run; set `TOMNY_DISABLE_WINDOWS_TEST=1` to turn it off (then the
  * manager refuses Windows instead of touching the shared desktop).
  */
 const windowsDisplayBackend: DisplayBackend = {
   name: 'windows-shared-desktop',
-  isSupported: async () => process.platform === 'win32' && process.env.AIONUI_DISABLE_WINDOWS_TEST !== '1',
+  isSupported: async () => process.platform === 'win32' && process.env.TOMNY_DISABLE_WINDOWS_TEST !== '1',
   create: async () => ({ target: { kind: 'windows-shared-desktop' } }),
   destroy: async () => undefined,
 };
@@ -318,7 +318,7 @@ export const getTestingServices = (getWindow: () => BrowserWindow | null | undef
   const windowsTarget: IPlatformTarget = createWindowsTarget({
     // The .exe under test is supplied per-scenario via `app.exePath` (picked in
     // the Testing UI). The env var is a fallback default for headless/agent runs.
-    exePath: process.env.AIONUI_WINDOWS_TEST_EXE,
+    exePath: process.env.TOMNY_WINDOWS_TEST_EXE,
     launcher: createRealWindowsLauncher(),
   });
 

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -26,7 +26,7 @@ import type { IMcpServer, ISessionMcpServer } from '@/common/config/storage';
 import { teamRemoteClient } from './teamRemoteClient';
 import type { TeamTreeEntry } from './teamSessionHost';
 
-export const REMOTE_IDE_MCP_NAME = 'aionui-remote-ide';
+export const REMOTE_IDE_MCP_NAME = 'tomny-remote-ide';
 
 const SSE_PATH = '/sse';
 const MESSAGE_PATH = '/message';
@@ -438,7 +438,7 @@ export const createRemoteIdeWorkspaceGuide = (session: RemoteIdeMcpSession): str
     `# Remote IDE Session: ${session.repoName}`,
     '',
     'This directory is only a lightweight launch workspace for an agent running on this peer machine.',
-    'The real repository is hosted by another AionUi instance and must be accessed through MCP tools.',
+    'The real repository is hosted by another Tomny instance and must be accessed through MCP tools.',
     '',
     'Rules:',
     '- Use repo-relative paths such as `packages/app/src/main.ts`.',
@@ -997,7 +997,7 @@ export const ensureCloudIdeMcpRegistered = async (
   const endpoint = await startRemoteIdeMcpHost();
   const transport = { type: 'sse' as const, url: endpoint.url };
   const description =
-    'Built-in cloud IDE tools for an AionUi cloud workspace. Proxies file/search/edit operations to the relay.';
+    'Built-in cloud IDE tools for an Tomny cloud workspace. Proxies file/search/edit operations to the relay.';
   const original_json = JSON.stringify({ mcpServers: { [REMOTE_IDE_MCP_NAME]: { url: endpoint.url } } }, null, 2);
   const existing = (await getMcpRegistry().list()) ?? [];
   const current = existing.find((server) => server.name === REMOTE_IDE_MCP_NAME);

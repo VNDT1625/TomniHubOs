@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -27,6 +27,11 @@ vi.mock('react-router-dom', () => ({
 vi.mock('@arco-design/web-react', () => ({
   Image: {
     PreviewGroup: ({ children }: PropsWithChildren) => <>{children}</>,
+  },
+  Typography: {
+    Paragraph: ({ children }: PropsWithChildren) => <p>{children}</p>,
+    Text: ({ children }: PropsWithChildren) => <span>{children}</span>,
+    Title: ({ children }: PropsWithChildren) => <h3>{children}</h3>,
   },
 }));
 

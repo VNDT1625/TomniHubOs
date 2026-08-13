@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -63,6 +63,20 @@ describe('applyConnectorPlan — claude-code (configFile, deepMerge)', () => {
     expect(written.env.ANTHROPIC_AUTH_TOKEN).toBe('sk_test');
     expect(written.model).toBe('kr/claude-sonnet-4.5');
     expect(written.availableModels).toEqual(['kr/claude-sonnet-4.5']);
+  });
+
+  it('journals exact before/after content around a connector write', async () => {
+    const target = norm('/home/me/.claude/settings.json');
+    const original = JSON.stringify({ theme: 'dark' });
+    const { deps, files } = makeDeps({ [target]: original });
+    const beforeWrite = vi.fn(async () => undefined);
+    const afterWrite = vi.fn(async () => undefined);
+
+    await applyConnectorPlan('claude-code', endpoint, { ...deps, beforeWrite, afterWrite });
+    const applied = files.get(target) as string;
+
+    expect(beforeWrite).toHaveBeenCalledWith(target, original, applied);
+    expect(afterWrite).toHaveBeenCalledWith(target, applied);
   });
 
   it('backs up + deep-merges an existing config (preserves unrelated keys)', async () => {

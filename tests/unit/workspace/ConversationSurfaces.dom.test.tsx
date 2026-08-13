@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  *
  * DOM tests for ConversationSurfaces — the "Super" control in the conversation
@@ -26,7 +26,7 @@ import type { TChatConversation } from '@/common/config/storage';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-const BROWSER_CONTROL = 'aionui-browser-control';
+const BROWSER_CONTROL = 'tomny-browser-control';
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (k: string) => k, i18n: { language: 'en' } }),
@@ -82,7 +82,7 @@ import ConversationSurfaces from '@/renderer/pages/conversation/components/Conve
 import ConversationWatchOverlay from '@/renderer/pages/conversation/components/superWatch/ConversationWatchOverlay';
 
 const conversation = (extra?: Record<string, unknown>): TChatConversation =>
-  ({ id: 'c1', type: 'aionrs', extra }) as unknown as TChatConversation;
+  ({ id: 'c1', type: 'tomnyagentic', extra }) as unknown as TChatConversation;
 
 // Render the header control + the in-chat overlay together, exactly how
 // ChatConversation wires them (they communicate via the emitter).
@@ -340,7 +340,7 @@ describe('ConversationSurfaces (DOM)', () => {
 
 describe('live browser composer placement', () => {
   const platformChats = [
-    ['aionrs/AionrsChat.tsx', '<AionrsSendBox'],
+    ['tomnyagentic/TomnyAgenticChat.tsx', '<TomnyAgenticSendBox'],
     ['acp/AcpChat.tsx', '<AcpSendBox'],
     ['remote/RemoteChat.tsx', '<RemoteSendBox'],
     ['openclaw/OpenClawChat.tsx', '<OpenClawSendBox'],

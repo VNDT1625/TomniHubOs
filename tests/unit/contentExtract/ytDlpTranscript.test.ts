@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  *
  * Unit tests for the yt-dlp transcript fetcher — the primary YouTube transcript
@@ -16,7 +16,7 @@ import { createYtDlpTranscript, parseVtt, parseJson3 } from '@/process/services/
 
 const tempDirs: string[] = [];
 const realTempDir = async (): Promise<string> => {
-  const dir = await mkdtemp(join(tmpdir(), 'aionui-ytdlp-test-'));
+  const dir = await mkdtemp(join(tmpdir(), 'tomny-ytdlp-test-'));
   tempDirs.push(dir);
   return dir;
 };

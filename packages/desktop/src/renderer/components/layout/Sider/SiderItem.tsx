@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -56,10 +56,10 @@ const SiderItem: React.FC<SiderItemProps> = ({
     >
       <div
         className={classNames(
-          'h-34px rd-8px flex items-center gap-8px pl-10px pr-8px cursor-pointer relative overflow-hidden shrink-0 group min-w-0 transition-colors',
+          'h-34px rd-8px flex items-center gap-8px pl-10px pr-8px cursor-pointer relative overflow-hidden shrink-0 group min-w-0 transition-all border border-transparent',
           {
-            'hover:bg-fill-3': !selected,
-            '!bg-fill-3': selected,
+            'hover:bg-hover hover:border-surface-glass-border': !selected,
+            '!bg-hover !border-surface-glass-border-strong text-t-primary font-medium': selected,
           }
         )}
         onClick={onClick}

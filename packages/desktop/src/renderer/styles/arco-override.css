@@ -35,8 +35,14 @@ body {
 
 .arco-btn {
   &.arco-btn-outline {
-    border-color: #86909c;
-    color: #86909c;
+    border-color: var(--border-base);
+    color: var(--text-secondary);
+    transition: all var(--motion-duration-fast) var(--motion-ease-standard);
+
+    &:hover {
+      border-color: var(--primary);
+      color: var(--primary);
+    }
   }
 }
 
@@ -80,24 +86,24 @@ body[arco-theme='dark'] .arco-tag-checked.arco-tag-gray {
   color: rgb(209, 213, 219) !important;
 }
 
-/* AionUi Steps wrapper styles */
-.aionui-steps .arco-steps-item-process .arco-steps-item-icon {
+/* Tomny Steps wrapper styles */
+.tomny-steps .arco-steps-item-process .arco-steps-item-icon {
   background-color: var(--aou-6-brand) !important;
   border-color: var(--aou-6-brand) !important;
 }
 
-.aionui-steps .arco-steps-item-finish .arco-steps-item-icon {
-  background-color: #e8f3ff !important;
-  border-color: #e8f3ff !important;
+.tomny-steps .arco-steps-item-finish .arco-steps-item-icon {
+  background-color: var(--brand-light) !important;
+  border-color: var(--brand-light) !important;
   border-radius: 50% !important;
 }
 
-.aionui-steps .arco-steps-item-finish .arco-steps-item-icon .arco-steps-icon {
+.tomny-steps .arco-steps-item-finish .arco-steps-item-icon .arco-steps-icon {
   line-height: 28px !important;
 }
 
-/* AionUi Modal wrapper styles */
-.aionui-modal .arco-modal-content {
+/* Tomny Modal wrapper styles */
+.tomny-modal .arco-modal-content {
   background: var(--dialog-fill-0) !important;
   border: 1px solid var(--border-base) !important;
   border-radius: 16px !important;
@@ -109,7 +115,7 @@ body[arco-theme='dark'] .arco-modal-content {
 }
 
 body[arco-theme='dark'] .arco-modal {
-  background-color: var(--dialog-fill-0) !important;
+  background: var(--surface-glass-raised) !important;
 }
 
 body[arco-theme='dark'] .arco-modal-header {
@@ -212,21 +218,21 @@ body[arco-theme='dark'] .arco-modal-confirm-icon {
   border-color: var(--bg-4) !important;
 }
 
-.aionui-modal-header {
+.tomny-modal-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: 20px 24px 16px;
 }
 
-.aionui-modal-title {
+.tomny-modal-title {
   font-size: 18px;
   font-weight: 500;
   color: var(--text-primary);
   margin: 0;
 }
 
-.aionui-modal-close-btn {
+.tomny-modal-close-btn {
   width: 32px;
   height: 32px;
   display: flex;
@@ -240,7 +246,7 @@ body[arco-theme='dark'] .arco-modal-confirm-icon {
   padding: 0;
 }
 
-.aionui-modal-close-btn:hover {
+.tomny-modal-close-btn:hover {
   background: var(--color-fill-1);
 }
 
@@ -250,38 +256,29 @@ body[arco-theme='dark'] .arco-modal-confirm-icon {
   border-radius: 8px !important;
 }
 
-/* Light mode */
+/* Status messages keep semantic accents while sharing the same translucent surface. */
+.arco-message-success,
+.arco-message-warning,
+.arco-message-info,
+.arco-message-error {
+  background: var(--surface-glass-raised) !important;
+  box-shadow: var(--surface-glass-shadow-raised) !important;
+}
+
 .arco-message-success {
-  background: linear-gradient(270deg, #f9fff2 0%, #d2ffd9 100%) !important;
+  border-color: color-mix(in srgb, var(--success) 44%, var(--surface-glass-border)) !important;
 }
 
 .arco-message-warning {
-  background: linear-gradient(90deg, #fff3dc 0%, #fff8de 100%) !important;
+  border-color: color-mix(in srgb, var(--warning) 44%, var(--surface-glass-border)) !important;
 }
 
 .arco-message-info {
-  background: linear-gradient(90deg, #e8f3ff 0%, #f8f8ff 49.52%) !important;
+  border-color: color-mix(in srgb, var(--info) 44%, var(--surface-glass-border)) !important;
 }
 
 .arco-message-error {
-  background: linear-gradient(90deg, #ffdddb 0%, #fff3f0 100%) !important;
-}
-
-/* Dark mode */
-body[arco-theme='dark'] .arco-message-success {
-  background: linear-gradient(270deg, rgba(249, 255, 242, 0.3) 0%, rgba(210, 255, 217, 0.3) 100%) !important;
-}
-
-body[arco-theme='dark'] .arco-message-warning {
-  background: linear-gradient(90deg, rgba(255, 243, 220, 0.3) 0%, rgba(255, 248, 222, 0.3) 100%) !important;
-}
-
-body[arco-theme='dark'] .arco-message-info {
-  background: linear-gradient(90deg, rgba(232, 243, 255, 0.3) 0%, rgba(248, 248, 255, 0.3) 49.52%) !important;
-}
-
-body[arco-theme='dark'] .arco-message-error {
-  background: linear-gradient(90deg, rgba(255, 221, 219, 0.3) 0%, rgba(255, 243, 240, 0.3) 100%) !important;
+  border-color: color-mix(in srgb, var(--danger) 44%, var(--surface-glass-border)) !important;
 }
 
 /* Workspace tree selection styles - use text color instead of background */
@@ -394,4 +391,386 @@ body[arco-theme='dark'] .arco-message-error {
 [data-mobile='true'] [data-testid='mode-selector'] .arco-btn-shape-round {
   padding-left: 4px !important;
   padding-right: 4px !important;
+}
+
+/* Shared translucent surfaces. Component-local styles may opt out or layer a stronger treatment. */
+.arco-card {
+  border-color: var(--surface-glass-border);
+  border-radius: var(--surface-radius);
+  background: var(--surface-glass);
+  box-shadow: var(--surface-glass-shadow-soft);
+  backdrop-filter: var(--surface-glass-filter-compact);
+  -webkit-backdrop-filter: var(--surface-glass-filter-compact);
+  transition:
+    transform var(--motion-duration-standard) var(--motion-ease-emphasized),
+    border-color var(--motion-duration-standard) var(--motion-ease-standard),
+    box-shadow var(--motion-duration-standard) var(--motion-ease-standard);
+}
+
+.arco-card .arco-card-header {
+  border-bottom-color: var(--surface-glass-border);
+  background: transparent;
+}
+
+.arco-card-hoverable:hover {
+  transform: translateY(var(--motion-lift-distance));
+  border-color: var(--surface-glass-border-strong);
+  box-shadow: var(--surface-glass-shadow-raised);
+}
+
+.arco-modal {
+  border: 1px solid var(--surface-glass-border) !important;
+  border-radius: var(--popup-radius) !important;
+  background: var(--surface-glass-raised) !important;
+  box-shadow: var(--surface-glass-shadow-raised) !important;
+  backdrop-filter: var(--surface-glass-filter);
+  -webkit-backdrop-filter: var(--surface-glass-filter);
+}
+
+.tomny-modal .arco-modal-content,
+.arco-modal-content,
+.arco-modal-header,
+.arco-modal-body,
+.arco-modal-footer,
+body[arco-theme='dark'] .arco-modal-content,
+body[arco-theme='dark'] .arco-modal-header,
+body[arco-theme='dark'] .arco-modal-body,
+body[arco-theme='dark'] .arco-modal-footer {
+  background: transparent !important;
+}
+
+.arco-modal-header,
+.arco-modal-footer {
+  border-color: var(--surface-glass-border) !important;
+}
+
+.arco-modal-close-icon,
+.arco-drawer-close-icon {
+  display: inline-flex !important;
+  width: var(--control-height);
+  height: var(--control-height);
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  color: var(--color-text-2);
+  line-height: 1;
+}
+
+.arco-modal-close-icon {
+  top: 8px !important;
+  right: 12px !important;
+}
+
+.arco-modal-close-icon svg,
+.arco-drawer-close-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.arco-popover-content,
+.arco-popconfirm-content,
+.arco-dropdown-menu,
+.arco-select-popup,
+.arco-cascader-popup,
+.arco-picker-container {
+  border: 1px solid var(--surface-glass-border) !important;
+  border-radius: var(--popup-radius) !important;
+  background: var(--surface-glass-raised) !important;
+  box-shadow: var(--surface-glass-shadow-raised) !important;
+  backdrop-filter: var(--surface-glass-filter);
+  -webkit-backdrop-filter: var(--surface-glass-filter);
+}
+
+.arco-popconfirm-arrow.arco-trigger-arrow,
+.arco-popover-arrow.arco-trigger-arrow,
+.arco-dropdown-menu + .arco-trigger-arrow {
+  border-color: var(--surface-glass-border) !important;
+  background: var(--surface-glass-raised) !important;
+}
+
+.arco-select-popup .arco-select-option,
+.arco-cascader-popup .arco-cascader-list-column {
+  background: transparent !important;
+}
+
+.arco-dropdown-menu-item,
+.arco-dropdown-menu-pop-header,
+.arco-select-popup .arco-select-option,
+.arco-cascader-list-item,
+.arco-cascader-list-search-item {
+  transition:
+    color var(--motion-duration-fast) var(--motion-ease-standard),
+    background-color var(--motion-duration-fast) var(--motion-ease-standard);
+}
+
+.arco-select-popup .arco-select-option-hover,
+.arco-cascader-list-item:hover,
+.arco-cascader-list-search-item-hover {
+  background: var(--color-fill-2) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .arco-card,
+  .arco-modal,
+  .arco-popover-content,
+  .arco-popconfirm-content,
+  .arco-dropdown-menu,
+  .arco-select-popup,
+  .arco-cascader-popup,
+  .arco-picker-container,
+  .arco-dropdown-menu-item,
+  .arco-dropdown-menu-pop-header,
+  .arco-select-option,
+  .arco-cascader-list-item,
+  .arco-cascader-list-search-item {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Tomny glass contract: shared surfaces for every page, app and popup. */
+.arco-card,
+.arco-modal,
+.arco-drawer,
+.arco-drawer-content,
+.arco-popover-content,
+.arco-popconfirm-content,
+.arco-dropdown-menu,
+.arco-select-popup,
+.arco-cascader-popup,
+.arco-picker-container,
+.arco-tooltip-content,
+.arco-notification-list,
+.arco-message {
+  border-color: var(--surface-glass-border) !important;
+  background: var(--surface-glass-raised) !important;
+  box-shadow: var(--surface-glass-shadow-raised) !important;
+  backdrop-filter: var(--surface-glass-filter) !important;
+  -webkit-backdrop-filter: var(--surface-glass-filter) !important;
+}
+
+.arco-card,
+.arco-drawer,
+.arco-drawer-content {
+  border-radius: var(--surface-radius) !important;
+}
+
+.arco-modal,
+.arco-popover-content,
+.arco-popconfirm-content,
+.arco-dropdown-menu,
+.arco-select-popup,
+.arco-cascader-popup,
+.arco-picker-container,
+.arco-tooltip-content,
+.arco-notification-list,
+.arco-message {
+  border-radius: var(--popup-radius) !important;
+}
+
+.arco-modal-content,
+.arco-modal-header,
+.arco-modal-body,
+.arco-modal-footer,
+.arco-drawer-header,
+.arco-drawer-body,
+.arco-drawer-footer {
+  background: transparent !important;
+  border-color: var(--surface-glass-border) !important;
+}
+
+.arco-btn-secondary,
+.arco-btn-outline,
+.arco-input-inner-wrapper,
+.arco-input,
+.arco-textarea,
+.arco-select-view,
+.arco-picker {
+  border-color: var(--surface-glass-border) !important;
+  background: var(--surface-glass) !important;
+  backdrop-filter: var(--surface-glass-filter-compact);
+  -webkit-backdrop-filter: var(--surface-glass-filter-compact);
+}
+
+.arco-btn-secondary:hover,
+.arco-btn-secondary:focus-visible,
+.arco-btn-outline:hover,
+.arco-btn-outline:focus-visible,
+.arco-input-inner-wrapper:hover,
+.arco-input-inner-wrapper:focus-within,
+.arco-select-view:hover,
+.arco-select-view-focus,
+.arco-picker:hover {
+  border-color: var(--surface-glass-border-strong) !important;
+  background: var(--surface-glass-subtle) !important;
+}
+
+.arco-input:-webkit-autofill,
+.arco-input:-webkit-autofill:hover,
+.arco-input:-webkit-autofill:focus,
+.arco-textarea:-webkit-autofill,
+.arco-textarea:-webkit-autofill:hover,
+.arco-textarea:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--color-text-1);
+  caret-color: var(--color-text-1);
+  box-shadow: 0 0 0 1000px var(--surface-glass) inset !important;
+  transition: background-color 9999s ease-out 0s;
+}
+
+/* Tomny control rhythm: shared icon, label and field alignment on every page. */
+.arco-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center;
+  gap: var(--control-icon-gap);
+}
+
+.arco-btn-long {
+  display: flex !important;
+}
+
+.arco-btn-size-mini {
+  gap: var(--control-inline-gap);
+}
+
+.arco-btn > .arco-btn-icon,
+.arco-btn > .i-icon,
+.arco-btn-content,
+.arco-input-prefix,
+.arco-input-suffix,
+.arco-select-view-prefix,
+.arco-select-view-suffix,
+.arco-menu-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.arco-btn > .arco-btn-icon {
+  margin-right: 0 !important;
+}
+
+.arco-btn-content {
+  min-width: 0;
+}
+
+.arco-input-inner-wrapper,
+.arco-select-view,
+.arco-picker,
+.arco-input-group-wrapper {
+  align-items: center;
+  gap: var(--control-icon-gap);
+}
+
+.arco-input-prefix,
+.arco-input-suffix,
+.arco-select-view-prefix,
+.arco-select-view-suffix {
+  margin-inline: 0 !important;
+}
+
+.arco-select-view-selector,
+.arco-select-view-value,
+.arco-select-view-value > * {
+  overflow: hidden;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.arco-select-view-selector {
+  height: 100%;
+  flex: 1 1 0;
+  align-items: center;
+}
+
+.arco-select-view-value {
+  display: flex !important;
+  height: 100%;
+  align-items: center;
+  line-height: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.arco-select-view-value > * {
+  align-items: center;
+}
+
+.arco-select-view-value > * > :not(img):last-child {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.arco-select-suffix {
+  flex: 0 0 auto;
+}
+
+.arco-dropdown-menu-item,
+.arco-dropdown-menu-pop-header,
+.arco-select-option,
+.arco-cascader-list-item,
+.arco-cascader-list-search-item,
+.arco-menu-item-inner,
+.arco-tabs-header-title {
+  align-items: center;
+  gap: var(--control-icon-gap);
+}
+
+.arco-dropdown-menu,
+.arco-select-popup {
+  padding: 6px !important;
+}
+
+.arco-dropdown-menu-item,
+.arco-select-option {
+  min-height: var(--control-height);
+  border-radius: 8px;
+}
+
+.arco-popover-inner-content,
+.arco-popconfirm-inner-content {
+  padding: var(--popup-content-padding);
+}
+
+.arco-modal-footer,
+.arco-drawer-footer {
+  gap: var(--control-icon-gap);
+}
+
+.arco-menu-item:hover,
+.arco-menu-item-active,
+.arco-dropdown-menu-item:hover,
+.arco-select-option-hover,
+.arco-picker-cell-selected {
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent) !important;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .arco-card,
+  .arco-modal,
+  .arco-drawer,
+  .arco-drawer-content,
+  .arco-popover-content,
+  .arco-popconfirm-content,
+  .arco-dropdown-menu,
+  .arco-select-popup,
+  .arco-cascader-popup,
+  .arco-picker-container,
+  .arco-tooltip-content,
+  .arco-notification-list,
+  .arco-message,
+  .arco-btn-secondary,
+  .arco-btn-outline,
+  .arco-input-inner-wrapper,
+  .arco-input,
+  .arco-textarea,
+  .arco-select-view,
+  .arco-picker {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
 }

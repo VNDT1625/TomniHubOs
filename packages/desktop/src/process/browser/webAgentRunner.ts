@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -14,7 +14,7 @@
  *
  *   1. Send the conversation + a tool catalog to the user's configured model
  *      (OpenAI-compatible `/chat/completions`, same call style as
- *      `companyGenerator.ts` — provider read from the native Tomni catalog).
+ *      `companyGenerator.ts` — provider read from the native Tomny catalog).
  *   2. The model replies with EITHER a tool call (navigate / read / click /
  *      type / scroll / screenshot / finish) OR a final answer.
  *   3. The runner executes the tool against the live tab (navigation via the
@@ -139,7 +139,7 @@ export type ChatMessageInput = { role: string; content: ChatContent };
 /**
  * The chat-completion call the runner uses to think. Returns the raw assistant
  * message text. Production wiring supplies {@link createProviderChat} (reads the
- * user's provider from aioncore); tests inject a deterministic stub.
+ * user's provider from tomnycore); tests inject a deterministic stub.
  */
 export type AgentChat = (params: {
   model: string;
@@ -640,17 +640,17 @@ const ANALYZE_AUDIO_SCRIPT = `(async () => {
     if (!media) return '';
     const Ctx = window.AudioContext || window.webkitAudioContext;
     if (!Ctx) return '';
-    if (!window.__aionAudioCtx) window.__aionAudioCtx = new Ctx();
-    const ctx = window.__aionAudioCtx;
+    if (!window.__tomnyAudioCtx) window.__tomnyAudioCtx = new Ctx();
+    const ctx = window.__tomnyAudioCtx;
     try { await ctx.resume(); } catch (e) {}
-    if (!media.__aionSrc) {
-      media.__aionSrc = ctx.createMediaElementSource(media);
-      media.__aionAnalyser = ctx.createAnalyser();
-      media.__aionAnalyser.fftSize = 2048;
-      media.__aionSrc.connect(media.__aionAnalyser);
-      media.__aionSrc.connect(ctx.destination); // passthrough so audio still plays
+    if (!media.__tomnySrc) {
+      media.__tomnySrc = ctx.createMediaElementSource(media);
+      media.__tomnyAnalyser = ctx.createAnalyser();
+      media.__tomnyAnalyser.fftSize = 2048;
+      media.__tomnySrc.connect(media.__tomnyAnalyser);
+      media.__tomnySrc.connect(ctx.destination); // passthrough so audio still plays
     }
-    const analyser = media.__aionAnalyser;
+    const analyser = media.__tomnyAnalyser;
     const bins = analyser.frequencyBinCount;
     const data = new Uint8Array(bins);
     const sampleRate = ctx.sampleRate;

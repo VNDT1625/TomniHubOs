@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -85,13 +85,12 @@ export type VisualArtifactTextAnalyzerInput = {
   height: number;
 };
 
-export type VisualArtifactTextAnalyzer = (
-  input: VisualArtifactTextAnalyzerInput
-) => Promise<VisualArtifactTextBlock[]>;
+export type VisualArtifactTextAnalyzer = (input: VisualArtifactTextAnalyzerInput) => Promise<VisualArtifactTextBlock[]>;
 
 export type AnalyzeVisualArtifactOptions = {
   mimeType?: string;
   textAnalyzer?: VisualArtifactTextAnalyzer;
+  ocrMode?: 'local' | 'disabled';
+  ocrRequired?: boolean;
   generatedAt?: Date;
 };
-

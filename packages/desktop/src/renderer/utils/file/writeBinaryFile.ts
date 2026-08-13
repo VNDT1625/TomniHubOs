@@ -1,13 +1,13 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
 /**
  * `writeBinaryFile` — binary-safe file write for the renderer.
  *
- * The aioncore `/api/fs/write` endpoint stores its `data` as literal UTF-8 text
+ * The tomnycore `/api/fs/write` endpoint stores its `data` as literal UTF-8 text
  * (it does not base64-decode), so saving binary content (images, `.docx` ZIPs,
  * …) through it corrupts the bytes. The Main process exposes a raw-bytes writer
  * (`studio.write-binary`, see `process/studio/studioFsBridge.ts`); this helper

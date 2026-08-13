@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -28,7 +28,7 @@ import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 
 /** Container name we manage so repeated launches reuse one instance. */
-const CONTAINER_NAME = 'aionui-onlyoffice';
+const CONTAINER_NAME = 'tomny-onlyoffice';
 const IMAGE = 'onlyoffice/documentserver:latest';
 const DEFAULT_PORT = 8080;
 /** Default URL of the managed container — probed first as a fast path. */

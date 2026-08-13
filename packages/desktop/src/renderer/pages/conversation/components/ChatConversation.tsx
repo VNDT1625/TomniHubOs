@@ -1,12 +1,12 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
 import { ipcBridge } from '@/common';
 import type { IConversationMcpStatus, IProvider, TChatConversation, TProviderWithModel } from '@/common/config/storage';
-import { isTomniAgentBackend } from '@/common/utils/buildAgentConversationParams';
+import { isTomnyAgentBackend } from '@/common/utils/buildAgentConversationParams';
 import { uuid } from '@/common/utils';
 import addChatIcon from '@/renderer/assets/icons/add-chat.svg';
 import { CronJobManager } from '@/renderer/pages/cron';
@@ -31,12 +31,12 @@ import NanobotChat from '../platforms/nanobot/NanobotChat';
 import OpenClawChat from '../platforms/openclaw/OpenClawChat';
 import RemoteChat from '../platforms/remote/RemoteChat';
 import AcpModelSelector from '@/renderer/components/agent/AcpModelSelector';
-import { saveAionrsDefaultModel } from '@/renderer/pages/guid/hooks/agentSelectionUtils';
+import { saveTomnyAgenticDefaultModel } from '@/renderer/pages/guid/hooks/agentSelectionUtils';
 import { getConversationOrNull } from '@/renderer/pages/conversation/utils/conversationCache';
 import GoogleModelSelector from '../platforms/gemini/GoogleModelSelector';
-import AionrsChat from '../platforms/aionrs/AionrsChat';
-import AionrsModelSelector from '../platforms/aionrs/AionrsModelSelector';
-import { useAionrsModelSelection } from '../platforms/aionrs/useAionrsModelSelection';
+import TomnyAgenticChat from '../platforms/tomnyagentic/TomnyAgenticChat';
+import TomnyAgenticModelSelector from '../platforms/tomnyagentic/TomnyAgenticModelSelector';
+import { useTomnyAgenticModelSelection } from '../platforms/tomnyagentic/useTomnyAgenticModelSelection';
 import { usePreviewContext } from '../Preview';
 import StarOfficeMonitorCard from '../platforms/openclaw/StarOfficeMonitorCard.tsx';
 // import SkillRuleGenerator from './components/SkillRuleGenerator'; // Temporarily hidden
@@ -139,18 +139,18 @@ const _AddNewConversation: React.FC<{ conversation: TChatConversation }> = ({ co
   );
 };
 
-type AionrsConversation = TChatConversation;
+type TomnyAgenticConversation = TChatConversation;
 
-/** Legacy Tomni rows used the ACP type; route them to the native Tomni chat plane. */
+/** Legacy Tomny rows used the ACP type; route them to the native Tomny chat plane. */
 export const isTomnyCompatibilityConversation = (
   conversation: Pick<TChatConversation, 'type' | 'extra'> | undefined
 ): boolean =>
-  conversation?.type === 'aionrs' ||
+  conversation?.type === 'tomnyagentic' ||
   (conversation?.type === 'acp' &&
-    isTomniAgentBackend((conversation.extra as { backend?: string } | undefined)?.backend));
+    isTomnyAgentBackend((conversation.extra as { backend?: string } | undefined)?.backend));
 
-const AionrsConversationPanel: React.FC<{
-  conversation: AionrsConversation;
+const TomnyAgenticConversationPanel: React.FC<{
+  conversation: TomnyAgenticConversation;
   sliderTitle: React.ReactNode;
   embedded?: boolean;
 }> = ({ conversation, sliderTitle, embedded }) => {
@@ -164,19 +164,19 @@ const AionrsConversationPanel: React.FC<{
       // Kill running agent on model switch — will be rebuilt with new model on next message
       await ipcBridge.conversation.stop.invoke({ conversation_id: conversation.id });
       const ok = await ipcBridge.conversation.update.invoke({ id: conversation.id, updates: { model: selected } });
-      if (ok) void saveAionrsDefaultModel(_provider.id, modelName);
+      if (ok) void saveTomnyAgenticDefaultModel(_provider.id, modelName);
       return Boolean(ok);
     },
     [conversation.id]
   );
 
-  const modelSelection = useAionrsModelSelection({
+  const modelSelection = useTomnyAgenticModelSelection({
     initialModel: 'model' in conversation ? conversation.model : undefined,
     onSelectModel,
   });
   const workspaceEnabled = Boolean(conversation.extra?.workspace);
   const { info: presetAssistantInfo } = usePresetAssistantInfo(conversation);
-  const aionrsAssistantId = resolveAssistantConfigId(conversation) ?? undefined;
+  const tomnyagenticAssistantId = resolveAssistantConfigId(conversation) ?? undefined;
   const layout = useLayoutContext();
   // Mobile: model selection moved into the sendbox `+` action sheet to free up
   // header space; the dropdown stays available on desktop and tablets ≥768px.
@@ -194,20 +194,20 @@ const AionrsConversationPanel: React.FC<{
           cron_job_id={conversation.extra?.cron_job_id as string | undefined}
           hasCronSkill={hasLoadedSkill(conversation, 'cron')}
         />
-        {!isMobile && <AionrsModelSelector selection={modelSelection} />}
+        {!isMobile && <TomnyAgenticModelSelector selection={modelSelection} />}
       </div>
     ),
     workspaceEnabled: embedded ? false : workspaceEnabled,
     workspacePath: conversation.extra?.workspace,
     isTemporaryWorkspace: (conversation.extra as { is_temporary_workspace?: boolean } | undefined)
       ?.is_temporary_workspace,
-    backend: 'aionrs' as const,
-    presetAssistant: presetAssistantInfo ? { ...presetAssistantInfo, id: aionrsAssistantId } : undefined,
+    backend: 'tomnyagentic' as const,
+    presetAssistant: presetAssistantInfo ? { ...presetAssistantInfo, id: tomnyagenticAssistantId } : undefined,
   };
 
   return (
     <ChatLayout {...chatLayoutProps} conversation_id={conversation.id}>
-      <AionrsChat
+      <TomnyAgenticChat
         conversation_id={conversation.id}
         workspace={conversation.extra.workspace}
         modelSelection={modelSelection}
@@ -242,7 +242,7 @@ const ChatConversation: React.FC<{
   const layout = useLayoutContext();
   const isMobile = Boolean(layout?.isMobile);
 
-  const isAionrsConversation = isTomnyCompatibilityConversation(conversation);
+  const isTomnyAgenticConversation = isTomnyCompatibilityConversation(conversation);
 
   // Heal an already-enabled Browser-Control MCP snapshot when a chat mounts.
   // Its SSE URL is ephemeral and may be stale after an app restart; missing
@@ -256,7 +256,7 @@ const ChatConversation: React.FC<{
 
   // 使用统一的 Hook 获取预设助手信息（ACP/Codex 会话）
   // Use unified hook for preset assistant info (ACP/Codex conversations)
-  const acpConversation = isAionrsConversation ? undefined : conversation;
+  const acpConversation = isTomnyAgenticConversation ? undefined : conversation;
   const { info: presetAssistantInfo, isLoading: isLoadingPreset } = usePresetAssistantInfo(acpConversation);
   const acpAssistantId = acpConversation ? (resolveAssistantConfigId(acpConversation) ?? undefined) : undefined;
 
@@ -264,7 +264,7 @@ const ChatConversation: React.FC<{
   const assistantDisplayName = presetAssistantInfo?.name || conversationAgentName;
 
   const conversationNode = useMemo(() => {
-    if (!conversation || isAionrsConversation) return null;
+    if (!conversation || isTomnyAgenticConversation) return null;
     switch (conversation.type) {
       case 'acp':
         return (
@@ -290,7 +290,7 @@ const ChatConversation: React.FC<{
         // removed. The message history is still served by the shared messages
         // table, so AcpChat renders it fine. The composer is left enabled —
         // any send attempt will get a BadRequest from the factory branch in
-        // aionui-common/src/enums.rs → factory.rs, surfacing a clear error
+        // tomny-common/src/enums.rs → factory.rs, surfacing a clear error
         // to the user.
         return (
           <AcpChat
@@ -362,7 +362,7 @@ const ChatConversation: React.FC<{
       default:
         return null;
     }
-  }, [conversation, isAionrsConversation, assistantDisplayName, hideSendBox]);
+  }, [conversation, isTomnyAgenticConversation, assistantDisplayName, hideSendBox]);
 
   const sliderTitle = useMemo(() => {
     return (
@@ -377,7 +377,7 @@ const ChatConversation: React.FC<{
   // Mobile: model selection moves into the sendbox `+` action sheet, so the
   // header selector is suppressed to free up vertical space.
   const modelSelector = useMemo(() => {
-    if (!conversation || isAionrsConversation) return undefined;
+    if (!conversation || isTomnyAgenticConversation) return undefined;
     if (isMobile) return undefined;
     if (conversation.type === 'acp') {
       const extra = conversation.extra as { backend?: string; current_model_id?: string };
@@ -390,11 +390,11 @@ const ChatConversation: React.FC<{
       );
     }
     return <GoogleModelSelector disabled={true} />;
-  }, [conversation, isAionrsConversation, isMobile]);
+  }, [conversation, isTomnyAgenticConversation, isMobile]);
 
-  if (conversation && isAionrsConversation) {
+  if (conversation && isTomnyAgenticConversation) {
     return (
-      <AionrsConversationPanel
+      <TomnyAgenticConversationPanel
         key={conversation.id}
         conversation={conversation}
         sliderTitle={sliderTitle}
@@ -415,8 +415,8 @@ const ChatConversation: React.FC<{
           backend:
             conversation?.type === 'acp'
               ? conversation?.extra?.backend
-              : conversation?.type === 'aionrs'
-                ? 'aionrs'
+              : conversation?.type === 'tomnyagentic'
+                ? 'tomnyagentic'
                 : conversation?.type === 'codex'
                   ? 'codex'
                   : conversation?.type === 'openclaw-gateway'

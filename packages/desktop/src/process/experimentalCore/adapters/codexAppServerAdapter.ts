@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -71,7 +71,7 @@ const parseModelKey = (key?: string): { model?: string; effort?: string } => {
   return { model: model || undefined, effort: effort || undefined };
 };
 
-/** Direct Codex app-server v2 client. It never calls aioncore. */
+/** Direct Codex app-server v2 client. It never calls tomnycore. */
 export const codexMcpConfig = (servers: CoreRunInput['mcpServers']): Record<string, unknown> | undefined => {
   const unique = dedupeCoreMcpServers(servers ?? []);
   if (unique.length === 0) return undefined;
@@ -248,7 +248,7 @@ export class CodexAppServerAdapter implements CoreAdapter {
     });
     this.initialized = (async () => {
       await this.request('initialize', {
-        clientInfo: { name: 'aionui-direct-core', title: 'AionUi Direct Core', version: '0.1.0' },
+        clientInfo: { name: 'tomny-direct-core', title: 'Tomny Direct Core', version: '0.1.0' },
         capabilities: null,
       });
       this.notify('initialized');

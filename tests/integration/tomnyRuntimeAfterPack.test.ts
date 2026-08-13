@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -54,7 +54,7 @@ describe('Tomny Runtime packaged integrity', () => {
     await expect(afterPack(context(appOutDir))).resolves.toBeUndefined();
   });
 
-  it('rejects a packaged Tomni Agent whose manifest hash is missing', async () => {
+  it('rejects a packaged Tomny Agent whose manifest hash is missing', async () => {
     const { appOutDir, cliDir } = fixture();
     writeFileSync(join(cliDir, 'manifest.json'), '{}');
     await expect(afterPack(context(appOutDir))).rejects.toThrow('Tomny CLI integrity check failed');

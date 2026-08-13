@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -66,7 +66,6 @@ export function initSystemSettingsBridge(): void {
     return (await ProcessConfig.get('system.keepAwake')) ?? false;
   });
 
-
   ipcBridge.systemSettings.setKeepAwake.provider(async ({ enabled }) => {
     await ProcessConfig.set('system.keepAwake', enabled);
     const power = getPlatformServices().power;
@@ -94,7 +93,6 @@ export function initSystemSettingsBridge(): void {
     await ProcessConfig.set('system.autoPreviewOfficeFiles', enabled);
   });
 
-
   // 语言变更通知，同步主进程 i18n 并通知托盘重建
   // Language change notification, sync main process i18n and notify tray rebuild
   ipcBridge.systemSettings.changeLanguage.provider(async ({ language }) => {
@@ -104,7 +102,6 @@ export function initSystemSettingsBridge(): void {
     _languageChangeListener?.(language);
 
     await ProcessConfig.set('language', language);
-
 
     // Update main process i18n (non-blocking – don't let a hang here block the provider)
     changeLanguage(language).catch((error) => {

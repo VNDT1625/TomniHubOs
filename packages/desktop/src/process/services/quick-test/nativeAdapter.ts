@@ -29,7 +29,14 @@ export type NativeActionCapability = 'launch' | 'tap' | 'input' | 'back' | 'swip
 export type NativeScenarioStep =
   | { id: string; kind: 'launch'; timeoutMs?: number }
   | { id: string; kind: 'tap'; locators: readonly NativeLocator[]; timeoutMs?: number }
-  | { id: string; kind: 'input'; locators: readonly NativeLocator[]; value: string; redacted: boolean; timeoutMs?: number }
+  | {
+      id: string;
+      kind: 'input';
+      locators: readonly NativeLocator[];
+      value: string;
+      redacted: boolean;
+      timeoutMs?: number;
+    }
   | { id: string; kind: 'back'; timeoutMs?: number }
   | {
       id: string;
@@ -152,7 +159,9 @@ export const recordNativeScenario = (
   for (const event of trace.events) {
     if (event.kind !== 'click' && event.kind !== 'input') continue;
     const locators = resolveLocators(event).filter((locator) =>
-      locator.kind === 'coordinates' ? Number.isFinite(locator.x) && Number.isFinite(locator.y) : locator.value.trim().length > 0
+      locator.kind === 'coordinates'
+        ? Number.isFinite(locator.x) && Number.isFinite(locator.y)
+        : locator.value.trim().length > 0
     );
     if (!locators.length) continue;
     const ordinal = steps.length;
@@ -324,7 +333,13 @@ export const runNativeScenario = async (
     try {
       // Native replay must preserve the exact recorded action order.
       // eslint-disable-next-line no-await-in-loop
-      await runWithDeadline(adapter, step, { target, stepIndex, deadlineAt: stepStartedAt + timeoutMs }, timeoutMs, options.signal);
+      await runWithDeadline(
+        adapter,
+        step,
+        { target, stepIndex, deadlineAt: stepStartedAt + timeoutMs },
+        timeoutMs,
+        options.signal
+      );
       results.push({
         stepIndex,
         stepId: step.id,

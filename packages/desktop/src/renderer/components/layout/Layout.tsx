@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -123,6 +123,10 @@ const Layout: React.FC<{
   const navigate = useNavigate();
   useConversationShortcuts({ navigate });
   const location = useLocation();
+
+  const isHubHomeRoute = ['/guid', '/manager', '/store', '/products', '/history', '/company'].some(
+    (route) => location.pathname === route || location.pathname.startsWith(`${route}/`)
+  );
   const workspaceAvailable =
     location.pathname.startsWith('/conversation/') || (TEAM_MODE_ENABLED && location.pathname.startsWith('/team/'));
   const collapsedRef = useRef(collapsed);
@@ -378,7 +382,7 @@ const Layout: React.FC<{
       void navigate('/settings/about');
       // Trigger update modal after a short delay to ensure page is loaded
       setTimeout(() => {
-        window.dispatchEvent(new CustomEvent('aionui-open-update-modal', { detail: { source: 'tray' } }));
+        window.dispatchEvent(new CustomEvent('tomny-open-update-modal', { detail: { source: 'tray' } }));
       }, 100);
     };
 
@@ -497,9 +501,9 @@ const Layout: React.FC<{
     >
       <NavigationHistoryProvider>
         <div className='app-shell flex flex-col size-full min-h-0'>
-          <Titlebar workspaceAvailable={workspaceAvailable} />
+          {!isHubHomeRoute && <Titlebar workspaceAvailable={workspaceAvailable} />}
           {/* 移动端左侧边栏蒙板 / Mobile left sider backdrop */}
-          {isMobile && !collapsed && (
+          {!isHubHomeRoute && isMobile && !collapsed && (
             <div className='fixed inset-0 bg-black/30 z-90' onClick={() => setCollapsed(true)} aria-hidden='true' />
           )}
 
@@ -511,7 +515,7 @@ const Layout: React.FC<{
               className={classNames('!bg-2 layout-sider', {
                 collapsed: collapsed,
               })}
-              style={siderStyle}
+              style={isHubHomeRoute ? { display: 'none' } : siderStyle}
             >
               <ArcoLayout.Header
                 className={classNames(
@@ -531,7 +535,7 @@ const Layout: React.FC<{
                     }
                   )}
                   onClick={onClick}
-                  aria-label='Tomni'
+                  aria-label='Tomny'
                 >
                   <img
                     src={tomniIcon}
@@ -541,7 +545,7 @@ const Layout: React.FC<{
                     })}
                   />
                 </button>
-                <div className='text-16px text-t-primary collapsed-hidden font-semibold'>Tomni</div>
+                <div className='text-16px text-t-primary collapsed-hidden font-semibold'>Tomny</div>
                 {isMobile && !collapsed && (
                   <button
                     type='button'

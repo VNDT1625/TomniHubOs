@@ -1,13 +1,13 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
 /**
  * Start the in-process Browser-Control MCP host and ensure the MCP catalog has
  * an `sse` server entry pointing at its loopback URL — so an agent (Claude Code
- * / ACP, aionrs, …) can connect and drive the live embedded browser.
+ * / ACP, tomnyagentic, …) can connect and drive the live embedded browser.
  *
  * Mirrors `process/testing/registerTestingMcp.ts`. The catalog entry is created
  * `enabled: false` (not auto-attached to every new chat): it is the

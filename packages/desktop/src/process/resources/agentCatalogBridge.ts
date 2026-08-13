@@ -14,8 +14,13 @@ import { createAssistantCatalogStore } from './assistantCatalogStore';
 import { createAgentCatalogStore } from './agentCatalogStore';
 
 const root = (): string => path.join(app.getPath('userData'), 'tomny-core');
-let assistants = createAssistantCatalogStore(path.join(root(), 'assistants.json'));
-let agents = createAgentCatalogStore(path.join(root(), 'agents.json'));
+type AssistantCatalogStore = ReturnType<typeof createAssistantCatalogStore>;
+type AgentCatalogStore = ReturnType<typeof createAgentCatalogStore>;
+let assistants: AssistantCatalogStore | undefined;
+let agents: AgentCatalogStore | undefined;
+const getAssistants = (): AssistantCatalogStore =>
+  (assistants ??= createAssistantCatalogStore(path.join(root(), 'getAssistants().json')));
+const getAgents = (): AgentCatalogStore => (agents ??= createAgentCatalogStore(path.join(root(), 'getAgents().json')));
 let assistantMigration: Promise<void> | undefined;
 let agentMigration: Promise<void> | undefined;
 let legacyCatalog: ReturnType<typeof readLegacyCatalog> | undefined;
@@ -30,67 +35,67 @@ const readLegacy = () => {
 };
 
 const migrateAssistants = async (): Promise<void> => {
-  if ((await assistants.list()).length > 0) return;
-  await assistants.importExisting((await readLegacy()).assistants);
+  if ((await getAssistants().list()).length > 0) return;
+  await getAssistants().importExisting((await readLegacy()).assistants);
 };
 const readyAssistants = async (): Promise<void> => {
   assistantMigration ??= migrateAssistants().catch((error) => {
     assistantMigration = undefined;
-    console.warn('[TomniAssistantCatalog] compatibility import deferred:', error);
+    console.warn('[TomnyAssistantCatalog] compatibility import deferred:', error);
   });
   await assistantMigration;
 };
 const migrateAgents = async (): Promise<void> => {
-  await agents.importLegacy((await readLegacy()).agents);
+  await getAgents().importLegacy((await readLegacy()).agents);
 };
 const readyAgents = async (): Promise<void> => {
   agentMigration ??= migrateAgents().catch((error) => {
     agentMigration = undefined;
-    console.warn('[TomniAgentCatalog] compatibility import deferred:', error);
+    console.warn('[TomnyAgentCatalog] compatibility import deferred:', error);
   });
   await agentMigration;
 };
 
 export const listReadyAssistants = async (): Promise<Assistant[]> => {
   await readyAssistants();
-  return assistants.list();
+  return getAssistants().list();
 };
 export const listReadyAgents = async (): Promise<AgentMetadata[]> => {
   await readyAgents();
-  return agents.list();
+  return getAgents().list();
 };
-export const createNativeAssistant = (input: Parameters<typeof assistants.create>[0]): Promise<Assistant> =>
-  assistants.create(input);
+export const createNativeAssistant = (input: Parameters<AssistantCatalogStore['create']>[0]): Promise<Assistant> =>
+  getAssistants().create(input);
 
 export const registerAgentCatalogBridge = (): void => {
   if (registered) return;
   registered = true;
   assistantChannels.list.provider(async () => {
     await readyAssistants();
-    return assistants.list();
+    return getAssistants().list();
   });
-  assistantChannels.create.provider((input) => assistants.create(input));
-  assistantChannels.update.provider((input) => assistants.update(input));
-  assistantChannels.delete.provider(({ id }) => assistants.remove(id));
-  assistantChannels.setState.provider((input) => assistants.setState(input));
-  assistantChannels.import.provider(({ assistants: rows }) => assistants.importMany(rows));
+  assistantChannels.create.provider((input) => getAssistants().create(input));
+  assistantChannels.update.provider((input) => getAssistants().update(input));
+  assistantChannels.delete.provider(({ id }) => getAssistants().remove(id));
+  assistantChannels.setState.provider((input) => getAssistants().setState(input));
+  assistantChannels.import.provider(({ assistants: rows }) => getAssistants().importMany(rows));
 
   agentChannels.getAvailableAgents.provider(async () => {
     await readyAgents();
-    return agents.list();
+    return getAgents().list();
   });
   agentChannels.refreshCustomAgents.provider(async () => {
     await readyAgents();
-    await agents.refresh();
+    await getAgents().refresh();
   });
-  agentChannels.testCustomAgent.provider((input) => agents.test(input));
-  agentChannels.createCustomAgent.provider((input) => agents.create(input));
-  agentChannels.updateCustomAgent.provider(({ id, ...input }) => agents.update(id, input));
-  agentChannels.deleteCustomAgent.provider(async ({ id }) => ({ deleted: await agents.remove(id) }));
-  agentChannels.setAgentEnabled.provider(({ id, enabled }) => agents.setEnabled(id, enabled));
+  agentChannels.testCustomAgent.provider((input) => getAgents().test(input));
+  agentChannels.createCustomAgent.provider((input) => getAgents().create(input));
+  agentChannels.updateCustomAgent.provider(({ id, ...input }) => getAgents().update(id, input));
+  agentChannels.deleteCustomAgent.provider(async ({ id }) => ({ deleted: await getAgents().remove(id) }));
+  agentChannels.setAgentEnabled.provider(({ id, enabled }) => getAgents().setEnabled(id, enabled));
   agentChannels.checkAgentHealth.provider(async ({ backend }) => {
     const started = Date.now();
-    const row = (await agents.list()).find((item) => item.id === backend || item.backend === backend);
+    const row = (await getAgents().list()).find((item) => item.id === backend || item.backend === backend);
     return row
       ? {
           available: row.available,
@@ -136,6 +141,6 @@ export const resetAgentCatalogBridgeForTests = (options?: {
   legacyCatalog = undefined;
   assistantMigration = undefined;
   agentMigration = undefined;
-  if (options?.assistantStore) assistants = options.assistantStore;
-  if (options?.agentStore) agents = options.agentStore;
+  assistants = options?.assistantStore;
+  agents = options?.agentStore;
 };

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  *
  * Main-window bounds persistence: restore the last-known size and position
@@ -102,7 +102,7 @@ export const attachWindowBoundsPersistence = (
     // boot-time snapshot.
     cachedBounds = bounds;
     const op = Promise.resolve(persist(bounds)).catch((error) => {
-      console.error('[AionUi] Failed to persist window bounds:', error);
+      console.error('[Tomny] Failed to persist window bounds:', error);
     });
     trackPersistedWrite(op);
   };

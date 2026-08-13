@@ -92,7 +92,12 @@ const KNOWN_PATTERNS: KnownPattern[] = [
   },
 ];
 
-const normalizeKey = (key: string): string => key.replace(/[^A-Za-z0-9]/g, '').toLowerCase();
+const normalizeKey = (key: string): string =>
+  key
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .replace(/[^A-Za-z0-9]/g, '')
+    .toLowerCase();
 
 const isHighConfidenceKey = (key: string): boolean => {
   const normalized = normalizeKey(key);
@@ -106,6 +111,9 @@ const isHighConfidenceKey = (key: string): boolean => {
     'password',
     'passwd',
     'passphrase',
+    'matkhau',
+    'matma',
+    'mapin',
     'clientsecret',
     'webhooksecret',
     'authtoken',
@@ -134,7 +142,14 @@ const isHighConfidenceKey = (key: string): boolean => {
 
 const inferKeyType = (key: string): SecretFindingType => {
   const normalized = normalizeKey(key);
-  if (normalized.includes('password') || normalized.endsWith('passwd') || normalized.endsWith('passphrase')) {
+  if (
+    normalized.includes('password') ||
+    normalized.endsWith('passwd') ||
+    normalized.endsWith('passphrase') ||
+    normalized.endsWith('matkhau') ||
+    normalized.endsWith('matma') ||
+    normalized.endsWith('mapin')
+  ) {
     return 'password';
   }
   if (normalized.includes('privatekey') || normalized.includes('signingkey') || normalized.includes('encryptionkey')) {
@@ -337,6 +352,16 @@ const collectProseValues = (input: string, candidates: Candidate[]): void => {
   }
 };
 
+const collectLocalizedCredentialValues = (input: string, candidates: Candidate[]): void => {
+  const localized =
+    /(^|[\r\n])(\s*)(mật\s*(?:khẩu|mã)|mat\s*(?:khau|ma)|mã\s*pin|ma\s*pin)\s*(?::|=|là|la)\s*([^\r\n]{4,})/giu;
+  for (const match of input.matchAll(localized)) {
+    if (match.index === undefined || !match[3] || !match[4]) continue;
+    const start = match.index + match[0].lastIndexOf(match[4]);
+    addStructuredCandidate(candidates, input, match[3], start, start + match[4].length, 130);
+  }
+};
+
 const collectAggressiveValues = (input: string, candidates: Candidate[]): void => {
   const value =
     /(?<![A-Za-z0-9])(?=[A-Za-z0-9+/_=-]{24,}(?![A-Za-z0-9]))(?=[^\s]*[A-Za-z])(?=[^\s]*\d)[A-Za-z0-9+/_=-]{24,}(?![A-Za-z0-9])/g;
@@ -433,6 +458,7 @@ const redact = (input: string, aggressive: boolean): SecretFirewallResult => {
   collectConnectionStrings(scanInput, candidates);
   collectUrlCredentials(scanInput, candidates);
   collectProseValues(scanInput, candidates);
+  collectLocalizedCredentialValues(scanInput, candidates);
   collectKnownPatterns(scanInput, candidates);
   if (aggressive) collectAggressiveValues(scanInput, candidates);
 

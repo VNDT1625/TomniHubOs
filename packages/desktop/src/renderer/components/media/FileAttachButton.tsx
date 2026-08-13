@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -139,7 +139,7 @@ const FileAttachButton: React.FC<FileAttachButtonProps> = ({
         shape='circle'
         icon={plusIcon}
         onClick={openFileSelector}
-        data-testid='aionrs-attach-folder-btn'
+        data-testid='tomnyagentic-attach-folder-btn'
       />
     );
   }
@@ -313,7 +313,7 @@ const FileAttachButton: React.FC<FileAttachButtonProps> = ({
           icon={plusIcon}
           loading={uploading}
           disabled={uploading}
-          data-testid='aionrs-attach-folder-btn'
+          data-testid='tomnyagentic-attach-folder-btn'
         />
       </Trigger>
       <input
@@ -322,7 +322,7 @@ const FileAttachButton: React.FC<FileAttachButtonProps> = ({
         multiple
         style={{ display: 'none' }}
         onChange={handleLocalFileChange}
-        data-testid='aionrs-file-upload-input'
+        data-testid='tomnyagentic-file-upload-input'
       />
     </>
   );

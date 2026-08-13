@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -150,7 +150,7 @@ const parseSubtitle = (name: string, body: string): string => {
 export const createYtDlpTranscript = (deps: YtDlpTranscriptDeps = {}): IYtDlpTranscript => {
   const resolveBinary = deps.resolveBinary ?? (() => findExternalTool('yt-dlp'));
   const spawn = deps.spawn ?? defaultSpawn;
-  const makeTempDir = deps.makeTempDir ?? (() => mkdtemp(join(tmpdir(), 'aionui-ytdlp-')));
+  const makeTempDir = deps.makeTempDir ?? (() => mkdtemp(join(tmpdir(), 'tomny-ytdlp-')));
   const preferLangs = deps.preferLangs ?? DEFAULT_PREFER_LANGS;
   const maxChars = deps.maxChars ?? DEFAULT_MAX_CHARS;
 

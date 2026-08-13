@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -22,10 +22,11 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { fileWatchStartMock, fileWatchStopMock, listDirMock, onFileChangedMock, scanRepoMock, showOpenMock } =
+const { fileWatchStartMock, fileWatchStopMock, getDefaultRootMock, listDirMock, onFileChangedMock, scanRepoMock, showOpenMock } =
   vi.hoisted(() => ({
     fileWatchStartMock: vi.fn(),
     fileWatchStopMock: vi.fn(),
+    getDefaultRootMock: vi.fn(),
     listDirMock: vi.fn(),
     onFileChangedMock: vi.fn(),
     scanRepoMock: vi.fn(),
@@ -34,6 +35,7 @@ const { fileWatchStartMock, fileWatchStopMock, listDirMock, onFileChangedMock, s
 
 vi.mock('@renderer/pages/studio/ide/ideClient', () => ({
   ideClient: {
+    getDefaultRoot: getDefaultRootMock,
     listDir: listDirMock,
     scanRepo: scanRepoMock,
     fileWatchStart: fileWatchStartMock,
@@ -66,6 +68,7 @@ describe('useIdeWorkspace', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
+    getDefaultRootMock.mockResolvedValue(null);
     listDirMock.mockResolvedValue(okDir);
     scanRepoMock.mockResolvedValue(okScan);
     fileWatchStartMock.mockResolvedValue(okBool);

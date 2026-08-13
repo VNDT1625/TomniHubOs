@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -56,7 +56,7 @@ const resolveFetch = (options?: WebSearchOptions): FetchLike | undefined =>
 /** Collect DuckDuckGo abstract + related-topic results (best-effort). */
 const searchDuckDuckGo = async (query: string, fetchImpl: FetchLike): Promise<WebSearchResult[]> => {
   try {
-    const url = `${DDG_URL}?q=${encodeURIComponent(query)}&format=json&no_redirect=1&no_html=1&t=aionui`;
+    const url = `${DDG_URL}?q=${encodeURIComponent(query)}&format=json&no_redirect=1&no_html=1&t=tomny`;
     const res = await fetchImpl(url, { headers: { Accept: 'application/json' } });
     if (!res.ok) return [];
     const body = (await res.json()) as {

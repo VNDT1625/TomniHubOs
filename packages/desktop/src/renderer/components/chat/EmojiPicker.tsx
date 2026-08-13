@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -429,7 +429,7 @@ const EMOJI_CATEGORIES = {
 
 type CategoryKey = keyof typeof EMOJI_CATEGORIES;
 
-const RECENT_EMOJIS_KEY = 'aionui.emoji.recent';
+const RECENT_EMOJIS_KEY = 'tomny.emoji.recent';
 const MAX_RECENT_EMOJIS = 24;
 
 // Arco Design Popover position types

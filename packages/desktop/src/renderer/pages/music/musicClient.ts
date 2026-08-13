@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -17,7 +17,7 @@
  */
 
 import { bridge } from '@office-ai/platform';
-import type { Project, ProjectSummary, Sample } from '@aionui/music-core';
+import type { Project, ProjectSummary, Sample } from '@tomny/music-core';
 import type { LoadSampleResult, MusicResult, RenderResult } from '@process/music/musicBridge';
 
 const MUSIC_CHANNELS = {

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  *
  * Unit tests for the "Understand Anything" knowledge-graph builder. Every case
@@ -64,7 +64,7 @@ describe('extractSymbols', () => {
       '',
       'function readName() { return "x"; }',
       '',
-      'export const DEFAULT_NAME = "aion";',
+      'export const DEFAULT_NAME = "tomny";',
       '',
     ].join('\n');
 
@@ -122,21 +122,21 @@ describe('inferLayer', () => {
 
 describe('resolveSummaryConcurrency', () => {
   it('uses explicit options, env override, then model heuristics', () => {
-    const previous = process.env.AIONUI_UNDERSTAND_SUMMARY_CONCURRENCY;
+    const previous = process.env.TOMNY_UNDERSTAND_SUMMARY_CONCURRENCY;
     try {
       expect(resolveSummaryConcurrency('claude-opus', 6)).toBe(6);
       expect(resolveSummaryConcurrency('claude-opus', 99)).toBe(12);
-      process.env.AIONUI_UNDERSTAND_SUMMARY_CONCURRENCY = '9';
+      process.env.TOMNY_UNDERSTAND_SUMMARY_CONCURRENCY = '9';
       expect(resolveSummaryConcurrency('claude-opus')).toBe(9);
-      delete process.env.AIONUI_UNDERSTAND_SUMMARY_CONCURRENCY;
+      delete process.env.TOMNY_UNDERSTAND_SUMMARY_CONCURRENCY;
       expect(resolveSummaryConcurrency('claude-opus')).toBe(3);
       expect(resolveSummaryConcurrency('gemini-flash')).toBe(6);
       expect(resolveSummaryConcurrency('gpt-5')).toBe(4);
     } finally {
       if (previous === undefined) {
-        delete process.env.AIONUI_UNDERSTAND_SUMMARY_CONCURRENCY;
+        delete process.env.TOMNY_UNDERSTAND_SUMMARY_CONCURRENCY;
       } else {
-        process.env.AIONUI_UNDERSTAND_SUMMARY_CONCURRENCY = previous;
+        process.env.TOMNY_UNDERSTAND_SUMMARY_CONCURRENCY = previous;
       }
     }
   });
@@ -155,19 +155,19 @@ describe('resolveEffectiveSummaryConcurrency', () => {
 
 describe('resolveSummaryBatchSize', () => {
   it('uses explicit options, env override, and a larger production default', () => {
-    const previous = process.env.AIONUI_UNDERSTAND_SUMMARY_BATCH_SIZE;
+    const previous = process.env.TOMNY_UNDERSTAND_SUMMARY_BATCH_SIZE;
     try {
       expect(resolveSummaryBatchSize(7)).toBe(7);
       expect(resolveSummaryBatchSize(99)).toBe(24);
-      process.env.AIONUI_UNDERSTAND_SUMMARY_BATCH_SIZE = '16';
+      process.env.TOMNY_UNDERSTAND_SUMMARY_BATCH_SIZE = '16';
       expect(resolveSummaryBatchSize()).toBe(16);
-      delete process.env.AIONUI_UNDERSTAND_SUMMARY_BATCH_SIZE;
+      delete process.env.TOMNY_UNDERSTAND_SUMMARY_BATCH_SIZE;
       expect(resolveSummaryBatchSize()).toBe(12);
     } finally {
       if (previous === undefined) {
-        delete process.env.AIONUI_UNDERSTAND_SUMMARY_BATCH_SIZE;
+        delete process.env.TOMNY_UNDERSTAND_SUMMARY_BATCH_SIZE;
       } else {
-        process.env.AIONUI_UNDERSTAND_SUMMARY_BATCH_SIZE = previous;
+        process.env.TOMNY_UNDERSTAND_SUMMARY_BATCH_SIZE = previous;
       }
     }
   });
@@ -377,7 +377,7 @@ describe('createKnowledgeGraphBuilder.build', () => {
     };
 
     const forward = await buildStructural(files);
-    const reversed = await buildStructural([...files].reverse());
+    const reversed = await buildStructural([...files].toReversed());
     const expected: KnowledgeEdge[] = [
       {
         from: 'packages/desktop/src/process/services/chat/bridge.ts',
@@ -881,7 +881,7 @@ describe('graph freshness', () => {
     const root = await import('node:fs/promises').then(async (fs) => {
       const os = await import('node:os');
       const path = await import('node:path');
-      const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'aionui-graph-freshness-'));
+      const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'tomny-graph-freshness-'));
       await fs.mkdir(path.join(dir, '.tomni', 'understand'), { recursive: true });
       await fs.writeFile(
         path.join(dir, '.tomni', 'understand', 'stale.json'),
@@ -910,9 +910,9 @@ describe('graph freshness', () => {
     const root = await import('node:fs/promises').then(async (fs) => {
       const os = await import('node:os');
       const path = await import('node:path');
-      const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'aionui-graph-freshness-'));
-      await fs.mkdir(path.join(dir, '.aionui', 'understand'), { recursive: true });
-      await fs.writeFile(path.join(dir, '.aionui', 'understand', 'stale.json'), '{not-json');
+      const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'tomny-graph-freshness-'));
+      await fs.mkdir(path.join(dir, '.tomny', 'understand'), { recursive: true });
+      await fs.writeFile(path.join(dir, '.tomny', 'understand', 'stale.json'), '{not-json');
       return dir;
     });
     const graph = await createKnowledgeGraphBuilder({

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -251,7 +251,7 @@ const AgentModeSelector: React.FC<AgentModeSelectorProps> = ({
             <div
               className='flex items-center gap-8px'
               data-mode-value={mode.value}
-              data-testid={`aionrs-mode-option-${mode.value}`}
+              data-testid={`tomnyagentic-mode-option-${mode.value}`}
             >
               {current_mode === mode.value && <span className='text-primary'>✓</span>}
               <span className={current_mode !== mode.value ? 'ml-16px' : ''}>{getDisplayModeLabel(mode)}</span>

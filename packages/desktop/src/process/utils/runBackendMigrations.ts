@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -369,7 +369,6 @@ const MIGRATION_STEPS: Array<{
   name: string;
   run: (configFile: ConfigFile) => Promise<MigrationStepResult>;
 }> = [
-
   { name: 'migrateConfigStorage', run: async (configFile) => (await migrateConfigStorage(configFile), true) },
   { name: 'migrateProviders', run: async (configFile) => (await migrateProviders(configFile), true) },
   {
@@ -486,7 +485,7 @@ const getBootstrapAgents = (): BootstrapAgentEntry[] => [
     yolo_id: 'yolo',
   },
   {
-    name: 'AionUi Strict Claude',
+    name: 'Tomny Strict Claude',
     command: process.execPath,
     args: [getBuiltinMcpScriptPath('strict-claude-acp')],
     icon: 'ai-china/deepseek.svg',
@@ -560,11 +559,11 @@ async function ensureBootstrapAgents(): Promise<boolean> {
     const raw = await httpRequest<unknown>('GET', '/api/agents');
     existing = (Array.isArray(raw) ? raw : []) as MinimalAgentRow[];
   } catch (error) {
-    console.warn('[AionUi] Bootstrap agents: failed to fetch existing agents, will retry next launch', error);
+    console.warn('[Tomny] Bootstrap agents: failed to fetch existing agents, will retry next launch', error);
     return false;
   }
 
-  console.info(`[AionUi] Bootstrap agents: found ${existing.length} existing agent(s)`);
+  console.info(`[Tomny] Bootstrap agents: found ${existing.length} existing agent(s)`);
 
   let changed = 0;
 
@@ -574,13 +573,13 @@ async function ensureBootstrapAgents(): Promise<boolean> {
 
     if (matchedAgent) {
       if (!needsBootstrapAgentUpdate(matchedAgent, entry)) {
-        console.info(`[AionUi] Bootstrap agents: "${entry.name}" already registered, skipping`);
+        console.info(`[Tomny] Bootstrap agents: "${entry.name}" already registered, skipping`);
         continue;
       }
 
       if (matchedAgent.agent_source && matchedAgent.agent_source !== 'custom') {
         console.info(
-          `[AionUi] Bootstrap agents: "${entry.name}" is managed by source "${matchedAgent.agent_source}", skipping update`
+          `[Tomny] Bootstrap agents: "${entry.name}" is managed by source "${matchedAgent.agent_source}", skipping update`
         );
         continue;
       }
@@ -588,10 +587,10 @@ async function ensureBootstrapAgents(): Promise<boolean> {
       try {
         // eslint-disable-next-line no-await-in-loop -- bootstrap migrations intentionally run sequentially at startup.
         await httpRequest<unknown>('PUT', `/api/agents/custom/${matchedAgent.id}`, payload);
-        console.info(`[AionUi] Bootstrap agents: updated "${entry.name}" (command=${entry.command})`);
+        console.info(`[Tomny] Bootstrap agents: updated "${entry.name}" (command=${entry.command})`);
         changed += 1;
       } catch (error) {
-        console.warn(`[AionUi] Bootstrap agents: failed to update "${entry.name}"`, error);
+        console.warn(`[Tomny] Bootstrap agents: failed to update "${entry.name}"`, error);
       }
       continue;
     }
@@ -599,26 +598,25 @@ async function ensureBootstrapAgents(): Promise<boolean> {
     try {
       // eslint-disable-next-line no-await-in-loop -- bootstrap migrations intentionally run sequentially at startup.
       const result = await httpRequest<unknown>('POST', '/api/agents/custom', payload);
-      console.info(`[AionUi] Bootstrap agents: registered "${entry.name}" (command=${entry.command})`, result);
+      console.info(`[Tomny] Bootstrap agents: registered "${entry.name}" (command=${entry.command})`, result);
       changed += 1;
     } catch (error) {
-      console.warn(`[AionUi] Bootstrap agents: failed to register "${entry.name}"`, error);
+      console.warn(`[Tomny] Bootstrap agents: failed to register "${entry.name}"`, error);
     }
   }
 
   // Trigger a refresh so the backend re-scans PATH for the new agents
   if (changed > 0) {
-    console.info(`[AionUi] Bootstrap agents: changed ${changed} agent(s), triggering refresh`);
+    console.info(`[Tomny] Bootstrap agents: changed ${changed} agent(s), triggering refresh`);
     try {
       await httpRequest<void>('POST', '/api/agents/refresh');
     } catch (error) {
-      console.warn('[AionUi] Bootstrap agents: refresh failed (non-fatal)', error);
+      console.warn('[Tomny] Bootstrap agents: refresh failed (non-fatal)', error);
     }
   }
 
   return true;
 }
-
 
 export async function runBackendMigrations(configFile: ConfigFile): Promise<void> {
   await CLEANUP_STEPS.reduce<Promise<void>>(async (previous, step) => {
@@ -626,9 +624,9 @@ export async function runBackendMigrations(configFile: ConfigFile): Promise<void
     const start = Date.now();
     try {
       await step.run();
-      console.info(`[AionUi] Backend migration step completed: ${step.name} (${Date.now() - start}ms)`);
+      console.info(`[Tomny] Backend migration step completed: ${step.name} (${Date.now() - start}ms)`);
     } catch (error) {
-      console.error(`[AionUi] Backend migration step failed: ${step.name} (${Date.now() - start}ms)`, error);
+      console.error(`[Tomny] Backend migration step failed: ${step.name} (${Date.now() - start}ms)`, error);
     }
   }, Promise.resolve());
 
@@ -639,14 +637,13 @@ export async function runBackendMigrations(configFile: ConfigFile): Promise<void
       const completed = await step.run(configFile);
       const elapsed = Date.now() - start;
       if (!completed) {
-        console.warn(`[AionUi] Backend migration step incomplete: ${step.name} (${elapsed}ms)`);
+        console.warn(`[Tomny] Backend migration step incomplete: ${step.name} (${elapsed}ms)`);
         return;
       }
-      console.info(`[AionUi] Backend migration step completed: ${step.name} (${elapsed}ms)`);
+      console.info(`[Tomny] Backend migration step completed: ${step.name} (${elapsed}ms)`);
     } catch (error) {
       const elapsed = Date.now() - start;
-      console.error(`[AionUi] Backend migration step failed: ${step.name} (${elapsed}ms)`, error);
+      console.error(`[Tomny] Backend migration step failed: ${step.name} (${elapsed}ms)`, error);
     }
   }, Promise.resolve());
-
 }

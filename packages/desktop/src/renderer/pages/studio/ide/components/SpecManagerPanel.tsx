@@ -1,13 +1,13 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
 /**
  * `SpecManagerPanel` — the spec-driven workflow command center for the IDE.
  *
- * Reads the active `.aionui/specs/<slug>/` directory and renders a Kiro-grade
+ * Reads the active `.tomny/specs/<slug>/` directory and renders a Kiro-grade
  * health view across three dimensions:
  *  1. EARS requirements validation (how normative + well-shaped each criterion is),
  *  2. Req↔Task↔Test traceability (which requirements a task covers / verifies),

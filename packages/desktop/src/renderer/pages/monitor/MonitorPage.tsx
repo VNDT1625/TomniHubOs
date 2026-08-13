@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -14,11 +14,11 @@
  *    counts and known-fix markers (criteria 6.1 / 6.2 / 6.9).
  *
  * Desktop-only (the monitor is a Main-process service), degrading to a notice in
- * WebUI mode — mirrors the other Tomni pages.
+ * WebUI mode — mirrors the other Tomny pages.
  */
 
 import { isElectronDesktop } from '@/renderer/utils/platform';
-import AionScrollArea from '@/renderer/components/base/AionScrollArea';
+import TomnyScrollArea from '@/renderer/components/base/TomnyScrollArea';
 import { useSettingsViewMode } from '@/renderer/components/settings/SettingsModal/settingsViewContext';
 import { Button, Empty, Tag } from '@arco-design/web-react';
 import { Bug, CheckOne, Refresh, Tool } from '@icon-park/react';
@@ -64,7 +64,7 @@ const MonitorPage: React.FC = () => {
         </Button>
       </header>
 
-      <AionScrollArea className='flex-1 min-h-0 pb-16px' disableOverflow={isPageMode}>
+      <TomnyScrollArea className='flex-1 min-h-0 pb-16px' disableOverflow={isPageMode}>
         {status === 'unavailable' ? (
           <div className='p-12px text-12px text-t-tertiary'>{t('monitor.unavailable')}</div>
         ) : (
@@ -131,7 +131,7 @@ const MonitorPage: React.FC = () => {
             </section>
           </div>
         )}
-      </AionScrollArea>
+      </TomnyScrollArea>
     </div>
   );
 };

@@ -6,7 +6,13 @@ export {
 export type { FileAttachmentArtifactStoreOptions } from './fileStore';
 
 export { resolveAttachmentDelivery } from './delivery';
-export type { ResolvedAgentToolAttachment, ResolvedAttachmentDelivery, ResolvedNativeAttachment } from './delivery';
+export type {
+  AttachmentImageSecurityScanner,
+  ResolveAttachmentDeliveryOptions,
+  ResolvedAgentToolAttachment,
+  ResolvedAttachmentDelivery,
+  ResolvedNativeAttachment,
+} from './delivery';
 
 export { TOMNY_ANALYZE_IMAGE_TOOL, planAttachmentDelivery } from './routing';
 export { redactAttachmentArtifact, validateAttachmentEnvelope } from './validation';

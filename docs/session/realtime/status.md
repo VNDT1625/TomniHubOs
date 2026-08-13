@@ -1,7 +1,7 @@
 # Status — Realtime Knowledge + Smart Terminal (handoff)
 
 > Cập nhật: 2026-06-09. Đọc kèm `docs/session/realtime/memory.md` + spec
-> `.aionui/specs/{realtime-knowledge,smart-terminal}/`.
+> `.tomni/specs/{realtime-knowledge,smart-terminal}/`.
 > File này nói rõ: ĐÃ xong, ĐANG dở, CHƯA bắt đầu, và lỗi/giới hạn — để agent khác tiếp tục.
 
 ## ✅ Đã xong & verify (không cần làm lại)
@@ -9,7 +9,7 @@
 ### Realtime Knowledge (RTK) — Phase 1–4 hoàn chỉnh
 
 - Backend `process/knowledge/realtime/` (10 file) + `rtkEmbedder`/`rtkWiring`/`realtimeKnowledgeBridge`
-  - MCP `aionui-realtime-knowledge` (register ở `runBackendMigrations`). 4 cơ chế: (a) vector lookup +
+  - MCP `tomni-realtime-knowledge` (register ở `runBackendMigrations`). 4 cơ chế: (a) vector lookup +
     freshness/sources, (b) scheduler refresh hết hạn, (c) staleDetector + verify-trước-khi-ghi,
     (d) query→lookup→ground→verify→update. Guardrail FR7 + relation graph (relate supersedes/contradicts).
 - Renderer inspector `pages/knowledge/` (`/settings/knowledge`, desktop-only) + i18n `realtimeKnowledge`
@@ -58,7 +58,7 @@ buildConfirmPrompt(from,to,{tag,question}))` + set awaiting. Khi remap=null → 
 3. **i18n `smartTerminal.json`** (9 locale): thêm `smartFix.tag` ("Smart Fix"), `smartFix.confirmQuestion`
    (vd "run `{{program}}`? (y/N)"), `smartFix.skipped`, `smartFix.running` ({{program}}). Rồi
    `generate-i18n-types` + `check-i18n`.
-4. **Toggle UI + persist**: dùng `localStorage` key (vd `aionui.terminal.smartFixAutoRerun`, mặc định
+4. **Toggle UI + persist**: dùng `localStorage` key (vd `tomni.terminal.smartFixAutoRerun`, mặc định
    false) — KHÔNG cần config bridge. Thêm `Switch` (Arco) ở header `TerminalPage.tsx` (i18n
    `smartTerminal.autoRerunLabel`). `useTerminalIntelligence` hoặc `TerminalPage` đọc localStorage →
    truyền `autoConfirm` xuống `TerminalView`.

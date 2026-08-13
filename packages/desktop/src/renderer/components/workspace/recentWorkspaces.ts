@@ -1,10 +1,10 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
-export const DEFAULT_RECENT_WS_KEY = 'aionui:recent-workspaces';
+export const DEFAULT_RECENT_WS_KEY = 'tomny:recent-workspaces';
 const MAX_RECENT_WORKSPACES = 5;
 
 export const getRecentWorkspaces = (storageKey: string = DEFAULT_RECENT_WS_KEY): string[] => {

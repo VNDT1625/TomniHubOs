@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -112,7 +112,7 @@ const makeReplica = async (
   clientId: string,
   initial?: Record<string, string>
 ): Promise<{ root: string; replica: CloudWorkspaceReplica }> => {
-  const parent = await mkdtemp(path.join(tmpdir(), `aionui-replica-${clientId}-`));
+  const parent = await mkdtemp(path.join(tmpdir(), `tomny-replica-${clientId}-`));
   tempPaths.push(parent);
   const root = path.join(parent, 'repo');
   const dataPath = path.join(parent, 'state');

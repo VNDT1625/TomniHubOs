@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -19,7 +19,7 @@
  *
  * Reads files directly (Main-process Node.js); the model call mirrors
  * `scenarioGenerator.ts` / `companyGenerator.ts` (provider list from
- * native Tomni provider catalog, direct `POST /chat/completions`). Nothing is hardcoded;
+ * native Tomny provider catalog, direct `POST /chat/completions`). Nothing is hardcoded;
  * a clear error is thrown when no model is configured.
  *
  * Process boundary: Main-process (Node.js) module. No DOM APIs.

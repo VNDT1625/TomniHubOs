@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  *
  * 统一的 Agent Logo 映射工具
@@ -21,7 +21,7 @@ import tomnyAgenticIcon from '@/renderer/assets/tomny-agentic-icon.svg';
  * Note: keys are lowercase, supports multiple variants (e.g., openclaw-gateway and openclaw)
  */
 const AGENT_LOGO_PATH_MAP = {
-  aionrs: 'brand/aion.svg',
+  tomnyrs: 'brand/tomny.svg',
   claude: 'ai-major/claude.svg',
   gemini: 'ai-major/gemini.svg',
   qwen: 'ai-china/qwen.svg',
@@ -47,7 +47,7 @@ const AGENT_LOGO_PATH_MAP = {
   antigravity: 'tools/antigravity.svg',
 } as const satisfies Record<string, string>;
 
-const TOMNY_AGENTIC_ALIASES = new Set(['aionrs', 'tomny', 'tomny-agentic', 'tomny agentic']);
+const TOMNY_AGENTIC_ALIASES = new Set(['tomnyrs', 'tomny', 'tomny-agentic', 'tomny agentic']);
 const OPEN_CODE_LIGHT_FILE_NAME = 'opencode-light.svg';
 const OPEN_CODE_DARK_FILE_NAME = 'opencode-dark.svg';
 

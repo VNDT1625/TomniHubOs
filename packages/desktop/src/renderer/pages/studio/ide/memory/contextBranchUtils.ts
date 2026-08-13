@@ -1,9 +1,9 @@
-import type { AionrsContextBranch } from '@/common';
+import type { TomnyAgenticContextBranch } from '@/common';
 
 const MAX_CONTEXT_BRANCH_CHARS = 8_000;
 
-/** Validate the same branch invariants enforced by AionCore before persistence. */
-export const areContextBranchesValid = (branches: readonly AionrsContextBranch[]): boolean => {
+/** Validate the same branch invariants enforced by the legacy core before persistence. */
+export const areContextBranchesValid = (branches: readonly TomnyAgenticContextBranch[]): boolean => {
   const ids = new Set<string>();
   return branches.every((branch) => {
     const id = branch.id.trim();

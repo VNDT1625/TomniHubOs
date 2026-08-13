@@ -143,7 +143,7 @@ Omni поставляется с полноценным движком ИИ-аг
 
 Если вы уже используете Claude Code, Codex, Hermes Agent или OpenClaw, Omni автоматически обнаружит их и позволит работать со всеми ними вместе со встроенным агентом.
 
-**Поддерживаемые агенты:** Встроенный агент (без настройки) • Claude Code • Codex • Qwen Code • Goose AI • OpenClaw • Augment Code • CodeBuddy • Kimi CLI • OpenCode • Factory Droid • GitHub Copilot • Qoder CLI • Mistral Vibe • Nanobot • Tomni Agentic (aionrs, Rust-бэкенд-сервис, поставляемый с Omni) • Snow CLI • Hermes Agent • Cursor Agent и другие
+**Поддерживаемые агенты:** Встроенный агент (без настройки) • Claude Code • Codex • Qwen Code • Goose AI • OpenClaw • Augment Code • CodeBuddy • Kimi CLI • OpenCode • Factory Droid • GitHub Copilot • Qoder CLI • Mistral Vibe • Nanobot • Tomny Agentic (tomnirs, Rust-бэкенд-сервис, поставляемый с Omni) • Snow CLI • Hermes Agent • Cursor Agent и другие
 
 <p align="center">
   <img src="./resources/multi-agent支持openclaw.gif" alt="Multi-Agent Cowork" width="800">
@@ -163,8 +163,8 @@ Omni поставляется с полноценным движком ИИ-аг
   <img src="../../resources/Omni_team.gif" alt="Team Mode overview" width="800">
 </p>
 
-- **Параллельное выполнение нескольких агентов** — Leader разбивает задачи на подзадачи и делегирует параллельно работающим Teammate-агентам; каждый Teammate использует свою модель через ACP (Agent Communication Protocol, слой координации мультиагентности Omni), Gemini или Aionrs
-- **Оркестрация Leader** — Leader назначает, отслеживает и агрегирует результаты; поддерживаемые бэкенды: Claude Code, Codex, Hermes Agent, Gemini, Snow CLI, Tomni Agentic
+- **Параллельное выполнение нескольких агентов** — Leader разбивает задачи на подзадачи и делегирует параллельно работающим Teammate-агентам; каждый Teammate использует свою модель через ACP (Agent Communication Protocol, слой координации мультиагентности Omni), Gemini или Tomnirs
+- **Оркестрация Leader** — Leader назначает, отслеживает и агрегирует результаты; поддерживаемые бэкенды: Claude Code, Codex, Hermes Agent, Gemini, Snow CLI, Tomny Agentic
 - **Изолированное рабочее пространство команды** — все агенты совместно используют одну папку; у каждого есть свой диалог подтверждения разрешений с бейджем на боковой панели для ожидающих подтверждений
 
 <details>
@@ -173,7 +173,7 @@ Omni поставляется с полноценным движком ИИ-аг
 <br>
 
 - **Общее рабочее пространство** — все агенты читают/записывают одну папку; файловая панель остаётся видимой на протяжении всего процесса
-- **Поддерживаемые бэкенды** — Claude Code, Codex, Gemini, Snow CLI, Tomni Agentic (aionrs); другие ACP-бэкенды с `mcpCapabilities.stdio` поддерживаются автоматически
+- **Поддерживаемые бэкенды** — Claude Code, Codex, Gemini, Snow CLI, Tomny Agentic (tomnirs); другие ACP-бэкенды с `mcpCapabilities.stdio` поддерживаются автоматически
 - **Динамическое масштабирование** — добавляйте или удаляйте Teammate-агентов во время работы команды; молчащие агенты автоматически переходят в статус failed с возможностью удаления в один клик
 - **Детальные разрешения** — у каждого агента есть собственный диалог подтверждения разрешений; бейдж на боковой панели показывает ожидающие подтверждения
 - **Обмен файлами** — Leader может передавать вложения файлов Teammate-агентам

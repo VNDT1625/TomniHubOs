@@ -24,7 +24,7 @@ describe('persistent development services', () => {
   it('matches the Electron development data directory on Windows by default', () => {
     const dataDir = manager.resolveDesktopDataDir({ APPDATA: 'D:\\Profiles\\Roaming' }, 'win32', 'D:\\Profiles');
 
-    expect(dataDir).toBe(path.join('D:\\Profiles\\Roaming', 'AionUi-Dev', 'aionui'));
+    expect(dataDir).toBe(path.join('D:\\Profiles\\Roaming', 'Tomny-Dev', 'tomny'));
   });
 
   it('rejects privileged and invalid port overrides', () => {

@@ -48,7 +48,7 @@ afterEach(async () => {
   await Promise.all(directories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })));
 });
 
-describe('Tomni gateway WebUI auth routes', () => {
+describe('Tomny gateway WebUI auth routes', () => {
   it('seeds credentials internally, logs in, verifies the cookie, and logs out', async () => {
     const { server } = await harness();
     const reset = await gatewayFetch(server, '/api/webui/reset-password', {

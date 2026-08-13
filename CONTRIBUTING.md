@@ -17,7 +17,7 @@ Tomni Agentic uses `0.0.x` versions for updater and distribution testing:
 - `0.0.0` is the clean baseline installer.
 - `0.0.1`, `0.0.2`, and later patch versions are update-test releases.
 - `0.1.0` is the first official public release.
-- Releases, update metadata, documentation, and downloads must use only `VNDT1625/OmniAgent`. Do not add AionUi or iOfficeAI endpoints.
+- Releases, update metadata, documentation, and downloads must use only `VNDT1625/OmniAgent`. Do not add TomniHubOS or iOfficeAI endpoints.
 
 ## Rule 1: Atomic PRs
 

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -157,7 +157,7 @@ const saveEditedFile = async (session: EditSession, downloadUrl: string): Promis
   // temp file first, then atomically rename so a crash mid-write can't corrupt
   // the original.
   if (res.body) {
-    const tmpPath = `${session.filePath}.aionui-tmp-${randomBytes(6).toString('hex')}`;
+    const tmpPath = `${session.filePath}.tomny-tmp-${randomBytes(6).toString('hex')}`;
     try {
       await pipeline(res.body as unknown as NodeJS.ReadableStream, createWriteStream(tmpPath));
       await fs.rename(tmpPath, session.filePath);

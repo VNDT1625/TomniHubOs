@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -102,7 +102,7 @@ export type RepoSecretAgentService = {
 };
 
 /** Canonical MCP server name for the built-in IDE server. */
-export const BUILTIN_IDE_NAME = 'aionui-ide';
+export const BUILTIN_IDE_NAME = 'tomny-ide';
 
 /** Stable identifier (parity with the other built-in server constants). */
 export const BUILTIN_IDE_ID = 'builtin-ide';
@@ -728,7 +728,7 @@ const RESEARCH_FLOW_STAGE_FOCUS: Record<ResearchFlowStage, string> = {
   'service-runtime':
     'NativeConversationService runtime.start repository.saveMessage handleCoreEvent validate business service finish error',
   persistence: 'NativeConversationRepository saveMessage writeFile snapshot repository load update transaction',
-  'response-ui': 'useAionrsMessage responseStream.on addOrUpdateMessage listener state render completion error',
+  'response-ui': 'useTomnyAgenticMessage responseStream.on addOrUpdateMessage listener state render completion error',
 };
 
 const RESEARCH_FLOW_ANCHOR_QUERIES = [
@@ -950,7 +950,7 @@ const RESEARCH_FLOW_STAGE_ANCHOR_PATTERN: Record<ResearchFlowStage, RegExp> = {
   'process-bridge': /registerNativeConversationBridge|service\.send|sendMessage\.provider/i,
   'service-runtime': /NativeConversationService|runtime\.start|repository\.saveMessage|handleCoreEvent/i,
   persistence: /NativeConversationRepository|saveMessage|writeFile|snapshot/i,
-  'response-ui': /useAionrsMessage|responseStream\.on|addOrUpdateMessage|turnCompleted/i,
+  'response-ui': /useTomnyAgenticMessage|responseStream\.on|addOrUpdateMessage|turnCompleted/i,
 };
 
 const RESEARCH_FLOW_STAGE_SOURCE_ANCHORS: Record<ResearchFlowStage, string[]> = {

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -313,7 +313,7 @@ const FeedbackReportModal: React.FC<FeedbackReportModalProps> = ({
       className='w-[min(600px,calc(100vw-32px))] max-w-600px rd-16px'
       autoFocus={false}
       // The feedback modal is global and may be opened from inside another
-      // AionModal (e.g. the Agent editor). Arco's default z-index stacks
+      // TomnyModal (e.g. the Agent editor). Arco's default z-index stacks
       // modals in mount order, which leaves the feedback modal under the
       // pre-existing modal when both are open. Bump wrap+mask above the
       // standard 1001 so feedback always appears on top.

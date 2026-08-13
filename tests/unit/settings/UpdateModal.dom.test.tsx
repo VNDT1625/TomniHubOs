@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -41,7 +41,7 @@ vi.mock('react-i18next', () => ({
   }),
 }));
 
-vi.mock('@/renderer/components/base/AionModal', () => ({
+vi.mock('@/renderer/components/base/TomnyModal', () => ({
   default: ({ visible, children }: { visible: boolean; children: React.ReactNode }) =>
     visible ? <div data-testid='update-modal'>{children}</div> : null,
 }));
@@ -101,7 +101,7 @@ const latestRelease = {
 
 const openUpdateModal = async (): Promise<void> => {
   render(<UpdateModal />);
-  window.dispatchEvent(new Event('aionui-open-update-modal'));
+  window.dispatchEvent(new Event('tomny-open-update-modal'));
   await screen.findByTestId('update-modal');
 };
 
@@ -114,7 +114,7 @@ describe('UpdateModal download flow', () => {
     mocks.ipcBridge.autoUpdate.download.invoke.mockResolvedValue({ success: true });
     mocks.ipcBridge.update.download.invoke.mockResolvedValue({
       success: true,
-      data: { downloadId: 'manual-download', file_path: 'C:/Temp/AionUi.exe' },
+      data: { downloadId: 'manual-download', file_path: 'C:/Temp/Tomny.exe' },
     });
     mocks.ipcBridge.update.check.invoke.mockResolvedValue({
       success: true,

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -27,7 +27,7 @@ export function initApplicationBridgeCore(): void {
     if (oldDir.cacheDir !== safeCacheDir) {
       await copyDirectoryRecursively(oldDir.cacheDir, safeCacheDir);
     }
-    await ProcessEnv.set('aionui.dir', { cacheDir: safeCacheDir, workDir: safeWorkDir });
+    await ProcessEnv.set('tomny.dir', { cacheDir: safeCacheDir, workDir: safeWorkDir });
   });
 
   ipcBridge.application.getPath.provider(({ name }) => {

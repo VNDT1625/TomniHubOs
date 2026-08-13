@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -9,7 +9,7 @@ import type { AgentSource } from '@/renderer/utils/model/agentTypes';
 
 /**
  * Available agent entry returned by the backend.
- * `agent_type` is the top-level discriminant (acp, aionrs, nanobot, etc.).
+ * `agent_type` is the top-level discriminant (acp, tomnyagentic, nanobot, etc.).
  * `backend` is only present when `agent_type === 'acp'` (claude, qwen, codex, …).
  */
 export type AvailableAgent = {

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -25,8 +25,8 @@ const MobileConversationBrand: React.FC<MobileConversationBrandProps> = ({ conve
   const backend =
     conversation?.type === 'acp'
       ? conversation.extra?.backend
-      : conversation?.type === 'aionrs'
-        ? 'aionrs'
+      : conversation?.type === 'tomnyagentic'
+        ? 'tomnyagentic'
         : conversation?.type === 'codex'
           ? 'codex'
           : conversation?.type === 'openclaw-gateway'

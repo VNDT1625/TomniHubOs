@@ -15,7 +15,7 @@
   vs RepoFacts; tự sửa moved-path (unique basename) + near-miss script (edit-distance ≤2);
   trả issues + corrected markdown. → "trust but verify".
 - `packages/desktop/src/process/ide/wiki/wikiStore.ts`: persist `PersistedWiki` (app store userData + repo export
-  `.aionui/wiki/`), atomic tmp+rename, fs injected. → lưu sống qua restart.
+  `.tomni/wiki/`), atomic tmp+rename, fs injected. → lưu sống qua restart.
 - `packages/desktop/src/process/ide/wiki/wikiBootstrap.ts`: pipeline scanning→verifying→fixing→planning→writing→saving,
   deps injected. Hiện viết MỖI section 1 lần (chưa có vòng lặp tự đánh giá).
 - Test: `tests/unit/ide/wiki/{docVerify,wikiStore,wikiBootstrap}.test.ts` + wikiPlanner + WikiPanel.dom

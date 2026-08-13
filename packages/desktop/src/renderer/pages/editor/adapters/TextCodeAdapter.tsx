@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -25,8 +25,8 @@ import { configureMonacoTypeScript, isTypeScriptLike } from './monacoTsSetup';
 import { resolveEngine, shouldUseMonacoTsWorker } from './languageEngineRegistry';
 import { attachLspToModel, syncLspDocument } from './monacoLspProvider';
 import { consumeEditorGoto, onEditorGoto } from '../editorGoto';
-import { ideClient } from '@renderer/pages/studio/ide/ideClient';
-import type { KnowledgeGraph } from '@renderer/pages/studio/ide/ideClient';
+import { coreIdeClient } from '@renderer/services/coreIdeClient';
+import type { KnowledgeGraph } from '@renderer/services/coreIdeClient';
 import { importSpecifierOnLine, resolveImport, relationsFor } from '@renderer/pages/studio/ide/codeRelations';
 import { lspClient } from '@renderer/pages/studio/ide/lspClient';
 import { emitter, useAddEventListener } from '@renderer/utils/emitter';
@@ -99,7 +99,7 @@ const TextCodeAdapter: React.FC<EditorAdapterProps> = ({
     if (!ed || !monaco) return;
     const model = ed.getModel();
     if (!model) return;
-    void ideClient
+    void coreIdeClient
       .lintFile(filePath, '')
       .then((res) => {
         // Re-check the model is still the same file (tab may have switched).
@@ -205,7 +205,7 @@ const TextCodeAdapter: React.FC<EditorAdapterProps> = ({
   useEffect(() => {
     if (!workspace) return;
     let cancelled = false;
-    void ideClient
+    void coreIdeClient
       .kgGet(workspace)
       .then((res) => {
         if (!cancelled && res.ok) {
@@ -227,7 +227,7 @@ const TextCodeAdapter: React.FC<EditorAdapterProps> = ({
     'ide.kg.updated',
     (payload) => {
       if (!workspace || payload.rootPath !== workspace) return;
-      void ideClient
+      void coreIdeClient
         .kgGet(workspace)
         .then((res) => {
           if (res.ok) {
@@ -245,7 +245,7 @@ const TextCodeAdapter: React.FC<EditorAdapterProps> = ({
   /**
    * Register Monaco's inline (ghost-text) completion provider for this file:
    * "Tab completion". On a typing pause it sends the code around the cursor to
-   * the model (via {@link ideClient.inlineComplete}) and shows the returned
+   * the model (via {@link coreIdeClient.inlineComplete}) and shows the returned
    * snippet as ghost text the user accepts with Tab. Debounced + cancellable so
    * each keystroke supersedes the previous request; fails soft (no suggestion)
    * when no model is configured or the bridge is unavailable (e.g. WebUI).
@@ -268,7 +268,9 @@ const TextCodeAdapter: React.FC<EditorAdapterProps> = ({
           const prefix = full.slice(0, offset);
           const suffix = full.slice(offset);
           if (prefix.trim().length === 0) return { items: [] };
-          const res = await ideClient.inlineComplete({ prefix, suffix, language, filePath }).catch((): null => null);
+          const res = await coreIdeClient
+            .inlineComplete({ prefix, suffix, language, filePath })
+            .catch((): null => null);
           if (!res || !res.ok || res.data.length === 0 || token.isCancellationRequested) return { items: [] };
           return {
             items: [
@@ -386,7 +388,7 @@ const TextCodeAdapter: React.FC<EditorAdapterProps> = ({
       const model = editorRef.current?.getModel();
       if (!model) return;
       const activeRel = toRelPath(filePath, root);
-      void ideClient
+      void coreIdeClient
         .kgRefreshFile(root, activeRel, model.getValue())
         .then((res) => {
           const node = res.ok ? res.data : null;
@@ -527,7 +529,7 @@ const TextCodeAdapter: React.FC<EditorAdapterProps> = ({
               );
             };
             editor.addAction({
-              id: 'aionui.goToDefinition',
+              id: 'tomny.goToDefinition',
               label: 'Go to Definition',
               keybindings: [monaco.KeyCode.F12],
               contextMenuGroupId: 'navigation',
@@ -535,7 +537,7 @@ const TextCodeAdapter: React.FC<EditorAdapterProps> = ({
               run: () => emitNav('definition'),
             });
             editor.addAction({
-              id: 'aionui.findReferences',
+              id: 'tomny.findReferences',
               label: 'Find All References',
               keybindings: [monaco.KeyMod.Shift | monaco.KeyCode.F12],
               contextMenuGroupId: 'navigation',
@@ -543,7 +545,7 @@ const TextCodeAdapter: React.FC<EditorAdapterProps> = ({
               run: () => emitNav('references'),
             });
             editor.addAction({
-              id: 'aionui.runTestAtCursor',
+              id: 'tomny.runTestAtCursor',
               label: 'Run Test at Cursor',
               keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.F10],
               contextMenuGroupId: 'navigation',

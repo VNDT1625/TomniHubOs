@@ -18,7 +18,12 @@ const useOpenClawDraft = getSendBoxDraftHook('openclaw-gateway', {
 });
 const useNanobotDraft = getSendBoxDraftHook('nanobot', { _type: 'nanobot', atPath: [], content: '', uploadFile: [] });
 const useRemoteDraft = getSendBoxDraftHook('remote', { _type: 'remote', atPath: [], content: '', uploadFile: [] });
-const useAionrsDraft = getSendBoxDraftHook('aionrs', { _type: 'aionrs', atPath: [], content: '', uploadFile: [] });
+const useTomnyAgenticDraft = getSendBoxDraftHook('tomnyagentic', {
+  _type: 'tomnyagentic',
+  atPath: [],
+  content: '',
+  uploadFile: [],
+});
 
 type Props = {
   conversation_id: string;
@@ -82,13 +87,13 @@ const TeamChatEmptyState: React.FC<Props> = ({ conversation_id, icon, isLeader =
   // `satisfies Record<DetectedAgentKind, ...>` keeps the map exhaustive — adding a new
   // DetectedAgentKind without wiring up a draft setter here becomes a typecheck error.
   const acpDraft = useAcpDraft(conversation_id);
-  const aionrsDraft = useAionrsDraft(conversation_id);
+  const tomnyagenticDraft = useTomnyAgenticDraft(conversation_id);
   const nanobotDraft = useNanobotDraft(conversation_id);
   const remoteDraft = useRemoteDraft(conversation_id);
   const openClawDraft = useOpenClawDraft(conversation_id);
   const setContentByKind = {
     acp: (text: string) => acpDraft.mutate((prev) => ({ ...prev, content: text })),
-    aionrs: (text: string) => aionrsDraft.mutate((prev) => ({ ...prev, content: text })),
+    tomnyagentic: (text: string) => tomnyagenticDraft.mutate((prev) => ({ ...prev, content: text })),
     nanobot: (text: string) => nanobotDraft.mutate((prev) => ({ ...prev, content: text })),
     remote: (text: string) => remoteDraft.mutate((prev) => ({ ...prev, content: text })),
     'openclaw-gateway': (text: string) => openClawDraft.mutate((prev) => ({ ...prev, content: text })),

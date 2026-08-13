@@ -116,29 +116,29 @@
       "send_feedback": "Ekibin inceleyebilmesi için günlüklerle birlikte geri bildirim gönderin."
     },
     "ownership": {
-      "aionui": "Uygulama",
+      "tomny": "Uygulama",
       "user_agent": "Ajan",
       "user_llm_provider": "Model sağlayıcı",
       "unknown_upstream": "Üst hizmet"
     },
     "codes": {
-      "AIONUI_STREAM_BROKEN": {
+      "TOMNY_STREAM_BROKEN": {
         "title": "Yanıt akışı kesildi",
         "body": "Uygulama mesajınızı aldı ancak yanıt akışı beklenmedik şekilde sona erdi. Yeniden deneyin; tekrarlanırsa geri bildirim gönderin."
       },
-      "AIONUI_STATE_INCONSISTENT": {
+      "TOMNY_STATE_INCONSISTENT": {
         "title": "Konuşma durumu eşitlenmemiş",
         "body": "Konuşma durumu eşitlenmemiş. Yeniden denemeden önce bu sohbeti yeniden başlatın veya uygulamayı yenileyin."
       },
-      "AIONUI_PERMISSION_ERROR": {
+      "TOMNY_PERMISSION_ERROR": {
         "title": "İstenen kaynağa erişilemedi",
         "body": "Yerel izin veya dosya sistemi denetimi başarısız oldu. Proje yolunu ve uygulama izinlerini kontrol edip yeniden deneyin."
       },
-      "AIONUI_INTERNAL_ERROR": {
+      "TOMNY_INTERNAL_ERROR": {
         "title": "İstek uygulamada başarısız oldu",
         "body": "Uygulama isteği işlerken hata oluştu. Bir kez yeniden deneyin; tekrarlanırsa geri bildirim gönderin."
       },
-      "AIONUI_CONVERSATION_BUSY": {
+      "TOMNY_CONVERSATION_BUSY": {
         "title": "Konuşma meşgul",
         "body": "Başka bir yanıt hâlâ çalışıyor. Yeni mesaj göndermeden önce bitmesini bekleyin."
       },

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -88,7 +88,7 @@ describe('MTUI strict policy helpers', () => {
   it('ignores spec temporary files', () => {
     const violations = detectMtuiViolations(
       '/repo',
-      ['.aionui/specs/demo/plan/temporary/test.log', '.kiro/tmp-ox.txt', 'src/a.ts'],
+      ['.tomny/specs/demo/plan/temporary/test.log', '.kiro/tmp-ox.txt', 'src/a.ts'],
       [],
       new Set()
     );

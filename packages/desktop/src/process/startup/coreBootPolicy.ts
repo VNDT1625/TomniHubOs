@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -22,15 +22,15 @@ const VALID_MODES = new Set<CoreBootMode>(['tomny', 'compat', 'legacy']);
 
 /**
  * Resolves the desktop core cutover policy without touching the legacy binary.
- * Compatibility mode is the desktop default until every HTTP-dependent feature is native to Tomni Core.
+ * Compatibility mode is the desktop default until every HTTP-dependent feature is native to Tomny Core.
  */
 export function resolveCoreBootPolicy(input: ResolveCoreBootPolicyInput = {}): CoreBootPolicy {
   const requested = input.requestedMode?.trim().toLowerCase();
   if (requested && !VALID_MODES.has(requested as CoreBootMode)) {
-    throw new Error(`Invalid Tomni Core boot mode ${input.requestedMode}. Expected one of: tomny, compat, legacy.`);
+    throw new Error(`Invalid Tomny Core boot mode ${input.requestedMode}. Expected one of: tomny, compat, legacy.`);
   }
 
-  // WebUI and password reset are served by the native Tomni Gateway. Surface
+  // WebUI and password reset are served by the native Tomny Gateway. Surface
   // flags no longer widen the compatibility-backend requirement.
   const mode = (requested || 'compat') as CoreBootMode;
 

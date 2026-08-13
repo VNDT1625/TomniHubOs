@@ -111,7 +111,7 @@ Lặp 1→9 cho đến khi **một trong các điều kiện** sau đạt:
 
 - Kết quả **tiệm cận hoàn toàn (≈100%)** goal: mọi tiêu chí DoD PASS, tracker xanh, typecheck/lint/i18n sạch.
 - **Hết credit**.
-- Gặp **quyết định kiến trúc lớn không thể tự quyết an toàn** (vd buộc sửa Rust backend aioncore, thao
+- Gặp **quyết định kiến trúc lớn không thể tự quyết an toàn** (vd buộc sửa Rust backend tomnicore, thao
   tác phá hủy/không hồi phục) → ghi rõ vào `.kiro/status.md` rồi dừng (autonomous-run #4).
 
 ---
@@ -160,7 +160,7 @@ Cập nhật task `[ ] → [x]` (hoặc `[-]`) ngay khi xong mỗi sub-task đ�
 
 ## Triển khai thực tế trong app (KHÔNG chỉ là doc)
 
-`/goal` và `/goal-all` là **slash command thật** trong ô chat của agent tự chủ (aionrs), không phải
+`/goal` và `/goal-all` là **slash command thật** trong ô chat của agent tự chủ (tomnirs), không phải
 file md để đọc. Khi người dùng gõ `/goal <yêu cầu>`:
 
 - Bubble vẫn hiển thị nguyên văn `/goal <yêu cầu>` người dùng gõ.
@@ -173,7 +173,7 @@ Mã liên quan:
   (nguồn chân lý của nội dung prompt mở rộng; chính là pipeline trong file này, viết inline).
 - `packages/desktop/src/renderer/components/chat/SendBox/index.tsx` — prop `enableGoal` + đăng ký 2
   builtin slash item để dropdown gợi ý khi gõ `/`.
-- `packages/desktop/src/renderer/pages/conversation/platforms/aionrs/AionrsSendBox.tsx` — gọi
+- `packages/desktop/src/renderer/pages/conversation/platforms/tomnirs/TomnyAgenticSendBox.tsx` — gọi
   `expandGoalCommand(input)` trong `executeCommand` trước `buildPlanningGuard`, và truyền `enableGoal`.
 - i18n: `conversation.goalCommand.description` / `conversation.goalCommand.allDescription` (9 locale).
 - Test: `tests/unit/common/chat/slash/goalCommand.test.ts`.
@@ -196,7 +196,7 @@ chuẩn nghiệm thu nghiêm ngặt hơn, và chạy đến khi xong hoặc hế
 
 ### Đa platform
 
-`/goal` + `/goal-all` hoạt động trên **cả 5 platform send box**: aionrs, acp, openclaw, nanobot, remote.
+`/goal` + `/goal-all` hoạt động trên **cả 5 platform send box**: tomnirs, acp, openclaw, nanobot, remote.
 Mỗi platform expand `/goal` trong `executeCommand` (bubble giữ raw, model nhận prompt đầy đủ) và đăng
 ký lệnh qua prop `enableGoal` của `<SendBox>`. openclaw/nanobot/remote còn expand cả đường
 initial-message (khi mở hội thoại bằng `/goal ...` từ trang Guid).
@@ -211,7 +211,7 @@ chờ cooldown → gửi lại goal gốc. Có chặn cứng để không loop v
   `disarmWatchdog`), deterministic, không timer/I/O.
 - Hook: `packages/desktop/src/renderer/hooks/chat/useGoalWatchdog.ts` — heartbeat từ
   `ipcBridge.conversation.responseStream`, ticker 15s, dùng `conversation.stop` + re-send `executeCommand`.
-- Wire: `packages/desktop/src/renderer/pages/conversation/platforms/aionrs/AionrsSendBox.tsx` (platform agent tự chủ). CHỈ kích hoạt khi lệnh đang chạy là goal;
+- Wire: `packages/desktop/src/renderer/pages/conversation/platforms/tomnirs/TomnyAgenticSendBox.tsx` (platform agent tự chủ). CHỈ kích hoạt khi lệnh đang chạy là goal;
   resume KHÔNG re-arm (giữ nguyên bộ đếm để tôn trọng cap); disarm khi user gửi lệnh khác hoặc turn
   kết thúc bình thường.
 - Mặc định (`DEFAULT_GOAL_WATCHDOG_CONFIG`): stall 5 phút, cooldown 5 phút, tối đa 3 lần resume.
@@ -232,20 +232,20 @@ tới khi gõ `/goal off` (hoặc `/goal stop`).
 
 - Reminder mỗi turn: `packages/desktop/src/common/chat/slash/goalSteering.ts` → `GOAL_TURN_REMINDER` (ngắn gọn nhưng cứng:
   9 pha + tự chủ + an toàn + cách tắt). Khối đầy đủ: `buildGoalSteering(variant)`.
-- Trạng thái: `packages/desktop/src/renderer/utils/chat/goalMode.ts` (localStorage `aionui.goal.mode.<conversation_id>`),
+- Trạng thái: `packages/desktop/src/renderer/utils/chat/goalMode.ts` (localStorage `tomni.goal.mode.<conversation_id>`),
   `withGoalSteeringDirective(modelInput, cid)` chèn reminder mỗi turn (bỏ qua slash command, message đã
   có steering, hoặc khi mode off).
-- Wire: `AionrsSendBox` — `/goal X` bật mode + expand turn đầu; turn sau chèn steering; `/goal off`
+- Wire: `TomnyAgenticSendBox` — `/goal X` bật mode + expand turn đầu; turn sau chèn steering; `/goal off`
   tắt mode (intercept, không gửi turn) + disarm watchdog.
 
 > Lưu ý trung thực: cơ chế này đảm bảo **văn bản steering luôn có mặt mỗi turn** (do code chèn,
 > deterministic) — đây là mức "bắt buộc 100%" mà renderer làm được. Nó KHÔNG thể ép LLM tuân thủ 100%
 > (không cơ chế text nào làm được). Muốn ép cứng cấu trúc (chặn agent "kết thúc" khi chưa qua đủ pha)
-> phải gating vòng lặp tool ở Rust backend aioncore — nằm ngoài phạm vi an toàn của renderer.
+> phải gating vòng lặp tool ở Rust backend tomnicore — nằm ngoài phạm vi an toàn của renderer.
 
 ---
 
-## Hard enforcement — renderer control-loop (không đụng aioncore)
+## Hard enforcement — renderer control-loop (không đụng tomnicore)
 
 Để "ép cứng" ở mức cao nhất khả thi mà không sửa backend Rust: renderer trở thành **orchestrator**
 điều khiển vòng lặp goal bằng CODE, thay vì tin agent tự lặp.
@@ -268,12 +268,12 @@ tới khi gõ `/goal off` (hoặc `/goal stop`).
 Nếu lượt **không bao giờ finish** (treo) → nhánh stall huỷ lượt, cooldown, gửi lại goal. Tất cả có
 cap cứng (mặc định maxAutoTurns=40, maxCorrections=3, stall/cooldown 5') để chi phí hữu hạn.
 
-`useGoalRunner` chỉ wire ở aionrs (agent tự chủ). Các platform khác có Goal Mode steering mỗi turn +
+`useGoalRunner` chỉ wire ở tomnirs (agent tự chủ). Các platform khác có Goal Mode steering mỗi turn +
 `/goal off`, nhưng không auto-drive (an toàn chi phí trên agent bên thứ ba).
 
 > Trần enforcement thật sự: renderer gate dựa trên tín hiệu agent KHAI BÁO (marker). Nếu agent cố tình
 > ngụy tạo (báo tests=pass khi chưa chạy), renderer không phát hiện được. Ép cứng tuyệt đối (chặn agent
-> "done" khi tool thật chưa chạy/chưa pass) đòi hỏi gating vòng lặp tool trong aioncore — ngoài phạm vi.
+> "done" khi tool thật chưa chạy/chưa pass) đòi hỏi gating vòng lặp tool trong tomnicore — ngoài phạm vi.
 
 ---
 

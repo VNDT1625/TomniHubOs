@@ -1,12 +1,12 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
 /**
  * In-process MCP host for the IDE server — the bridge that lets an agent (a
- * company role, Claude Code over ACP, aionrs, …) use the IDE / repo-intelligence
+ * company role, Claude Code over ACP, tomnyagentic, …) use the IDE / repo-intelligence
  * tools (list/read/search/find-definition/find-references/scan-repo).
  *
  * ## Why an in-process HTTP/SSE host (not a stdio child)

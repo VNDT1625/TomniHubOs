@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -28,7 +28,7 @@ import type { TestPlatform, TestScenario, TestStep } from '@process/testing/test
 export const BUILTIN_TESTING_ID = 'builtin-testing';
 
 /** Canonical name of the built-in Testing MCP server (consumed by Task 15.1). */
-export const BUILTIN_TESTING_NAME = 'aionui-testing';
+export const BUILTIN_TESTING_NAME = 'tomny-testing';
 
 /** Injected collaborators for {@link createTestingServer}. */
 export type TestingServerDeps = {

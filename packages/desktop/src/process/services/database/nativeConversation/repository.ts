@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -160,7 +160,7 @@ export class NativeConversationRepository {
       try {
         imported = await this.readLegacyDatabase(source, conversationIds);
       } catch (error) {
-        console.warn('[TomniCore] Legacy conversation import skipped:', source, error);
+        console.warn('[TomnyCore] Legacy conversation import skipped:', source, error);
         continue;
       }
 

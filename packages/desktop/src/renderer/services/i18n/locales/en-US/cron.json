@@ -105,8 +105,8 @@
       "selectFolder": "Select Folder",
       "clearFolder": "Clear",
       "model": "Model",
-      "aionrsModelRequired": "Please select a model for Tomny Agentic",
-      "aionrsNoProvider": "No available models"
+      "tomnyagenticModelRequired": "Please select a model for Tomny Agentic",
+      "tomnyagenticNoProvider": "No available models"
     },
     "freq": {
       "manual": "Manual",

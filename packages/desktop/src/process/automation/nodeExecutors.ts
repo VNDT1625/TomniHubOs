@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -253,7 +253,7 @@ export const createNodeExecutors = (deps: NodeExecutorDeps): NodeExecutorMap => 
       return n8nAction(config as unknown as N8nNodeConfig, ctx.input, signal);
     },
 
-    // --- App-reuse nodes (drive existing AionUi features) ---
+    // --- App-reuse nodes (drive existing Tomny features) ---
 
     'action.notify': (node, ctx) => appReuse.notify(node.config as unknown as NotifyNodeConfig, ctx.input, node.name),
 
@@ -271,7 +271,7 @@ export const createNodeExecutors = (deps: NodeExecutorDeps): NodeExecutorMap => 
     'action.subworkflow': (node, ctx) =>
       appReuse.subworkflow(node.config as unknown as SubworkflowNodeConfig, ctx.input, node.name),
 
-    // --- App-function nodes: produce an artifact from an AionUi sub-app ---
+    // --- App-function nodes: produce an artifact from a Tomny sub-app ---
 
     'action.app.makeVideo': async (node, _ctx) => {
       if (!deps.makeVideo) {

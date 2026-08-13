@@ -2,9 +2,9 @@
 /**
  * Minimal ACP adapter for current Codex CLI versions.
  *
- * Codex CLI no longer exposes `codex acp`, but AionUi's agent catalog expects
+ * Codex CLI no longer exposes `codex acp`, but Tomny's agent catalog expects
  * an ACP JSON-RPC stdio server. This adapter implements the small ACP surface
- * AionUi needs and delegates each prompt to `codex exec`.
+ * Tomny needs and delegates each prompt to `codex exec`.
  */
 
 const { spawn } = require('node:child_process');

@@ -1,21 +1,21 @@
-﻿# AionUi Cloud Workspace Relay
+﻿# TomniHubOS Cloud Workspace Relay
 
-Production relay for two or more AionUi desktop replicas. Each workspace is one
+Production relay for two or more TomniHubOS desktop replicas. Each workspace is one
 Cloudflare Durable Object (ordered manifest, operations, leases, presence and
 WebSockets); immutable file bodies are stored in R2.
 
 ## Deploy
 
 Prerequisites: Cloudflare Workers and R2 enabled, Wrangler authenticated, and an
-R2 bucket named `aionui-cloud-relay-blobs`.
+R2 bucket named `tomni-cloud-relay-blobs`.
 
 ```bash
-bunx wrangler r2 bucket create aionui-cloud-relay-blobs
+bunx wrangler r2 bucket create tomni-cloud-relay-blobs
 bun run check
 bun run deploy
 ```
 
-The default production URL is printed by Wrangler. Enter that URL in AionUi's
+The default production URL is printed by Wrangler. Enter that URL in TomniHubOS's
 **Cloud workspace** dialog. On the first device, use **Generate secure
 credentials**, then share the generated Workspace ID and token with the second
 device over a secure channel. Both devices must select their local clone folder

@@ -2,8 +2,8 @@
  * WebUI static server.
  *
  * Serves out/renderer/ as the SPA and reverse-proxies /api/*, /ws, /login and
- * /logout to aioncore. All auth goes to backend's aionui-auth crate;
- * /login and /logout are aionui-auth's top-level paths, the rest live under
+ * /logout to tomnycore. All auth goes to backend's tomny-auth crate;
+ * /login and /logout are tomny-auth's top-level paths, the rest live under
  * /api/auth/*.
  *
  * Design: Node native http + serve-handler. No Express. No business routes.
@@ -22,6 +22,7 @@ export type StaticServerOptions = {
   upstreamToken?: string;
   port?: number;
   allowRemote?: boolean;
+  localApiHandler?: (request: IncomingMessage, response: ServerResponse) => Promise<boolean>;
 };
 
 export type StaticServerHandle = {
@@ -57,7 +58,7 @@ function getLanIP(): string | null {
   // Prefer a private address on a physical Wi-Fi/Ethernet adapter. This avoids
   // publishing a VirtualBox/Radmin/Tailscale address that a normal phone on the
   // same router cannot reach.
-  return candidates.sort((a, b) => b.score - a.score)[0]?.address ?? null;
+  return candidates.toSorted((a, b) => b.score - a.score)[0]?.address ?? null;
 }
 
 function forwardToBackend(
@@ -179,8 +180,12 @@ export async function startStaticServer(opts: StaticServerOptions): Promise<Stat
         return;
       }
 
+      if (opts.localApiHandler && (await opts.localApiHandler(req, res))) {
+        return;
+      }
+
       // /api/* — reverse proxy to backend (includes /api/auth/*).
-      // /login and /logout are aionui-auth's top-level auth endpoints: proxy them too
+      // /login and /logout are tomny-auth's top-level auth endpoints: proxy them too
       // so WebUI browser clients reach the backend without a path-rewrite.
       if (req.url.startsWith('/api/') || req.url.startsWith('/api?') || req.url === '/login' || req.url === '/logout') {
         forwardToBackend(req, res, opts.backendPort, opts.upstreamToken);

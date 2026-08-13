@@ -10,7 +10,7 @@ export type Router9ConsumerUsage = {
   lastUsed?: string;
 };
 
-/** Aggregate 9Router's per-key/per-model buckets into one row per Tomni/CLI consumer. */
+/** Aggregate 9Router's per-key/per-model buckets into one row per Tomny/CLI consumer. */
 export const usageByConsumer = (stats: ManagedRouter9UsageStats | null): Router9ConsumerUsage[] => {
   const grouped = new Map<string, Router9ConsumerUsage>();
   for (const bucket of Object.values(stats?.byApiKey ?? {})) {

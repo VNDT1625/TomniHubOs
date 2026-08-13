@@ -1,11 +1,21 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { AuthType } from '@office-ai/aioncli-core';
 import { isNewApiPlatform } from './platformConstants';
+
+export enum AuthType {
+  LOGIN_WITH_GOOGLE = 'oauth-personal',
+  USE_GEMINI = 'gemini-api-key',
+  USE_VERTEX_AI = 'vertex-ai',
+  LEGACY_CLOUD_SHELL = 'cloud-shell',
+  COMPUTE_ADC = 'compute-default-credentials',
+  USE_OPENAI = 'openai',
+  USE_ANTHROPIC = 'anthropic',
+  USE_BEDROCK = 'bedrock',
+}
 
 /**
  * 根据平台名称获取对应的认证类型

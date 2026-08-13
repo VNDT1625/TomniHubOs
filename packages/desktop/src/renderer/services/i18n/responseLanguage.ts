@@ -1,13 +1,13 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
 /**
  * Response-language directive for chat send boxes.
  *
- * The main conversation system prompt lives in the aioncore backend, so the
+ * The main conversation system prompt lives in the tomnycore backend, so the
  * model has no reliable signal about which language the *user* reads — it tends
  * to mirror the language of the surrounding code/files (mostly English) or its
  * own training bias. To keep replies in the language the user picked in the app
@@ -48,7 +48,7 @@ const LANGUAGE_NATIVE_NAMES: Record<string, string> = {
 const ESCALATE_RATIO = 0.45;
 const CLEAR_RATIO = 0.2;
 
-const STRICT_PREFIX = 'aionui.langStrict.';
+const STRICT_PREFIX = 'tomny.langStrict.';
 const strictCache = new Map<string, boolean>();
 
 const readStrict = (conversationId: string): boolean => {
@@ -106,7 +106,7 @@ export const noteAssistantReply = (conversationId: string, replyText: string): v
 /**
  * Append a "reply in this language" tag to the model input. Two strengths:
  *  - default: a minimal tag (~3-8 tokens), kept tiny because it is persisted
- *    with the user message in aioncore history and re-read every turn;
+ *    with the user message in tomnycore history and re-read every turn;
  *  - strict: a stronger directive, used only when {@link noteAssistantReply}
  *    has detected the conversation drifting to another language (adaptive
  *    escalation — pay the extra tokens only when the model actually misbehaves).

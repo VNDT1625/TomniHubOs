@@ -1,53 +1,129 @@
-/* GPU-friendly: transform applies to the + SVG only (see Sider.tsx), not the padded row or icon frame */
-
-.newChatTrigger {
-  position: relative;
+.siderContent {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--text-primary);
 }
 
-.newChatIcon {
-  transform: translateZ(0);
-  transition: transform 0.14s cubic-bezier(0.33, 1, 0.68, 1);
+.navigation,
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
 }
 
-.newChatTrigger:hover .newChatIcon {
-  transform: scale(0.92) translateZ(0);
+.navButton {
+  height: 35px !important;
+  justify-content: flex-start !important;
+  gap: 9px !important;
+  padding-inline: 10px !important;
+  border-radius: 8px !important;
+  color: var(--text-secondary) !important;
+  font-size: 12px !important;
 }
 
-.newChatTrigger:active .newChatIcon {
-  transform: scale(0.84) translateZ(0);
+.navButton:hover {
+  background: var(--surface-glass-hover) !important;
+  color: var(--text-primary) !important;
+}
+
+.navButtonActive {
+  background: color-mix(in srgb, var(--color-primary) 14%, transparent) !important;
+  color: var(--color-primary) !important;
+}
+
+.divider {
+  height: 1px;
+  margin: 6px 4px;
+  background: var(--surface-glass-border);
+}
+
+.sectionLabel {
+  display: flex;
+  min-height: 25px;
+  align-items: center;
+  justify-content: space-between;
+  padding-inline: 10px;
+  color: var(--text-tertiary);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.spacer {
+  min-height: 12px;
+  flex: 1;
+}
+
+.accountButton {
+  height: 51px !important;
+  justify-content: flex-start !important;
+  gap: 9px !important;
+  padding: 7px 8px !important;
+  border-radius: 9px !important;
+  color: var(--text-primary) !important;
+}
+
+.accountAvatar {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--color-primary);
+  color: var(--color-white);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.accountCopy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.25;
+}
+
+.accountCopy strong,
+.accountCopy small {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.accountCopy strong {
+  font-size: 11px;
+}
+
+.accountCopy small {
+  color: var(--text-tertiary);
+  font-size: 9px;
+}
+
+.collapsed .navButton,
+.collapsed .accountButton {
+  justify-content: center !important;
+  padding-inline: 0 !important;
+}
+
+.collapsed .sectionLabel {
+  justify-content: center;
+  padding-inline: 0;
+}
+
+.collapsed .sectionLabel > :first-child,
+.collapsed .sidebarCopy {
+  display: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .newChatIcon {
-    transition: none;
+  .navButton {
+    transition: none !important;
   }
-
-  .newChatTrigger:hover .newChatIcon,
-  .newChatTrigger:active .newChatIcon {
-    transform: translateZ(0);
-  }
-}
-
-/* Overlay-style scroll area: scrollbar takes zero layout width so icons in the
-   fixed top nav and the scrollable list stay on the same vertical center line.
-   Mimics macOS native overlay scrollbars. */
-.scrollArea {
-  scrollbar-width: none; /* Firefox */
-}
-
-.scrollArea::-webkit-scrollbar {
-  width: 0;
-  height: 0;
-}
-
-/* Pinned sidebar row — reserve a dedicated 28px slot on the right for the
-   pushpin indicator so it never overlaps the row title. When the row is
-   hovered, the three-dot menu takes over that slot and the text reclaims
-   the gap (18px), matching non-pinned rows. */
-.pinnedTextSlot {
-  padding-right: 28px;
-}
-
-:global(.group):hover .pinnedTextSlot {
-  padding-right: 18px;
 }

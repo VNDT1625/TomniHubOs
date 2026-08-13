@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  *
  * Unit tests for the Super standing-instructions builder. These rules steer the
@@ -18,7 +18,7 @@ import {
 
 describe('superGuidance', () => {
   it('exposes the canonical Browser-Control server name', () => {
-    expect(BROWSER_CONTROL_MCP_NAME).toBe('aionui-browser-control');
+    expect(BROWSER_CONTROL_MCP_NAME).toBe('tomny-browser-control');
   });
 
   it('rules forbid shelling out / sub-agents and point to the browser + editor tools', () => {

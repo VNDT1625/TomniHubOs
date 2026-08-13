@@ -13,8 +13,7 @@ const logoSvg = await readFile(logoSvgPath);
 const coreIconSvg = await readFile(coreIconSvgPath);
 const coreLogoSvg = await readFile(coreLogoSvgPath);
 
-const recolorSvg = (source, gradientId, color) =>
-  Buffer.from(String(source).replaceAll(`url(#${gradientId})`, color));
+const recolorSvg = (source, gradientId, color) => Buffer.from(String(source).replaceAll(`url(#${gradientId})`, color));
 const iconWhiteSvg = recolorSvg(iconSvg, 'tomniGradient', '#FFFFFF');
 const iconBlackSvg = recolorSvg(iconSvg, 'tomniGradient', '#111116');
 const coreIconWhiteSvg = recolorSvg(coreIconSvg, 'tomnyCoreGradient', '#FFFFFF');
@@ -111,7 +110,7 @@ const pngTargets = [
   ['resources/app.png', 1024, iconSvg],
   ['resources/app_dev.png', 1024, iconSvg],
   ['resources/icon.png', 1024, iconSvg],
-  ['resources/aionui_logo_no_border.png', 1800, logoSvg, 491],
+  ['resources/tomny_logo_no_border.png', 1800, logoSvg, 491],
   ['resources/tomni-icon.png', 1024, iconSvg],
   ['resources/tomni-icon-white.png', 1024, iconWhiteSvg],
   ['resources/tomni-icon-black.png', 1024, iconBlackSvg],
@@ -145,6 +144,6 @@ const blackBackgroundLogo = Buffer.from(
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1320 360" fill="none"><rect width="1320" height="360" rx="40" fill="#0C0C10"/>'
   )
 );
-await writeFile(path.join(root, 'resources/aionui_logo_black_bg.svg'), blackBackgroundLogo);
+await writeFile(path.join(root, 'resources/tomny_logo_black_bg.svg'), blackBackgroundLogo);
 
 console.log('Tomni brand assets generated successfully.');

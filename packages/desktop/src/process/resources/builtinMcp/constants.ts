@@ -1,14 +1,19 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
 // Keep this constant local to avoid pulling in common/config/storage side effects
 // when the built-in MCP server boots in a standalone stdio process.
 export const BUILTIN_IMAGE_GEN_ID = 'builtin-image-gen';
-export const BUILTIN_IMAGE_GEN_NAME = 'aionui-image-generation';
-export const BUILTIN_IMAGE_GEN_LEGACY_NAMES = ['AionUi Image Generation', BUILTIN_IMAGE_GEN_ID] as const;
+export const BUILTIN_IMAGE_GEN_NAME = 'tomny-image-generation';
+export const BUILTIN_IMAGE_GEN_LEGACY_NAMES = [
+  'tomny-image-generation',
+  'Tomny Image Generation',
+  'Tomny Image Generation',
+  BUILTIN_IMAGE_GEN_ID,
+] as const;
 
 export function isBuiltinImageGenName(name?: string | null): boolean {
   if (!name) return false;
@@ -39,16 +44,16 @@ export function isBuiltinImageGenTransport(transport?: {
 export const BUILTIN_RESOURCE_ID = 'builtin-resource';
 
 /** Canonical name of the built-in Resource MCP server. */
-export const BUILTIN_RESOURCE_NAME = 'aionui-resource';
+export const BUILTIN_RESOURCE_NAME = 'tomny-resource';
 
 /** Historic names that may appear in stored configs; treated as the same server. */
-export const BUILTIN_RESOURCE_LEGACY_NAMES = ['AionUi Resource', BUILTIN_RESOURCE_ID] as const;
+export const BUILTIN_RESOURCE_LEGACY_NAMES = ['tomny-resource', 'Tomny Resource', BUILTIN_RESOURCE_ID] as const;
 
 /**
  * Name of the single read-only tool the Resource MCP server exposes.
  *
  * `design.md` refers to this capability as `resource.status`; the existing
- * built-in tool (`aionui_image_generation`) uses snake_case rather than a dot
+ * built-in tool (`tomny_image_generation`) uses snake_case rather than a dot
  * separator, so we follow that convention here while preserving the intent.
  */
 export const BUILTIN_RESOURCE_TOOL_NAME = 'resource_status';
@@ -61,7 +66,7 @@ export const BUILTIN_RESOURCE_TOOL_NAME = 'resource_status';
  * the resolved directory through this variable (mirrors how the image-gen
  * server receives its provider config via env, see `imageGenerationMcpEnv.ts`).
  */
-export const RESOURCE_STATE_DIR_ENV_KEY = 'AIONUI_RESOURCE_STATE_DIR';
+export const RESOURCE_STATE_DIR_ENV_KEY = 'TOMNY_RESOURCE_STATE_DIR';
 
 export function isBuiltinResourceName(name?: string | null): boolean {
   if (!name) return false;
@@ -91,10 +96,10 @@ export function isBuiltinResourceTransport(transport?: {
 export const BUILTIN_MANAGER_ID = 'builtin-manager';
 
 /** Canonical name of the built-in Manager MCP server. */
-export const BUILTIN_MANAGER_NAME = 'aionui-manager';
+export const BUILTIN_MANAGER_NAME = 'tomny-manager';
 
 /** Historic names that may appear in stored configs; treated as the same server. */
-export const BUILTIN_MANAGER_LEGACY_NAMES = ['AionUi Manager', BUILTIN_MANAGER_ID] as const;
+export const BUILTIN_MANAGER_LEGACY_NAMES = ['tomny-manager', 'Tomny Manager', BUILTIN_MANAGER_ID] as const;
 
 /**
  * Environment variable carrying the directory that holds `manager-data.json`.
@@ -103,7 +108,7 @@ export const BUILTIN_MANAGER_LEGACY_NAMES = ['AionUi Manager', BUILTIN_MANAGER_I
  * cannot reach Electron's `app.getPath('userData')`; the spawning code injects
  * the resolved directory through this variable (mirrors `RESOURCE_STATE_DIR_ENV_KEY`).
  */
-export const MANAGER_DATA_DIR_ENV_KEY = 'AIONUI_MANAGER_DATA_DIR';
+export const MANAGER_DATA_DIR_ENV_KEY = 'TOMNY_MANAGER_DATA_DIR';
 
 export function isBuiltinManagerName(name?: string | null): boolean {
   if (!name) return false;
@@ -138,10 +143,10 @@ export function isBuiltinManagerTransport(transport?: {
 export const BUILTIN_CRON_ID = 'builtin-cron';
 
 /** Canonical name of the built-in Cron MCP server. */
-export const BUILTIN_CRON_NAME = 'aionui-cron';
+export const BUILTIN_CRON_NAME = 'tomny-cron';
 
 /** Historic names that may appear in stored configs; treated as the same server. */
-export const BUILTIN_CRON_LEGACY_NAMES = ['AionUi Cron', BUILTIN_CRON_ID] as const;
+export const BUILTIN_CRON_LEGACY_NAMES = ['tomny-cron', 'Tomny Cron', BUILTIN_CRON_ID] as const;
 
 export function isBuiltinCronName(name?: string | null): boolean {
   if (!name) return false;
@@ -161,10 +166,10 @@ export function isBuiltinCronName(name?: string | null): boolean {
 export const BUILTIN_SYSTEM_ID = 'builtin-system';
 
 /** Canonical name of the built-in System Insight MCP server. */
-export const BUILTIN_SYSTEM_NAME = 'aionui-system';
+export const BUILTIN_SYSTEM_NAME = 'tomny-system';
 
 /** Historic names that may appear in stored configs; treated as the same server. */
-export const BUILTIN_SYSTEM_LEGACY_NAMES = ['AionUi System', BUILTIN_SYSTEM_ID] as const;
+export const BUILTIN_SYSTEM_LEGACY_NAMES = ['tomny-system', 'Tomny System', BUILTIN_SYSTEM_ID] as const;
 
 /** Name of the single read-only tool the System Insight MCP server exposes. */
 export const BUILTIN_SYSTEM_TOOL_NAME = 'system_status';
@@ -176,7 +181,7 @@ export const BUILTIN_SYSTEM_TOOL_NAME = 'system_status';
  * Electron's `app.getPath('userData')`; the spawning code injects the resolved
  * directory through this variable (mirrors `RESOURCE_STATE_DIR_ENV_KEY`).
  */
-export const SYSTEM_SNAPSHOT_DIR_ENV_KEY = 'AIONUI_SYSTEM_SNAPSHOT_DIR';
+export const SYSTEM_SNAPSHOT_DIR_ENV_KEY = 'TOMNY_SYSTEM_SNAPSHOT_DIR';
 
 export function isBuiltinSystemName(name?: string | null): boolean {
   if (!name) return false;

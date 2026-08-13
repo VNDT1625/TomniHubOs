@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -31,11 +31,11 @@ const isModelKeyAvailable = (key: string | null, providers?: IProvider[]) => {
 };
 
 /** Provider-based agent keys that share the model list UI */
-type ProviderAgentKey = 'aionrs';
+type ProviderAgentKey = 'tomnyagentic';
 
 /** Map agent key → storage key for persisting default model */
-const MODEL_STORAGE_KEY: Record<ProviderAgentKey, 'aionrs.defaultModel'> = {
-  aionrs: 'aionrs.defaultModel',
+const MODEL_STORAGE_KEY: Record<ProviderAgentKey, 'tomnyagentic.defaultModel'> = {
+  tomnyagentic: 'tomnyagentic.defaultModel',
 };
 
 export type GuidModelSelectionResult = {
@@ -48,9 +48,9 @@ export type GuidModelSelectionResult = {
 
 /**
  * Hook that manages the model list and selection state for the Guid page.
- * @param agentKey - current provider-based agent (currently only 'aionrs')
+ * @param agentKey - current provider-based agent (currently only 'tomnyagentic')
  */
-export const useGuidModelSelection = (agentKey: ProviderAgentKey = 'aionrs'): GuidModelSelectionResult => {
+export const useGuidModelSelection = (agentKey: ProviderAgentKey = 'tomnyagentic'): GuidModelSelectionResult => {
   const { isGoogleAuth } = useGoogleAuthModels();
   const { data: modelConfig } = useProvidersQuery();
 

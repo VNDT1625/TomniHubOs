@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { PassThrough } from 'node:stream';
@@ -103,6 +103,25 @@ describe('ManagedRouter9Service', () => {
     expect(restored.autoStart).toBe(true);
   });
 
+  it('migrates legacy v1 auto-start preferences to disabled v2 preferences', async () => {
+    const root = await tempDir();
+    const dataDir = path.join(root, 'data', 'tomni-model-gateway');
+    const preferencesPath = path.join(dataDir, 'model-gateway-preferences.json');
+    await mkdir(dataDir, { recursive: true });
+    await writeFile(preferencesPath, JSON.stringify({ schemaVersion: 1, autoStart: true }));
+    const service = new ManagedRouter9Service({
+      resourcesPath: () => path.join(root, 'resources'),
+      userDataPath: () => path.join(root, 'data'),
+      fetch: vi.fn(async () => new Response(null, { status: 503 })) as typeof fetch,
+    });
+
+    const status = await service.status();
+    const migrated = JSON.parse(await readFile(preferencesPath, 'utf8')) as Record<string, unknown>;
+
+    expect(status.autoStart).toBe(false);
+    expect(migrated).toEqual({ schemaVersion: 2, autoStart: false });
+  });
+
   it('reuses a compatible running gateway when persisted auto-start is enabled', async () => {
     const root = await tempDir();
     const fetchMock = vi.fn(async () => Response.json({ requireLogin: true })) as typeof fetch;
@@ -149,12 +168,19 @@ describe('ManagedRouter9Service', () => {
       spawned = true;
       return child;
     });
+
+    const stopChild = vi.fn(async () => {
+      spawned = false;
+      child.emit('exit', 0, null);
+    });
     const service = new ManagedRouter9Service({
       resourcesPath: () => path.join(root, 'resources'),
       userDataPath: () => path.join(root, 'data'),
       execPath: () => 'electron-test',
       newSecret: () => 'test-secret-value-with-sufficient-length',
       spawn: spawnMock,
+
+      stopChild,
       fetch: fetchMock as typeof fetch,
     });
 
@@ -165,16 +191,87 @@ describe('ManagedRouter9Service', () => {
     const models = await service.listModels(client.key);
     await service.openDashboard('providers');
 
+    const stopped = await service.stop();
+
     expect(status).toMatchObject({ state: 'running', owned: true, pid: 4242, upstreamCommit: 'pinned' });
     expect(spawnMock).toHaveBeenCalledWith(
       'electron-test',
       [path.join(runtime, 'custom-server.js')],
       expect.objectContaining({ detached: true, stdio: 'ignore', windowsHide: true })
     );
-    expect(child.unref).toHaveBeenCalledOnce();
+    expect(child.unref).not.toHaveBeenCalled();
+    expect(stopChild).toHaveBeenCalledWith(child);
+    expect(stopped).toMatchObject({ state: 'stopped', owned: false });
     expect(client).toMatchObject({ id: 'client-1', key: 'sk-client-1' });
     expect(providers.connections).toHaveLength(1);
     expect(logs).toHaveLength(1);
     expect(models).toEqual([{ id: 'gpt-test', object: 'model' }]);
+  });
+
+  it('waits for an in-flight start and prevents a gateway spawn after shutdown begins', async () => {
+    const root = await tempDir();
+    const runtime = path.join(root, 'resources', 'bundled-model-gateway', `${process.platform}-${process.arch}`);
+    await mkdir(runtime, { recursive: true });
+    await writeFile(path.join(runtime, 'manifest.json'), JSON.stringify({ entry: 'custom-server.js' }));
+    await writeFile(path.join(runtime, 'custom-server.js'), '');
+
+    let releaseInitialProbe: (() => void) | undefined;
+    const initialProbe = new Promise<void>((resolve) => {
+      releaseInitialProbe = resolve;
+    });
+    let probeCount = 0;
+    let spawned = false;
+    const child = fakeChild();
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.endsWith('/api/auth/status')) {
+        probeCount += 1;
+        if (probeCount === 1) {
+          await initialProbe;
+          return new Response(null, { status: 503 });
+        }
+        return new Response(null, { status: spawned ? 200 : 503 });
+      }
+      if (url.endsWith('/api/auth/login')) {
+        return Response.json({ success: true }, { headers: { 'set-cookie': 'session=test; Path=/' } });
+      }
+      return new Response(null, { status: 404 });
+    });
+    const spawnMock = vi.fn(() => {
+      spawned = true;
+      return child;
+    });
+    const stopChild = vi.fn(async () => {
+      spawned = false;
+      child.emit('exit', 0, null);
+    });
+    const service = new ManagedRouter9Service({
+      resourcesPath: () => path.join(root, 'resources'),
+      userDataPath: () => path.join(root, 'data'),
+      execPath: () => 'electron-test',
+      newSecret: () => 'test-secret-value-with-sufficient-length',
+      spawn: spawnMock,
+      stopChild,
+      fetch: fetchMock as typeof fetch,
+    });
+
+    const startPromise = service.start();
+    await vi.waitFor(() => expect(probeCount).toBe(1));
+    let shutdownSettled = false;
+    const shutdownPromise = service.shutdown().finally(() => {
+      shutdownSettled = true;
+    });
+    await vi.waitFor(() => expect(probeCount).toBeGreaterThanOrEqual(2));
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+    const settledBeforeInitialProbeFinished = shutdownSettled;
+    releaseInitialProbe?.();
+
+    const [startResult, shutdownResult] = await Promise.allSettled([startPromise, shutdownPromise]);
+    expect(settledBeforeInitialProbeFinished).toBe(false);
+    expect(startResult.status).toBe('rejected');
+    expect(shutdownResult.status).toBe('fulfilled');
+    expect(spawnMock).not.toHaveBeenCalled();
+    expect(stopChild).not.toHaveBeenCalled();
   });
 });

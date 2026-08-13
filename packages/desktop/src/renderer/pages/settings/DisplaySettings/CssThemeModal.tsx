@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -9,7 +9,7 @@ import { ipcBridge } from '@/common';
 import { useThemeContext } from '@renderer/hooks/context/ThemeContext.tsx';
 import { iconColors } from '@renderer/styles/colors';
 import { Button, Input } from '@arco-design/web-react';
-import AionModal from '@renderer/components/base/AionModal.tsx';
+import TomnyModal from '@renderer/components/base/TomnyModal.tsx';
 import { Plus, Delete } from '@icon-park/react';
 import CodeMirror from '@uiw/react-codemirror';
 import { css as cssLang } from '@codemirror/lang-css';
@@ -111,7 +111,7 @@ const CssThemeModal: React.FC<CssThemeModalProps> = ({ visible, theme, onClose, 
   const isEditing = !!theme;
 
   return (
-    <AionModal
+    <TomnyModal
       visible={visible}
       header={isEditing ? t('settings.cssTheme.editTheme') : t('settings.cssTheme.addToPreset')}
       onCancel={onClose}
@@ -188,7 +188,7 @@ const CssThemeModal: React.FC<CssThemeModalProps> = ({ visible, theme, onClose, 
           </div>
         </div>
       </div>
-    </AionModal>
+    </TomnyModal>
   );
 };
 

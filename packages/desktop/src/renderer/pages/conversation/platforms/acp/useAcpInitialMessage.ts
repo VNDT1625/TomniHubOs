@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -9,8 +9,8 @@ import { isBackendHttpError } from '@/common/adapter/httpBridge';
 import type { AgentStreamErrorInfo } from '@/common/chat/chatLib';
 import type { TMessage } from '@/common/chat/chatLib';
 import { parseError, uuid } from '@/common/utils';
-import { ideClient } from '@/renderer/pages/studio/ide/ideClient';
-import { buildPlanningGuard } from '@/renderer/pages/studio/ide/planningGuard';
+import { coreIdeClient } from '@/renderer/services/coreIdeClient';
+import { buildPlanningGuard } from '@/renderer/services/planningGuard';
 import { withResponseLanguageDirective } from '@/renderer/services/i18n/responseLanguage';
 import { emitter } from '@/renderer/utils/emitter';
 import { buildDisplayMessage } from '@/renderer/utils/file/messageFiles';
@@ -40,8 +40,8 @@ const buildSendFailureError = (error: unknown, message: string): AgentStreamErro
 
   return {
     message,
-    code: 'AIONUI_INTERNAL_ERROR',
-    ownership: 'aionui',
+    code: 'TOMNY_INTERNAL_ERROR',
+    ownership: 'tomny',
     detail: message,
     retryable: true,
     feedback_recommended: true,
@@ -89,7 +89,7 @@ export const useAcpInitialMessage = ({
         void checkAndUpdateTitle(conversation_id, input);
         let outgoingMessage = displayMessage;
         if (workspacePath) {
-          const contextResult = await ideClient.kgContext(workspacePath, input, [], true).catch((): null => null);
+          const contextResult = await coreIdeClient.kgContext(workspacePath, input, [], true).catch((): null => null);
           const pack = contextResult?.ok ? contextResult.data : null;
           if (pack && pack.slices.length > 0) {
             outgoingMessage = `${pack.renderedContext}\n\n${displayMessage}`;

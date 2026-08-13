@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -8,7 +8,7 @@
  * Refresh scheduler for the News aggregator.
  *
  * Like the Personal Manager's reminder scheduler, this runs entirely in the
- * Main process with a simple ticker — NOT through aioncore's cron (which exists
+ * Main process with a simple ticker — NOT through tomnycore's cron (which exists
  * to run *agent tasks*, not lightweight feed polling). On {@link start} it runs
  * an immediate catch-up refresh (so reopening the app pulls fresh news), then
  * ticks on a fixed interval. Each tick refreshes only feeds whose

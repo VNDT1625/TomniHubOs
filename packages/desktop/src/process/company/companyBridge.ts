@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -8,7 +8,7 @@
  * Company IPC bridge — exposes the Main-process agent-company services to the
  * renderer Company UI (Requirement 3.1, Task 4.10).
  *
- * This is an Electron-native bridge (not an aioncore HTTP route), built with the
+ * This is an Electron-native bridge (not an tomnycore HTTP route), built with the
  * same `@office-ai/platform` `bridge` helper that backs `ipcBridge.ts`. Because
  * `ipcBridge.ts` does not (yet) carry a `company` namespace and this task must
  * not modify it, the typed channels are declared **here** and exported so the
@@ -135,7 +135,7 @@ export type SetRulesRequest = {
 
 /** One installed CLI engine in the assignable agent pool. */
 export type AgentPoolCli = { id: string; name: string; available: boolean; teamCapable: boolean };
-/** One existing AionUi assistant in the assignable agent pool. */
+/** One existing Tomny assistant in the assignable agent pool. */
 export type AgentPoolAssistant = { id: string; name: string; model?: string; presetAgentType: string };
 /** One provider model id usable as an executor model. */
 export type AgentPoolModel = { id: string; name: string };
@@ -397,7 +397,7 @@ export const getCompanyServices = (): CompanyServices => {
 };
 
 /**
- * Fetch the assignable executor pool from Tomni Core: installed CLI engines,
+ * Fetch the assignable executor pool from Tomny Core: installed CLI engines,
  * native assistants, and provider models. Defensive — any catalog failure
  * degrades to an empty list so the company UI still loads.
  *
@@ -509,7 +509,7 @@ const ENGINE_MODES: Record<string, Array<{ value: string; label: string }>> = {
     { value: 'plan', label: 'Plan' },
     { value: 'ask', label: 'Ask' },
   ],
-  aionrs: [
+  tomnyagentic: [
     { value: 'default', label: 'Default' },
     { value: 'auto_edit', label: 'Auto-Accept Edits' },
     { value: 'yolo', label: 'YOLO' },
@@ -750,7 +750,7 @@ export function registerCompanyBridge(options: RegisterCompanyBridgeOptions = {}
       // Resolve the set of real, installed engine ids once so a draft's
       // LLM-proposed `presetAgentType` can be clamped to something runnable.
       // An assistant created with a non-existent engine id is unrunnable
-      // (aioncore: "ACP agent requires either agent_id or backend in extra").
+      // (tomnycore: "ACP agent requires either agent_id or backend in extra").
       const pool = await fetchAgentPool().catch(
         (): ListAgentsResponse => ({
           clis: [],

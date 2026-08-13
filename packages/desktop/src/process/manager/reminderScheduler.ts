@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -9,7 +9,7 @@
  * 3.6).
  *
  * Reminders are scheduled **in the Main process** with a simple 60s ticker —
- * deliberately NOT through aioncore's cron (which is for running *agent tasks*,
+ * deliberately NOT through tomnycore's cron (which is for running *agent tasks*,
  * not personal reminders, and would require an HTTP round-trip / backend
  * change). On {@link IReminderScheduler.start} the scheduler first runs a
  * **catch-up** pass so reminders that came due while the app was closed are not

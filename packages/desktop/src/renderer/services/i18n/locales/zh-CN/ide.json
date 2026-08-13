@@ -39,9 +39,60 @@
     "hooks": "Agent \u94a9\u5b50",
     "spec": "\u89c4\u683c",
     "lsp": "\u8bed\u8a00\u670d\u52a1\u5668",
+    "extensions": "扩展",
     "expbase": "\u7ecf\u9a8c\u5e93",
     "team": "\u56e2\u961f",
     "viu": "Viu \u00b7 \u53ef\u89c6\u5316\u754c\u9762"
+  },
+  "extensions": {
+    "title": "扩展",
+    "subtitle": "来自可信软件包的已安装 IDE 功能。此处仅显示元数据，不会执行可选模块。",
+    "installedCount": "已安装 {{count}} 个",
+    "refresh": "刷新",
+    "browseStore": "浏览商店",
+    "activityGroups": "活动组",
+    "installedSubtabs": "已安装的子标签页",
+    "groupEmpty": "此组中没有已安装的子标签页。",
+    "findExtensions": "查找扩展",
+    "emptyHint": "从商店安装 IDE 扩展以在此添加功能。",
+    "loading": "正在加载扩展",
+    "loadFailed": "无法加载扩展。",
+    "retry": "重试",
+    "selected": "已选贡献",
+    "selectedHint": "当前已选择此贡献。执行仍受 IDE 策略约束。",
+    "openPackage": "打开软件包",
+    "packageLabel": "软件包",
+    "moduleLabel": "模块",
+    "activationLabel": "激活方式",
+    "activation": {
+      "onOpen": "打开时",
+      "onStartup": "启动时"
+    },
+    "runtime": {
+      "open": "打开",
+      "back": "返回扩展",
+      "title": "{{name}} 扩展",
+      "policyHint": "此处仅允许运行已签名的第一方可信 React 模块。其他运行时仍会被阻止。",
+      "checking": "正在检查执行策略",
+      "blockedTitle": "执行已阻止",
+      "sandboxedWebBlocked": "沙箱 Web 模块已禁用，因为尚未强制实施网络隔离。",
+      "unsupportedBlocked": "此模块不符合 IDE 执行策略。"
+    },
+
+    "groups": {
+      "codebase": "代码库",
+      "agentOps": "智能体运维"
+    },
+    "diagnostics": {
+      "title": "贡献诊断",
+      "redactedHint": "详细信息已隐藏；仅显示诊断类别和数量。",
+      "invalidPackage": "无效软件包",
+      "protectedNamespace": "受保护的命名空间",
+      "dependencyUnavailable": "依赖项不可用",
+      "hostApiIncompatible": "主机 API 不兼容",
+      "contributionCollision": "贡献冲突",
+      "danglingReference": "悬空引用"
+    }
   },
   "viu": {
     "open": "Viu \u00b7 \u53ef\u89c6\u5316\u754c\u9762",
@@ -219,8 +270,35 @@
           "y": "Y"
         },
 
-
-"image":{"section":"\u56fe\u50cf","fit":"\u9002\u914d\u65b9\u5f0f","fitCover":"\u8986\u76d6","fitContain":"\u5b8c\u6574\u663e\u793a","fitFill":"\u62c9\u4f38","fitNone":"\u539f\u59cb\u5c3a\u5bf8","fitScaleDown":"\u7b49\u6bd4\u7f29\u5c0f","crop":"\u88c1\u526a","focalPoint":"\u7126\u70b9","flipHorizontal":"\u6c34\u5e73\u7ffb\u8f6c","flipVertical":"\u5782\u76f4\u7ffb\u8f6c","reset":"\u91cd\u7f6e\u53d6\u666f"},"stroke":{"section":"\u63cf\u8fb9","add":"\u6dfb\u52a0\u63cf\u8fb9","dashPattern":"\u865a\u7ebf\u6a21\u5f0f","dashOffset":"\u865a\u7ebf\u504f\u79fb"},"quality":{"section":"\u8d28\u91cf\u68c0\u67e5","issueCount":"{{count}}\u0020\u4e2a\u95ee\u9898","noIssues":"\u672a\u53d1\u73b0\u8d28\u91cf\u95ee\u9898\u3002","error":"\u9519\u8bef","warning":"\u8b66\u544a","project":"\u9879\u76ee","issue":"{{code}}\u0020\u00b7\u0020{{entityId}}"},
+        "image": {
+          "section": "\u56fe\u50cf",
+          "fit": "\u9002\u914d\u65b9\u5f0f",
+          "fitCover": "\u8986\u76d6",
+          "fitContain": "\u5b8c\u6574\u663e\u793a",
+          "fitFill": "\u62c9\u4f38",
+          "fitNone": "\u539f\u59cb\u5c3a\u5bf8",
+          "fitScaleDown": "\u7b49\u6bd4\u7f29\u5c0f",
+          "crop": "\u88c1\u526a",
+          "focalPoint": "\u7126\u70b9",
+          "flipHorizontal": "\u6c34\u5e73\u7ffb\u8f6c",
+          "flipVertical": "\u5782\u76f4\u7ffb\u8f6c",
+          "reset": "\u91cd\u7f6e\u53d6\u666f"
+        },
+        "stroke": {
+          "section": "\u63cf\u8fb9",
+          "add": "\u6dfb\u52a0\u63cf\u8fb9",
+          "dashPattern": "\u865a\u7ebf\u6a21\u5f0f",
+          "dashOffset": "\u865a\u7ebf\u504f\u79fb"
+        },
+        "quality": {
+          "section": "\u8d28\u91cf\u68c0\u67e5",
+          "issueCount": "{{count}}\u0020\u4e2a\u95ee\u9898",
+          "noIssues": "\u672a\u53d1\u73b0\u8d28\u91cf\u95ee\u9898\u3002",
+          "error": "\u9519\u8bef",
+          "warning": "\u8b66\u544a",
+          "project": "\u9879\u76ee",
+          "issue": "{{code}}\u0020\u00b7\u0020{{entityId}}"
+        },
         "layout": {
           "section": "Auto layout",
           "mode": "Direction",
@@ -433,7 +511,25 @@
           "timeline": "Timeline",
           "keyframes": "Keyframes",
           "position": "Position",
-    "presetSmartAnimate":"\u667a\u80fd\u52a8\u753b","createTimeline":"\u521b\u5efa\u65f6\u95f4\u8f74","addTrack":"\u6dfb\u52a0\u8f68\u9053","addKeyframe":"\u6dfb\u52a0\u5173\u952e\u5e27","loop":"\u5faa\u73af","property":"\u5c5e\u6027","start":"\u5f00\u59cb","end":"\u7ed3\u675f","pin":"\u56fa\u5b9a","parallax":"\u89c6\u5dee","scrollBinding":"\u6eda\u52a8\u7ed1\u5b9a","addScrollBinding":"\u6dfb\u52a0\u6eda\u52a8\u7ed1\u5b9a","noTimeline":"\u5c1a\u65e0\u65f6\u95f4\u8f74","x":"X","y":"Y","opacity":"\u4e0d\u900f\u660e\u5ea6","scale":"\u7f29\u653e","rotate":"\u65cb\u8f6c","blur":"\u6a21\u7cca"
+          "presetSmartAnimate": "\u667a\u80fd\u52a8\u753b",
+          "createTimeline": "\u521b\u5efa\u65f6\u95f4\u8f74",
+          "addTrack": "\u6dfb\u52a0\u8f68\u9053",
+          "addKeyframe": "\u6dfb\u52a0\u5173\u952e\u5e27",
+          "loop": "\u5faa\u73af",
+          "property": "\u5c5e\u6027",
+          "start": "\u5f00\u59cb",
+          "end": "\u7ed3\u675f",
+          "pin": "\u56fa\u5b9a",
+          "parallax": "\u89c6\u5dee",
+          "scrollBinding": "\u6eda\u52a8\u7ed1\u5b9a",
+          "addScrollBinding": "\u6dfb\u52a0\u6eda\u52a8\u7ed1\u5b9a",
+          "noTimeline": "\u5c1a\u65e0\u65f6\u95f4\u8f74",
+          "x": "X",
+          "y": "Y",
+          "opacity": "\u4e0d\u900f\u660e\u5ea6",
+          "scale": "\u7f29\u653e",
+          "rotate": "\u65cb\u8f6c",
+          "blur": "\u6a21\u7cca"
         }
       },
       "inspector": {
@@ -1197,17 +1293,17 @@
       "deleteComboKey": "\u79fb\u9664\u952e"
     },
     "context": {
-      "loading": "\u6b63\u5728\u52a0\u8f7d AionRS \u4e0a\u4e0b\u6587\u2026",
-      "loadFailed": "\u65e0\u6cd5\u52a0\u8f7d AionRS \u4e0a\u4e0b\u6587\u3002",
-      "empty": "\u5c1a\u65e0 AionRS \u4e0a\u4e0b\u6587\u3002",
-      "exactTitle": "AionRS \u5b9e\u9645\u8bf7\u6c42\u4e0a\u4e0b\u6587",
-      "exactHint": "\u76f4\u63a5\u8bfb\u53d6 AionRS \u538b\u7f29\u540e\u7684\u72b6\u6001\u3002\u5185\u90e8\u4e0a\u4e0b\u6587\u53ea\u8bfb\uff1b\u81ea\u5b9a\u4e49\u4e0a\u4e0b\u6587\u53ef\u7f16\u8f91\u3002",
+      "loading": "\u6b63\u5728\u52a0\u8f7d Tomny Agentic \u4e0a\u4e0b\u6587\u2026",
+      "loadFailed": "\u65e0\u6cd5\u52a0\u8f7d Tomny Agentic \u4e0a\u4e0b\u6587\u3002",
+      "empty": "\u5c1a\u65e0 Tomny Agentic \u4e0a\u4e0b\u6587\u3002",
+      "exactTitle": "Tomny Agentic \u5b9e\u9645\u8bf7\u6c42\u4e0a\u4e0b\u6587",
+      "exactHint": "\u76f4\u63a5\u8bfb\u53d6 Tomny Agentic \u538b\u7f29\u540e\u7684\u72b6\u6001\u3002\u5185\u90e8\u4e0a\u4e0b\u6587\u53ea\u8bfb\uff1b\u81ea\u5b9a\u4e49\u4e0a\u4e0b\u6587\u53ef\u7f16\u8f91\u3002",
       "messageCount": "{{count}} \u6761\u6d88\u606f",
       "messageWindow": "\u6700\u8fd1 {{assistant}} \u6761 AI \u56de\u590d \u00b7 \u8bf7\u6c42 {{sent}} \u6761\uff0c\u4f1a\u8bdd\u5171 {{total}} \u6761",
       "toolCount": "{{count}} \u4e2a\u5de5\u5177",
       "maxTokens": "\u6700\u5927\u8f93\u51fa {{count}}",
       "customTitle": "\u81ea\u5b9a\u4e49\u4e0a\u4e0b\u6587",
-      "customHint": "\u6b64\u6587\u672c\u4f1a\u5728\u6bcf\u8f6e AionRS \u8bf7\u6c42\u4e2d\u9644\u52a0\u5230\u7cfb\u7edf\u63d0\u793a\u8bcd\u3002",
+      "customHint": "\u6b64\u6587\u672c\u4f1a\u5728\u6bcf\u8f6e Tomny Agentic \u8bf7\u6c42\u4e2d\u9644\u52a0\u5230\u7cfb\u7edf\u63d0\u793a\u8bcd\u3002",
       "customPlaceholder": "\u4e3a\u6b64\u5bf9\u8bdd\u6dfb\u52a0\u957f\u671f\u6307\u4ee4\u6216\u4e0a\u4e0b\u6587\u2026",
       "save": "\u4fdd\u5b58\u4e0a\u4e0b\u6587",
       "saved": "\u81ea\u5b9a\u4e49\u4e0a\u4e0b\u6587\u5df2\u4fdd\u5b58\u3002",

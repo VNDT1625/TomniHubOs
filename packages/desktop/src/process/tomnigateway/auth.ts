@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Tomni
+ * Copyright 2025 Tomny
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -15,11 +15,11 @@ const tokenMatches = (presented: string, expected: string): boolean =>
 
 export const assertValidGatewayAuth = (config: TomniGatewayAuthConfig): void => {
   if (config.sessionTokens.length === 0 || config.sessionTokens.some((token) => token.trim().length < 16)) {
-    throw new Error('[TomniGateway] At least one session token of 16 or more characters is required.');
+    throw new Error('[TomnyGateway] At least one session token of 16 or more characters is required.');
   }
   for (const origin of config.allowedOrigins) {
     if (origin.includes('*') || new URL(origin).origin !== origin) {
-      throw new Error(`[TomniGateway] Invalid exact origin: ${origin}`);
+      throw new Error(`[TomnyGateway] Invalid exact origin: ${origin}`);
     }
   }
 };

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Tomni
+ * Copyright 2025 Tomny
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -64,7 +64,7 @@ afterEach(async () => {
   await Promise.all(servers.splice(0).map((server) => server.close()));
 });
 
-describe('Tomni compatibility gateway contract', () => {
+describe('Tomny compatibility gateway contract', () => {
   it('serves versioned native collection and message routes', async () => {
     const { server } = await harness();
 

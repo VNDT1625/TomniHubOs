@@ -105,8 +105,8 @@
       "selectFolder": "Chọn thư mục",
       "clearFolder": "Xóa",
       "model": "Mô hình",
-      "aionrsModelRequired": "Vui lòng chọn mô hình cho Tomny Agentic",
-      "aionrsNoProvider": "Không có mô hình nào khả dụng"
+      "tomnyagenticModelRequired": "Vui lòng chọn mô hình cho Tomny Agentic",
+      "tomnyagenticNoProvider": "Không có mô hình nào khả dụng"
     },
     "freq": {
       "manual": "Thủ công",

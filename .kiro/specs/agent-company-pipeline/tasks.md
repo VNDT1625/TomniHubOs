@@ -4,7 +4,7 @@
 
 Kế hoạch triển khai **công ty tác nhân làm việc thật, đệ quy, do soul/rule điều khiển** (xem
 [`requirements.md`](./requirements.md) + [`design.md`](./design.md)). Ngôn ngữ: **TypeScript** (Electron +
-Vite + React + Bun). Không sửa aioncore. Orchestrator thực thi nằm ở **renderer** (tái dùng
+Vite + React + Bun). Không sửa tomnicore. Orchestrator thực thi nằm ở **renderer** (tái dùng
 `ipcBridge.conversation` + `turn.completed` + `companySession`). Engine model-chat cũ (`companyConversation`)
 giữ nguyên làm chế độ "diễn".
 
@@ -190,7 +190,7 @@ approved, note)` settle. Từ chối kèm note → đưa note vào `incoming` đ
   reports + rules → mỗi loại công ty có quy trình riêng mà không hardcode; sửa ở UI là lần chạy sau đổi
   theo (YC1). `process/company/soulTemplates.ts` là fallback mặc định khi cần.
 - **Thực thi thật (B)** qua `conversation.sendMessage` + chờ `turn.completed` (`roleExecutor`), agent chạy
-  trong workspace thật. Orchestrator nằm ở renderer để tái dùng API conversation/turn (không sửa aioncore).
+  trong workspace thật. Orchestrator nằm ở renderer để tái dùng API conversation/turn (không sửa tomnicore).
 - **Hoãn (giai đoạn sau):** spawn "lead phụ" cùng model/context (YC6.3); auto-merge code song song cùng file.
 - Sau khi sửa locale: `bun run i18n:types` + `node scripts/check-i18n.js`.
 

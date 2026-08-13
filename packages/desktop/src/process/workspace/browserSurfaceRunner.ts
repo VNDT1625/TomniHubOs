@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -103,7 +103,11 @@ export const createBrowserSurfaceRunner = (deps: BrowserSurfaceRunnerDeps): ISur
         if (result.status === 'error') {
           throw new Error(result.answer || 'The web agent failed.');
         }
-        return { answer: result.answer, steps: result.steps };
+        return {
+          answer: result.answer,
+          steps: result.steps,
+          ...(result.status === 'stopped' ? { status: 'stopped' as const } : {}),
+        };
       } finally {
         ctx.signal.removeEventListener('abort', onAbort);
       }

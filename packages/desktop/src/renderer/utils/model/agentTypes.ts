@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -10,7 +10,7 @@ import { ipcBridge } from '@/common';
 export const DETECTED_AGENTS_SWR_KEY = 'agents.detected';
 
 /** Type of an agent. */
-export type AgentType = 'acp' | 'remote' | 'aionrs' | 'openclaw-gateway' | 'nanobot';
+export type AgentType = 'acp' | 'remote' | 'tomnyagentic' | 'openclaw-gateway' | 'nanobot';
 
 /** Source tier of an agent row, mirroring backend `agent_source` enum. */
 export type AgentSource = 'internal' | 'builtin' | 'extension' | 'custom';
@@ -74,7 +74,7 @@ export type AgentMetadata = {
 
   /** Vendor label (e.g. "claude"). Absent for agents without vendor grouping. */
   backend?: string;
-  /** Top-level runtime discriminant: "acp" | "remote" | "nanobot" | "aionrs" | … */
+  /** Top-level runtime discriminant: "acp" | "remote" | "nanobot" | "tomnyagentic" | … */
   agent_type: AgentType;
   agent_source: AgentSource;
   agent_source_info?: AgentSourceInfo;
@@ -93,7 +93,7 @@ export type AgentMetadata = {
 
   behavior_policy?: BehaviorPolicy;
 
-  /** Native mode id that AionUi's legacy `yolo` / `yoloNoSandbox`
+  /** Native mode id that Tomny's legacy `yolo` / `yoloNoSandbox`
    *  aliases resolve to before calling `session/set_mode`. Absent
    *  when the backend has no yolo equivalent. */
   yolo_id?: string;
@@ -150,7 +150,7 @@ function hasBootstrapCliAgent(agents: AgentMetadata[], entry: BootstrapCliAgent)
 }
 
 function normalizeAgentDisplayName(agent: AgentMetadata): AgentMetadata {
-  if (agent.agent_type === 'aionrs' || agent.backend === 'aionrs') {
+  if (agent.agent_type === 'tomnyagentic' || agent.backend === 'tomnyagentic') {
     return { ...agent, name: 'Tomny Agentic' };
   }
   return agent;

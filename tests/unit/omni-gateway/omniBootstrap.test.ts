@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  *
  * Unit tests for the Omni External MCP Gateway session state machine.
@@ -81,7 +81,7 @@ describe('buildOmniBootstrapResult', () => {
     const { state } = newState();
     return {
       state,
-      rootPath: '/repo/AionUi',
+      rootPath: '/repo/Tomny',
       rules: ['rule-1', 'rule-2'] as const,
       planningEnabled: false,
       allowDangerous: false,
@@ -95,8 +95,8 @@ describe('buildOmniBootstrapResult', () => {
   it('returns a session id + workspace name derived from the rootPath basename', () => {
     const result = buildOmniBootstrapResult(baseInput());
     expect(result.sessionId).toBe('s-1');
-    expect(result.workspace.rootPath).toBe('/repo/AionUi');
-    expect(result.workspace.name).toBe('AionUi');
+    expect(result.workspace.rootPath).toBe('/repo/Tomny');
+    expect(result.workspace.name).toBe('Tomny');
   });
 
   it('marks dangerous tools as not allowed when the opt-in is off', () => {
@@ -126,7 +126,7 @@ describe('buildOmniBootstrapResult', () => {
   it('embeds the workspace primer into activeGuide', () => {
     const result = buildOmniBootstrapResult(baseInput());
     expect(result.activeGuide).toContain('## IDE workspace guide');
-    expect(result.activeGuide).toContain('Workspace root: /repo/AionUi');
+    expect(result.activeGuide).toContain('Workspace root: /repo/Tomny');
     expect(result.activeGuide).toContain('## Project rules');
     expect(result.activeGuide).toContain('- rule-1');
     expect(result.activeGuide).toContain(result.sessionId);

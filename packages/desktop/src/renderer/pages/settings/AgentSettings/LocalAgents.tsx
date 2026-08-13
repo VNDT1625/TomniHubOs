@@ -1,18 +1,18 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
 import { ipcBridge } from '@/common';
 import type { AgentMetadata } from '@/renderer/utils/model/agentTypes';
-import AionModal from '@/renderer/components/base/AionModal';
+import TomnyModal from '@/renderer/components/base/TomnyModal';
 import { useAgents } from '@/renderer/hooks/agent/useAgents';
 import { Button, Typography } from '@arco-design/web-react';
 import { Home, Plus } from '@icon-park/react';
 import React, { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import AgentCard from './AgentCard';
 import { AgentHubModal } from './AgentHubModal';
 import InlineAgentEditor, { type CustomAgentDraft } from './InlineAgentEditor';
@@ -21,7 +21,9 @@ import { getAgentKey } from '@/renderer/pages/guid/hooks/agentSelectionUtils';
 const LocalAgents: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const [hubModalVisible, setHubModalVisible] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [hubModalVisible, setHubModalVisible] = useState(() => searchParams.get('market') === '1');
+  const hubScope = searchParams.get('scope') === 'all' ? 'all' : 'agents';
 
   // Single fetch for all agents; both detected and custom lists are derived from it.
   const { agents: allAgents, revalidate: mutateAgents } = useAgents();
@@ -85,13 +87,23 @@ const LocalAgents: React.FC = () => {
   );
 
   // Tomny Agentic first among detected agents
-  const aionrsAgent = detectedAgents?.find((a) => a.agent_type === 'aionrs' || a.backend === 'aionrs');
-  const otherDetected = detectedAgents?.filter((a) => a.agent_type !== 'aionrs' && a.backend !== 'aionrs') ?? [];
+  const tomnyagenticAgent = detectedAgents?.find(
+    (a) => a.agent_type === 'tomnyagentic' || a.backend === 'tomnyagentic'
+  );
+  const otherDetected =
+    detectedAgents?.filter((a) => a.agent_type !== 'tomnyagentic' && a.backend !== 'tomnyagentic') ?? [];
 
   const openCustomAgentEditor = useCallback(() => {
     setEditingAgent(null);
     setEditorVisible(true);
   }, []);
+
+  const openHubMarket = useCallback(() => {
+    setHubModalVisible(true);
+    const next = new URLSearchParams(searchParams);
+    next.delete('market');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   const goToChatWithAgent = useCallback(
     (agent: AgentMetadata) => {
@@ -136,7 +148,7 @@ const LocalAgents: React.FC = () => {
               size='small'
               icon={<Plus size='14' />}
               className='!rounded-10px md:!min-w-144px'
-              onClick={() => setHubModalVisible(true)}
+              onClick={openHubMarket}
             >
               {t('settings.agentManagement.installFromMarket')}
             </Button>
@@ -151,8 +163,12 @@ const LocalAgents: React.FC = () => {
         </Typography.Text>
       </div>
       <div className='grid grid-cols-2 gap-10px px-16px md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5'>
-        {aionrsAgent && (
-          <AgentCard type='detected' agent={aionrsAgent} onGoToChat={() => goToChatWithAgent(aionrsAgent)} />
+        {tomnyagenticAgent && (
+          <AgentCard
+            type='detected'
+            agent={tomnyagenticAgent}
+            onGoToChat={() => goToChatWithAgent(tomnyagenticAgent)}
+          />
         )}
         {otherDetected.map((agent) => (
           <AgentCard
@@ -178,7 +194,7 @@ const LocalAgents: React.FC = () => {
         </div>
       )}
 
-      <AionModal
+      <TomnyModal
         visible={editorVisible}
         onCancel={() => {
           setEditorVisible(false);
@@ -215,7 +231,7 @@ const LocalAgents: React.FC = () => {
             }}
           />
         )}
-      </AionModal>
+      </TomnyModal>
 
       <div className='flex flex-col gap-4px px-0'>
         {customAgents?.map((agent) => (
@@ -234,7 +250,9 @@ const LocalAgents: React.FC = () => {
         ))}
       </div>
 
-      {hubModalVisible && <AgentHubModal visible={hubModalVisible} onCancel={() => setHubModalVisible(false)} />}
+      {hubModalVisible && (
+        <AgentHubModal visible={hubModalVisible} scope={hubScope} onCancel={() => setHubModalVisible(false)} />
+      )}
     </div>
   );
 };

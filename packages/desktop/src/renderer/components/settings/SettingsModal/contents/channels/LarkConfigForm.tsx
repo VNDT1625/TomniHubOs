@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -86,7 +86,7 @@ const LarkConfigForm: React.FC<LarkConfigFormProps> = ({ pluginStatus, modelSele
     backend?: string;
     name?: string;
     id?: string;
-  }>({ agent_type: 'aionrs' });
+  }>({ agent_type: 'tomnyagentic' });
 
   // Load pending pairings
   const loadPendingPairings = useCallback(async () => {
@@ -148,7 +148,7 @@ const LarkConfigForm: React.FC<LarkConfigFormProps> = ({ pluginStatus, modelSele
             typeof s.agent_type === 'string'
               ? s.agent_type
               : typeof s.backend === 'string' &&
-                  ['aionrs', 'tomni-cli', 'openclaw-gateway', 'nanobot', 'remote'].includes(s.backend)
+                  ['tomnyagentic', 'tomni-cli', 'openclaw-gateway', 'nanobot', 'remote'].includes(s.backend)
                 ? s.backend
                 : 'acp';
           setSelectedAgent({
@@ -159,7 +159,7 @@ const LarkConfigForm: React.FC<LarkConfigFormProps> = ({ pluginStatus, modelSele
             name: s.name as string | undefined,
           });
         } else if (typeof saved === 'string') {
-          const agentType = ['aionrs', 'tomni-cli', 'openclaw-gateway', 'nanobot', 'remote'].includes(saved)
+          const agentType = ['tomnyagentic', 'tomni-cli', 'openclaw-gateway', 'nanobot', 'remote'].includes(saved)
             ? saved
             : 'acp';
           setSelectedAgent({ agent_type: agentType, backend: saved });
@@ -350,13 +350,13 @@ const LarkConfigForm: React.FC<LarkConfigFormProps> = ({ pluginStatus, modelSele
   };
 
   const hasExistingUsers = authorizedUsers.length > 0;
-  const showModelSelector = selectedAgent.agent_type === 'aionrs';
+  const showModelSelector = selectedAgent.agent_type === 'tomnyagentic';
   const agentOptions: Array<{
     agent_type: string;
     backend?: string;
     name: string;
     id?: string;
-  }> = availableAgents.length > 0 ? availableAgents : [{ agent_type: 'aionrs', name: 'Tomny Agentic' }];
+  }> = availableAgents.length > 0 ? availableAgents : [{ agent_type: 'tomnyagentic', name: 'Tomny Agentic' }];
 
   return (
     <div className='flex flex-col gap-24px'>
@@ -645,7 +645,7 @@ const LarkConfigForm: React.FC<LarkConfigFormProps> = ({ pluginStatus, modelSele
                         setSelectedAgent(next);
                         void persistSelectedAgent(next);
 
-                        if (next.agent_type === 'aionrs') {
+                        if (next.agent_type === 'tomnyagentic') {
                           const savedModel = configService.get('assistant.lark.defaultModel');
                           const providers = modelSelection.providers;
                           const savedProviderExists = savedModel?.id && providers.some((p) => p.id === savedModel.id);

@@ -1,13 +1,16 @@
 import React, { Suspense } from 'react';
-import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { HashRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import AppLoader from '@renderer/components/layout/AppLoader';
 import RouteErrorBoundary from '@renderer/components/layout/RouteErrorBoundary';
 import { useAuth } from '@renderer/hooks/context/AuthContext';
 import { MUSIC_STUDIO_ENABLED, TEAM_MODE_ENABLED } from '@/common/config/constants';
+import { createStudioCompatibilityRouteDestination } from '@/common/packages/studioCompatibility';
 const Conversation = React.lazy(() => import('@renderer/pages/conversation'));
 const Guid = React.lazy(() => import('@renderer/pages/guid'));
-const Studio = React.lazy(() => import('@renderer/pages/studio'));
 const Manager = React.lazy(() => import('@renderer/pages/manager'));
+const ManagementPage = React.lazy(() => import('@renderer/pages/hub/ManagementPage'));
+const StorePage = React.lazy(() => import('@renderer/pages/hub/StorePage'));
+const HistoryPage = React.lazy(() => import('@renderer/pages/hub/HistoryPage'));
 const AgentSettings = React.lazy(() => import('@renderer/pages/settings/AgentSettings'));
 const PersonalSettings = React.lazy(() => import('@renderer/pages/settings/PersonalSettings'));
 const AssistantSettings = React.lazy(() => import('@renderer/pages/settings/AssistantSettings'));
@@ -18,6 +21,7 @@ const SystemSettings = React.lazy(() => import('@renderer/pages/settings/SystemS
 const WebuiSettings = React.lazy(() => import('@renderer/pages/settings/WebuiSettings'));
 const PetSettings = React.lazy(() => import('@renderer/pages/settings/PetSettings'));
 const ResourceSettings = React.lazy(() => import('@renderer/pages/settings/ResourceSettings'));
+const CompanyHubPage = React.lazy(() => import('@renderer/pages/hub/CompanyHubPage'));
 const CompanySettings = React.lazy(() => import('@renderer/pages/company'));
 const RealtimeKnowledgeSettings = React.lazy(() => import('@renderer/pages/knowledge'));
 const BrowserSettings = React.lazy(() => import('@renderer/pages/browser'));
@@ -55,6 +59,11 @@ const ProtectedLayout: React.FC<{ layout: React.ReactElement }> = ({ layout }) =
   return React.cloneElement(layout);
 };
 
+const LegacyStudioRoute: React.FC = () => {
+  const location = useLocation();
+  return <Navigate replace state={location.state} to={createStudioCompatibilityRouteDestination(location.search)} />;
+};
+
 const PanelRoute: React.FC<{ layout: React.ReactElement }> = ({ layout }) => {
   const { status } = useAuth();
 
@@ -68,11 +77,17 @@ const PanelRoute: React.FC<{ layout: React.ReactElement }> = ({ layout }) => {
         <Route element={<ProtectedLayout layout={layout} />}>
           <Route index element={<Navigate to='/guid' replace />} />
           <Route path='/guid' element={withRouteFallback(Guid)} />
-          <Route path='/studio' element={withRouteFallback(Studio)} />
-          <Route path='/manager' element={withRouteFallback(Manager)} />
+          <Route path='/studio' element={<LegacyStudioRoute />} />
+          <Route path='/manager' element={withRouteFallback(ManagementPage)} />
+          <Route path='/manager/workspace' element={withRouteFallback(Manager)} />
+          <Route path='/store/app/:packageId/:moduleId' element={withRouteFallback(StorePage)} />
+          <Route path='/store/package/:packageId' element={withRouteFallback(StorePage)} />
+          <Route path='/store/*' element={withRouteFallback(StorePage)} />
+          <Route path='/products' element={<Navigate to='/store' replace />} />
+          <Route path='/history' element={withRouteFallback(HistoryPage)} />
           <Route path='/conversation/:id' element={withRouteFallback(Conversation)} />
           {/* New top-level aliases for recent features (company, browser tools, testing, monitor, terminal, knowledge, realtime, git) */}
-          <Route path='/company' element={withRouteFallback(CompanySettings)} />
+          <Route path='/company' element={withRouteFallback(CompanyHubPage)} />
           <Route path='/browser' element={withRouteFallback(BrowserSettings)} />
           <Route path='/testing' element={withRouteFallback(TestingSettings)} />
           <Route path='/monitor' element={withRouteFallback(MonitorSettings)} />
@@ -88,7 +103,7 @@ const PanelRoute: React.FC<{ layout: React.ReactElement }> = ({ layout }) => {
             path='/music'
             element={
               MUSIC_STUDIO_ENABLED ? (
-                <Navigate to='/studio' replace state={{ studioView: 'music' }} />
+                <Navigate to='/store/app/com.tomni.studio/studio' replace />
               ) : (
                 <Navigate to='/guid' replace />
               )

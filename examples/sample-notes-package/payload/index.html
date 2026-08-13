@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Focus Notes</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: ui-rounded, system-ui, sans-serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: Canvas;
+        color: CanvasText;
+      }
+      main {
+        width: min(760px, calc(100% - 32px));
+        margin: 0 auto;
+        padding: 48px 0;
+      }
+      header {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 24px;
+      }
+      h1 {
+        margin: 0;
+        font-size: clamp(28px, 6vw, 56px);
+        letter-spacing: -0.05em;
+      }
+      p {
+        opacity: 0.68;
+      }
+      form {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 10px;
+      }
+      input,
+      button {
+        min-height: 44px;
+        border: 1px solid GrayText;
+        border-radius: 12px;
+        font: inherit;
+      }
+      input {
+        padding: 0 14px;
+        background: Canvas;
+        color: CanvasText;
+      }
+      button {
+        padding: 0 18px;
+        background: Highlight;
+        color: HighlightText;
+        cursor: pointer;
+      }
+      ul {
+        display: grid;
+        gap: 10px;
+        padding: 0;
+        margin: 22px 0 0;
+        list-style: none;
+      }
+      li {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 16px;
+        padding: 16px;
+        border: 1px solid GrayText;
+        border-radius: 14px;
+      }
+      li button {
+        min-height: 34px;
+        padding: 0 12px;
+        background: transparent;
+        color: CanvasText;
+      }
+      .empty {
+        padding: 32px;
+        text-align: center;
+        opacity: 0.58;
+        border: 1px dashed GrayText;
+        border-radius: 14px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          <h1>Focus Notes</h1>
+          <p>A real app downloaded from Tomny Store.</p>
+        </div>
+        <strong id="count">0 notes</strong>
+      </header>
+      <form id="form">
+        <input
+          id="note"
+          maxlength="180"
+          autocomplete="off"
+          placeholder="Write one clear thought?"
+          aria-label="New note"
+        />
+        <button type="submit">Add note</button>
+      </form>
+      <ul id="notes">
+        <li class="empty">Your notes will appear here.</li>
+      </ul>
+    </main>
+    <script>
+      const notes = [];
+      const form = document.querySelector('#form');
+      const input = document.querySelector('#note');
+      const list = document.querySelector('#notes');
+      const count = document.querySelector('#count');
+      const render = () => {
+        count.textContent = `${notes.length} note${notes.length === 1 ? '' : 's'}`;
+        list.replaceChildren();
+        if (notes.length === 0) {
+          const empty = document.createElement('li');
+          empty.className = 'empty';
+          empty.textContent = 'Your notes will appear here.';
+          list.append(empty);
+          return;
+        }
+        notes.forEach((text, index) => {
+          const item = document.createElement('li');
+          const label = document.createElement('span');
+          const remove = document.createElement('button');
+          label.textContent = text;
+          remove.type = 'button';
+          remove.textContent = 'Remove';
+          remove.addEventListener('click', () => {
+            notes.splice(index, 1);
+            render();
+          });
+          item.append(label, remove);
+          list.append(item);
+        });
+      };
+      form.addEventListener('submit', (event) => {
+        event.preventDefault();
+        const value = input.value.trim();
+        if (!value) return;
+        notes.unshift(value);
+        input.value = '';
+        render();
+      });
+    </script>
+  </body>
+</html>

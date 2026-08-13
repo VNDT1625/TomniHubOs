@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Tomni
+ * Copyright 2025 Tomny
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -279,7 +279,7 @@ export const handleMcpRoute = async ({ request, url, service, respond }: McpRout
     } else if (code === 'MCP_NOT_FOUND') respond.failure(404, 'NOT_FOUND', 'MCP server not found.');
     else if (/already exists/iu.test(code))
       respond.failure(409, 'CONFLICT', 'An MCP server with that name already exists.');
-    else respond.failure(500, 'MCP_OPERATION_FAILED', 'The Tomni MCP service could not complete the request.');
+    else respond.failure(500, 'MCP_OPERATION_FAILED', 'The Tomny MCP service could not complete the request.');
     return true;
   }
 };

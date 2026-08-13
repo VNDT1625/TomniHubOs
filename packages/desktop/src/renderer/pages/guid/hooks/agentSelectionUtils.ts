@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 AionUi (github.com/VNDT1625/OmniAgent)
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -10,9 +10,9 @@ import type { AgentSource } from '@/renderer/utils/model/agentTypes';
 /** Save preferred mode to the agent's own config key */
 export async function savePreferredMode(agentKey: string, mode: string): Promise<void> {
   try {
-    if (agentKey === 'aionrs') {
-      const config = configService.get('aionrs.config');
-      await configService.set('aionrs.config', { ...config, preferredMode: mode });
+    if (agentKey === 'tomnyagentic') {
+      const config = configService.get('tomnyagentic.config');
+      await configService.set('tomnyagentic.config', { ...config, preferredMode: mode });
     } else if (agentKey !== 'custom') {
       const config = configService.get('acp.config');
       const backendConfig = config?.[agentKey as string] || {};
@@ -34,10 +34,10 @@ export async function savePreferredModelId(agentKey: string, model_id: string): 
   }
 }
 
-/** Save default aionrs provider/model so the Guid page restores it next session. */
-export async function saveAionrsDefaultModel(provider_id: string, use_model: string): Promise<void> {
+/** Save default tomnyagentic provider/model so the Guid page restores it next session. */
+export async function saveTomnyAgenticDefaultModel(provider_id: string, use_model: string): Promise<void> {
   try {
-    await configService.set('aionrs.defaultModel', { id: provider_id, use_model });
+    await configService.set('tomnyagentic.defaultModel', { id: provider_id, use_model });
   } catch {
     /* silent */
   }

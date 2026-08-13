@@ -118,8 +118,8 @@
       "selectFolder": "Klasör Seç",
       "clearFolder": "Temizle",
       "model": "Model",
-      "aionrsModelRequired": "Tomny Agentic için bir model seçin",
-      "aionrsNoProvider": "Kullanılabilir model yok"
+      "tomnyagenticModelRequired": "Tomny Agentic için bir model seçin",
+      "tomnyagenticNoProvider": "Kullanılabilir model yok"
     },
     "freq": {
       "manual": "Manuel",
