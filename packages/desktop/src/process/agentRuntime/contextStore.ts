@@ -150,6 +150,7 @@ export type PersonalLearningCoordinator = {
   reject(recordId: string): Promise<boolean>;
   correct(recordId: string, fact: ContextFact, explanation: string): Promise<boolean>;
   forget(recordId: string): Promise<boolean>;
+  delete(recordId: string): Promise<boolean>;
   recordOutcome(recordId: string, outcome: 'helpful' | 'not_helpful'): Promise<boolean>;
 };
 
@@ -248,6 +249,17 @@ export const createPersonalLearningCoordinator = (
           learningRecords: profile.learningRecords?.map((item) =>
             item.id === record.id ? { ...item, status: 'forgotten' } : item
           ),
+          updatedAt: now(),
+        }))
+      ),
+    delete: (recordId) =>
+      mutate(() =>
+        update(recordId, (profile, record) => ({
+          ...profile,
+          [record.collection]: profile[record.collection].filter(
+            (fact) => fact.key !== record.fact.key || fact.value !== record.fact.value
+          ),
+          learningRecords: profile.learningRecords?.filter((item) => item.id !== record.id),
           updatedAt: now(),
         }))
       ),

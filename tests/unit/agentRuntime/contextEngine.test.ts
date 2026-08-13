@@ -802,6 +802,8 @@ describe('Context learning conflict policy', () => {
     await learning.forget(proposed.id);
     expect(current.preferences).toEqual([]);
     expect(current.learningRecords).toMatchObject([{ status: 'forgotten', outcome: 'not_helpful' }]);
+    await learning.delete(proposed.id);
+    expect(current.learningRecords).toEqual([]);
   });
 });
 
