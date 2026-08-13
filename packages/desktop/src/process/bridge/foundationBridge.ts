@@ -118,8 +118,15 @@ export const parseFoundationRunPayload = (value: unknown): FoundationRunPayload 
   return { intent: assertRunIntent(payload.intent as RunIntent) };
 };
 
-const kindForCoreTarget = (kind: 'builtin' | 'acp' | 'cli' | 'local' | 'remote'): HubExecutionTarget['kind'] =>
-  kind === 'local' ? 'local' : kind === 'remote' ? 'cloud' : 'cli';
+const kindForCoreTarget = (
+  kind: 'builtin' | 'acp' | 'cli' | 'local' | 'remote',
+  modelKey?: string
+): HubExecutionTarget['kind'] =>
+  kind === 'local'
+    ? 'local'
+    : kind === 'remote' || (kind === 'builtin' && modelKey?.startsWith('app-provider:'))
+      ? 'cloud'
+      : 'cli';
 
 const priorityForCoreTarget = (kind: HubExecutionTarget['kind']): number =>
   kind === 'local' ? 40 : kind === 'cloud' ? 30 : kind === 'cli' ? 20 : 10;
@@ -132,7 +139,8 @@ export const createFoundationHubTargets = async (
   (await runtime.listTargets())
     .filter((target) => target.available)
     .map((target) => {
-      const kind = kindForCoreTarget(target.kind);
+      const modelKey = overrides.modelKey ?? target.defaultModelKey;
+      const kind = kindForCoreTarget(target.kind, modelKey);
       const hubTarget: HubExecutionTarget = {
         id: target.id,
         kind,
@@ -144,7 +152,7 @@ export const createFoundationHubTargets = async (
             targetId: target.id,
             prompt: intent.goal,
             workspace: intent.workspaceScope,
-            modelKey: overrides.modelKey ?? target.defaultModelKey,
+            modelKey,
             permissionMode: overrides.permissionMode ?? 'workspace-write',
             sessionId: overrides.sessionId,
             contextIdentity: overrides.contextIdentity ?? {
