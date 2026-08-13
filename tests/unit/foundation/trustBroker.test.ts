@@ -7,6 +7,7 @@ const createBroker = () =>
     allowedCapabilities: ['cli.execute', 'workspace.read', 'workspace.write'],
     allowedNetworkHosts: ['api.example.test'],
     trustedPackageIds: ['com.tomni.ide'],
+    allowedOrigins: ['app://hub'],
   });
 
 const request = {
@@ -53,5 +54,17 @@ describe('TrustBroker', () => {
     const decision = createBroker().authorize({ ...request, requestedCapabilities: ['workspace.write'] });
 
     expect(decision).toMatchObject({ decision: 'approval_required', reasonCode: 'MUTATION_REQUIRES_APPROVAL' });
+  });
+
+  it('denies unknown origins and final secret-shaped egress, then honors revocation', () => {
+    const broker = createBroker();
+
+    expect(broker.requestCapability(request, 'app://untrusted').reasonCode).toBe('ORIGIN_NOT_ALLOWED');
+    expect(
+      broker.inspectFinalEgress({ ...request, origin: 'app://hub', serializedPayload: 'api_key=should-not-leave' })
+        .reasonCode
+    ).toBe('FINAL_EGRESS_SECRET_DETECTED');
+    broker.revoke('workspace.read');
+    expect(broker.requestCapability(request, 'app://hub').reasonCode).toBe('CAPABILITY_NOT_ALLOWED');
   });
 });

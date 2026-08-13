@@ -21,6 +21,7 @@ export type TrustPolicy = {
   allowedCapabilities: readonly string[];
   allowedNetworkHosts: readonly string[];
   trustedPackageIds: readonly string[];
+  allowedOrigins: readonly string[];
   requireApprovalForMutation: boolean;
 };
 
@@ -28,8 +29,12 @@ const DEFAULT_POLICY: TrustPolicy = {
   allowedCapabilities: ['execution.safe', 'target.execute', 'workspace.read'],
   allowedNetworkHosts: [],
   trustedPackageIds: [],
+  allowedOrigins: [],
   requireApprovalForMutation: true,
 };
+
+export type TrustOriginRequest = Pick<TrustRequest, 'runId' | 'taskId' | 'targetId'> & { origin: string };
+export type FinalEgressRequest = TrustRequest & { origin: string; serializedPayload: string };
 
 const isWithinWorkspace = (workspaceScope: string, candidate: string): boolean => {
   const relative = path.relative(path.resolve(workspaceScope), path.resolve(candidate));
@@ -44,6 +49,7 @@ const isMutating = (capability: string): boolean => capability.endsWith('.write'
  */
 export class TrustBroker {
   private readonly policy: TrustPolicy;
+  private readonly revokedCapabilities = new Set<string>();
 
   constructor(policy: Partial<TrustPolicy> = {}) {
     this.policy = { ...DEFAULT_POLICY, ...policy };
@@ -59,7 +65,12 @@ export class TrustBroker {
       receiptId,
     };
 
-    if (request.requestedCapabilities.some((capability) => !this.policy.allowedCapabilities.includes(capability))) {
+    if (
+      request.requestedCapabilities.some(
+        (capability) =>
+          !this.policy.allowedCapabilities.includes(capability) || this.revokedCapabilities.has(capability)
+      )
+    ) {
       return { ...base, decision: 'deny', reasonCode: 'CAPABILITY_NOT_ALLOWED' };
     }
     if (
@@ -87,5 +98,39 @@ export class TrustBroker {
       return { ...base, decision: 'approval_required', reasonCode: 'MUTATION_REQUIRES_APPROVAL' };
     }
     return { ...base, decision: 'allow', reasonCode: 'TRUST_ALLOWED' };
+  }
+
+  /** Unknown renderers, subframes, and package origins are denied before capability evaluation. */
+  public authorizeOrigin(request: TrustOriginRequest): PolicyDecision {
+    const allowed = this.policy.allowedOrigins.includes(request.origin);
+    return {
+      runId: request.runId,
+      taskId: request.taskId,
+      targetId: request.targetId,
+      capabilities: [],
+      receiptId: `trust_origin_${request.runId}_${Date.now()}`,
+      decision: allowed ? 'allow' : 'deny',
+      reasonCode: allowed ? 'ORIGIN_ALLOWED' : 'ORIGIN_NOT_ALLOWED',
+    };
+  }
+
+  public requestCapability(request: TrustRequest, origin: string): PolicyDecision {
+    const originDecision = this.authorizeOrigin({ ...request, origin });
+    return originDecision.decision === 'allow' ? this.authorize(request) : originDecision;
+  }
+
+  /** Final serialized egress is checked separately so model or tool output cannot bypass policy. */
+  public inspectFinalEgress(request: FinalEgressRequest): PolicyDecision {
+    const originDecision = this.authorizeOrigin(request);
+    if (originDecision.decision !== 'allow') return originDecision;
+    if (/\b(?:api[_-]?key|password|secret|token)\s*[:=]/iu.test(request.serializedPayload)) {
+      return { ...this.authorize(request), decision: 'deny', reasonCode: 'FINAL_EGRESS_SECRET_DETECTED' };
+    }
+    return this.authorize(request);
+  }
+
+  /** Revocation is immediate for all future authorization checks in this runtime. */
+  public revoke(capability: string): void {
+    this.revokedCapabilities.add(capability);
   }
 }
