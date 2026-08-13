@@ -1,8 +1,16 @@
+import { readFileSync, readdirSync } from 'node:fs';
+import { relative, resolve } from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
+import { createFirstPartyPackageCatalog } from '@/common/packages/catalog';
 import {
+  assertOptionalPackageOwnershipClean,
+  collectBaseArtifactInputsFromGraph,
   createOptionalPackageOwnershipDenylist,
+  createOptionalPackageOwnershipDenylistFromCatalog,
   scanOptionalPackageOwnership,
+  type OptionalOwnershipSourceFile,
   type OptionalPackageOwnershipDeclaration,
 } from '@/common/packages/optionalOwnership';
 
@@ -14,6 +22,32 @@ const IDE_OWNERSHIP: OptionalPackageOwnershipDeclaration = {
     'packages/desktop/src/renderer/pages/studio/ide',
   ],
 };
+
+const PROJECT_ROOT = process.cwd();
+const RENDERER_SOURCE_ROOT = resolve(PROJECT_ROOT, 'packages/desktop/src/renderer');
+
+const readRendererSourceFiles = (directory = RENDERER_SOURCE_ROOT): OptionalOwnershipSourceFile[] =>
+  readdirSync(directory, { withFileTypes: true })
+    .toSorted((left, right) => left.name.localeCompare(right.name))
+    .flatMap((entry): OptionalOwnershipSourceFile[] => {
+      const absolutePath = resolve(directory, entry.name);
+      if (entry.isDirectory()) return readRendererSourceFiles(absolutePath);
+      if (!entry.isFile() || !/\.(?:ts|tsx)$/.test(entry.name)) return [];
+      return [
+        {
+          path: relative(PROJECT_ROOT, absolutePath).replaceAll('\\', '/'),
+          content: readFileSync(absolutePath, 'utf8'),
+        },
+      ];
+    });
+
+const LEGACY_OPTIONAL_ROOTS = [
+  {
+    moduleId: 'ide',
+    importPathPrefixes: ['@renderer/pages/studio/ide'],
+    artifactPathPrefixes: ['packages/desktop/src/renderer/pages/studio/ide'],
+  },
+] as const;
 
 describe('optional package ownership audit', () => {
   it('allows core-only imports and artifact inputs', () => {
@@ -107,5 +141,74 @@ describe('optional package ownership audit', () => {
       'com.tomni.workspace-lab',
       'com.tomni.workspace-lab',
     ]);
+  });
+
+  it('derives package-app ownership from the actual first-party catalog manifests', () => {
+    const denylist = createOptionalPackageOwnershipDenylistFromCatalog(createFirstPartyPackageCatalog());
+    const result = scanOptionalPackageOwnership({
+      denylist,
+      coreSourceFiles: [
+        {
+          path: 'packages/desktop/src/renderer/hub/HubPage.tsx',
+          content: `import IdeWorkspace from '@renderer/package-apps/ide';`,
+        },
+      ],
+      baseArtifactInputs: ['packages/desktop/src/renderer/package-apps/ide.tsx'],
+    });
+
+    expect(denylist.owners.find((owner) => owner.packageId === 'com.tomni.ide')).toMatchObject({
+      importPathPrefixes: expect.arrayContaining(['@renderer/package-apps/ide']),
+    });
+    expect(result.violations.map((violation) => violation.packageId)).toEqual(['com.tomni.ide', 'com.tomni.ide']);
+  });
+
+  it('parses Vite/Rollup and esbuild graph module inputs without accepting an empty graph', () => {
+    expect(
+      collectBaseArtifactInputsFromGraph({
+        inputs: { 'packages/desktop/src/renderer/package-apps/ide.tsx': {} },
+        outputs: {
+          'assets/app.js': {
+            modules: { 'packages/desktop/src/renderer/pages/studio/ide/IdeWorkspace.tsx': {} },
+          },
+        },
+      })
+    ).toEqual([
+      'packages/desktop/src/renderer/package-apps/ide.tsx',
+      'packages/desktop/src/renderer/pages/studio/ide/IdeWorkspace.tsx',
+    ]);
+    expect(() => collectBaseArtifactInputsFromGraph({ outputs: {} })).toThrow(
+      'Base artifact graph must expose input or output module paths.'
+    );
+  });
+
+  it('reports the current base-source extraction gap and rejects it at the ownership gate', () => {
+    const sourceFiles = readRendererSourceFiles();
+    const result = scanOptionalPackageOwnership({
+      denylist: createOptionalPackageOwnershipDenylistFromCatalog(
+        createFirstPartyPackageCatalog(),
+        LEGACY_OPTIONAL_ROOTS
+      ),
+      coreSourceFiles: sourceFiles,
+      // The committed renderer source is a conservative base-input baseline.
+      // A release gate must additionally feed the exact emitted candidate graph.
+      baseArtifactInputs: sourceFiles.map((source) => source.path),
+    });
+
+    expect(result.violations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'base-artifact-owns-optional-package',
+          packageId: 'com.tomni.ide',
+          path: 'packages/desktop/src/renderer/package-apps/ide.tsx',
+        }),
+        expect.objectContaining({
+          kind: 'core-imports-optional-package',
+          packageId: 'com.tomni.ide',
+          path: 'packages/desktop/src/renderer/pages/editor/adapters/TextCodeAdapter.tsx',
+          referencedPath: '@renderer/pages/studio/ide/codeRelations',
+        }),
+      ])
+    );
+    expect(() => assertOptionalPackageOwnershipClean(result)).toThrow('Optional package ownership audit failed:');
   });
 });
