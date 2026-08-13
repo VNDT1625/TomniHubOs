@@ -804,6 +804,9 @@ describe('Context learning conflict policy', () => {
     expect(current.learningRecords).toMatchObject([{ status: 'forgotten', outcome: 'not_helpful' }]);
     await learning.delete(proposed.id);
     expect(current.learningRecords).toEqual([]);
+    await expect(learning.export()).resolves.toMatchObject({ id: 'default', preferences: [] });
+    const exported = await learning.export();
+    expect(exported).not.toHaveProperty('secretReferences');
   });
 });
 

@@ -152,6 +152,7 @@ export type PersonalLearningCoordinator = {
   forget(recordId: string): Promise<boolean>;
   delete(recordId: string): Promise<boolean>;
   recordOutcome(recordId: string, outcome: 'helpful' | 'not_helpful'): Promise<boolean>;
+  export(): Promise<Omit<PersonalContext, 'secretReferences'>>;
 };
 
 /** Consent gate for personal context: proposed observations never enter projections until confirmed. */
@@ -273,6 +274,13 @@ export const createPersonalLearningCoordinator = (
           updatedAt: now(),
         }))
       ),
+    export: async () => {
+      await queue;
+      const profile = await store.getPersonal(personalId);
+      if (!profile) throw new Error(`Personal context not found: ${personalId}`);
+      const { secretReferences: _secretReferences, ...safeExport } = structuredClone(profile);
+      return safeExport;
+    },
   };
 };
 
