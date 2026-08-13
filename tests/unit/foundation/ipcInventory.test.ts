@@ -18,6 +18,8 @@ describe('base preload and IPC inventory', () => {
     expect(first.preloadMethods.map((method) => method.method)).toContain('creatorPreview.open');
     expect(first.rendererChannels.map((channel) => channel.channel)).toContain('foundation:execute-run');
     expect(first.handlers.map((channel) => channel.channel)).toContain('foundation:execute-run');
+    expect(first.handlers.map((channel) => channel.channel)).toContain('get-backend-port');
+    expect(findIpcInventoryViolations(first)).toEqual([]);
   });
 
   it('reports an unregistered literal renderer-to-main IPC fixture', () => {

@@ -38,6 +38,7 @@ export function scanBaseIpcInventory(repositoryRoot: string): BaseIpcInventory {
   return scanIpcInventoryFromSources({
     ...readTypeScriptSources(root, 'packages/desktop/src/preload'),
     ...readTypeScriptSources(root, 'packages/desktop/src/process'),
+    ...readTypeScriptFile(root, 'packages/desktop/src/index.ts'),
   });
 }
 
@@ -90,6 +91,11 @@ function readTypeScriptSources(repositoryRoot: string, directory: string): IpcIn
     sources[relative(repositoryRoot, file).replaceAll('\\', '/')] = readFileSync(file, 'utf8');
   }
   return sources;
+}
+
+function readTypeScriptFile(repositoryRoot: string, file: string): IpcInventorySource {
+  const absoluteFile = join(repositoryRoot, file);
+  return { [file]: readFileSync(absoluteFile, 'utf8') };
 }
 
 function walkTypeScriptFiles(directory: string): readonly string[] {
