@@ -17,6 +17,8 @@ const target = {
   runnable: true,
 };
 
+const requireLocalReleaseProof = process.env.TOMNI_REQUIRE_LOCAL_E2E === '1';
+
 describe('loopback OpenAI adapter', () => {
   it('rejects every non-loopback endpoint before it can be used', () => {
     expect(() => validateLoopbackOpenAiEndpoint('https://api.example.test/v1')).toThrow('loopback');
@@ -101,4 +103,36 @@ describe('loopback OpenAI adapter', () => {
       })
     ).rejects.toThrow('terminal marker');
   });
+
+  it.skipIf(!requireLocalReleaseProof)(
+    'executes an offline completion against the configured real local engine',
+    async () => {
+      const endpoint = process.env.TOMNI_LOCAL_OPENAI_URL?.trim();
+      const model = process.env.TOMNI_LOCAL_OPENAI_MODEL?.trim();
+      if (!endpoint) throw new Error('TOMNI_LOCAL_OPENAI_URL must identify the release-test loopback endpoint.');
+      if (!model) throw new Error('TOMNI_LOCAL_OPENAI_MODEL must identify an installed local model.');
+
+      const detected = await detectLoopbackOpenAiTarget({ endpoint });
+      expect(detected).toMatchObject({ available: true, detected: true, protocol: 'loopback-openai' });
+      const adapter = new LoopbackOpenAiAdapter({ endpoint });
+      await expect(adapter.listModels(detected)).resolves.toContainEqual(expect.objectContaining({ modelId: model }));
+
+      const output: string[] = [];
+      await adapter.run({
+        sessionId: 'release-local-proof',
+        target: detected,
+        prompt: 'Reply with a short acknowledgement that local inference is available.',
+        workspace: process.cwd(),
+        modelKey: model,
+        permissionMode: 'read-only',
+        signal: AbortSignal.timeout(60_000),
+        emit: (event) => {
+          if (event.type === 'delta') output.push(event.text);
+        },
+        requestPermission: async () => false,
+      });
+      expect(output.join('').trim()).not.toBe('');
+    },
+    75_000
+  );
 });

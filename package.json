@@ -56,6 +56,7 @@
     "test:coverage": "vitest run --coverage",
     "test:contract": "vitest run tests/contract --passWithNoTests",
     "test:release:base-artifact": "cross-env TOMNI_MAIN_GRAPH_EVIDENCE=1 TOMNI_RENDERER_GRAPH_EVIDENCE=1 TOMNI_REQUIRE_RELEASE_ARTIFACT_AUDIT=1 electron-vite build --config packages/desktop/electron.vite.config.ts && cross-env TOMNI_REQUIRE_RELEASE_ARTIFACT_AUDIT=1 vitest run tests/regression/wave0/optionalOwnership.test.ts",
+    "test:release:local": "cross-env TOMNI_REQUIRE_LOCAL_E2E=1 vitest run tests/unit/cores/loopbackOpenAiAdapter.test.ts",
     "test:integration": "vitest run tests/integration",
     "test:packaged:i18n": "vitest run tests/integration/i18n-packaged.test.ts",
     "bench": "vitest bench",

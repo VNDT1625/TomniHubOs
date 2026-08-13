@@ -166,7 +166,7 @@ Every target is invoked from the same ordinary Hub surface and the same Run Kern
 - Every enabled release-candidate surface reaches that kernel; unmigrated executors are feature-flagged off.
 - Provider metadata APIs never serialize API keys to renderer code.
 - Reversible Base64 secret fallback is removed; credential rollback never restores it.
-- Local model install and offline end-to-end execution pass on a clean supported machine.
+- Local model install and offline end-to-end execution pass on a clean supported machine through `bun run test:release:local`; this gate requires an explicit loopback endpoint and installed model and cannot pass with a mock.
 - Local broker health, stream, cancellation, crash, restart, update, and uninstall are integration-tested.
 - Cloud, CLI, local, and MCP adapters pass the same contract tests; the signed pilot joins after package ABI completion.
 - Target selection is deterministic over capability, privacy, allowed pin, health, ResourceCoordinator availability, and hard budget. Learned quality, predictive latency, and cost optimization remain P1.

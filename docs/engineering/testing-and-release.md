@@ -73,6 +73,14 @@ bun run test:bun
 bun run test:e2e
 ```
 
+The local release gate never uses a mock. On a clean supported machine with a running loopback OpenAI-compatible engine and an installed model, set `TOMNI_LOCAL_OPENAI_URL` and `TOMNI_LOCAL_OPENAI_MODEL`, then run:
+
+```sh
+bun run test:release:local
+```
+
+It fails when either the engine, selected model, or real streamed completion is unavailable.
+
 Renderer text and i18n work also requires:
 
 ```sh
