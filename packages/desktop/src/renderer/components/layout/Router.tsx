@@ -24,10 +24,6 @@ const ResourceSettings = React.lazy(() => import('@renderer/pages/settings/Resou
 const CompanyHubPage = React.lazy(() => import('@renderer/pages/hub/CompanyHubPage'));
 const CompanySettings = React.lazy(() => import('@renderer/pages/company'));
 const RealtimeKnowledgeSettings = React.lazy(() => import('@renderer/pages/knowledge'));
-const BrowserSettings = React.lazy(() => import('@renderer/pages/browser'));
-const TestingSettings = React.lazy(() => import('@renderer/pages/testing'));
-const MonitorSettings = React.lazy(() => import('@renderer/pages/monitor'));
-const TerminalSettings = React.lazy(() => import('@renderer/pages/terminal'));
 const GitSettings = React.lazy(() => import('@renderer/pages/git'));
 const NewsSettings = React.lazy(() => import('@renderer/pages/news'));
 const ExtensionSettingsPage = React.lazy(() => import('@renderer/pages/settings/ExtensionSettingsPage'));
@@ -86,12 +82,12 @@ const PanelRoute: React.FC<{ layout: React.ReactElement }> = ({ layout }) => {
           <Route path='/products' element={<Navigate to='/store' replace />} />
           <Route path='/history' element={withRouteFallback(HistoryPage)} />
           <Route path='/conversation/:id' element={withRouteFallback(Conversation)} />
-          {/* New top-level aliases for recent features (company, browser tools, testing, monitor, terminal, knowledge, realtime, git) */}
+          {/* Optional app URLs open the Store; their implementation is never loaded by the base router. */}
           <Route path='/company' element={withRouteFallback(CompanyHubPage)} />
-          <Route path='/browser' element={withRouteFallback(BrowserSettings)} />
-          <Route path='/testing' element={withRouteFallback(TestingSettings)} />
-          <Route path='/monitor' element={withRouteFallback(MonitorSettings)} />
-          <Route path='/terminal' element={withRouteFallback(TerminalSettings)} />
+          <Route path='/browser' element={<Navigate to='/store' replace />} />
+          <Route path='/testing' element={<Navigate to='/store' replace />} />
+          <Route path='/monitor' element={<Navigate to='/store' replace />} />
+          <Route path='/terminal' element={<Navigate to='/store' replace />} />
           <Route path='/knowledge' element={withRouteFallback(RealtimeKnowledgeSettings)} />
           <Route path='/realtime' element={withRouteFallback(NewsSettings)} />
           <Route path='/git' element={withRouteFallback(GitSettings)} />
@@ -123,10 +119,10 @@ const PanelRoute: React.FC<{ layout: React.ReactElement }> = ({ layout }) => {
           <Route path='/settings/resource' element={withRouteFallback(ResourceSettings)} />
           <Route path='/settings/company' element={withRouteFallback(CompanySettings)} />
           <Route path='/settings/knowledge' element={withRouteFallback(RealtimeKnowledgeSettings)} />
-          <Route path='/settings/browser' element={withRouteFallback(BrowserSettings)} />
-          <Route path='/settings/testing' element={withRouteFallback(TestingSettings)} />
-          <Route path='/settings/monitor' element={withRouteFallback(MonitorSettings)} />
-          <Route path='/settings/terminal' element={withRouteFallback(TerminalSettings)} />
+          <Route path='/settings/browser' element={<Navigate to='/store' replace />} />
+          <Route path='/settings/testing' element={<Navigate to='/store' replace />} />
+          <Route path='/settings/monitor' element={<Navigate to='/store' replace />} />
+          <Route path='/settings/terminal' element={<Navigate to='/store' replace />} />
           <Route path='/settings/git' element={withRouteFallback(GitSettings)} />
           <Route path='/settings/realtime' element={withRouteFallback(NewsSettings)} />
           {/* Legacy redirect for old /settings/news bookmarks */}
