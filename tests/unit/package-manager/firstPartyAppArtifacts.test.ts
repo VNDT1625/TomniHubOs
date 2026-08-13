@@ -1,8 +1,10 @@
 import { createHash, generateKeyPairSync } from 'node:crypto';
+import { spawn } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 
 import { tmpdir } from 'node:os';
+import JSZip from 'jszip';
 import { describe, expect, it } from 'vitest';
 
 import { DEVELOPMENT_SIGNING_KEY_ID, loadPackageSigningKey } from '../../../scripts/package-apps/signing';
@@ -18,6 +20,25 @@ type PackageBundle = {
   manifest: unknown;
   files: Record<string, string>;
 };
+
+const runPackageBuild = (environment: NodeJS.ProcessEnv): Promise<void> =>
+  new Promise((resolve, reject) => {
+    const child = spawn(process.platform === 'win32' ? 'bun.exe' : 'bun', ['scripts/package-apps/build.ts'], {
+      cwd: path.resolve('.'),
+      env: environment,
+      stdio: ['ignore', 'ignore', 'pipe'],
+    });
+    const stderr: Buffer[] = [];
+    child.stderr?.on('data', (chunk: Buffer | string) => stderr.push(Buffer.from(chunk)));
+    child.once('error', reject);
+    child.once('close', (code) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+      reject(new Error(`Package build failed with status ${code}: ${Buffer.concat(stderr).toString('utf8')}`));
+    });
+  });
 
 const PACKAGE_IDS = [
   'com.tomni.design-studio',
@@ -107,6 +128,51 @@ describe('first-party package signing policy', () => {
 });
 
 describe('signed first-party app package artifacts', () => {
+  it('builds a signed sandboxed pilot that declares only the supervised host ABI capability', async () => {
+    const root = await fs.mkdtemp(path.join(tmpdir(), 'tomni-runtime-pilot-'));
+    try {
+      await runPackageBuild({
+        ...process.env,
+        LOCALAPPDATA: root,
+        TOMNI_PACKAGE_DEV_SIGNING: '1',
+        TOMNI_PACKAGE_OUTPUT_ROOT: path.join(root, 'artifacts'),
+        TOMNI_PACKAGE_TARGETS: 'com.tomni.runtime-pilot',
+      });
+      const artifactPath = path.join(root, 'artifacts', 'com.tomni.runtime-pilot-1.0.0.dev.tomny');
+      const archive = await JSZip.loadAsync(await fs.readFile(artifactPath));
+      const manifestEntry = archive.file('tomny-package.json');
+      if (!manifestEntry) throw new Error('Runtime pilot is missing its manifest.');
+      const manifest = parsePackageManifest(JSON.parse(await manifestEntry.async('text')) as unknown);
+      const files = Object.fromEntries(
+        await Promise.all(
+          Object.entries(archive.files)
+            .filter(([name, entry]) => !entry.dir && name !== 'tomny-package.json')
+            .map(async ([name, entry]) => [name, (await entry.async('nodebuffer')).toString('base64')] as const)
+        )
+      );
+      const signingKey = await loadPackageSigningKey({
+        env: { TOMNI_PACKAGE_DEV_SIGNING: '1' },
+        signingRoot: path.join(root, 'Tomni', 'StoreSigning', 'development'),
+      });
+
+      expect(manifest).toMatchObject({
+        id: 'com.tomni.runtime-pilot',
+        permissions: ['host.ipc'],
+        modules: [{ runtime: 'sandboxed-web', entrypoint: 'index.html' }],
+      });
+      expect(() => verifyArtifactSignature(manifest, { [signingKey.keyId]: signingKey.publicKey })).not.toThrow();
+      expect(integrityFor(files)).toEqual({
+        integrity: manifest.artifact?.integrity,
+        sizeBytes: manifest.artifact?.sizeBytes,
+      });
+      const html = Buffer.from(files['index.html']!, 'base64').toString('utf8');
+      expect(html).toContain("type: 'tomni.capability.invoke'");
+      expect(html).toContain("capability: 'host.runtime.info'");
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  }, 30_000);
+
   for (const packageId of PACKAGE_IDS) {
     it(`ships a verifiable independently downloadable ${packageId} bundle`, async () => {
       const catalogEntry = FIRST_PARTY_PACKAGE_CATALOG.find((entry) => entry.manifest.id === packageId);

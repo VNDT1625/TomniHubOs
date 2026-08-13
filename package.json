@@ -29,6 +29,7 @@
     "webui:prod:remote": "cross-env NODE_ENV=production tsx scripts/webui.ts --remote",
     "resetpass": "tsx scripts/resetpass.ts",
     "package": "electron-vite build --config packages/desktop/electron.vite.config.ts",
+    "store:build": "tsx scripts/package-apps/build.ts",
     "store:pack": "tsx scripts/package-apps/pack.ts",
     "store:publish": "tsx scripts/package-apps/publish.ts",
     "make": "electron-vite build --config packages/desktop/electron.vite.config.ts",
