@@ -95,7 +95,7 @@ The richer ContextStore, the placeholder preference map, and IDE-owned recovery 
 
 ### P0: local, cloud, and CLI product paths
 
-One offline local model, one write-only-credential cloud adapter, and one supervised CLI must pass the same Run Kernel lifecycle in ordinary Hub conversation. The user-run loopback local target is production-wired; LocalInferenceBroker and ModelPack components are not yet the managed local-model production path.
+One offline local model, one write-only-credential cloud adapter, and one supervised CLI must pass the same Run Kernel lifecycle in ordinary Hub conversation. The user-run loopback local target is production-wired; selected cloud provider credentials remain main-process-only and enter the supervised Tomny child environment. LocalInferenceBroker and ModelPack components are not yet the managed local-model production path, and final cloud egress inspection still needs a Hub-owned proof.
 
 ### P0: deterministic routing and one resource owner
 

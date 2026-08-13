@@ -18,7 +18,9 @@ The AI runtime makes provider choice replaceable while keeping execution policy 
 
 **PARTIAL:** Foundation Run Kernel and ExperimentalCoreRuntime overlap. Foundation now delegates Hub runs through the existing runtime, but the production runtime still needs one named, consolidated ownership boundary rather than a third orchestrator.
 
-**BLOCKED:** ProviderStore can return usable API keys through renderer-facing contracts and uses a reversible Base64 fallback. Credential handling must be fixed before calling cloud adapters trusted.
+**CURRENT:** Provider secrets are encrypted only through OS secure storage and renderer-facing bridge responses reduce providers to metadata. The store fails closed when secure storage is unavailable.
+
+**PARTIAL:** The selected provider can be injected only into the supervised Tomny CLI child environment. That gives the ordinary Hub path a cloud-capable target, but final outbound egress inspection is still owned by the child runtime rather than proven at the Hub boundary.
 
 ## Unified target contract
 
