@@ -6,6 +6,7 @@ import {
   type HubTargetKind,
 } from '../../../packages/desktop/src/process/foundation/hubExecutionAdapter';
 import { RunKernel } from '../../../packages/desktop/src/process/foundation/runKernel';
+import { TrustBroker } from '../../../packages/desktop/src/process/foundation/trustBroker';
 
 const intent = (runId: string): RunIntent => ({
   runId,
@@ -64,5 +65,31 @@ describe('HubExecutionAdapter', () => {
     const result = await hub.execute(intent('run_priority'));
 
     expect(result).toMatchObject({ targetId: 'cloud_high', text: 'cloud', receipt: { evidenceRefs: ['cloud'] } });
+  });
+
+  it('requires origin, capability, and final egress approval for a cloud target', async () => {
+    const trustBroker = new TrustBroker({
+      allowedCapabilities: ['workspace.read'],
+      allowedNetworkHosts: ['api.example.test'],
+      allowedOrigins: ['app://hub'],
+    });
+    const hub = new HubExecutionAdapter(
+      new RunKernel(),
+      [
+        {
+          id: 'cloud_governed',
+          kind: 'cloud',
+          priority: 1,
+          requestedCapabilities: ['workspace.read'],
+          networkHost: 'api.example.test',
+          execute: async () => ({ text: 'safe response', evidenceRefs: ['cloud_receipt'] }),
+        },
+      ],
+      { trustBroker, origin: 'app://hub' }
+    );
+
+    const result = await hub.execute(intent('run_governed_cloud'));
+
+    expect(result).toMatchObject({ targetId: 'cloud_governed', receipt: { status: 'verified' } });
   });
 });
