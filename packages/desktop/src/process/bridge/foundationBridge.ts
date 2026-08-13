@@ -16,6 +16,16 @@ import { getResourceCoordinator } from '../resource/resourceCoordinator';
 let globalKernel: RunKernel | undefined;
 
 export type FoundationRunPayload = { intent: RunIntent; candidates: readonly SelectionCandidate[] };
+type FoundationSenderEvent = { sender: { mainFrame?: unknown }; senderFrame?: unknown };
+
+export const isFoundationMainFrame = (event: FoundationSenderEvent): boolean =>
+  event.senderFrame !== undefined && event.senderFrame === event.sender.mainFrame;
+
+export const parseFoundationRunId = (value: unknown): string => {
+  if (typeof value !== 'string' || value.length === 0 || value.length > 200)
+    throw new Error('INVALID_FOUNDATION_RUN_ID');
+  return value;
+};
 
 /** Validate renderer input before it can allocate a Run, lease, or durable event. */
 export const parseFoundationRunPayload = (value: unknown): FoundationRunPayload => {
@@ -52,8 +62,9 @@ const getGlobalKernel = (): RunKernel => {
 };
 
 export const registerFoundationBridge = (): void => {
-  ipcMain.handle('foundation:execute-run', async (_event, rawPayload: unknown) => {
+  ipcMain.handle('foundation:execute-run', async (event, rawPayload: unknown) => {
     try {
+      if (!isFoundationMainFrame(event)) throw new Error('FOUNDATION_SENDER_REJECTED');
       const payload = parseFoundationRunPayload(rawPayload);
       const receipt = await getGlobalKernel().executeRun(payload.intent, payload.candidates ?? [], async () => {
         return { evidenceRefs: [`ev_gui_${Date.now()}`] };
@@ -65,15 +76,17 @@ export const registerFoundationBridge = (): void => {
     }
   });
 
-  ipcMain.handle('foundation:get-events', async (_event, runId: string) => {
+  ipcMain.handle('foundation:get-events', async (event, rawRunId: unknown) => {
     try {
+      if (!isFoundationMainFrame(event)) throw new Error('FOUNDATION_SENDER_REJECTED');
+      const runId = parseFoundationRunId(rawRunId);
       const kernel = getGlobalKernel();
       await kernel.eventStore.initialize();
       const events = kernel.eventStore.getEventsByRunId(runId);
       return { success: true, events };
     } catch (error) {
       console.error('[foundationBridge] Error getting events:', error);
-      return { success: false, error: String(error) };
+      return { success: false, error: 'FOUNDATION_EVENTS_REJECTED' };
     }
   });
 };

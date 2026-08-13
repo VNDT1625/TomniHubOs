@@ -5,7 +5,11 @@ vi.mock('electron', () => ({
   ipcMain: { handle: vi.fn() },
 }));
 
-import { parseFoundationRunPayload } from '../../../packages/desktop/src/process/bridge/foundationBridge';
+import {
+  isFoundationMainFrame,
+  parseFoundationRunId,
+  parseFoundationRunPayload,
+} from '../../../packages/desktop/src/process/bridge/foundationBridge';
 
 const intent = {
   runId: 'run_1',
@@ -36,5 +40,13 @@ describe('Foundation bridge payload validation', () => {
     { intent: { ...intent, runId: '' }, candidates: [] },
   ])('rejects malformed renderer input before execution', (payload) => {
     expect(() => parseFoundationRunPayload(payload)).toThrow();
+  });
+
+  it('accepts only the main frame and bounded run ids', () => {
+    const mainFrame = {};
+    expect(isFoundationMainFrame({ sender: { mainFrame }, senderFrame: mainFrame })).toBe(true);
+    expect(isFoundationMainFrame({ sender: { mainFrame }, senderFrame: {} })).toBe(false);
+    expect(parseFoundationRunId('run_1')).toBe('run_1');
+    expect(() => parseFoundationRunId('')).toThrow('INVALID_FOUNDATION_RUN_ID');
   });
 });
