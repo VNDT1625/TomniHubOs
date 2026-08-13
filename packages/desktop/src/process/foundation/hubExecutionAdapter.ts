@@ -36,6 +36,7 @@ const operationFor = (kind: HubTargetKind): TrustOperation =>
 
 const targetMatchesIntent = (target: HubExecutionTarget, intent: RunIntent): boolean => {
   if (target.health === 'unavailable') return false;
+  if (intent.capabilityGrant !== undefined && !intent.capabilityGrant.includes('target.execute')) return false;
   if (intent.constraints.includes('offline_only') && target.kind !== 'local') return false;
   if (intent.constraints.includes('private_only') && target.kind === 'cloud') return false;
   if (

@@ -135,7 +135,7 @@ describe('HubExecutionAdapter', () => {
 
     const result = await hub.execute({
       ...intent('run_capability_budget'),
-      capabilityGrant: ['workspace.read'],
+      capabilityGrant: ['workspace.read', 'target.execute'],
       budget: { maxEstimatedCostMB: 16, maxSteps: 2 },
     });
 
@@ -162,5 +162,25 @@ describe('HubExecutionAdapter', () => {
       targetId: 'alpha',
       text: 'alpha',
     });
+  });
+
+  it('rejects an explicit grant that omits target execution', async () => {
+    const hub = new HubExecutionAdapter(new RunKernel(), [
+      {
+        id: 'local_denied',
+        kind: 'local',
+        priority: 1,
+        requestedCapabilities: ['workspace.read'],
+        execute: async () => ({ text: 'must not execute', evidenceRefs: [] }),
+      },
+    ]);
+
+    const result = await hub.execute({
+      ...intent('run_missing_execution_grant'),
+      capabilityGrant: ['workspace.read'],
+    });
+
+    expect(result).toMatchObject({ receipt: { status: 'failed' } });
+    expect(result.text).toBeUndefined();
   });
 });
