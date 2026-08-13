@@ -5,13 +5,11 @@ import { createContextStore, reconcilePersonalSecretReferences, type ContextStor
 import {
   createFileSecretRepository,
   createSecretVault,
-  recoverSecretSource,
   type SecretRecoveryReport,
   type SecretVault,
   type SecretVaultCodec,
 } from './secretVault';
 import type { AgentContext, CoreContextComposer, PersonalContext } from './contextTypes';
-import { getRepoSecretStore } from '@process/ide/memory/repoSecretStore';
 
 const safeStorageCodec: SecretVaultCodec = {
   available: () => {
@@ -79,6 +77,18 @@ const reconcileStoredSecretReferences = async (store: ContextStore, vault: Secre
   await store.upsertPersonal({ ...reconciled, updatedAt: Date.now() });
 };
 
+/**
+ * Core owns its vault. Optional packages may offer their own explicit migration
+ * when activated, but Core startup must not load their storage implementation.
+ */
+const noLegacyRecovery = (): SecretRecoveryReport => ({
+  status: 'missing',
+  imported: 0,
+  existing: 0,
+  skipped: 0,
+  failed: 0,
+});
+
 export type ElectronContextServices = {
   composer: CoreContextComposer;
   vault: SecretVault;
@@ -97,9 +107,7 @@ export const createElectronContextServices = (): ElectronContextServices => {
   const store = createContextStore(path.join(directory, 'profiles.json'));
   const repository = createFileSecretRepository(path.join(directory, 'secrets.json'));
   const vault = createSecretVault(repository, safeStorageCodec);
-  const recovery = ensureDefaultContexts(store).then(() =>
-    recoverSecretSource(vault, () => getRepoSecretStore().listCoreRecoveryCandidates())
-  );
+  const recovery = ensureDefaultContexts(store).then(noLegacyRecovery);
   void recovery.then((report) => {
     if (report.status === 'partial' || report.status === 'unavailable') {
       console.warn('[SecretContextRecovery] Legacy recovery was not complete.', {
