@@ -13,6 +13,8 @@ import {
 } from '../../../packages/desktop/src/process/agentRuntime/retryPolicy';
 
 import {
+  appProviderEnvironment,
+  appProviderNetworkHost,
   isTomnyControlPlaneTool,
   normalizeTomnyStreamEvent,
   preflightSkillWorkflowTool,
@@ -38,6 +40,39 @@ import {
 } from '../../../packages/desktop/src/process/experimentalCore/adapters/tomnyCoreAdapter';
 
 describe('Tomny JSON stream adapter', () => {
+  it('resolves a selected app-provider host in Main and rejects unsafe credential endpoints', async () => {
+    const source = {
+      list: vi.fn(),
+      get: vi.fn().mockResolvedValue({
+        id: 'provider-1',
+        name: 'Provider',
+        platform: 'openai',
+        base_url: 'https://models.example.test/v1',
+        api_key: 'provider-secret',
+        models: ['model-1'],
+      }),
+    };
+    const modelKey = 'app-provider:provider-1:model-1';
+
+    await expect(appProviderNetworkHost(modelKey, source)).resolves.toBe('models.example.test');
+    await expect(
+      appProviderEnvironment(modelKey, source, { HTTP_PROXY: 'http://proxy.invalid' })
+    ).resolves.toMatchObject({
+      BASE_URL: 'https://models.example.test/v1',
+      API_KEY: 'provider-secret',
+    });
+
+    source.get.mockResolvedValueOnce({
+      id: 'provider-1',
+      name: 'Provider',
+      platform: 'openai',
+      base_url: 'http://provider.example.test/v1',
+      api_key: 'provider-secret',
+      models: ['model-1'],
+    });
+    await expect(appProviderNetworkHost(modelKey, source)).rejects.toThrow('APP_PROVIDER_BASE_URL_NOT_ALLOWED');
+  });
+
   it('bounds session action-history queries without accepting a session id', () => {
     expect(
       tomnySessionActionHistoryQuery({

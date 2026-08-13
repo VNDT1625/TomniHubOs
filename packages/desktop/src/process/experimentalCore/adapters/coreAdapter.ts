@@ -167,6 +167,8 @@ export type CoreAdapter = {
   /** False when the host must rehydrate canonical session history on every turn. */
   retainsConversationHistory?: boolean;
   listModels: (target: DetectedCoreTarget, workspace?: string) => Promise<ExperimentalCoreModel[]>;
+  /** Resolve the selected model's credential-bearing destination in Main before a Hub network grant. */
+  networkHostForModel?: (modelKey?: string) => Promise<string | undefined>;
   inspectContext?: (input: CoreContextInspectionInput) => Promise<CoreContextSnapshot>;
   run: (input: CoreRunInput) => Promise<void>;
   dispose: () => Promise<void>;

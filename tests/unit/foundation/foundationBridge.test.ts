@@ -119,6 +119,31 @@ describe('Foundation bridge payload validation', () => {
     );
   });
 
+  it('binds the selected cloud model to its Main-resolved network host before Foundation grants execution', async () => {
+    const coreRuntime = {
+      listTargets: vi.fn().mockResolvedValue([
+        {
+          id: 'tomny-core',
+          kind: 'builtin',
+          available: true,
+          defaultModelKey: 'app-provider:provider-1:model-1',
+        },
+      ]),
+      resolveNetworkHost: vi.fn().mockResolvedValue('models.example.test'),
+      executeToCompletion: vi.fn().mockResolvedValue({ text: 'cloud answer', evidenceRefs: ['core-receipt'] }),
+    };
+
+    const result = await executeFoundationHubRun(
+      new RunKernel(),
+      coreRuntime,
+      { ...intent, runId: 'cloud-run' },
+      'tomny://cloud-test'
+    );
+
+    expect(result).toMatchObject({ targetId: 'tomny-core', text: 'cloud answer', receipt: { status: 'verified' } });
+    expect(coreRuntime.resolveNetworkHost).toHaveBeenCalledWith('tomny-core', 'app-provider:provider-1:model-1');
+  });
+
   it('routes native conversations through Foundation while preserving the selected Core execution input', async () => {
     const coreRuntime = {
       listTargets: vi.fn().mockResolvedValue([{ id: 'local-engine', kind: 'local', available: true }]),

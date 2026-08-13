@@ -584,6 +584,16 @@ export class ExperimentalCoreRuntime {
     return this.modelsFor(target, adapter, requireWorkspace(workspace));
   }
 
+  /** Resolve the concrete network destination for the selected model before Foundation grants cloud execution. */
+  public async resolveNetworkHost(targetId: string, modelKey?: string): Promise<string | undefined> {
+    if (this.targets.length === 0) this.targets = await this.deps.detectTargets();
+    const target = this.targets.find((candidate) => candidate.id === targetId);
+    if (!target) throw new Error(`Core target is not registered: ${targetId}`);
+    if (target.networkHost) return target.networkHost;
+    const adapter = this.deps.adapters.find((candidate) => candidate.protocol === target.protocol);
+    return adapter?.networkHostForModel?.(modelKey);
+  }
+
   public async listSessions(): Promise<CoreSessionCheckpoint[]> {
     await this.initialized;
     return this.sessionStore.list();

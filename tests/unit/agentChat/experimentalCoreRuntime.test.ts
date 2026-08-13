@@ -201,6 +201,23 @@ describe('experimental direct core runtime', () => {
     expect(adapter.listModels).toHaveBeenCalledWith(target, undefined);
   });
 
+  it('resolves a selected model network host through its adapter instead of accepting renderer host input', async () => {
+    const hostAdapter = {
+      ...makeAdapter(),
+      networkHostForModel: vi.fn().mockResolvedValue('models.example.test'),
+    };
+    const hostRuntime = new ExperimentalCoreRuntime((event) => events.push(event), {
+      detectTargets: vi.fn().mockResolvedValue([target]),
+      adapters: [hostAdapter],
+      coordinator,
+    });
+
+    await expect(hostRuntime.resolveNetworkHost('codex', 'app-provider:provider:model')).resolves.toBe(
+      'models.example.test'
+    );
+    expect(hostAdapter.networkHostForModel).toHaveBeenCalledWith('app-provider:provider:model');
+  });
+
   it('awaits a direct target terminal result with opaque execution evidence', async () => {
     const result = await runtime.executeToCompletion({
       requestId: 'hub-run-1',

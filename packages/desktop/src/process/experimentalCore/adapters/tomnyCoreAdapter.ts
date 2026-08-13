@@ -166,6 +166,40 @@ const parseAppProviderModelKey = (modelKey?: string): { providerId: string; mode
   return { providerId: decodeURIComponent(match[1]), modelId: decodeURIComponent(match[2]) };
 };
 
+const isLoopbackHostname = (hostname: string): boolean =>
+  hostname === 'localhost' || hostname === '::1' || hostname === '127.0.0.1' || hostname.startsWith('127.');
+
+/**
+ * Normalize a credential-bearing provider endpoint before it reaches the child
+ * environment. Plain HTTP is allowed only for a local engine; an arbitrary
+ * network host would expose the selected API key in transit.
+ */
+const appProviderNetworkHostForProvider = (provider: IProvider): string => {
+  let endpoint: URL;
+  try {
+    endpoint = new URL(provider.base_url.trim());
+  } catch {
+    throw new Error('APP_PROVIDER_BASE_URL_INVALID');
+  }
+  const hostname = endpoint.hostname.toLowerCase();
+  if (!hostname || endpoint.username || endpoint.password) throw new Error('APP_PROVIDER_BASE_URL_INVALID');
+  if (endpoint.protocol !== 'https:' && !(endpoint.protocol === 'http:' && isLoopbackHostname(hostname))) {
+    throw new Error('APP_PROVIDER_BASE_URL_NOT_ALLOWED');
+  }
+  return hostname;
+};
+
+export const appProviderNetworkHost = async (
+  modelKey: string | undefined,
+  source: TomnyProviderSource
+): Promise<string | undefined> => {
+  const selected = parseAppProviderModelKey(modelKey);
+  if (!selected) return undefined;
+  const provider = await source.get(selected.providerId);
+  if (!provider) throw new Error(`The selected Tomny provider no longer exists: ${selected.providerId}`);
+  return appProviderNetworkHostForProvider(provider);
+};
+
 export const appProviderModels = (providers: IProvider[]): ExperimentalCoreModel[] => {
   const models: ExperimentalCoreModel[] = [];
   for (const provider of providers) {
@@ -205,6 +239,7 @@ export const appProviderEnvironment = async (
   if (!selected) return inheritedEnvironment;
   const provider = await source.get(selected.providerId);
   if (!provider) throw new Error(`The selected Tomny provider no longer exists: ${selected.providerId}`);
+  appProviderNetworkHostForProvider(provider);
   const runtimeEnvironment: NodeJS.ProcessEnv = {};
   for (const key of APP_PROVIDER_RUNTIME_ENVIRONMENT_KEYS) {
     const value = inheritedEnvironment[key];
@@ -1236,6 +1271,9 @@ export class TomnyCoreAdapter implements CoreAdapter {
     } catch {
       return parseTomnyModelCatalog('', process.env);
     }
+  }
+  public networkHostForModel(modelKey?: string): Promise<string | undefined> {
+    return appProviderNetworkHost(modelKey, this.providerSource);
   }
   private readonly processes = new BoundedSessionPool<TomnyProcess>({ maxSessions: 8, idleTimeoutMs: 5 * 60_000 });
 

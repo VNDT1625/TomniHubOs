@@ -20,7 +20,7 @@ The AI runtime makes provider choice replaceable while keeping execution policy 
 
 **CURRENT:** Provider secrets are encrypted only through OS secure storage and renderer-facing bridge responses reduce providers to metadata. The store fails closed when secure storage is unavailable.
 
-**PARTIAL:** The selected provider is injected only into the supervised Tomny CLI child environment, which receives a minimal OS execution environment plus the selected provider credential rather than inherited proxy, cloud, or application secrets. An `app-provider:*` model is classified as a cloud Hub target, so TrustBroker inspects the prompt before the child starts. Exact HTTP egress enforcement inside that child runtime is still not a Hub-owned proof.
+**PARTIAL:** The selected provider is injected only into the supervised Tomny CLI child environment, which receives a minimal OS execution environment plus the selected provider credential rather than inherited proxy, cloud, or application secrets. An `app-provider:*` model is classified as a cloud Hub target; Main validates its credential-bearing endpoint as HTTPS (or loopback HTTP), resolves the selected model's hostname, and binds that hostname to the Foundation network grant before the child starts. Exact HTTP egress enforcement inside the child runtime is still not a Hub-owned proof.
 
 ## Unified target contract
 

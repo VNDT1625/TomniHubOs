@@ -42,6 +42,7 @@ export type FoundationCoreRuntime = {
       networkHost?: string;
     }>
   >;
+  resolveNetworkHost?: (targetId: string, modelKey?: string) => Promise<string | undefined>;
   executeToCompletion: (input: {
     requestId: string;
     targetId: string;
@@ -152,40 +153,43 @@ export const createFoundationHubTargets = async (
   runtime: FoundationCoreRuntime,
   overrides: FoundationExecutionOverrides = {}
 ): Promise<readonly HubExecutionTarget[]> =>
-  (await runtime.listTargets())
-    .filter((target) => target.available)
-    .map((target) => {
-      const modelKey = overrides.modelKey ?? target.defaultModelKey;
-      const kind = kindForCoreTarget(target.kind, modelKey);
-      const hubTarget: HubExecutionTarget = {
-        id: target.id,
-        kind,
-        priority: priorityForCoreTarget(kind),
-        requestedCapabilities: ['target.execute'],
-        execute: ({ intent, signal }) =>
-          runtime.executeToCompletion({
-            requestId: overrides.requestId ?? intent.runId,
-            targetId: target.id,
-            prompt: intent.goal,
-            workspace: intent.workspaceScope,
-            modelKey,
-            permissionMode: overrides.permissionMode ?? 'workspace-write',
-            sessionId: overrides.sessionId,
-            contextIdentity: overrides.contextIdentity ?? {
-              surface: intent.surface,
-              agentId: 'tomny',
-              personalId: intent.userId,
-              capabilityGrants: intent.capabilityGrant ? [...intent.capabilityGrant] : undefined,
-            },
-            signal: (() => {
-              overrides.onCoreExecutionStarted?.();
-              return signal;
-            })(),
-          }),
-      };
-      if (target.networkHost) hubTarget.networkHost = target.networkHost;
-      return hubTarget;
-    });
+  Promise.all(
+    (await runtime.listTargets())
+      .filter((target) => target.available)
+      .map(async (target) => {
+        const modelKey = overrides.modelKey ?? target.defaultModelKey;
+        const kind = kindForCoreTarget(target.kind, modelKey);
+        const networkHost = (await runtime.resolveNetworkHost?.(target.id, modelKey)) ?? target.networkHost;
+        const hubTarget: HubExecutionTarget = {
+          id: target.id,
+          kind,
+          priority: priorityForCoreTarget(kind),
+          requestedCapabilities: ['target.execute'],
+          execute: ({ intent, signal }) =>
+            runtime.executeToCompletion({
+              requestId: overrides.requestId ?? intent.runId,
+              targetId: target.id,
+              prompt: intent.goal,
+              workspace: intent.workspaceScope,
+              modelKey,
+              permissionMode: overrides.permissionMode ?? 'workspace-write',
+              sessionId: overrides.sessionId,
+              contextIdentity: overrides.contextIdentity ?? {
+                surface: intent.surface,
+                agentId: 'tomny',
+                personalId: intent.userId,
+                capabilityGrants: intent.capabilityGrant ? [...intent.capabilityGrant] : undefined,
+              },
+              signal: (() => {
+                overrides.onCoreExecutionStarted?.();
+                return signal;
+              })(),
+            }),
+        };
+        if (networkHost) hubTarget.networkHost = networkHost;
+        return hubTarget;
+      })
+  );
 
 /** Executes a Hub run using only Main-discovered direct-core targets. */
 export const executeFoundationHubRun = async (
