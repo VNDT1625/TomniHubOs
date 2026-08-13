@@ -91,7 +91,16 @@ describe('Foundation bridge payload validation', () => {
     const result = await executeFoundationHubRun(new RunKernel(), coreRuntime, intent, 'app://foundation');
     expect(result).toMatchObject({ targetId: 'remote-core', text: 'local answer', receipt: { status: 'verified' } });
     expect(coreRuntime.executeToCompletion).toHaveBeenCalledWith(
-      expect.objectContaining({ targetId: 'remote-core', requestId: intent.runId, prompt: intent.goal })
+      expect.objectContaining({
+        targetId: 'remote-core',
+        requestId: intent.runId,
+        prompt: intent.goal,
+        contextIdentity: expect.objectContaining({
+          surface: intent.surface,
+          agentId: 'tomny',
+          personalId: intent.userId,
+        }),
+      })
     );
   });
 });

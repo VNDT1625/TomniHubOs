@@ -35,6 +35,13 @@ export type FoundationCoreRuntime = {
     workspace: string;
     modelKey?: string;
     permissionMode: 'read-only' | 'workspace-write' | 'full-access';
+    contextIdentity?: {
+      surface?: string;
+      agentId?: string;
+      personalId?: string;
+      permissionScopes?: string[];
+      capabilityGrants?: string[];
+    };
     signal?: AbortSignal;
   }) => Promise<{ text: string; evidenceRefs: readonly string[] }>;
 };
@@ -113,6 +120,12 @@ export const createFoundationHubTargets = async (
             workspace: intent.workspaceScope,
             modelKey: target.defaultModelKey,
             permissionMode: 'workspace-write',
+            contextIdentity: {
+              surface: intent.surface,
+              agentId: 'tomny',
+              personalId: intent.userId,
+              capabilityGrants: intent.capabilityGrant ? [...intent.capabilityGrant] : undefined,
+            },
             signal,
           }),
       };
