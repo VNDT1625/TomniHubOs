@@ -21,6 +21,11 @@ import {
   normalizeTransportMessage,
   parseExperimentalHandshakeModels,
 } from '../../../packages/desktop/src/process/experimentalCore/experimentalCoreProtocol';
+import {
+  parsePersonalLearningCorrectRequest,
+  parsePersonalLearningProposeRequest,
+  parsePersonalLearningRecordId,
+} from '../../../packages/desktop/src/process/experimentalCore/experimentalCoreBridge';
 
 describe('experimental core protocol', () => {
   it.each([
@@ -30,6 +35,44 @@ describe('experimental core protocol', () => {
     [{ agent_type: 'remote', agent_source: 'custom' }, 'remote'],
   ] as const)('classifies %o as %s', (agent, expected) => {
     expect(classifyExperimentalTarget(agent)).toBe(expected);
+  });
+
+  it('accepts bounded personal learning proposals and redacts credential-shaped text before persistence', () => {
+    const fact = {
+      key: 'favorite-tool',
+      value: 'sk-abcdefghijklmnop',
+      confidence: 0.8,
+      source: 'inferred',
+      learnedAt: 1,
+      scope: { kind: 'global' },
+      sensitivity: 'private',
+      userLocked: false,
+    } as const;
+    expect(
+      parsePersonalLearningProposeRequest({
+        collection: 'preferences',
+        fact,
+        explanation: 'Observed during a confirmed task.',
+        provenance: 'run:run_1',
+      })
+    ).toMatchObject({ collection: 'preferences', fact: { ...fact, value: '[REDACTED]' } });
+    expect(
+      parsePersonalLearningCorrectRequest({
+        recordId: 'learning_1',
+        fact: { ...fact, value: 'corrected value' },
+        explanation: 'The user corrected this preference.',
+      })
+    ).toMatchObject({ recordId: 'learning_1', fact: { ...fact, value: 'corrected value' } });
+  });
+
+  it.each([
+    { recordId: 'learning_1', unexpected: true },
+    { collection: 'preferences', fact: {}, explanation: 'reason', provenance: 'run:1' },
+    { collection: 'invalid', fact: {}, explanation: 'reason', provenance: 'run:1' },
+    { recordId: '../escape' },
+  ])('rejects malformed personal learning IPC payload %o', (payload) => {
+    expect(() => parsePersonalLearningRecordId(payload)).toThrow();
+    expect(() => parsePersonalLearningProposeRequest(payload)).toThrow();
   });
 
   it('normalizes string and object content into append deltas', () => {

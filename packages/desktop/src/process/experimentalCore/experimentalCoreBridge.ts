@@ -5,7 +5,15 @@
  */
 
 import { bridge } from '@office-ai/platform';
-import { cron, telegramChannel, type PersonalSecretSetSaveRequest } from '@/common/adapter/ipcBridge';
+import {
+  cron,
+  telegramChannel,
+  type PersonalContextExport,
+  type PersonalLearningCorrectRequest,
+  type PersonalLearningProposeRequest,
+  type PersonalLearningRecordIdRequest,
+  type PersonalSecretSetSaveRequest,
+} from '@/common/adapter/ipcBridge';
 import { app } from 'electron';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
@@ -29,8 +37,17 @@ import { createCompanyCoreRunner } from '@process/agentRuntime/companyCoreRunner
 import { configureSecretContextStoredCallback } from '@process/agentRuntime/agentMesh/mcp/secret-context/wiring';
 import type { AgentMeshService } from '@process/agentRuntime/agentMesh/service';
 import { createElectronContextServices } from '@process/agentRuntime/electronContext';
-import { createPersonalContextMutationCoordinator } from '@process/agentRuntime/contextStore';
-import type { PersonalContext, SecretDescriptor } from '@process/agentRuntime/contextTypes';
+import {
+  createPersonalContextMutationCoordinator,
+  createPersonalLearningCoordinator,
+  redactContextText,
+} from '@process/agentRuntime/contextStore';
+import type {
+  ContextFact,
+  PersonalContext,
+  PersonalLearningRecord,
+  SecretDescriptor,
+} from '@process/agentRuntime/contextTypes';
 import { normalizeExactSecretHostnames } from '@process/agentRuntime/secretVault';
 import {
   bindScheduledCoreRuntime,
@@ -93,6 +110,13 @@ export const EXPERIMENTAL_CORE_CHANNELS = {
   resolveOrchestrationProposal: 'experimental-core.resolve-orchestration-proposal',
   personalGet: 'personal-context.get',
   personalSave: 'personal-context.save',
+  personalLearningPropose: 'personal-context.learning.propose',
+  personalLearningConfirm: 'personal-context.learning.confirm',
+  personalLearningReject: 'personal-context.learning.reject',
+  personalLearningCorrect: 'personal-context.learning.correct',
+  personalLearningForget: 'personal-context.learning.forget',
+  personalLearningDelete: 'personal-context.learning.delete',
+  personalLearningExport: 'personal-context.learning.export',
   personalSecretsList: 'personal-secrets.list',
   personalSecretsSave: 'personal-secrets.save',
   personalSecretsRemove: 'personal-secrets.remove',
@@ -112,6 +136,127 @@ export type CoreTelemetryQuery = { runId?: string; sessionId?: string; limit?: n
 
 const DEFAULT_TELEMETRY_LIMIT = 200;
 const MAX_TELEMETRY_LIMIT = 1_000;
+const MAX_PERSONAL_LEARNING_RECORD_ID_LENGTH = 160;
+const MAX_PERSONAL_LEARNING_EXPLANATION_LENGTH = 4_000;
+const MAX_PERSONAL_LEARNING_PROVENANCE_LENGTH = 2_000;
+
+const isPlainRecord = (value: unknown): value is Record<string, unknown> =>
+  Boolean(value) &&
+  typeof value === 'object' &&
+  !Array.isArray(value) &&
+  Object.getPrototypeOf(value) === Object.prototype;
+
+const hasOnlyKeys = (value: Record<string, unknown>, allowed: readonly string[]): boolean =>
+  Object.keys(value).every((key) => allowed.includes(key));
+
+const parseBoundedLearningText = (value: unknown, label: string, maximum: number): string => {
+  if (typeof value !== 'string' || !value.trim() || value.length > maximum) {
+    throw new Error(`INVALID_PERSONAL_LEARNING_${label}`);
+  }
+  return redactContextText(value.trim());
+};
+
+/** Parses a fact at the IPC boundary and redacts credential-shaped text before persistence. */
+export const parsePersonalLearningFact = (value: unknown): ContextFact => {
+  if (
+    !isPlainRecord(value) ||
+    !hasOnlyKeys(value, [
+      'key',
+      'value',
+      'confidence',
+      'source',
+      'learnedAt',
+      'lastConfirmedAt',
+      'scope',
+      'sensitivity',
+      'userLocked',
+    ])
+  ) {
+    throw new Error('INVALID_PERSONAL_LEARNING_FACT');
+  }
+  const scope = value.scope;
+  if (!isPlainRecord(scope) || !hasOnlyKeys(scope, ['kind', 'surface'])) {
+    throw new Error('INVALID_PERSONAL_LEARNING_FACT');
+  }
+  const isGlobalScope = scope.kind === 'global' && Object.keys(scope).length === 1;
+  const isSurfaceScope =
+    scope.kind === 'surface' &&
+    typeof scope.surface === 'string' &&
+    scope.surface.trim().length > 0 &&
+    scope.surface.length <= 100 &&
+    Object.keys(scope).length === 2;
+  if (
+    (!isGlobalScope && !isSurfaceScope) ||
+    typeof value.confidence !== 'number' ||
+    !Number.isFinite(value.confidence) ||
+    value.confidence < 0 ||
+    value.confidence > 1 ||
+    !Number.isSafeInteger(value.learnedAt) ||
+    (value.lastConfirmedAt !== undefined && !Number.isSafeInteger(value.lastConfirmedAt)) ||
+    !['user', 'observed', 'imported', 'inferred'].includes(value.source as string) ||
+    !['normal', 'private'].includes(value.sensitivity as string) ||
+    typeof value.userLocked !== 'boolean'
+  ) {
+    throw new Error('INVALID_PERSONAL_LEARNING_FACT');
+  }
+  return {
+    key: parseBoundedLearningText(value.key, 'FACT', 200),
+    value: parseBoundedLearningText(value.value, 'FACT', 8_000),
+    confidence: value.confidence as number,
+    source: value.source as ContextFact['source'],
+    learnedAt: value.learnedAt as number,
+    ...(value.lastConfirmedAt === undefined ? {} : { lastConfirmedAt: value.lastConfirmedAt as number }),
+    scope: isGlobalScope
+      ? { kind: 'global' }
+      : { kind: 'surface', surface: redactContextText((scope.surface as string).trim()) },
+    sensitivity: value.sensitivity as ContextFact['sensitivity'],
+    userLocked: value.userLocked as boolean,
+  };
+};
+
+const parsePersonalLearningRecordIdValue = (value: unknown): string => {
+  if (
+    typeof value !== 'string' ||
+    !/^[A-Za-z0-9][A-Za-z0-9_-]*$/u.test(value) ||
+    value.length > MAX_PERSONAL_LEARNING_RECORD_ID_LENGTH
+  ) {
+    throw new Error('INVALID_PERSONAL_LEARNING_RECORD_ID');
+  }
+  return value;
+};
+
+export const parsePersonalLearningRecordId = (value: unknown): string => {
+  if (!isPlainRecord(value) || !hasOnlyKeys(value, ['recordId'])) {
+    throw new Error('INVALID_PERSONAL_LEARNING_RECORD_ID');
+  }
+  return parsePersonalLearningRecordIdValue(value.recordId);
+};
+
+export const parsePersonalLearningProposeRequest = (value: unknown): PersonalLearningProposeRequest => {
+  if (!isPlainRecord(value) || !hasOnlyKeys(value, ['collection', 'fact', 'explanation', 'provenance'])) {
+    throw new Error('INVALID_PERSONAL_LEARNING_PROPOSAL');
+  }
+  if (!['facts', 'preferences', 'habits'].includes(value.collection as string)) {
+    throw new Error('INVALID_PERSONAL_LEARNING_PROPOSAL');
+  }
+  return {
+    collection: value.collection as PersonalLearningRecord['collection'],
+    fact: parsePersonalLearningFact(value.fact),
+    explanation: parseBoundedLearningText(value.explanation, 'EXPLANATION', MAX_PERSONAL_LEARNING_EXPLANATION_LENGTH),
+    provenance: parseBoundedLearningText(value.provenance, 'PROVENANCE', MAX_PERSONAL_LEARNING_PROVENANCE_LENGTH),
+  };
+};
+
+export const parsePersonalLearningCorrectRequest = (value: unknown): PersonalLearningCorrectRequest => {
+  if (!isPlainRecord(value) || !hasOnlyKeys(value, ['recordId', 'fact', 'explanation'])) {
+    throw new Error('INVALID_PERSONAL_LEARNING_CORRECTION');
+  }
+  return {
+    recordId: parsePersonalLearningRecordIdValue(value.recordId),
+    fact: parsePersonalLearningFact(value.fact),
+    explanation: parseBoundedLearningText(value.explanation, 'EXPLANATION', MAX_PERSONAL_LEARNING_EXPLANATION_LENGTH),
+  };
+};
 
 /** Keep renderer diagnostics bounded even when a caller supplies invalid input. */
 export const normalizeTelemetryLimit = (limit?: number): number =>
@@ -170,6 +315,27 @@ const channels = {
   personalGet: bridge.buildProvider<PersonalContext, void>(EXPERIMENTAL_CORE_CHANNELS.personalGet),
   personalSave: bridge.buildProvider<PersonalContext, { profile: PersonalContext }>(
     EXPERIMENTAL_CORE_CHANNELS.personalSave
+  ),
+  personalLearningPropose: bridge.buildProvider<PersonalLearningRecord, PersonalLearningProposeRequest>(
+    EXPERIMENTAL_CORE_CHANNELS.personalLearningPropose
+  ),
+  personalLearningConfirm: bridge.buildProvider<boolean, PersonalLearningRecordIdRequest>(
+    EXPERIMENTAL_CORE_CHANNELS.personalLearningConfirm
+  ),
+  personalLearningReject: bridge.buildProvider<boolean, PersonalLearningRecordIdRequest>(
+    EXPERIMENTAL_CORE_CHANNELS.personalLearningReject
+  ),
+  personalLearningCorrect: bridge.buildProvider<boolean, PersonalLearningCorrectRequest>(
+    EXPERIMENTAL_CORE_CHANNELS.personalLearningCorrect
+  ),
+  personalLearningForget: bridge.buildProvider<boolean, PersonalLearningRecordIdRequest>(
+    EXPERIMENTAL_CORE_CHANNELS.personalLearningForget
+  ),
+  personalLearningDelete: bridge.buildProvider<boolean, PersonalLearningRecordIdRequest>(
+    EXPERIMENTAL_CORE_CHANNELS.personalLearningDelete
+  ),
+  personalLearningExport: bridge.buildProvider<PersonalContextExport, void>(
+    EXPERIMENTAL_CORE_CHANNELS.personalLearningExport
   ),
   personalSecretsList: bridge.buildProvider<SecretDescriptor[], void>(EXPERIMENTAL_CORE_CHANNELS.personalSecretsList),
   personalSecretsSave: bridge.buildProvider<SecretDescriptor, PersonalSecretSetSaveRequest>(
@@ -233,6 +399,16 @@ export const registerExperimentalCoreBridge = (agentMeshService: AgentMeshServic
     return profile;
   };
   const personalMutations = createPersonalContextMutationCoordinator({
+    getPersonal: async (id) => {
+      await contextServices.ready;
+      return contextServices.store.getPersonal(id);
+    },
+    upsertPersonal: async (profile) => {
+      await contextServices.ready;
+      return contextServices.store.upsertPersonal(profile);
+    },
+  });
+  const personalLearning = createPersonalLearningCoordinator({
     getPersonal: async (id) => {
       await contextServices.ready;
       return contextServices.store.getPersonal(id);
@@ -476,6 +652,18 @@ export const registerExperimentalCoreBridge = (agentMeshService: AgentMeshServic
   );
   channels.personalGet.provider(() => getPersonalProfile());
   channels.personalSave.provider(({ profile }) => personalMutations.saveProfile(profile));
+  channels.personalLearningPropose.provider((input) =>
+    personalLearning.propose(parsePersonalLearningProposeRequest(input))
+  );
+  channels.personalLearningConfirm.provider((input) => personalLearning.confirm(parsePersonalLearningRecordId(input)));
+  channels.personalLearningReject.provider((input) => personalLearning.reject(parsePersonalLearningRecordId(input)));
+  channels.personalLearningCorrect.provider((input) => {
+    const request = parsePersonalLearningCorrectRequest(input);
+    return personalLearning.correct(request.recordId, request.fact, request.explanation);
+  });
+  channels.personalLearningForget.provider((input) => personalLearning.forget(parsePersonalLearningRecordId(input)));
+  channels.personalLearningDelete.provider((input) => personalLearning.delete(parsePersonalLearningRecordId(input)));
+  channels.personalLearningExport.provider(() => personalLearning.export());
   channels.personalSecretsList.provider(async () => {
     await contextServices.ready;
     return contextServices.vault.list();

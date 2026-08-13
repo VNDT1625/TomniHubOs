@@ -72,7 +72,12 @@ import type { LifecycleHandleRequest, LifecycleHandleSnapshot } from '@process/r
 import type { OmniGatewayProgressEvent } from '@process/omni-gateway/omniGatewayProgress';
 import type { OmniAuthMode, OmniOAuthClientSummary, OmniToolPermissions } from '@process/omni-gateway/auth/authTypes';
 import type { RemoteAccessMode } from '@/common/config/remotePublicUrl';
-import type { PersonalContext, SecretDescriptor } from '@process/agentRuntime/contextTypes';
+import type {
+  ContextFact,
+  PersonalContext,
+  PersonalLearningRecord,
+  SecretDescriptor,
+} from '@process/agentRuntime/contextTypes';
 
 import type { CompanyConfig } from '@process/company/companyConfig';
 import type { CompanyStructure } from '@process/company/companyOrchestrator';
@@ -730,9 +735,35 @@ export type PersonalSecretSetSaveRequest = {
   variables: PersonalSecretVariableInput[];
 };
 
+export type PersonalLearningProposeRequest = {
+  collection: PersonalLearningRecord['collection'];
+  fact: ContextFact;
+  explanation: string;
+  provenance: string;
+};
+
+export type PersonalLearningRecordIdRequest = { recordId: string };
+
+export type PersonalLearningCorrectRequest = PersonalLearningRecordIdRequest & {
+  fact: ContextFact;
+  explanation: string;
+};
+
+/** Export intentionally excludes every secret handle and vault reference. */
+export type PersonalContextExport = Omit<PersonalContext, 'secretReferences'>;
+
 export const personal = {
   get: bridge.buildProvider<PersonalContext, void>('personal-context.get'),
   save: bridge.buildProvider<PersonalContext, { profile: PersonalContext }>('personal-context.save'),
+  proposeLearning: bridge.buildProvider<PersonalLearningRecord, PersonalLearningProposeRequest>(
+    'personal-context.learning.propose'
+  ),
+  confirmLearning: bridge.buildProvider<boolean, PersonalLearningRecordIdRequest>('personal-context.learning.confirm'),
+  rejectLearning: bridge.buildProvider<boolean, PersonalLearningRecordIdRequest>('personal-context.learning.reject'),
+  correctLearning: bridge.buildProvider<boolean, PersonalLearningCorrectRequest>('personal-context.learning.correct'),
+  forgetLearning: bridge.buildProvider<boolean, PersonalLearningRecordIdRequest>('personal-context.learning.forget'),
+  deleteLearning: bridge.buildProvider<boolean, PersonalLearningRecordIdRequest>('personal-context.learning.delete'),
+  exportLearning: bridge.buildProvider<PersonalContextExport, void>('personal-context.learning.export'),
   listSecrets: bridge.buildProvider<SecretDescriptor[], void>('personal-secrets.list'),
   saveSecretSet: bridge.buildProvider<SecretDescriptor, PersonalSecretSetSaveRequest>('personal-secrets.save'),
   removeSecretSet: bridge.buildProvider<boolean, { handle: string }>('personal-secrets.remove'),
