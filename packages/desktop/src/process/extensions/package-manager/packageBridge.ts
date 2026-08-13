@@ -257,6 +257,7 @@ export const getPackageManagerService = (): PackageManagerService => {
     appVersion: app.getVersion(),
     catalog: FIRST_PARTY_PACKAGE_CATALOG,
     trustedKeys: FIRST_PARTY_PACKAGE_TRUSTED_KEYS,
+    firstPartyTrustedKeys: FIRST_PARTY_PACKAGE_TRUSTED_KEYS,
     catalogLoader: createRemotePackageCatalogLoader({
       url: process.env.TOMNI_STORE_CATALOG_URL ?? DEFAULT_PACKAGE_CATALOG_URL,
       cachePath: path.join(rootDir, 'catalog-cache.json'),

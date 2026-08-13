@@ -53,6 +53,8 @@ export type PackageManagerServiceDeps = {
   appVersion: string;
   catalog: readonly PackageCatalogEntry[];
   trustedKeys?: Readonly<Record<string, string>>;
+  /** Keys pinned to Tomni's protected package namespace; generic store keys cannot elevate this trust tier. */
+  firstPartyTrustedKeys?: Readonly<Record<string, string>>;
   stateStore?: PackageStateStore;
   now?: () => number;
   randomId?: () => string;
@@ -163,6 +165,7 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
   const downloadsDir = path.join(rootDir, '.downloads');
   const stateStore = deps.stateStore ?? new JsonPackageStateStore(path.join(rootDir, 'installed.json'));
   const trustedKeys = deps.trustedKeys ?? {};
+  const firstPartyTrustedKeys = deps.firstPartyTrustedKeys ?? {};
   const now = deps.now ?? Date.now;
   const randomId = deps.randomId ?? randomUUID;
   const readAssetFile = deps.readAssetFile ?? ((assetPath: string): Promise<string> => readFile(assetPath, 'utf8'));
@@ -366,6 +369,13 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
 
   type OwnedPayloadEvidence = Pick<InstalledPackageRecord, 'manifest' | 'provenance' | 'trust'>;
 
+  const isSignedByPinnedFirstPartyKey = (manifest: PackageManifest): boolean => {
+    const keyId = manifest.artifact?.signature.keyId;
+    if (!keyId) return false;
+    const pinnedKey = firstPartyTrustedKeys[keyId];
+    return pinnedKey !== undefined && pinnedKey === trustedKeys[keyId];
+  };
+
   const reconcileOwnedPayload = async (
     record: InstalledPackageRecord,
     version: string,
@@ -392,6 +402,7 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
       evidence.manifest !== undefined &&
       packageArtifactManifestsMatch(evidence.manifest, manifest) &&
       manifest.publisherId === 'com.tomni' &&
+      isSignedByPinnedFirstPartyKey(manifest) &&
       evidence.provenance?.scope !== undefined &&
       evidence.provenance.version === manifest.version &&
       evidence.provenance.integrity === manifest.artifact?.integrity;

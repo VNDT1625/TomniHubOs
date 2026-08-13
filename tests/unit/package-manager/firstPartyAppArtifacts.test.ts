@@ -254,6 +254,7 @@ describe('signed first-party app package artifacts', () => {
           catalog: [catalogEntryFor(catalogVersion)],
           catalogLoader: async () => [catalogEntryFor(catalogVersion)],
           trustedKeys: { [signingKey.keyId]: signingKey.publicKey },
+          firstPartyTrustedKeys: { [signingKey.keyId]: signingKey.publicKey },
           allowLocalArtifactUrls: true,
           isPackageSandboxActive: () => false,
           reservePackageSandboxMutation: () => ({ release: () => undefined }),

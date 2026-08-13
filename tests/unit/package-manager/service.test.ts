@@ -2150,6 +2150,7 @@ describe('package manager service', () => {
         catalog: [catalogEntry()],
         catalogLoader: async () => [catalogEntry()],
         trustedKeys: { 'ide-lifecycle-key': publicKey.export({ type: 'spki', format: 'pem' }).toString() },
+        firstPartyTrustedKeys: { 'ide-lifecycle-key': publicKey.export({ type: 'spki', format: 'pem' }).toString() },
         allowLocalArtifactUrls: true,
       });
     let service = createService();
@@ -2179,6 +2180,106 @@ describe('package manager service', () => {
     await expect(service.readAsset('com.tomni.ide', 'app.js')).rejects.toThrow(/not installed/i);
     await expect(access(path.join(rootDir, 'packages', 'com.tomni.ide'))).rejects.toMatchObject({ code: 'ENOENT' });
   }, 60_000);
+
+  it('refuses to elevate a generic store-signed rollback payload into the protected Tomni namespace', async () => {
+    const rootDir = await tempRoot();
+    const id = 'com.tomni.rollback-keyring';
+    const genericStorePair = generateKeyPairSync('ed25519');
+    const pinnedFirstPartyPair = generateKeyPairSync('ed25519');
+    const genericStoreKey = genericStorePair.publicKey.export({ type: 'spki', format: 'pem' }).toString();
+    const pinnedFirstPartyKey = pinnedFirstPartyPair.publicKey.export({ type: 'spki', format: 'pem' }).toString();
+    const writeSignedPayload = async (
+      version: string,
+      keyId: string,
+      privateKey: ReturnType<typeof generateKeyPairSync>['privateKey']
+    ): Promise<PackageManifest> => {
+      const payloadRoot = path.join(rootDir, 'packages', id, version);
+      await mkdir(payloadRoot, { recursive: true });
+      await writeFile(path.join(payloadRoot, 'index.html'), `<main>${version}</main>`);
+      const artifact = await computeArtifactIntegrity(payloadRoot);
+      const unsignedManifest: PackageManifest = {
+        ...bundledCatalog()[0]!.manifest,
+        id,
+        publisherId: 'com.tomni',
+        name: 'Rollback keyring test',
+        version,
+        artifact: {
+          ...artifact,
+          signature: { algorithm: 'ed25519', keyId, value: '' },
+        },
+      };
+      const manifest: PackageManifest = {
+        ...unsignedManifest,
+        artifact: {
+          ...unsignedManifest.artifact!,
+          signature: {
+            ...unsignedManifest.artifact!.signature,
+            value: sign(null, Buffer.from(packageSignaturePayload(unsignedManifest)), privateKey).toString('base64'),
+          },
+        },
+      };
+      await writeFile(path.join(payloadRoot, 'tomny-package.json'), JSON.stringify(manifest));
+      return manifest;
+    };
+    const activeManifest = await writeSignedPayload('2.0.0', 'tomni-pinned-key', pinnedFirstPartyPair.privateKey);
+    const rollbackManifest = await writeSignedPayload('1.0.0', 'generic-store-key', genericStorePair.privateKey);
+    let record: InstalledPackageRecord = {
+      id,
+      version: activeManifest.version,
+      previousVersion: rollbackManifest.version,
+      previousManifest: rollbackManifest,
+      // Simulates a modified durable registry. The signature is valid, but its key is not pinned for Tomni.
+      previousTrust: 'signed-first-party',
+      previousProvenance: {
+        source: 'store',
+        scope: 'optional',
+        version: rollbackManifest.version,
+        integrity: rollbackManifest.artifact!.integrity,
+      },
+      state: 'installed',
+      delivery: 'downloaded-package',
+      enabled: true,
+      installedAt: 1,
+      updatedAt: 1,
+      manifest: activeManifest,
+      trust: 'signed-first-party',
+      provenance: {
+        source: 'store',
+        scope: 'optional',
+        version: activeManifest.version,
+        integrity: activeManifest.artifact!.integrity,
+      },
+    };
+    const stateStore: PackageStateStore = {
+      initialize: async () => undefined,
+      list: () => [structuredClone(record)],
+      get: (packageId) => (packageId === id ? structuredClone(record) : undefined),
+      save: async (nextRecord) => {
+        record = structuredClone(nextRecord);
+      },
+      remove: async () => undefined,
+    };
+    const service = createPackageManagerService({
+      rootDir,
+      appVersion: '1.2.0',
+      catalog: [{ manifest: activeManifest, delivery: 'downloaded-package', trust: 'signed-first-party' }],
+      stateStore,
+      trustedKeys: {
+        'generic-store-key': genericStoreKey,
+        'tomni-pinned-key': pinnedFirstPartyKey,
+      },
+      firstPartyTrustedKeys: { 'tomni-pinned-key': pinnedFirstPartyKey },
+    });
+    await service.initialize();
+
+    await expect(service.rollback(id)).rejects.toThrow(/protected com\.tomni namespace/i);
+    expect(record).toMatchObject({
+      version: '2.0.0',
+      previousVersion: '1.0.0',
+      trust: 'signed-first-party',
+      previousTrust: 'signed-first-party',
+    });
+  });
 
   it('restores every installed version when the durable uninstall transaction fails', async () => {
     const rootDir = await tempRoot();

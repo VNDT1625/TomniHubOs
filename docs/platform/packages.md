@@ -60,6 +60,8 @@ Trust classes:
 
 A signature proves artifact origin, not safe behavior. Capability and sandbox policy still apply.
 
+`signed first-party package` is additionally bound to the exact key pinned for the protected `com.tomni.*` namespace in the main process. A valid generic Store signature, catalog label, or modified durable rollback record can at most be treated as `signed-store`; it never grants first-party trust or activates a protected namespace. Every retained rollback manifest is re-verified against its own artifact digest and this pinned keyring before activation.
+
 ## Target Package ABI
 
 The ABI has two planes.
@@ -130,7 +132,7 @@ Catalog expiry or offline state never turns an unverified artifact into trusted 
 
 ## Update, disable, revoke, and uninstall
 
-Updates stage beside the active version and switch only after verification and health checks. Rollback retains the last known-good version within a declared storage budget.
+Updates stage beside the active version and switch only after verification and health checks. Rollback retains the last known-good version within a declared storage budget, but restores its historical signed identity only after re-verifying the exact retained manifest, digest, and pinned trust key.
 
 Disable removes contributions and cancels package-owned background work without deleting user data. Revocation additionally blocks activation and quarantines unsafe artifacts.
 
