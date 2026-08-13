@@ -62,7 +62,11 @@ export class RunKernel {
   public async executeRun(
     rawIntent: RunIntent,
     candidates: readonly SelectionCandidate[],
-    executor: (leaseId?: string, signal?: AbortSignal) => Promise<{ evidenceRefs: readonly string[] }>,
+    executor: (
+      leaseId?: string,
+      signal?: AbortSignal,
+      targetId?: string
+    ) => Promise<{ evidenceRefs: readonly string[] }>,
     signal?: AbortSignal
   ): Promise<OutcomeReceipt> {
     const intent = assertRunIntent(rawIntent);
@@ -327,7 +331,7 @@ export class RunKernel {
 
     try {
       await this.emit(intent, 'execution.started', { leaseId: lease.leaseId });
-      const result = await executor(lease.leaseId, signal);
+      const result = await executor(lease.leaseId, signal, selection.selectedId);
       evidenceRefs = result.evidenceRefs;
       await this.emit(intent, 'evidence.recorded', { count: evidenceRefs.length });
     } catch {
@@ -375,7 +379,11 @@ export class RunKernel {
     parentIntent: RunIntent,
     childIntent: RunIntent,
     candidates: readonly SelectionCandidate[],
-    executor: (leaseId?: string, signal?: AbortSignal) => Promise<{ evidenceRefs: readonly string[] }>,
+    executor: (
+      leaseId?: string,
+      signal?: AbortSignal,
+      targetId?: string
+    ) => Promise<{ evidenceRefs: readonly string[] }>,
     signal?: AbortSignal
   ): Promise<OutcomeReceipt> {
     return this.executeRun(assertDelegatedRunIntent(parentIntent, childIntent), candidates, executor, signal);
