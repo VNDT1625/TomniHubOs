@@ -31,18 +31,21 @@ const isCorruptBackupName = (filePath: string, name: string): boolean => {
   return name.startsWith(prefix) && /^\d+-[0-9a-f-]{36}$/u.test(name.slice(prefix.length));
 };
 
-const hasValidProvenance = (record: Partial<InstalledPackageRecord>): boolean => {
-  const provenance = record.provenance;
+const hasValidProvenance = (
+  provenance: InstalledPackageRecord['provenance'],
+  version: string | undefined,
+  delivery: InstalledPackageRecord['delivery'] | undefined
+): boolean => {
   if (!provenance) return true;
-  const expectedSource = record.delivery === 'downloaded-package' ? 'store' : 'bundled';
+  const expectedSource = delivery === 'downloaded-package' ? 'store' : 'bundled';
   const validIntegrity = provenance.integrity === undefined || SHA256_INTEGRITY.test(provenance.integrity);
   return (
     provenance.source === expectedSource &&
     (provenance.scope === 'core' || provenance.scope === 'optional') &&
-    provenance.version === record.version &&
+    provenance.version === version &&
     semver.valid(provenance.version) !== null &&
     validIntegrity &&
-    (record.delivery !== 'downloaded-package' || provenance.integrity !== undefined)
+    (delivery !== 'downloaded-package' || provenance.integrity !== undefined)
   );
 };
 
@@ -73,17 +76,38 @@ const parseInstalledPackageRecord = (value: unknown): InstalledPackageRecord | u
       record.trust === 'trusted-first-party' ||
       record.trust === 'signed-first-party' ||
       record.trust === 'signed-store') &&
-    hasValidProvenance(record);
+    (!record.previousTrust ||
+      record.previousTrust === 'trusted-first-party' ||
+      record.previousTrust === 'signed-first-party' ||
+      record.previousTrust === 'signed-store') &&
+    hasValidProvenance(record.provenance, record.version, record.delivery) &&
+    hasValidProvenance(record.previousProvenance, record.previousVersion, record.delivery) &&
+    (!(record.previousManifest || record.previousTrust || record.previousProvenance) ||
+      record.previousVersion !== undefined);
   if (!valid) return undefined;
   try {
     const manifest = record.manifest ? parsePackageManifest(record.manifest) : undefined;
+    const previousManifest = record.previousManifest ? parsePackageManifest(record.previousManifest) : undefined;
     if (manifest && (manifest.id !== record.id || manifest.version !== record.version)) return undefined;
+    if (
+      previousManifest &&
+      (previousManifest.id !== record.id || previousManifest.version !== record.previousVersion)
+    ) {
+      return undefined;
+    }
     if (record.provenance?.integrity && manifest?.artifact?.integrity !== record.provenance.integrity) {
+      return undefined;
+    }
+    if (
+      record.previousProvenance?.integrity &&
+      previousManifest?.artifact?.integrity !== record.previousProvenance.integrity
+    ) {
       return undefined;
     }
     return {
       ...(record as InstalledPackageRecord),
       ...(manifest ? { manifest } : {}),
+      ...(previousManifest ? { previousManifest } : {}),
     };
   } catch {
     return undefined;
@@ -184,7 +208,10 @@ export class JsonPackageStateStore implements PackageStateStore {
         const state = initial ?? { schemaVersion: 1 as const, packages: this.list() };
         const temporaryPath = `${this.filePath}.${process.pid}.${randomUUID()}.tmp`;
         try {
-          await writeFile(temporaryPath, JSON.stringify(state, null, 2) + String.fromCharCode(10), { encoding: 'utf8', mode: 0o600 });
+          await writeFile(temporaryPath, JSON.stringify(state, null, 2) + String.fromCharCode(10), {
+            encoding: 'utf8',
+            mode: 0o600,
+          });
           await rename(temporaryPath, this.filePath);
         } catch (error) {
           await rm(temporaryPath, { force: true }).catch((): undefined => undefined);
@@ -202,7 +229,9 @@ export class JsonPackageStateStore implements PackageStateStore {
         .map((entry) => entry.name)
         .toSorted();
       const expiredBackups = backups.slice(0, Math.max(0, backups.length - MAX_CORRUPT_BACKUPS));
-      await Promise.all(expiredBackups.map((name) => rm(path.join(path.dirname(this.filePath), name), { force: true })));
+      await Promise.all(
+        expiredBackups.map((name) => rm(path.join(path.dirname(this.filePath), name), { force: true }))
+      );
     } catch {
       // A cleanup failure must not discard the recovered registry.
     }

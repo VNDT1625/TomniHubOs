@@ -287,6 +287,10 @@ export type InstalledPackageRecord = {
   id: string;
   version: string;
   previousVersion?: string;
+  /** Verified identity evidence retained for a rollback payload after the catalog advances. */
+  previousManifest?: PackageManifest;
+  previousTrust?: PackageTrust;
+  previousProvenance?: PackageInstallProvenance;
   state: Extract<PackageLifecycleState, 'installed' | 'failed' | 'quarantined'>;
   delivery: PackageDeliveryMode;
   enabled: boolean;

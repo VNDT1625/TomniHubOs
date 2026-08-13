@@ -364,10 +364,12 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
     });
   };
 
+  type OwnedPayloadEvidence = Pick<InstalledPackageRecord, 'manifest' | 'provenance' | 'trust'>;
+
   const reconcileOwnedPayload = async (
     record: InstalledPackageRecord,
     version: string,
-    expectedManifest?: PackageManifest
+    evidence: OwnedPayloadEvidence
   ) => {
     const payloadPath = path.join(packagesDir, record.id, version);
     if (!(await exists(payloadPath))) throw new Error('Owned package payload is missing.');
@@ -376,7 +378,7 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
     if (manifest.id !== record.id || manifest.version !== version) {
       throw new Error('Owned package payload does not match its registry identity.');
     }
-    if (expectedManifest && !packageArtifactManifestsMatch(expectedManifest, manifest)) {
+    if (evidence.manifest && !packageArtifactManifestsMatch(evidence.manifest, manifest)) {
       throw new Error('Owned package payload does not match its durable registry manifest.');
     }
     verifyArtifactSignature(manifest, trustedKeys);
@@ -385,32 +387,26 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
       throw new Error('Owned package payload integrity verification failed.');
     }
 
-    const catalogEntry = catalog.get(record.id);
     const durableFirstPartyIdentity =
-      record.trust === 'signed-first-party' &&
-      record.manifest !== undefined &&
-      packageArtifactManifestsMatch(record.manifest, manifest) &&
-      record.provenance?.scope !== undefined &&
-      record.provenance.version === manifest.version &&
-      record.provenance.integrity === manifest.artifact?.integrity;
-    const trust: PackageTrust =
-      durableFirstPartyIdentity &&
-      catalogEntry?.trust === 'signed-first-party' &&
-      catalogEntry.manifest.publisherId === manifest.publisherId &&
-      catalogEntry.manifest.artifact?.signature.keyId === manifest.artifact?.signature.keyId
-        ? 'signed-first-party'
-        : 'signed-store';
+      evidence.trust === 'signed-first-party' &&
+      evidence.manifest !== undefined &&
+      packageArtifactManifestsMatch(evidence.manifest, manifest) &&
+      manifest.publisherId === 'com.tomni' &&
+      evidence.provenance?.scope !== undefined &&
+      evidence.provenance.version === manifest.version &&
+      evidence.provenance.integrity === manifest.artifact?.integrity;
+    const trust: PackageTrust = durableFirstPartyIdentity ? 'signed-first-party' : 'signed-store';
     const provenance =
-      record.provenance?.scope &&
-      record.provenance.version === manifest.version &&
-      record.provenance.integrity === manifest.artifact?.integrity
-        ? record.provenance
+      evidence.provenance?.scope &&
+      evidence.provenance.version === manifest.version &&
+      evidence.provenance.integrity === manifest.artifact?.integrity
+        ? evidence.provenance
         : provenanceFor(
             {
               manifest,
               delivery: record.delivery,
             },
-            record.provenance?.scope
+            evidence.provenance?.scope
           );
     return { manifest, trust, provenance };
   };
@@ -440,10 +436,13 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
 
     for (const record of stateStore.list()) {
       if (record.delivery !== 'downloaded-package') continue;
-      const expectedManifest = record.manifest ?? catalog.get(record.id)?.manifest;
       const previousVersion = record.previousVersion;
       try {
-        const activePayload = await reconcileOwnedPayload(record, record.version, expectedManifest);
+        const activePayload = await reconcileOwnedPayload(record, record.version, {
+          manifest: record.manifest ?? catalog.get(record.id)?.manifest,
+          provenance: record.provenance,
+          trust: record.trust,
+        });
         const metadataChanged =
           !record.manifest ||
           record.trust !== activePayload.trust ||
@@ -469,13 +468,15 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
         }
       }
 
-      const previousPayload = await reconcileOwnedPayload(record, previousVersion).catch(
-        async (): Promise<undefined> => {
-          // Preserve every payload directory for manual repair; only durable state is fail-closed.
-          await recordReconciliationFailure(record);
-          return undefined;
-        }
-      );
+      const previousPayload = await reconcileOwnedPayload(record, previousVersion, {
+        manifest: record.previousManifest,
+        provenance: record.previousProvenance,
+        trust: record.previousTrust,
+      }).catch(async (): Promise<undefined> => {
+        // Preserve every payload directory for manual repair; only durable state is fail-closed.
+        await recordReconciliationFailure(record);
+        return undefined;
+      });
       if (!previousPayload) continue;
 
       const restoresInstalledSandbox =
@@ -497,11 +498,17 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
       }
 
       try {
-        const { lastError: _lastError, ...previousRecord } = record;
+        const {
+          lastError: _lastError,
+          previousManifest: _previousManifest,
+          previousProvenance: _previousProvenance,
+          previousTrust: _previousTrust,
+          previousVersion: _previousVersion,
+          ...previousRecord
+        } = record;
         await stateStore.save({
           ...previousRecord,
           version: previousVersion,
-          previousVersion: undefined,
           updatedAt: now(),
           manifest: previousPayload.manifest,
           trust: previousPayload.trust,
@@ -919,9 +926,21 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
         id,
         version: entry.manifest.version,
         ...(existing?.version && existing.version !== entry.manifest.version
-          ? { previousVersion: existing.version }
+          ? {
+              previousVersion: existing.version,
+              previousManifest: existing.manifest ? structuredClone(existing.manifest) : undefined,
+              previousProvenance: existing.provenance ? structuredClone(existing.provenance) : undefined,
+              previousTrust: existing.trust,
+            }
           : existing?.previousVersion
-            ? { previousVersion: existing.previousVersion }
+            ? {
+                previousVersion: existing.previousVersion,
+                previousManifest: existing.previousManifest ? structuredClone(existing.previousManifest) : undefined,
+                previousProvenance: existing.previousProvenance
+                  ? structuredClone(existing.previousProvenance)
+                  : undefined,
+                previousTrust: existing.previousTrust,
+              }
             : {}),
         state: 'installed',
         delivery: entry.delivery,
@@ -1086,11 +1105,18 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
     if (!installed.previousVersion) throw new Error(`Package ${id} has no rollback version.`);
     const lease = await reserveInactiveSandboxMutation(installed, 'rollback');
     try {
-      const previous = await reconcileOwnedPayload(installed, installed.previousVersion);
+      const previous = await reconcileOwnedPayload(installed, installed.previousVersion, {
+        manifest: installed.previousManifest,
+        provenance: installed.previousProvenance,
+        trust: installed.previousTrust,
+      });
       const next: InstalledPackageRecord = {
         ...installed,
         version: installed.previousVersion,
         previousVersion: installed.version,
+        previousManifest: installed.manifest ? structuredClone(installed.manifest) : undefined,
+        previousProvenance: installed.provenance ? structuredClone(installed.provenance) : undefined,
+        previousTrust: installed.trust,
         manifest: previous.manifest,
         trust: previous.trust,
         provenance: previous.provenance,

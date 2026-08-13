@@ -8,6 +8,7 @@ import { createHash, sign } from 'node:crypto';
 import { readFile, readdir, rename, rm, mkdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import JSZip from 'jszip';
+import semver from 'semver';
 import { build, type Plugin } from 'vite';
 import UnoCSS from 'unocss/vite';
 import unoConfig from '../../uno.config';
@@ -294,7 +295,11 @@ type BuiltPackage = {
   artifactName: string;
 };
 
-const buildPackage = async (definition: PackageDefinition, signingKey: PackageSigningKey): Promise<BuiltPackage> => {
+const buildPackage = async (
+  definition: PackageDefinition,
+  signingKey: PackageSigningKey,
+  version: string
+): Promise<BuiltPackage> => {
   const outputDirectory = path.join(BUILD_ROOT, definition.id);
   if (process.env.TOMNI_PACKAGE_SKIP_BUILD !== '1') {
     if (definition.staticFiles) {
@@ -403,7 +408,7 @@ const buildPackage = async (definition: PackageDefinition, signingKey: PackageSi
     description: definition.description,
     type: 'app',
     bundleKind: definition.bundleKind,
-    version: '1.0.0',
+    version,
     engines: { tomni: definition.enginesTomni ?? '>=0.0.0' },
     modules,
     permissions: definition.permissions,
@@ -454,6 +459,9 @@ const main = async (): Promise<void> => {
   await mkdir(OUTPUT_ROOT, { recursive: true });
   await mkdir(BUILD_ROOT, { recursive: true });
   const signingKey = await loadPackageSigningKey();
+  const requestedVersion = process.env.TOMNI_PACKAGE_VERSION?.trim() || '1.0.0';
+  const version = semver.valid(requestedVersion);
+  if (!version) throw new Error(`TOMNI_PACKAGE_VERSION must be a valid semantic version: ${requestedVersion}`);
   const requestedIds = new Set(
     (process.env.TOMNI_PACKAGE_TARGETS ?? '')
       .split(',')
@@ -464,7 +472,7 @@ const main = async (): Promise<void> => {
     requestedIds.size === 0 ? definitions : definitions.filter(({ id }) => requestedIds.has(id));
   if (selectedDefinitions.length === 0) throw new Error('TOMNI_PACKAGE_TARGETS did not match a package definition.');
   const packages: BuiltPackage[] = [];
-  for (const definition of selectedDefinitions) packages.push(await buildPackage(definition, signingKey));
+  for (const definition of selectedDefinitions) packages.push(await buildPackage(definition, signingKey, version));
   let preservedPackages: Array<{ artifactUrl: string; manifest: PackageManifest }> = [];
   if (signingKey.production && selectedDefinitions.length !== definitions.length) {
     try {

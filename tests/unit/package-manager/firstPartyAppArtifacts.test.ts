@@ -1,6 +1,7 @@
 import { createHash, generateKeyPairSync } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { promises as fs } from 'node:fs';
+import { createServer, type Server } from 'node:http';
 import path from 'node:path';
 
 import { tmpdir } from 'node:os';
@@ -8,7 +9,14 @@ import JSZip from 'jszip';
 import { describe, expect, it } from 'vitest';
 
 import { DEVELOPMENT_SIGNING_KEY_ID, loadPackageSigningKey } from '../../../scripts/package-apps/signing';
-import { FIRST_PARTY_PACKAGE_CATALOG, FIRST_PARTY_PACKAGE_TRUSTED_KEYS, parsePackageManifest } from '@/common/packages';
+import {
+  FIRST_PARTY_PACKAGE_CATALOG,
+  FIRST_PARTY_PACKAGE_TRUSTED_KEYS,
+  parsePackageManifest,
+  type PackageCatalogEntry,
+  type PackageManifest,
+} from '@/common/packages';
+import { createPackageManagerService } from '@process/extensions/package-manager';
 import {
   packageArtifactManifestsMatch,
   readArtifactManifest,
@@ -172,6 +180,118 @@ describe('signed first-party app package artifacts', () => {
       await fs.rm(root, { recursive: true, force: true });
     }
   }, 30_000);
+
+  it('runs the signed runtime pilot through install, update, disable, enable, rollback, and uninstall', async () => {
+    const root = await fs.mkdtemp(path.join(tmpdir(), 'tomni-runtime-pilot-lifecycle-'));
+    let server: Server | undefined;
+    try {
+      const artifactsRoot = path.join(root, 'artifacts');
+      const buildPilot = async (version: string): Promise<void> =>
+        runPackageBuild({
+          ...process.env,
+          LOCALAPPDATA: root,
+          TOMNI_PACKAGE_DEV_SIGNING: '1',
+          TOMNI_PACKAGE_OUTPUT_ROOT: artifactsRoot,
+          TOMNI_PACKAGE_TARGETS: 'com.tomni.runtime-pilot',
+          TOMNI_PACKAGE_VERSION: version,
+        });
+      await buildPilot('1.0.0');
+      await buildPilot('1.1.0');
+
+      const artifacts = new Map<string, Buffer>();
+      const manifests = new Map<string, PackageManifest>();
+      const builtArtifacts = await Promise.all(
+        ['1.0.0', '1.1.0'].map(async (version) => {
+          const artifactName = `com.tomni.runtime-pilot-${version}.dev.tomny`;
+          const artifact = await fs.readFile(path.join(artifactsRoot, artifactName));
+          const archive = await JSZip.loadAsync(artifact);
+          const manifestEntry = archive.file('tomny-package.json');
+          if (!manifestEntry) throw new Error(`Runtime pilot ${version} is missing its manifest.`);
+          return {
+            artifact,
+            artifactName,
+            manifest: parsePackageManifest(JSON.parse(await manifestEntry.async('text')) as unknown),
+            version,
+          };
+        })
+      );
+      for (const { artifact, artifactName, manifest, version } of builtArtifacts) {
+        artifacts.set(`/${artifactName}`, artifact);
+        manifests.set(version, manifest);
+      }
+
+      server = createServer((request, response) => {
+        const artifact = artifacts.get(request.url ?? '');
+        if (!artifact) {
+          response.writeHead(404).end();
+          return;
+        }
+        response.writeHead(200, {
+          'content-length': String(artifact.byteLength),
+          'content-type': 'application/vnd.tomni.package+zip',
+        });
+        response.end(artifact);
+      });
+      await new Promise<void>((resolve) => server!.listen(0, '127.0.0.1', resolve));
+      const address = server.address();
+      if (!address || typeof address === 'string') throw new Error('Runtime pilot test package server did not start.');
+
+      const signingKey = await loadPackageSigningKey({
+        env: { TOMNI_PACKAGE_DEV_SIGNING: '1' },
+        signingRoot: path.join(root, 'Tomni', 'StoreSigning', 'development'),
+      });
+      let catalogVersion = '1.0.0';
+      const catalogEntryFor = (version: string): PackageCatalogEntry => ({
+        manifest: manifests.get(version)!,
+        delivery: 'downloaded-package',
+        trust: 'signed-first-party',
+        artifactUrl: `http://127.0.0.1:${address.port}/com.tomni.runtime-pilot-${version}.dev.tomny`,
+      });
+      const createService = () =>
+        createPackageManagerService({
+          rootDir: path.join(root, 'package-manager'),
+          appVersion: '1.2.0',
+          catalog: [catalogEntryFor(catalogVersion)],
+          catalogLoader: async () => [catalogEntryFor(catalogVersion)],
+          trustedKeys: { [signingKey.keyId]: signingKey.publicKey },
+          allowLocalArtifactUrls: true,
+          isPackageSandboxActive: () => false,
+          reservePackageSandboxMutation: () => ({ release: () => undefined }),
+        });
+      let service = createService();
+      await service.initialize();
+
+      await expect(service.install('com.tomni.runtime-pilot')).resolves.toMatchObject({
+        installedVersion: '1.0.0',
+        enabled: true,
+      });
+      await expect(service.readAsset('com.tomni.runtime-pilot', 'index.html')).resolves.toMatchObject({
+        content: expect.stringContaining("capability: 'host.runtime.info'"),
+      });
+
+      catalogVersion = '1.1.0';
+      await expect(service.refreshCatalog()).resolves.toEqual(
+        expect.arrayContaining([expect.objectContaining({ installedVersion: '1.0.0', updateAvailable: true })])
+      );
+      await expect(service.install('com.tomni.runtime-pilot')).resolves.toMatchObject({
+        installedVersion: '1.1.0',
+        previousVersion: '1.0.0',
+      });
+      service = createService();
+      await service.initialize();
+      await expect(service.disable('com.tomni.runtime-pilot')).resolves.toMatchObject({ enabled: false });
+      await expect(service.enable('com.tomni.runtime-pilot')).resolves.toMatchObject({ enabled: true });
+      await expect(service.rollback('com.tomni.runtime-pilot')).resolves.toMatchObject({
+        installedVersion: '1.0.0',
+        previousVersion: '1.1.0',
+      });
+      await expect(service.uninstall('com.tomni.runtime-pilot')).resolves.toMatchObject({ state: 'available' });
+      await expect(service.readAsset('com.tomni.runtime-pilot', 'index.html')).rejects.toThrow(/not installed/i);
+    } finally {
+      if (server) await new Promise<void>((resolve) => server!.close(() => resolve()));
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  }, 60_000);
 
   for (const packageId of PACKAGE_IDS) {
     it(`ships a verifiable independently downloadable ${packageId} bundle`, async () => {
