@@ -70,7 +70,7 @@ test.describe('TomnyAgentic Chat - Mid-Conversation Switch (P1)', () => {
 
   test.skip('TC-A-08: should handle continuous switch (model → permission → model)', async ({ page }) => {
     // SKIP: Pending tomnyagentic binary investigation - runtime provider+mode switch causes silent hang on subsequent messages
-    // See tests/e2e/docs/chat-tomnyagentic/implementation-mapping.zh.md "Known Issues" section
+    // Tracked as a production-runtime ownership gap in docs/architecture/current.md.
     // Symptom: After model+permission switches, 2nd message stuck at conv.status=running/pending, no AI reply (2.7min timeout)
     // DB evidence: msg count=3 (user1, ai1, user2), missing 2nd AI reply
     // Next: Product team investigation of tomnyagentic binary runtime state handling
@@ -185,7 +185,7 @@ test.describe('TomnyAgentic Chat - Mid-Conversation Switch (P1)', () => {
 
   test.skip('TC-A-09: should handle 3 rounds of conversation after model/permission switch', async ({ page }) => {
     // SKIP: Same root cause as TC-A-08 - tomnyagentic binary runtime state handling issue after model+permission switches
-    // See tests/e2e/docs/chat-tomnyagentic/implementation-mapping.zh.md "Known Issues" section
+    // Tracked as a production-runtime ownership gap in docs/architecture/current.md.
 
     if (!preconditions.models!.modelB) {
       test.skip(true, 'Need 2nd tomnyagentic-compatible model for mid-conversation switch');

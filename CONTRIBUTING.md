@@ -1,111 +1,90 @@
-# Contributing Guide
+﻿# Contributing to TomniHubOS
 
-> **Chinese version**: [CONTRIBUTING.zh.md](CONTRIBUTING.zh.md)
+TomniHubOS is converging on a small trusted base and independently installable capability packages. Contributions should reduce ambiguity, duplicate execution paths, or base coupling.
 
-## Prerequisites
+## Before starting
 
-See [docs/contributing/development.md](docs/contributing/development.md) for environment setup. You will need:
+1. Read [AGENTS.md](AGENTS.md).
+2. Read the relevant entry in [docs/README.md](docs/README.md).
+3. Map the affected code with MTUI and verify current behavior in source and tests.
+4. Check git status and preserve unrelated changes.
+5. Define the smallest vertical outcome and its acceptance evidence.
 
-- Node.js 22+
-- [bun](https://bun.sh)
-- [prek](https://github.com/j178/prek) (`npm install -g @j178/prek`)
+Requirements are Node.js 22 through 24, Bun, Git, and the native build prerequisites for your platform.
 
-## Tomni Agentic Release Versioning
+```sh
+bun install
+bun run start
+```
 
-Tomni Agentic uses `0.0.x` versions for updater and distribution testing:
+## Choosing scope
 
-- `0.0.0` is the clean baseline installer.
-- `0.0.1`, `0.0.2`, and later patch versions are update-test releases.
-- `0.1.0` is the first official public release.
-- Releases, update metadata, documentation, and downloads must use only `VNDT1625/OmniAgent`. Do not add TomniHubOS or iOfficeAI endpoints.
+Prefer changes that advance one of the two MVP cores:
 
-## Rule 1: Atomic PRs
+- a governed Hub Agent OS run from request to receipt;
+- trust and user intelligence with explicit user control.
 
-Each pull request must contain **exactly one feature or one bug fix** that cannot be further decomposed.
+Local/cloud adapters and package extraction are supporting platform work when they unlock those cores. Optional applications must be changed in their package boundary, not expanded inside the base.
 
-**How to check:** Ask yourself (or an AI): _"Can this diff be split into multiple independently mergeable PRs?"_ If yes, split it before submitting.
+For broad tasks, split work according to the multi-agent protocol in [docs/execution/mvp-plan.md](docs/execution/mvp-plan.md). Shared contracts, IPC registration, bootstrap wiring, and database migrations have one owner at a time.
 
-### Examples
+## Making changes
 
-**Acceptable (single PR):**
+All repository writes go through MTUI. Keep changes focused and preserve existing public contracts unless the task explicitly migrates them.
 
-- A bug fix with one root cause, even if it touches multiple files (e.g., fixing toast z-index across modal and chat layers)
-- A single coherent feature (e.g., team creation modal with form validation)
+A change is expected to include:
 
-**Must be split into separate PRs:**
+- implementation and tests in the same scope;
+- validation at every trust boundary;
+- documentation updates when status, architecture, or a public contract changes;
+- migration and rollback behavior for persisted data;
+- cancellation and terminal-state behavior for asynchronous work;
+- no new imports from base core into an optional package implementation.
 
-- Team chat scroll fix + Sentry user tracking + office preview performance optimization = 3 PRs
-- Unrelated bug fixes bundled together (e.g., titlebar navigation fix + i18n missing key + speech input UI fix)
-- Independent technical layers (e.g., IPC bridge refactor + renderer component + worker process change for unrelated features)
+User-visible text must use i18n. Renderer controls use Arco Design, Icon Park, and semantic UnoCSS or CSS-variable tokens.
 
-## Rule 2: Pass Local Checks Before Push
+## Verification
 
-CI will reject your PR if these checks fail. Run them locally **before pushing** to save time.
+Run targeted tests first, then the gates relevant to the change.
 
-### Step-by-step
-
-```bash
-# 1. Format (always run — covers .ts, .tsx, .css, .json, .md)
-bun run format
-
-# 2. Lint (skip if no .ts/.tsx files changed)
+```sh
 bun run lint
-
-# 3. Type check (skip if no .ts/.tsx files changed)
+bun run format:check
 bunx tsc --noEmit
+bun run test
+```
 
-# 4. i18n validation (only if you changed files in src/renderer/, locales/, or src/common/config/i18n/)
+For i18n-sensitive changes:
+
+```sh
 bun run i18n:types
 node scripts/check-i18n.js
-
-# 5. Tests
-bunx vitest run
 ```
 
-### One-command alternative
+Use contract and integration tests for security, IPC, adapters, packages, persistence, or the run lifecycle. Follow [docs/engineering/testing-and-release.md](docs/engineering/testing-and-release.md) for release evidence.
 
-This replicates the exact CI quality check, then runs tests:
+## Commits and pull requests
 
-```bash
-prek run --from-ref origin/main --to-ref HEAD
-bunx vitest run
+Commit messages use English Conventional Commits:
+
+```text
+feat(agent-runtime): unify governed run lifecycle
+fix(security): reject unregistered egress destination
+docs(architecture): record package boundary evidence
 ```
 
-> `prek` runs format-check + lint + tsc in read-only mode. If it reports issues, run the auto-fix commands above first, then re-run prek.
+Keep refactors separate from behavioral changes when practical. Do not include AI signatures.
 
-### Common failures and fixes
+A pull request must explain:
 
-| Failure       | Fix                                                                  |
-| ------------- | -------------------------------------------------------------------- |
-| Format errors | `bun run format` (auto-fixes)                                        |
-| Lint errors   | `bun run lint:fix` for auto-fixable issues; fix the rest manually    |
-| Type errors   | Fix the TypeScript issue, then re-run `bunx tsc --noEmit`            |
-| i18n errors   | Check for missing keys; run `bun run i18n:types` to regenerate types |
-| Test failures | Fix the failing test or implementation; re-run `bunx vitest run`     |
+- user or platform outcome;
+- affected trust and process boundaries;
+- tests and evidence;
+- migration or rollback implications;
+- known gaps, using the canonical status labels.
 
-### Claude Code shortcut
+Use just push instead of direct git push. The command runs the project gates before pushing.
 
-If you use [Claude Code](https://docs.anthropic.com/en/docs/claude-code), run `/oss-pr` to automate the entire check + commit + PR flow.
+## Documentation policy
 
-## After Your PR
-
-This repository runs a PR automation bot that reviews, fixes minor issues, and prepares PRs for merge. You may see these labels on your PR:
-
-| Label                    | Meaning                                | Action needed                           |
-| ------------------------ | -------------------------------------- | --------------------------------------- |
-| `bot:reviewing`          | Bot is reviewing your PR               | Wait                                    |
-| `bot:ci-waiting`         | CI failed; bot is waiting for your fix | Push a new commit to fix CI             |
-| `bot:needs-rebase`       | Merge conflict; bot cannot auto-rebase | Rebase your branch onto `main` and push |
-| `bot:needs-human-review` | Blocking issue found                   | A maintainer will review and comment    |
-| `bot:ready-to-merge`     | All checks passed                      | A maintainer will merge when ready      |
-
-See [docs/contributing/pr-automation.md](docs/contributing/pr-automation.md) for the full automation workflow.
-
-## Enforcement
-
-When these rules are not followed, maintainers may:
-
-1. **Close and request resubmission** (preferred) — you retain full credit upon proper resubmission.
-2. **Cherry-pick valuable portions** — your authorship is preserved in git history, but the original PR shows as "Closed" rather than "Merged".
-
-Code style, dependency choices, and documentation polish are handled by maintainers post-merge. Focus your PR on the functional change.
+Do not add standalone plans, session notes, duplicate guides, or subsystem READMEs. Update the owning canonical document listed in [docs/README.md](docs/README.md). Generated evidence belongs in generated output and must identify its source revision and command.

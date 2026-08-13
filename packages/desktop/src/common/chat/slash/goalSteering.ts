@@ -26,8 +26,8 @@ import { GOAL_STATUS_CONTRACT, MANDATORY_PIPELINE, RECOVERY_AND_RULES, type Goal
 /** Compact, firm reminder injected on every ordinary turn while Goal Mode is on. */
 export const GOAL_TURN_REMINDER = [
   '[GOAL MODE — STEERING BẮT BUỘC] Phiên đang ở chế độ Goal. MỌI phản hồi PHẢI tuân thủ QUY TRÌNH BẮT BUỘC, không bỏ/đảo bước:',
-  'phân tích query → lấy data → suy luận + bổ sung skill còn thiếu → planning → tối ưu plan (cùng tool/khác query: leader gọi song song; chỉ spawn khi khác đầu ra + hành động/tool-family) → thực hiện → quick test sau MỖI task → quick test tracker sau mỗi bước lớn → lỗi thì root-cause → fix → test lại (lặp).',
-  'Tự chủ: KHÔNG hỏi lại, tự quyết hợp lý + ghi `.kiro/status.md`; một lỗi tự sửa ≤2 lần rồi đánh dấu [-] và đi tiếp. KHÔNG commit/push/xóa hàng loạt/đụng production trừ khi được yêu cầu. Chạy đến khi đạt mục tiêu (≈100%) hoặc hết credit. Gõ `/goal off` để tắt chế độ này.',
+  'phân tích query → đọc AGENTS.md và canonical docs liên quan → lấy dữ liệu → planning → tối ưu plan, chỉ spawn khi khác đầu ra và write target → thực hiện → quick test sau MỖI task → test gate sau mỗi bước lớn → phân tích nguyên nhân gốc → fix → test lại.',
+  'Tự chủ trong phạm vi an toàn; lưu tiến độ trong task state nội bộ, không tạo status Markdown. Xin hướng dẫn khi cần quyền mới hoặc quyết định kiến trúc không thể suy ra an toàn. KHÔNG commit, push, xóa hàng loạt hoặc đụng production trừ khi được yêu cầu. Gõ /goal off để tắt.',
   GOAL_STATUS_CONTRACT,
 ].join('\n');
 
@@ -35,7 +35,7 @@ export const GOAL_TURN_REMINDER = [
 export const buildGoalSteering = (variant: GoalCommandVariant): string => {
   const header =
     variant === 'goal-all'
-      ? '[GOAL-ALL MODE — STEERING BẮT BUỘC] Toàn quyền tự quyết, nhắm 101% (tối thiểu ngang mục tiêu, ưu tiên vượt). MỌI turn phải theo:'
+      ? '[GOAL-ALL MODE - STEERING BẮT BUỘC] Tự chủ trong phạm vi, nghiệm thu 101% trong phạm vi và ưu tiên vượt mục tiêu. MỌI turn phải theo:'
       : '[GOAL MODE — STEERING BẮT BUỘC] MỌI turn phải theo:';
   return [header, '', MANDATORY_PIPELINE, '', RECOVERY_AND_RULES].join('\n');
 };

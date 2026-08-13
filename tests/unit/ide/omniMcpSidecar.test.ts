@@ -260,7 +260,7 @@ describe('Omni MCP sidecar smoke checks', () => {
   });
 
   it('documents the rescue workflow and stop command', () => {
-    const doc = read('docs/RESCUE_MCP.md');
+    const doc = read('docs/engineering/testing-and-release.md');
     expect(doc).toContain('bun run omni:rescue');
     expect(doc).toContain('bun run omni:rescue:local');
     expect(doc).toContain('bun run omni:mcp:health');

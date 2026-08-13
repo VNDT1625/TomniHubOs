@@ -20,9 +20,8 @@
  * When a superior delegates work *down* to a worker ("tay chân") agent, the
  * division's context is composed together with the company layer and the task
  * prompt, then handed to the worker as a single payload (criterion 3.9). The
- * payload is modelled on the existing Team-Mode **`mailbox`** message (see the
- * `mailbox` table in `docs/CODEBASE_GUIDE.md` §19) so it can be passed through
- * the same async messaging channel used by Team Mode.
+ * payload is modelled on the existing Team-Mode **`mailbox`** message so it
+ * can be passed through the same asynchronous messaging channel.
  *
  * Invariant — workers hold no private memory: {@link ContextLayering} stores
  * **no per-worker / per-agent state whatsoever**. Worker context exists only at
@@ -87,8 +86,7 @@ export type DivisionContext = {
 export type DivisionContextInput = Omit<DivisionContext, 'divisionId'>;
 
 /**
- * A Team-Mode mailbox message (mirrors the `mailbox` table — see
- * `docs/CODEBASE_GUIDE.md` §19). Reused here as the transport for delegating
+ * A Team-Mode mailbox message. Reused here as the transport for delegating
  * context + task to a worker agent (criterion 3.9). Defined locally rather than
  * imported so this module stays independent of the backend layer.
  */

@@ -105,12 +105,8 @@ out/
 **/.claude/settings.json
 .qwen/
 .qwen/*/
-.specify/scripts/
 .gemini/
 .gemini/*/
-
-# Keep important project documentation
-!.specify/memory/constitution.md
 
 # Temporary and backup files
 *.tmp
@@ -241,11 +237,6 @@ packages/mtui/target/
 .tomny/
 data/*.db-shm
 data/*.db-wal
-
-# Files containing local dev-router API key (do not commit secrets)
-.kiro/steering/claude-ui-testing.md
-.claude/skills/test-with-computer/SKILL.md
-.kiro/status.md
 
 # Local model training artifacts (weights, synthetic datasets, checkpoints)
 .local-models/

@@ -5,8 +5,7 @@
  */
 
 /**
- * Shared types for the Agent Company **execution pipeline** (the recursive,
- * real-work engine — see `.kiro/specs/agent-company-pipeline/design.md`).
+ * Shared types for the Agent Company recursive execution pipeline.
  *
  * This is the renderer-side orchestrator's vocabulary: the events streamed to
  * the Manager popup, the per-role run state for the recursive tree board, the

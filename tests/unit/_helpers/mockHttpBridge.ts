@@ -5,7 +5,7 @@
  *
  * Tomny N3 mock HTTP/WS bridge helper.
  *
- * Public API frozen in docs/backend-migration/plans/2026-05-08-n3-test-rewrite-adapter-common.md §2.1.
+ * Public API is a compatibility seam for the N3 tests.
  * N4 teammates: do NOT change the exported signatures. If a new capability is
  * needed, escalate to the team-lead instead of patching this file.
  */

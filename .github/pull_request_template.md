@@ -1,39 +1,23 @@
-# Pull Request
+﻿## Outcome
 
-## Description
+Describe the user or platform outcome and link the owning canonical document.
 
-<!-- Provide a clear and concise description of what this PR does. -->
+## Boundaries affected
 
-## Related Issues
+List process, security, data, provider, and package boundaries. State whether each relevant claim is CURRENT, PARTIAL, TARGET, or BLOCKED.
 
-<!-- Link to related issues using "Closes #123" or "Fixes #123" -->
+## Evidence
 
-- Closes #
+- [ ] Targeted tests pass
+- [ ] Lint passes
+- [ ] Format check passes
+- [ ] Type check passes
+- [ ] Applicable unit, contract, integration, and package-boundary checks pass
+- [ ] Documentation is updated when a public contract or status changed
+- [ ] Migration, rollback, and clean-machine evidence is attached where relevant
 
-## Type of Change
+## Risk and recovery
 
-- [ ] Bug fix (non-breaking change which fixes an issue)
-- [ ] New feature (non-breaking change which adds functionality)
-- [ ] Breaking change (fix or feature that would cause existing functionality to not work as expected)
-- [ ] Documentation update
+Describe permissions, secrets, outbound data, persisted data, cancellation, rollback, and known gaps.
 
-## Testing
-
-- [ ] Tested on macOS
-- [ ] Tested on Windows
-- [ ] Tested on Linux
-- [ ] My code follows the project's code style guidelines
-- [ ] I have performed a self-review of my own code
-- [ ] My changes generate no new warnings or errors
-
-## Screenshots
-
-<!-- If applicable, add screenshots to help explain your changes. -->
-
-## Additional Context
-
-<!-- Add any other context about the pull request here. -->
-
----
-
-**Thank you for contributing to Tomny! 🎉**
+See [CONTRIBUTING.md](../CONTRIBUTING.md) and [testing and release](../docs/engineering/testing-and-release.md).

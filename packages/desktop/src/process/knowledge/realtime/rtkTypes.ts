@@ -15,7 +15,7 @@
  *
  * This module is PURE: it declares types and a few small constant tables only —
  * no I/O, no Node/DOM APIs — so it can be imported from anywhere and unit-tested
- * trivially. The spec lives at `.tomny/specs/realtime-knowledge/`.
+ * trivially and independently of generated specification state.
  *
  * Distinct from `exp-graph` (ExpBase), which remembers the agent's own
  * debugging/coding experience; RTK remembers facts about the outside world.

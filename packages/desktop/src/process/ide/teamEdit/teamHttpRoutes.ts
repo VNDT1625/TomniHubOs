@@ -11,7 +11,7 @@
  * browse the host repo, read/write files (file-leased through MTUI), pull the
  * host's Understand graph + Wiki (read-only), and run database queries by proxy.
  *
- * Contract (see `docs/design/team-collab-session.md`):
+ * HTTP contract:
  *   GET  /team/info                          → { ok, hasSession, repoName? }
  *   POST /team/join      {password,name}     → { ok, peerToken, participant, repoName } | 401
  *   GET  /team/snapshot + Authorization      → { ok, snapshot }

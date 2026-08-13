@@ -1,31 +1,42 @@
-# Omni Docs
+﻿# Canonical documentation
 
-Documentation is organized by reader intent, not by document type.
+This directory is the single design and execution source for TomniHubOS. Do not add parallel plans, session memory, subsystem READMEs, or tool-specific rule sets.
 
-| Directory                       | For whom                 | What lives here                                                                                                               |
-| ------------------------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
-| [`guides/`](guides)             | Users & operators        | How to deploy, test, and run the product. Server deployment, WebUI, Hub testing, CDP debugging.                               |
-| [`contributing/`](contributing) | Contributors             | Dev environment setup, file-structure conventions, PR automation workflow.                                                    |
-| [`architecture/`](architecture) | Engineers & architects   | System architecture overview, subsystem deep-dives (ACP, queue, team mode), and supporting research notes.                    |
-| [`specs/`](specs)               | Engineering-driven specs | Feature design docs, requirements, implementation plans (ACP rewrite, extension market, remote agent, wake prompt, PR notes). |
-| [`prds/`](prds)                 | Product team             | Formal Product Requirement Documents maintained by the product team. **Do not reorganize without their consent.**             |
-| [`readme/`](readme)             | Global users             | Translated copies of the root `readme.md` (Chinese, Japanese, Korean, Spanish, etc.).                                         |
+## Status language
 
-## Quick pointers
+Every material architecture claim uses one of these meanings:
 
-- New to the project? Start with [`architecture/overview.md`](architecture/overview.md).
-- Setting up a dev environment? See [`docs/contributing/development.md`](contributing/development.md).
-- Writing code? The entry point for code-style, linting, formatting, and commit rules is [`AGENTS.md`](AGENTS.md) at the repo root.
-- Deploying a server? [`docs/guides/deploy-server.md`](guides/deploy-server.md).
+- **CURRENT** - reachable code or a passing test demonstrates the behavior.
+- **PARTIAL** - some implementation exists, but coverage, integration, or release proof is incomplete.
+- **TARGET** - intended design only.
+- **BLOCKED** - a named dependency or decision prevents progress.
 
-## Where to put new docs
+A document can describe current and target behavior together only when it labels the boundary clearly.
 
-| Content type                                               | Destination                 |
-| ---------------------------------------------------------- | --------------------------- |
-| User/ops-facing how-to                                     | `guides/`                   |
-| Contributor convention, workflow, or tooling rule          | `contributing/`             |
-| System or subsystem design, technical analysis             | `architecture/`             |
-| Exploratory research, analysis reports                     | `architecture/research/`    |
-| Feature requirements / design drafts driven by engineering | `specs/<feature-name>/`     |
-| Formal PRD owned by product team                           | `prds/` (coordinate first)  |
-| README translation                                         | `readme/readme_<locale>.md` |
+## Document ownership
+
+| Topic                                                    | Canonical document                                              |
+| -------------------------------------------------------- | --------------------------------------------------------------- |
+| Product purpose, differentiation, MVP outcomes           | [Product vision](product/vision.md)                             |
+| Implemented code and verified gaps                       | [Current architecture](architecture/current.md)                 |
+| Trusted base and package boundaries                      | [Target architecture](architecture/target.md)                   |
+| Security, private context, preferences, user control     | [Trust and user understanding](core/trust-and-understanding.md) |
+| Provider APIs, CLIs, local models, cloud models, routing | [AI runtime](core/ai-runtime.md)                                |
+| Store, manifest, ABI, sandbox, package extraction        | [Packages](platform/packages.md)                                |
+| Ordered waves and autonomous subagent protocol           | [MVP plan](execution/mvp-plan.md)                               |
+| Source layout, naming, UI, i18n                          | [Engineering conventions](engineering/conventions.md)           |
+| Test levels, evidence, release gates                     | [Testing and release](engineering/testing-and-release.md)       |
+
+Repository-wide contributor requirements live only in [AGENTS.md](../AGENTS.md). The contribution workflow lives in [CONTRIBUTING.md](../CONTRIBUTING.md).
+
+## Updating documentation
+
+Update a canonical document in the same change when:
+
+- a target becomes implemented;
+- an implementation is removed or bypassed;
+- a public contract, trust boundary, or package boundary changes;
+- new evidence changes a CURRENT or PARTIAL assessment;
+- a release gate or MVP acceptance criterion changes.
+
+Cite source paths and tests for CURRENT claims. Record a revision or date for architecture evidence. Keep generated reports out of this directory unless the report itself is the maintained contract.

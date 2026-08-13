@@ -7,7 +7,7 @@
 /**
  * Pure decision logic for the goal auto-resume watchdog.
  *
- * The goal pipeline (see `goalCommand.ts` / `.claude/commands/goal.md`) requires
+ * The goal pipeline in goalCommand.ts requires
  * the agent to keep running until the goal is met. If the agent's turn stalls
  * (e.g. a hung terminal or a stuck server keeps the turn "running" with no stream
  * activity), the watchdog cancels the turn, waits a cooldown, then re-sends the

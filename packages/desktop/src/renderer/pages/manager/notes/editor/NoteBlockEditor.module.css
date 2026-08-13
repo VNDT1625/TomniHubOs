@@ -1,8 +1,7 @@
 /**
- * Scoped styling for the BlockNote-powered note editor (the only place in the
- * app that renders a non-Arco editor surface — an intentional, documented
- * exception, see `.kiro/steering/manager-editor-exception.md`). All overrides
- * are nested under `.host` so nothing leaks to the rest of the app.
+ * Scoped styling for the BlockNote-powered note editor, the only non-Arco
+ * editor surface in the app and an intentional implementation exception.
+ * All overrides are nested under `.host` so nothing leaks to the rest of the app.
  *
  * The goal is a Notion-style reading/writing page: generous reading column,
  * warm-charcoal ink via the app's theme variables, and the editor chrome tuned

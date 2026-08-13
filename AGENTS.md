@@ -1,160 +1,135 @@
-# TomniHubOS - Project Guide
+﻿# TomniHubOS Agent Rules
 
-All contributors (human and AI) must follow [CONTRIBUTING.md](CONTRIBUTING.md) before opening a PR. ([Chinese version](CONTRIBUTING.zh.md))
+These rules apply to every human or AI contributor in this repository.
 
-## Code Conventions
+## 1. Product priority
 
-### File & Directory Structure
+Optimize work in this order:
 
-- **Directory size limit**: A single directory must not exceed **10** direct children (files + subdirectories). Split by responsibility when approaching this limit.
+1. Make the **Hub Agent OS** run lifecycle coherent and production-safe.
+2. Complete **Trust and User Intelligence**: permissions, secret handling, egress control, audit, private context, preferences, and user control.
+3. Make local and cloud AI adapters provider-neutral and governed by the same contracts.
+4. Make the Store/package boundary real and remove optional applications from the base bundle.
+5. Improve optional packages only when doing so advances one of the first four goals.
 
-See [docs/contributing/file-structure.md](docs/contributing/file-structure.md) for complete rules. Agents must also follow the `architecture` skill (`.claude/skills/architecture/SKILL.md`) when creating files or modules.
+IDE, Browser, Studio, Office, media, monitoring, testing studios, and similar domain surfaces are downloadable packages. Do not add their implementation to the base application. Studio is a package group or compatibility redirect, not a required base module.
 
-### Naming
+## 2. Sources of truth
 
-- **Components**: PascalCase (`Button.tsx`, `Modal.tsx`)
-- **Utilities**: camelCase (`formatDate.ts`)
-- **Hooks**: camelCase with `use` prefix (`packages/desktop/src/renderer/hooks/system/useTheme.ts`)
-- **Constants files**: camelCase (`constants.ts`) — values inside use UPPER_SNAKE_CASE
-- **Type files**: camelCase (`types.ts`)
-- **Style files**: kebab-case or `ComponentName.module.css`
-- **Unused params**: prefix with `_`
+Read [docs/README.md](docs/README.md) and the relevant canonical document before changing a subsystem.
 
-### UI Library & Icons
+Use these labels in design and status work:
 
-- **Components**: `@arco-design/web-react` — no raw interactive HTML (`<button>`, `<input>`, `<select>`, etc.)
-- **Icons**: `@icon-park/react`
+- **CURRENT** - demonstrated by a reachable code path or test.
+- **PARTIAL** - implemented in some paths but not universal or release-proven.
+- **TARGET** - intended architecture, not yet proven.
+- **BLOCKED** - cannot proceed until a named dependency or decision is resolved.
 
-> **MANDATORY for any UI work**: before creating or restyling UI (pages, panels, components, modals), activate the `frontend-design` skill (`.claude/skills/frontend-design/SKILL.md`). Apply the skill's aesthetic principles but render strictly with Arco + `@icon-park/react` + UnoCSS semantic tokens — never Tailwind, shadcn, raw HTML, or hardcoded colors (see the skill's "Project Stack Binding").
+Code is evidence for current behavior. Canonical documents define intended boundaries. If they conflict, report the conflict and update the document or implementation in the same change; never silently choose one.
 
-### CSS
+Do not create competing plans, session logs, memory files, duplicate READMEs, or new rule systems. Update the canonical document that owns the topic. Generated reports must live in an explicitly generated output directory and must not become normative documentation.
 
-- Prefer **UnoCSS utility classes**; complex styles use **CSS Modules** (`ComponentName.module.css`)
-- Colors must use **semantic tokens** from `uno.config.ts` or CSS variables — no hardcoded values
-- Arco theme overrides go in `packages/desktop/src/renderer/styles/arco-override.css`; component-scoped Arco overrides use CSS Module with `:global()`
-- Global styles only in `packages/desktop/src/renderer/styles/`
+## 3. Required working method
 
-Formatting rules (Oxfmt, Prettier-compatible):
+Before reading large files:
 
-- Single-element arrays that fit on one line → inline: `[{ id: 'a', value: 'b' }]`
-- Trailing commas required in multi-line arrays/objects
-- Single quotes for strings
-
-### TypeScript
-
-- Strict mode enabled — no `any`, no implicit returns
-- Use path aliases: `@/*`, `@process/*`, `@renderer/*`
-- Prefer `type` over `interface` (per Oxlint config)
-- English for code comments; JSDoc for public functions
-
-### Internationalization (i18n)
-
-All user-facing text must use i18n keys — never hardcode strings. Languages and modules are defined in `packages/desktop/src/common/config/i18n-config.json`.
-
-See the `i18n` skill (`.claude/skills/i18n/SKILL.md`) for complete workflow, key naming, and validation steps.
-
-## Architecture
-
-Two process types — never mix their APIs:
-
-| Process  | Path                             | Restriction     |
-| -------- | -------------------------------- | --------------- |
-| Main     | `packages/desktop/src/process/`  | No DOM APIs     |
-| Renderer | `packages/desktop/src/renderer/` | No Node.js APIs |
-
-Cross-process communication must go through the IPC bridge (`packages/desktop/src/preload/`).
-See [docs/architecture/overview.md](docs/architecture/overview.md) for details.
-
-## Testing
-
-**Framework**: Vitest 4 (`vitest.config.ts`). Coverage target ≥ 80%.
-
-```bash
-bun run test              # run all tests
-bun run test:coverage     # with coverage report
+```sh
+mtui --json map intent "<task>"
+mtui --json map folder <path>
 ```
 
-See the `testing` skill (`.claude/skills/testing/SKILL.md`) for complete workflow and quality rules.
+Use MTUI context or compass operations to narrow the source set. Every repository file creation, edit, patch, rename, or deletion must go through an MTUI write command. Review the MTUI diff before handoff. Do not bypass MTUI with shell redirection or ad-hoc scripts.
 
-## Workflow
+Preserve unrelated work in a dirty worktree. Inspect git status before and after work. Never rewrite or delete user changes outside the assigned scope.
 
-### MTUI Runtime
+## 4. Architecture invariants
 
-Before loading long source files, agents should use `mtui --json map intent "<task>"`, then `mtui --json map folder <path>` / `context` / `compass read` to narrow scope; all file writes must go through MTUI (`new`, `edit`, or `apply-patch`) with `diff`/`undo` available.
+- Electron main code lives under packages/desktop/src/process and must not use DOM APIs.
+- Renderer code lives under packages/desktop/src/renderer and must not use Node.js APIs.
+- Preload is the only renderer-to-main bridge. IPC requires an explicit schema, sender validation, least privilege, bounded payloads, and stable error semantics.
+- The Hub owns orchestration policy; adapters own provider or transport details.
+- A package may depend on published core contracts. Core code must not import a package implementation.
+- Security checks must sit on the shared execution seam. A check used by only one UI or adapter is not a platform guarantee.
+- Secret values must remain in the main process or an approved isolated runtime. Renderer and model context receive opaque handles or redacted representations.
+- User understanding is not authorization. Learned context can inform a proposal but cannot grant a capability or bypass consent.
+- Every governed run must produce durable state transitions, evidence, resource usage, and a terminal receipt.
 
-### During Development
+See [docs/architecture/target.md](docs/architecture/target.md).
 
-Auto-fix as you edit:
+## 5. Source conventions
 
-```bash
-bun run lint:fix       # auto-fix lint issues (oxlint)
-bun run format         # auto-format all files (oxfmt)
-bunx tsc --noEmit      # verify no type errors
+- TypeScript remains strict. Do not add any, implicit returns, or unchecked external data.
+- Prefer type aliases over interfaces unless declaration merging is required.
+- Components use PascalCase; utilities and type files use camelCase; hooks start with use; constants use UPPER_SNAKE_CASE inside camelCase files.
+- Prefix intentionally unused parameters with an underscore.
+- Use existing path aliases instead of deep relative imports.
+- Public contracts and non-obvious security behavior require concise English JSDoc or comments.
+- Do not increase a source directory beyond ten direct children. Split new code by responsibility before that point; do not perform unrelated restructuring solely to repair legacy directories.
+
+For renderer work:
+
+- Use Arco Design components for interactive controls and Icon Park for icons.
+- Use UnoCSS semantic tokens or CSS variables; do not hardcode theme colors.
+- Put global styles only in the renderer styles area and isolate complex component styles in CSS Modules.
+- Route every user-visible string through the configured i18n system.
+
+See [docs/engineering/conventions.md](docs/engineering/conventions.md).
+
+## 6. Security and package rules
+
+Treat provider responses, CLI output, package manifests, archives, web content, model output, and IPC payloads as untrusted input.
+
+A new execution path is incomplete until it defines:
+
+- identity and origin;
+- requested capabilities;
+- permission and approval behavior;
+- secret exposure boundary;
+- outbound destination policy;
+- cancellation, timeout, and resource limits;
+- audit and recovery evidence.
+
+Never weaken signature, path traversal, archive size, SSRF, sandbox, or permission checks to make an integration pass. Trusted-react package execution is privileged and must not be the default for third-party packages.
+
+## 7. Verification
+
+Run the smallest relevant tests while iterating, then the applicable repository gates:
+
+```sh
+bun run lint
+bun run format:check
+bunx tsc --noEmit
+bun run test
 ```
 
-If your changes touch `packages/desktop/src/renderer/`, `locales/`, or `packages/desktop/src/common/config/i18n`, also run:
+Changes to renderer text or i18n configuration also require:
 
-```bash
+```sh
 bun run i18n:types
 node scripts/check-i18n.js
 ```
 
-### Before Pushing
+Security, IPC, package, database, and run-lifecycle changes require contract or integration tests, not only unit tests. Package extraction also requires a clean-machine absence/install/uninstall proof. See [docs/engineering/testing-and-release.md](docs/engineering/testing-and-release.md).
 
-Always use `just push` instead of `git push`:
+## 8. Multi-agent execution
 
-```bash
-just push                          # lint → format-check → typecheck → test → git push
-just push -u origin feat/branch    # same checks, with extra git push args
+For work spanning independent domains, follow [docs/execution/mvp-plan.md](docs/execution/mvp-plan.md):
+
+- one integrator owns shared contracts and final merge;
+- each subagent receives an explicit file allowlist, acceptance evidence, and no-overlap rule;
+- parallelize independent adapters, tests, and package migrations;
+- serialize shared contract, bootstrap, IPC, and schema changes;
+- subagents do not commit unless the integrator explicitly delegates commit ownership;
+- handoffs include changed files, tests run, remaining risks, and observed conflicts.
+
+## 9. Git and review
+
+Use English Conventional Commits:
+
+```text
+<type>(<scope>): <subject>
 ```
 
-Any step that fails aborts the push. Fix the issue, commit, then retry.
+Allowed common types are feat, fix, refactor, chore, docs, test, style, and perf. Never add AI attribution or generated-by signatures.
 
-> **Note for AI agents**: `just push` uses `--quiet` for lint — only errors cause failure. The project has many pre-existing lint _warnings_ which do NOT indicate failure. Judge success by exit code, not by output volume.
-
-### Before PR (optional stricter check)
-
-`prek` replicates the **exact CI pipeline** (includes end-of-file, trailing whitespace checks on all file types):
-
-```bash
-# One-time setup
-npm install -g @j178/prek
-
-# Run
-prek run --from-ref origin/main --to-ref HEAD
-```
-
-> `prek` is read-only — it reports but does not fix. If it reports issues, run the auto-fix commands above, commit, then re-run.
-
-The `oss-pr` skill runs this automatically during PR creation.
-
-### Commit & PR Format
-
-Commit format: `<type>(<scope>): <subject>` in English. Types: feat, fix, refactor, chore, docs, test, style, perf.
-
-**NEVER add AI signatures** (Co-Authored-By, Generated with, etc.).
-
-For pull request creation, see the `oss-pr` skill (`.claude/skills/oss-pr/SKILL.md`).
-
-## Skills Index
-
-| Skill                    | Purpose                                                                                                          | Triggers                                                                                   |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| **architecture**         | File & directory structure conventions for all process types                                                     | Creating files, adding modules, architectural decisions                                    |
-| **frontend-design**      | Distinctive, production-grade UI aesthetics (upstream Anthropic skill + Arco/UnoCSS adaptation)                  | Creating or restyling any UI: pages, panels, components, modals, beautifying screens       |
-| **systematic-debugging** | Root-cause-first debugging (4-phase framework, upstream obra/superpowers)                                        | Any bug, test failure, unexpected behavior, perf/build issue — before proposing fixes      |
-| **performance**          | RAM/CPU/GPU + startup optimization for Electron/React/tomnicore, tied to ResourceCoordinator                     | App lag, high memory/GPU, slow startup, tuning concurrency/leases                          |
-| **test-with-computer**   | ⛔ DEPRECATED — do NOT use. Claude/computer-use UI testing is disabled per `.kiro/steering/claude-ui-testing.md` | (none — use Vitest/DOM tests + user-run `bun start` instead)                               |
-| **i18n**                 | Internationalization workflow and standards                                                                      | Adding user-facing text, modifying `locales/` or `packages/desktop/src/common/config/i18n` |
-| **testing**              | Testing workflow and quality standards                                                                           | Writing tests, adding features, before claiming completion                                 |
-| **oss-pr**               | Full commit + PR workflow: branch management, quality checks, issue linking, PR                                  | Creating pull requests, after committing, `/oss-pr`                                        |
-| **bump-version**         | Version bump workflow: update package.json, checks, branch, PR, tag release                                      | Bumping version, `/bump-version`                                                           |
-| **pr-review**            | Local PR code review with full project context, no truncation limits                                             | Reviewing a PR, user says "review PR", `/pr-review`                                        |
-| **pr-fix**               | Fix all issues from a pr-review report, create a follow-up PR, and verify each fix                               | After pr-review, user says "fix all issues", `/pr-fix`                                     |
-| **pr-verify**            | Verify and merge bot:ready-to-merge PRs with impact analysis and test supplementation                            | Verifying PRs, merging ready PRs, `/pr-verify`                                             |
-| **pr-ship**              | End-to-end PR lifecycle: create, CI wait, review, fix, merge in one invocation                                   | `/pr-ship`, after development is done, resume shepherding a PR                             |
-| **pr-automation**        | PR automation orchestrator: poll PRs, review, fix, and merge via label state machine                             | Invoked by daemon script (`scripts/pr-automation.sh`), `/pr-automation`                    |
-
-> Skills are located in `.claude/skills/` and contain project conventions that apply to **all** agents and contributors.
->
-> **At the start of every session, read [`.claude/skills/SKILLS_GUIDE.md`](.claude/skills/SKILLS_GUIDE.md)** — it maps each situation to the right skill, lists skill paths, and gives conflict-avoidance rules (which skills overlap and which must NOT run together). Before adding any new skill, follow its "should we add a skill?" checklist to avoid duplication and stack conflicts.
+Before pushing, use just push so lint, formatting, type checking, tests, and the push run as one gated workflow. Do not claim completion from log volume; use command exit codes and concrete evidence.

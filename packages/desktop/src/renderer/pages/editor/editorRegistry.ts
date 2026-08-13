@@ -11,7 +11,7 @@
  * It classifies a file (by extension and/or MIME type) into an {@link EditorAdapterKind},
  * which the {@link UniversalEditor} (task 8.3) maps to a concrete adapter component.
  *
- * Design goals (see `.kiro/specs/tomny-enhancements/design.md`, "Yêu cầu 2a"):
+ * Design goals for the Universal Editor:
  * - **Never stuck (criterion 2.9):** every file resolves to *some* adapter kind. When no
  *   specific adapter matches, classification falls back to `'raw-text'` so a file can always
  *   be opened, even if only as plain text.

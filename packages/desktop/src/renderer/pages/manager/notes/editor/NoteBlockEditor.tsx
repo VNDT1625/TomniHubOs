@@ -5,13 +5,13 @@
  */
 
 /**
- * `NoteBlockEditor` — a Notion-style block editor for note bodies, powered by
- * BlockNote (MPL-2.0). This is the ONE place in the app that renders a non-Arco
- * editor surface — a deliberate, documented exception (see
- * `.kiro/steering/manager-editor-exception.md`): a true block editor (slash
- * commands, drag handles, tables, image/video/embed blocks) cannot be
- * reasonably reproduced with Arco primitives, and it is the core of the
- * "reading page like Notion" the user asked for.
+ * NoteBlockEditor is a Notion-style block editor powered by BlockNote
+ * (MPL-2.0).
+ * It is the deliberate non-Arco editor exception because slash commands,
+ * drag handles, tables, and rich media cannot be reasonably reproduced with
+ * Arco primitives.
+ * The editor provides a Notion-style reading and writing experience.
+ * Its storage contract with Manager remains unchanged.
  *
  * Contract with the rest of Manager is unchanged: the body is stored as
  * **Markdown** in `manager-data.json`. On mount we parse the incoming Markdown

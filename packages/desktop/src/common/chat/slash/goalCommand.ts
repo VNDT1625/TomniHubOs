@@ -15,8 +15,8 @@
  * and that it must follow the mandatory closed-loop pipeline until the goal is
  * reached (or credits run out).
  *
- * Mirror of the design documented in `.claude/commands/goal.md`, kept inline here
- * so it works as a real in-app slash command rather than a doc the agent must read.
+ * The runtime prompt follows the canonical repository rules in `AGENTS.md` and
+ * the execution protocol in `docs/execution/mvp-plan.md`.
  */
 
 export const GOAL_COMMAND_NAME = 'goal';
@@ -92,20 +92,20 @@ export const parseGoalCommand = (input: string): ParsedGoalCommand | null => {
 // the directives are written so the agent acts immediately.
 export const MANDATORY_PIPELINE = [
   'QUY TRÌNH BẮT BUỘC 100% (đi đủ, đúng thứ tự, lặp lại từ pha lỗi — KHÔNG bỏ/đảo bước):',
-  '1. Phân tích query: bóc tách mục tiêu chính, ràng buộc, phạm vi, và tự suy ra "Definition of Done" nếu chưa nêu; ghi vào `.kiro/status.md`.',
+  '1. Phân tích query: bóc tách mục tiêu chính, ràng buộc, phạm vi, và tự suy ra Definition of Done nếu chưa nêu; lưu trạng thái trong task state nội bộ của phiên, không tạo file Markdown theo dõi riêng.',
   '2. Lấy data: dùng `mtui --json map intent` rồi `compass read`/`read` để gom file liên quan; nhiều query cùng dùng MTUI/ide_research thì leader gọi song song và tự tổng hợp, không spawn; web search khi thiếu thông tin ngoài codebase.',
-  '3. Suy luận + bổ sung dữ liệu & năng lực còn thiếu: lấp khoảng trống kiến thức; rà `.claude/skills/SKILLS_GUIDE.md` và kích hoạt skill phù hợp (báo "Announce at start"); bổ sung thứ còn thiếu.',
+  '3. Suy luận + bổ sung dữ liệu và năng lực còn thiếu: đọc AGENTS.md và canonical doc phù hợp từ docs/README.md; lấp khoảng trống trong đúng phạm vi.',
   '4. Planning: chia thành các task rời rạc có thứ tự phụ thuộc rõ ràng, mỗi task có tiêu chí "xong" kiểm chứng được.',
   '5. Tối ưu plan cho sub-agent: chỉ spawn khi task độc lập cả đầu ra, write target VÀ hành động/tool-family chính; cùng tool chỉ khác query thì leader gọi tool song song. Khác hành động rõ ràng (vd. implement + independent test/review, code investigation + runtime Quick Test) mới chia ≤ 3–4 sub-agent; file chung/integration/checkpoint chạy tuần tự.',
   '6. Thực hiện tasks: bám stack dự án (Arco + @icon-park/react + UnoCSS semantic token + i18n; renderer không Node API, main không DOM API); auto-fix `bun run lint:fix` + `bun run format`; chạm renderer/locale thì `bun run i18n:types` + `node scripts/check-i18n.js`.',
   '7. Quick test mỗi bước: sau MỖI task chạy quick test nhanh (script Python/Node một-lần, xóa file tạm sau khi xong) + `getDiagnostics` + `bunx tsc --noEmit` cho phần liên quan; PASS → đánh dấu task [x], FAIL → vào pha 9.',
-  '8. Test lần cuối qua quick test tracker: sau MỖI tính năng/bước lớn/quan trọng, chạy cổng test chính thức `bun run test` (Vitest, kèm DOM test cho UI) + typecheck + lint + i18n; ghi kết quả từng mục vào `.kiro/status.md`.',
-  '9. Khi lỗi (root-cause trước, theo systematic-debugging): tìm dữ liệu lỗi → suy luận root cause → planning fix → thực hiện fix → test lại → thành công thì trả kết quả, thất bại thì quay lại bước trước trong vòng này và thử cách khác.',
+  '8. Test lần cuối: sau MỖI tính năng hoặc bước lớn, chạy bun run test cùng typecheck, lint và i18n phù hợp; ghi kết quả vào task state nội bộ của phiên.',
+  '9. Khi lỗi: thu thập bằng chứng, tái hiện, cô lập nguyên nhân gốc, lập kế hoạch sửa, thực hiện rồi chạy lại test; nếu thất bại thì cập nhật giả thuyết từ bằng chứng mới và lặp.',
 ].join('\n');
 
 export const RECOVERY_AND_RULES = [
-  'Phục hồi khi treo (terminal treo / lỗi server / hang): đóng/kill tiến trình kẹt (KHÔNG kill app người dùng đang dùng), chờ ~5 phút cho tài nguyên giải phóng, rồi tự tiếp tục đúng pha đang dở (đọc `.kiro/status.md`), không làm lại từ đầu; treo lặp 2 lần cùng bước thì đánh dấu [-] và đi tiếp.',
-  'Tự chủ (autonomous-run): KHÔNG hỏi lại người dùng — mọi quyết định tự quyết theo phương án hợp lý nhất và ghi 1 dòng lý do vào `.kiro/status.md`. Một lỗi tự sửa tối đa 2 lần; không xong thì đánh dấu task [-], ghi "Lỗi cần người dùng xử lý", rồi tiếp task kế tiếp — KHÔNG dừng cả phiên.',
+  'Phục hồi khi treo: đóng tiến trình kẹt trong phạm vi nhưng không kill app người dùng đang dùng, chờ tài nguyên giải phóng, đọc task state nội bộ rồi tiếp tục đúng pha; treo lặp 2 lần cùng bước thì đánh dấu [-] và đi tiếp.',
+  'Tự chủ trong phạm vi an toàn và lưu lý do ngắn trong task state nội bộ. Khi cần quyền mới, quyết định kiến trúc có nhiều hướng khác biệt, hoặc dữ liệu người dùng không thể suy ra an toàn, đánh dấu blocked và xin hướng dẫn; không tạo status Markdown riêng.',
   'An toàn: KHÔNG commit/push trừ khi yêu cầu nêu rõ; KHÔNG xóa dữ liệu hàng loạt; KHÔNG đụng production; KHÔNG dùng Claude/computer-use để test UI. Chỉ dừng hẳn khi gặp quyết định kiến trúc lớn không thể tự quyết an toàn (vd buộc sửa Rust backend tomnycore).',
   'Cập nhật trạng thái task ([ ] → [x] hoặc [-]) ngay khi xong mỗi sub-task; trả lời người dùng bằng tiếng Việt, giữ tiếng Anh cho code/định danh/commit/key i18n.',
   GOAL_STATUS_CONTRACT,
@@ -130,14 +130,14 @@ const GOAL_VARIANT_SPECS: Record<GoalCommandVariant, GoalVariantSpec> = {
   goal: {
     head: 'MỤC TIÊU (GOAL) của phiên này: ',
     tail: buildTail(
-      'Hãy TỰ THỰC HIỆN theo vòng lặp khép kín (làm → kiểm tra → sửa → phát triển tiếp), lặp đến khi kết quả TIỆM CẬN HOÀN TOÀN (≈100%) so với mục tiêu trên, hoặc hết credit. Bắt đầu ngay, không hỏi lại.',
+      'Hãy tự thực hiện theo vòng lặp khép kín, lặp đến khi đạt Definition of Done hoặc bị chặn. Bắt đầu ngay và chỉ hỏi khi cần quyền mới, dữ liệu người dùng, hoặc quyết định không thể suy ra an toàn.',
       'Điều kiện dừng: mọi tiêu chí Definition of Done PASS + test tracker xanh + typecheck/lint/i18n sạch; hoặc hết credit; hoặc gặp quyết định kiến trúc lớn không thể tự quyết an toàn.'
     ),
   },
   'goal-all': {
-    head: 'MỤC TIÊU (GOAL-ALL — chế độ toàn quyền, khó tính hơn) của phiên này: ',
+    head: 'MỤC TIÊU GOAL-ALL, chế độ nghiệm thu nghiêm ngặt hơn: ',
     tail: buildTail(
-      'Bạn được TOÀN QUYỀN tự quyết mọi thứ để đạt 101% so với yêu cầu trên: kết quả tối thiểu phải NGANG mục tiêu, ưu tiên VƯỢT mục tiêu (chủ động bổ sung edge case, độ bền, test, tài liệu, trải nghiệm — miễn không phá vỡ ràng buộc dự án). Tự đặt tiêu chuẩn nghiệm thu nghiêm ngặt hơn mức tối thiểu. Bắt đầu ngay, tuyệt đối không hỏi lại; chạy đến khi xong hoặc hết credit.',
+      'Tự chủ tối đa trong phạm vi và quyền hiện có để đạt kết quả vượt mức tối thiểu: chủ động phủ edge case, độ bền, test, tài liệu và trải nghiệm nhưng không mở rộng authority hoặc phá vỡ ràng buộc dự án. Chỉ hỏi khi bị chặn theo AGENTS.md.',
       'Tiêu chí "xong" của GOAL-ALL: vượt Definition of Done tự đặt (≥101%), test tracker xanh, typecheck/lint/i18n sạch, đã chủ động phủ các trường hợp biên/độ bền hợp lý. Chỉ dừng khi đạt mức này, hết credit, hoặc gặp quyết định kiến trúc lớn không thể tự quyết an toàn.'
     ),
   },
