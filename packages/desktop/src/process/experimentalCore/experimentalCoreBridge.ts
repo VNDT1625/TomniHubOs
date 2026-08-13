@@ -75,8 +75,10 @@ import { JsonPermissionRepository, PermissionStore } from '@process/services/age
 import {
   AcpCoreAdapter,
   CodexAppServerAdapter,
+  detectLoopbackOpenAiTarget,
   disposeMainRustSidecarLifecycle,
   getMainRustSidecarLifecycle,
+  LoopbackOpenAiAdapter,
   RustMirroredDurableEventStore,
   RustRuntimeAccelerator,
   TomnyCoreAdapter,
@@ -447,11 +449,13 @@ export const registerExperimentalCoreBridge = (agentMeshService: AgentMeshServic
       resolveExecutableOnPath(candidates, (filePath) => rustAccelerator.sha256File(filePath))
     )),
     ...(await remoteServices.detectTargets()),
+    await detectLoopbackOpenAiTarget(),
   ];
   const adapters = [
     new TomnyCoreAdapter(undefined, sessionActionHistory),
     new CodexAppServerAdapter(),
     new AcpCoreAdapter(),
+    new LoopbackOpenAiAdapter(),
     remoteServices.adapter,
   ];
   const coreEventListeners = new Set<(event: ExperimentalCoreEvent) => void>();

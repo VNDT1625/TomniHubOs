@@ -5,7 +5,7 @@
  */
 
 /** Stable source families exposed to the experimental renderer. */
-export type ExperimentalTargetKind = 'builtin' | 'acp' | 'cli' | 'remote';
+export type ExperimentalTargetKind = 'builtin' | 'acp' | 'cli' | 'local' | 'remote';
 
 /** Transport-neutral permission policy selected explicitly by the user. */
 export type ExperimentalPermissionMode = 'read-only' | 'workspace-write' | 'full-access';

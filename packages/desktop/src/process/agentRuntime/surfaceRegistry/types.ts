@@ -1,4 +1,4 @@
-export type SurfaceTargetKind = 'builtin' | 'acp' | 'cli' | 'remote';
+export type SurfaceTargetKind = 'builtin' | 'acp' | 'cli' | 'local' | 'remote';
 export type SurfacePermissionMode = 'read-only' | 'workspace-write' | 'full-access';
 export type SurfaceContextSlice = 'agent' | 'personal' | 'workspace' | 'conversation' | 'surface';
 export type SurfaceCapabilityKind = 'mcp' | 'native' | 'skill' | 'bridge';

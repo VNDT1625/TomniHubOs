@@ -22,7 +22,7 @@ export type FoundationCoreRuntime = {
   listTargets: () => Promise<
     ReadonlyArray<{
       id: string;
-      kind: 'builtin' | 'acp' | 'cli' | 'remote';
+      kind: 'builtin' | 'acp' | 'cli' | 'local' | 'remote';
       available: boolean;
       defaultModelKey?: string;
       networkHost?: string;
@@ -93,8 +93,8 @@ export const parseFoundationRunPayload = (value: unknown): FoundationRunPayload 
   return { intent: assertRunIntent(payload.intent as RunIntent) };
 };
 
-const kindForCoreTarget = (kind: 'builtin' | 'acp' | 'cli' | 'remote'): HubExecutionTarget['kind'] =>
-  kind === 'remote' ? 'cloud' : 'cli';
+const kindForCoreTarget = (kind: 'builtin' | 'acp' | 'cli' | 'local' | 'remote'): HubExecutionTarget['kind'] =>
+  kind === 'local' ? 'local' : kind === 'remote' ? 'cloud' : 'cli';
 
 const priorityForCoreTarget = (kind: HubExecutionTarget['kind']): number =>
   kind === 'local' ? 40 : kind === 'cloud' ? 30 : kind === 'cli' ? 20 : 10;

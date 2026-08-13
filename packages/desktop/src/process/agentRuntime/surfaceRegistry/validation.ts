@@ -11,7 +11,7 @@ export type SurfaceManifestValidationResult =
   | { valid: true; manifest: SurfaceManifest; issues: [] }
   | { valid: false; issues: SurfaceManifestValidationIssue[] };
 
-const TARGET_KINDS = new Set<SurfaceTargetKind>(['builtin', 'acp', 'cli', 'remote']);
+const TARGET_KINDS = new Set<SurfaceTargetKind>(['builtin', 'acp', 'cli', 'local', 'remote']);
 const PERMISSION_MODES = new Set<SurfacePermissionMode>(['read-only', 'workspace-write', 'full-access']);
 const CONTEXT_SLICES = new Set<SurfaceContextSlice>(['agent', 'personal', 'workspace', 'conversation', 'surface']);
 const CAPABILITY_KINDS = new Set<SurfaceCapabilityKind>(['mcp', 'native', 'skill', 'bridge']);

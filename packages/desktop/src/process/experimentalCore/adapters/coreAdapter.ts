@@ -13,6 +13,7 @@ export type CoreAdapterProtocol =
   | 'codex-app-server'
   | 'acp'
   | 'openclaw-gateway'
+  | 'loopback-openai'
   | 'tomny-remote-v1';
 
 export type CoreAdapterDefinition = {

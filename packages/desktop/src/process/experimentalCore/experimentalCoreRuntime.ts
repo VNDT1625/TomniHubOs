@@ -378,6 +378,7 @@ type PendingOrchestrationProposal = {
 
 const kindForTarget = (target: DetectedCoreTarget): ExperimentalTargetKind => {
   if (target.protocol === 'tomny-json-stream') return 'builtin';
+  if (target.protocol === 'loopback-openai') return 'local';
   if (target.protocol === 'openclaw-gateway' || target.protocol === 'tomny-remote-v1') return 'remote';
   if (target.protocol === 'codex-app-server') return 'cli';
   return 'acp';

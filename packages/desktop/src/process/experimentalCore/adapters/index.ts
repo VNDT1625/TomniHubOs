@@ -12,6 +12,8 @@ export * from './acpCompatibility';
 export * from './codexAppServerAdapter';
 export * from './coreAdapter';
 
+export * from './loopbackOpenAiAdapter';
+
 export * from './remote';
 
 export * from './sidecar';
