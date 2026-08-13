@@ -22,7 +22,7 @@ import {
 } from '@/process/ide/mcp/ideServer';
 import { startIdeMcpHost } from '@/process/ide/mcp/ideMcpHost';
 import { buildIdeServer } from '@/process/ide/mcp/ideMcpWiring';
-import { createSessionMemoryStore } from '@/process/ide/memory/sessionMemoryStore';
+import { createSessionMemoryStore } from '@/process/userUnderstanding/sessionMemoryStore';
 
 const makeService = (overrides: Partial<IdeMcpService> = {}): IdeMcpService => ({
   listDir: vi.fn(async () => [

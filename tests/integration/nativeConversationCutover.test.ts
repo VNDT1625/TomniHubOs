@@ -6,7 +6,7 @@
 
 import type { ICreateConversationParams } from '@/common/adapter/ipcBridge';
 import type { ExperimentalCoreEvent } from '@process/experimentalCore/experimentalCoreRuntime';
-import { createSessionMemoryStore, type ISessionMemoryStore } from '@process/ide/memory/sessionMemoryStore';
+import { createSessionMemoryStore, type ISessionMemoryStore } from '@process/userUnderstanding/sessionMemoryStore';
 import {
   NativeConversationRepository,
   NativeConversationService,

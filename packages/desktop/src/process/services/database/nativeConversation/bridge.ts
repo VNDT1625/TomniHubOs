@@ -9,7 +9,7 @@ import { sessionChannels } from '@/common/types/agent/sessionChannels';
 import type { ExperimentalCoreEvent } from '@process/experimentalCore/experimentalCoreRuntime';
 import { publishTomniRemoteEvent } from '@process/services/remoteGateway/registry';
 import { executeAfterOutboundInspection } from '@process/services/security';
-import { getSessionMemoryStore } from '@process/ide/memory/sessionMemoryStore';
+import { getSessionMemoryStore } from '@process/userUnderstanding/sessionMemoryStore';
 import { NativeConversationRepository } from './repository';
 import {
   NativeConversationService,

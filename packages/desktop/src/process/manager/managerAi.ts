@@ -27,7 +27,7 @@
 
 import { getResourceCoordinator } from '@process/resource/resourceCoordinator';
 import type { IResourceCoordinator } from '@process/resource/resourceCoordinator';
-import type { AgentChat, ChatMessageInput } from '@process/browser/webAgentRunner';
+import type { AgentChat, ChatMessageInput } from '@process/services/agentChat';
 import type {
   CalendarEvent,
   OptimizeResult,

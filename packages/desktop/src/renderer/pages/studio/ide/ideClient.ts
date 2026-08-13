@@ -183,7 +183,7 @@ import type {
   RepoSecretMarkerRender,
   RepoSecretScopeSummary,
 } from '@process/ide/memory/repoSecretStore';
-import type { SuperMemorySnapshot, RememberResult } from '@process/ide/memory/sessionMemoryStore';
+import type { SuperMemorySnapshot, RememberResult } from '@process/userUnderstanding/sessionMemoryStore';
 import type { IdeCommandResult, RunCommandRequest } from '@process/ide/command/commandBridge';
 import type { CommandResult } from '@process/ide/command/commandRunner';
 import type {
@@ -1327,4 +1327,4 @@ export type {
   SuperMemoryItem,
   SuperMemoryKind,
   RememberResult,
-} from '@process/ide/memory/sessionMemoryStore';
+} from '@process/userUnderstanding/sessionMemoryStore';

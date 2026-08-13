@@ -23,7 +23,7 @@
  * Process boundary: Main-process (Node.js) module. No DOM APIs.
  */
 
-import type { AgentChat } from '@process/browser/webAgentRunner';
+import type { AgentChat } from '@process/services/agentChat';
 import type {
   EditorSurfaceSpec,
   ISurfaceRunner,

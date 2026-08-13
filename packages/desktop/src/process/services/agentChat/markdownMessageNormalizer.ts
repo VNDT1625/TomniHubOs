@@ -18,7 +18,7 @@
 import { stat as fsStat } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { getContentExtractService, type ExtractOutcome, type ExtractVia } from '@process/services/contentExtract';
-import type { ChatContent, ChatMessageInput } from '@process/browser/webAgentRunner';
+import type { ChatContent, ChatMessageInput } from './types';
 
 type ChatPart = Exclude<ChatContent, string>[number];
 type TextChatPart = Extract<ChatPart, { type: 'text' }>;

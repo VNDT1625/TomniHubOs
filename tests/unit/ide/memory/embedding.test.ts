@@ -12,7 +12,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { createLocalEmbedder, cosineSimilarity } from '@/process/ide/memory/embedding';
+import { createLocalEmbedder, cosineSimilarity } from '@/process/userUnderstanding/memoryEmbedding';
 
 describe('createLocalEmbedder', () => {
   it('produces a deterministic, fixed-dimension, normalised vector', () => {

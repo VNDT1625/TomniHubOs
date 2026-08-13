@@ -15,10 +15,12 @@
  * Process boundary: Main-process (Node.js) module. No DOM APIs.
  */
 
-import type { Embedder } from '@process/ide/vectorIndex';
-
-/** Re-exported for callers that wire a real embedding provider. */
-export type ExperienceEmbedder = Embedder;
+/** Provider-backed semantic embedding contract used by the experience core. */
+export type ExperienceEmbedder = {
+  providerId: string;
+  model: string;
+  embed: (texts: readonly string[], signal?: AbortSignal) => Promise<number[][]>;
+};
 
 const magnitude = (vector: readonly number[]): number =>
   Math.sqrt(vector.reduce((sum, value) => sum + value * value, 0));

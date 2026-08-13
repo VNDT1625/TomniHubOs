@@ -24,8 +24,8 @@ import {
   createSessionMemoryStore,
   heuristicSummarizer,
   type SuperMemoryItem,
-} from '@/process/ide/memory/sessionMemoryStore';
-import { createLocalEmbedder } from '@/process/ide/memory/embedding';
+} from '@/process/userUnderstanding/sessionMemoryStore';
+import { createLocalEmbedder } from '@/process/userUnderstanding/memoryEmbedding';
 
 /** A deterministic summariser that records what it was asked to fold. */
 const fakeSummarizer = () => {

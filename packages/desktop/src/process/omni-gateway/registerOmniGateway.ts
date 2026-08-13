@@ -22,7 +22,7 @@ import { randomBytes } from 'node:crypto';
 import { ProcessConfig } from '@process/utils/initStorage';
 import { createCredentialStore, type ICredentialStore, type Credential } from '@process/automation/credentialStore';
 import { getDbService } from '@process/ide/db/dbWiring';
-import { getSessionMemoryStore } from '@process/ide/memory/sessionMemoryStore';
+import { getSessionMemoryStore } from '@process/userUnderstanding/sessionMemoryStore';
 import { getTeamEditService } from '@process/ide/teamEdit/teamEditService';
 import { getIdeMcpService, getQuickTestRunner, getQuickTestScenarioAgentService } from '@process/ide/mcp/ideMcpWiring';
 import type { DbAgentService } from '@process/ide/mcp/ideServer';

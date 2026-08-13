@@ -5,7 +5,7 @@
  */
 
 /**
- * Session "super-memory" for IDE agents — a high-capacity, durable working
+ * Session "super-memory" for Hub agents — a high-capacity, durable working
  * memory scoped to a single IDE chat session (one chat tab / one conversation).
  *
  * ## What problem this solves
@@ -66,8 +66,8 @@
 import { app } from 'electron';
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import type { SuperMemoryEmbedder } from './embedding';
-import { cosineSimilarity, createLocalEmbedder } from './embedding';
+import type { SuperMemoryEmbedder } from './memoryEmbedding';
+import { cosineSimilarity, createLocalEmbedder } from './memoryEmbedding';
 
 /** Category of a remembered note (purely advisory — helps the agent + UI scan). */
 export type SuperMemoryKind = 'fact' | 'decision' | 'todo' | 'snippet' | 'note' | 'summary';

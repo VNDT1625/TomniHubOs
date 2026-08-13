@@ -70,6 +70,7 @@ const MVP_BASE_OPTIONAL_OWNERSHIP: readonly OptionalPackageOwnershipDeclaration[
 ];
 
 const RELEASE_GRAPH_PATH = resolve(PROJECT_ROOT, 'store-artifacts/base-renderer-metafile.json');
+const MAIN_RELEASE_GRAPH_PATH = resolve(PROJECT_ROOT, 'store-artifacts/base-main-metafile.json');
 
 const readRendererGraphSourceFiles = (inputs: readonly string[]): OptionalOwnershipSourceFile[] =>
   inputs.flatMap((input): OptionalOwnershipSourceFile[] => {
@@ -77,6 +78,41 @@ const readRendererGraphSourceFiles = (inputs: readonly string[]): OptionalOwners
     const absolutePath = resolve(PROJECT_ROOT, input);
     return existsSync(absolutePath) ? [{ path: input, content: readFileSync(absolutePath, 'utf8') }] : [];
   });
+
+const readMainGraphSourceFiles = (inputs: readonly string[]): OptionalOwnershipSourceFile[] =>
+  inputs.flatMap((input): OptionalOwnershipSourceFile[] => {
+    if (!input.startsWith('packages/desktop/src/') || !/\.(?:ts|tsx)$/.test(input)) return [];
+    const absolutePath = resolve(PROJECT_ROOT, input);
+    return existsSync(absolutePath) ? [{ path: input, content: readFileSync(absolutePath, 'utf8') }] : [];
+  });
+
+const MVP_MAIN_OPTIONAL_OWNERSHIP: readonly OptionalPackageOwnershipDeclaration[] = [
+  {
+    manifest: { id: 'com.tomni.ide' },
+    importPathPrefixes: ['@process/ide'],
+    artifactPathPrefixes: ['packages/desktop/src/process/ide'],
+  },
+  {
+    manifest: { id: 'com.tomni.browser' },
+    importPathPrefixes: ['@process/browser'],
+    artifactPathPrefixes: ['packages/desktop/src/process/browser'],
+  },
+  {
+    manifest: { id: 'com.tomni.terminal' },
+    importPathPrefixes: ['@process/terminal'],
+    artifactPathPrefixes: ['packages/desktop/src/process/terminal'],
+  },
+  {
+    manifest: { id: 'com.tomni.office' },
+    importPathPrefixes: ['@process/office'],
+    artifactPathPrefixes: ['packages/desktop/src/process/office'],
+  },
+  {
+    manifest: { id: 'com.tomni.music' },
+    importPathPrefixes: ['@process/music'],
+    artifactPathPrefixes: ['packages/desktop/src/process/music'],
+  },
+];
 
 describe('optional package ownership audit', () => {
   it('allows core-only imports and artifact inputs', () => {
@@ -252,6 +288,24 @@ describe('optional package ownership audit', () => {
     const result = scanOptionalPackageOwnership({
       denylist: createOptionalPackageOwnershipDenylist(MVP_BASE_OPTIONAL_OWNERSHIP),
       coreSourceFiles: readRendererGraphSourceFiles(inputs),
+      baseArtifactInputs: inputs,
+    });
+
+    expect(result.violations).toEqual([]);
+    expect(() => assertOptionalPackageOwnershipClean(result)).not.toThrow();
+  });
+
+  it('rejects optional domains from the exact emitted main-process graph when release evidence is present', () => {
+    const required = process.env.TOMNI_REQUIRE_RELEASE_ARTIFACT_AUDIT === '1';
+    if (!existsSync(MAIN_RELEASE_GRAPH_PATH)) {
+      expect(required, 'release audit requires a freshly emitted main-process graph').toBe(false);
+      return;
+    }
+
+    const inputs = collectBaseArtifactInputsFromGraph(JSON.parse(readFileSync(MAIN_RELEASE_GRAPH_PATH, 'utf8')));
+    const result = scanOptionalPackageOwnership({
+      denylist: createOptionalPackageOwnershipDenylist(MVP_MAIN_OPTIONAL_OWNERSHIP),
+      coreSourceFiles: readMainGraphSourceFiles(inputs),
       baseArtifactInputs: inputs,
     });
 

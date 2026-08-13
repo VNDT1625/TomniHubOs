@@ -30,7 +30,7 @@
 import { listReadyProviders } from '@process/services/tomnyProviderBridge';
 import type { IProvider } from '@/common/config/storage';
 import { showNotification } from '@process/bridge/notificationBridge';
-import { createProviderChat } from '@process/browser/providerChat';
+import { createProviderChat } from '@process/services/agentChat';
 import { createManagerAi, type IManagerAi } from './managerAi';
 import { createManagerStore, type IManagerStore } from './managerStore';
 import { createReminderScheduler, type IReminderScheduler } from './reminderScheduler';

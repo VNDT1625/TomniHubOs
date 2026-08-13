@@ -272,6 +272,78 @@ function rendererGraphEvidencePlugin(): Plugin {
   };
 }
 
+/** Emits the exact main-process module graph used by the optional-package release audit. */
+function mainGraphEvidencePlugin(): Plugin {
+  const repoRoot = resolve(__dirname, '../..');
+  const portable = (moduleId: string): string | undefined => {
+    const cleanId = moduleId.split('?', 1)[0];
+    if (!cleanId || !isAbsolute(cleanId)) return undefined;
+    const relativePath = relative(repoRoot, cleanId).split(sep).join('/');
+    if (!relativePath || relativePath === '..' || relativePath.startsWith('../')) return undefined;
+    return relativePath;
+  };
+  return {
+    name: 'tomni-main-graph-evidence',
+    generateBundle(_options, bundle) {
+      const modules = Object.fromEntries(
+        [...this.getModuleIds()]
+          .flatMap((moduleId) => {
+            const id = portable(moduleId);
+            const info = this.getModuleInfo(moduleId);
+            if (!id || !info) return [];
+            const normalize = (ids: readonly string[]) =>
+              ids
+                .flatMap((candidate) => {
+                  const normalized = portable(candidate);
+                  return normalized ? [normalized] : [];
+                })
+                .toSorted();
+            return [
+              [
+                id,
+                {
+                  imports: normalize(info.importedIds),
+                  dynamicImports: normalize(info.dynamicallyImportedIds),
+                  importers: normalize(info.importers),
+                  dynamicImporters: normalize(info.dynamicImporters),
+                  isEntry: info.isEntry,
+                },
+              ] as const,
+            ];
+          })
+          .toSorted(([left], [right]) => left.localeCompare(right))
+      );
+      const outputs = Object.fromEntries(
+        Object.entries(bundle).map(([fileName, output]) => [
+          fileName,
+          output.type === 'chunk'
+            ? {
+                type: 'chunk',
+                modules: Object.fromEntries(Object.keys(output.modules).map((moduleId) => [moduleId, {}])),
+              }
+            : { type: 'asset' },
+        ])
+      );
+      const evidenceDirectory = resolve(repoRoot, 'store-artifacts');
+      mkdirSync(evidenceDirectory, { recursive: true });
+      writeFileSync(
+        resolve(evidenceDirectory, 'base-main-metafile.json'),
+        `${JSON.stringify(
+          {
+            schemaVersion: 1,
+            mode: 'production',
+            entry: 'packages/desktop/src/index.ts',
+            modules,
+            outputs,
+          },
+          null,
+          2
+        )}\n`
+      );
+    },
+  };
+}
+
 export default defineConfig(({ mode }) => {
   const isDevelopment = mode === 'development';
   const enableSentrySourceMaps = !isDevelopment && !!process.env.SENTRY_AUTH_TOKEN;
@@ -302,6 +374,7 @@ export default defineConfig(({ mode }) => {
         // `require(...)`, which Node cannot resolve because these workspace-only packages ship no
         // compiled .js files and point `exports` straight at `./src/index.ts`.
         externalizeDepsPlugin({ exclude: ['fix-path', '@tomny/web-host', '@tomny/music-core'] }),
+        ...(process.env.TOMNI_MAIN_GRAPH_EVIDENCE === '1' ? [mainGraphEvidencePlugin()] : []),
         ...(isDevelopment
           ? [
               {

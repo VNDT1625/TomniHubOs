@@ -27,7 +27,7 @@ import type { ExperimentalPermissionMode } from '@process/experimentalCore/exper
 import type { CoreContextSnapshot, CoreMcpServer } from '@process/experimentalCore/adapters';
 import type { ExperimentalCoreModel } from '@process/experimentalCore/experimentalCoreProtocol';
 import type { CoreSessionCheckpoint } from '@process/experimentalCore/sessionCheckpointStore';
-import type { ISessionMemoryStore, SuperMemoryItem } from '@process/ide/memory/sessionMemoryStore';
+import type { ISessionMemoryStore, SuperMemoryItem } from '@process/userUnderstanding/sessionMemoryStore';
 import { classifyWorkKind, deepDebugTask, isDeepDebugRequest, type WorkKind } from '@process/services/debug';
 import type { NativeConversationRepository } from './repository';
 import {

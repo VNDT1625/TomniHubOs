@@ -35,7 +35,7 @@ import { bridge } from '@office-ai/platform';
 import { listReadyProviders } from '@process/services/tomnyProviderBridge';
 import type { IProvider } from '@/common/config/storage';
 import { runAgentChatMessages } from '@process/services/agentChat';
-import type { ChatMessageInput } from '@process/browser/webAgentRunner';
+import type { ChatMessageInput } from '@process/services/agentChat';
 import type { IAutomationStore } from './automationStore';
 import type { Workflow } from './automationTypes';
 import { getSharedAutomationServices } from './automationBridge';

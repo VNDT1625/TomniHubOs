@@ -10,7 +10,6 @@ import { initUpdateBridge } from './updateBridge';
 import { initSystemSettingsBridge } from './systemSettingsBridge';
 import { initWindowControlsBridge } from './windowControlsBridge';
 import { initNotificationBridge } from './notificationBridge';
-import { initOmniGatewayBridge } from '@process/omni-gateway/omniGatewayIpc';
 import { initWebuiBridge } from './webuiBridge';
 import { registerFoundationBridge } from './foundationBridge';
 import { registerResourceBridge } from '@process/resource/resourceBridge';
@@ -20,7 +19,6 @@ import { getSystemInfoService } from '@process/system/systemInfoService';
 import { registerCompanyBridge } from '@process/company/companyBridge';
 import { registerRealtimeKnowledgeBridge } from '@process/knowledge/realtimeKnowledgeBridge';
 import { createCompanyGenerator } from '@process/company/companyGenerator';
-import { registerWorkspaceBridge } from '@process/workspace/workspaceBridge';
 import {
   activateProductionWindowsCreatorSandbox,
   disposeProductionCreatorPreviewBridge,
@@ -81,7 +79,6 @@ export function initAllBridges(deps: BridgeDependencies = {}): void {
   initUpdateBridge();
   initSystemSettingsBridge();
   initNotificationBridge();
-  initOmniGatewayBridge();
   initWebuiBridge();
   try {
     registerMcpRegistryBridge();
@@ -168,18 +165,6 @@ export function initAllBridges(deps: BridgeDependencies = {}): void {
     console.log('[Bridge] Realtime Knowledge bridge registered.');
   } catch (error) {
     console.error('[Bridge] Failed to register Realtime Knowledge bridge:', error);
-  }
-
-  try {
-    // Workspace orchestrator (parallel sub-agents, each on its own live
-    // surface). Browser surfaces attach WebContentsView tabs to the main
-    // window; `getWindow` is read lazily (only when a surface tab is created),
-    // so registering before the window exists is safe. Without this call the
-    // renderer Workspace page's run probe times out and shows a friendly notice.
-    registerWorkspaceBridge({ getWindow: getApplicationMainWindow });
-    console.log('[Bridge] Workspace bridge registered.');
-  } catch (error) {
-    console.error('[Bridge] Failed to register Workspace bridge:', error);
   }
 
   try {
@@ -356,7 +341,6 @@ export {
   initApplicationBridge,
   initDialogBridge,
   initNotificationBridge,
-  initOmniGatewayBridge,
   initSystemSettingsBridge,
   initUpdateBridge,
   initWindowControlsBridge,

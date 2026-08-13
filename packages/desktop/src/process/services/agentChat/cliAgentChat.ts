@@ -5,7 +5,7 @@
  * the legacy core REST conversation and backend WebSocket are deliberately not used.
  */
 
-import type { AgentChat, ChatMessageInput } from '@process/browser/webAgentRunner';
+import type { AgentChat, ChatMessageInput } from './types';
 import { parseCliModelId } from './cliModelId';
 import {
   createDirectCliAgentDriver,

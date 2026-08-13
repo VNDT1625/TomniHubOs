@@ -21,7 +21,7 @@
  */
 
 import { bridge } from '@office-ai/platform';
-import { createDefaultEmbedder } from '@process/ide/knowledgeGraphBridge';
+import { createProviderEmbedder } from '@process/knowledge/rtkEmbedder';
 import { createExperienceService, createWorkflowForService, type ExperienceService } from './index';
 import type { ExperienceEmbedder } from './experienceVectorIndex';
 import {
@@ -77,7 +77,7 @@ export const experienceChannels = {
 let embedderPromise: Promise<ExperienceEmbedder | null> | null = null;
 const resolveEmbedder = (): Promise<ExperienceEmbedder | null> => {
   if (!embedderPromise) {
-    embedderPromise = createDefaultEmbedder().catch((): ExperienceEmbedder | null => null);
+    embedderPromise = createProviderEmbedder().catch((): ExperienceEmbedder | null => null);
   }
   return embedderPromise;
 };

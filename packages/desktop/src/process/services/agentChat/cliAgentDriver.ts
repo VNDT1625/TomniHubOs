@@ -35,7 +35,7 @@
  * Main-process (Node.js) module. No DOM APIs.
  */
 
-import type { ChatMessageInput } from '@process/browser/webAgentRunner';
+import type { ChatMessageInput } from './types';
 
 /** Resolved handle to a CLI conversation backing one driver session. */
 export type CliConversationHandle = {

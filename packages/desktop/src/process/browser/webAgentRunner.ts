@@ -46,6 +46,9 @@
 import type { BrowserTabId, IBrowserViewManager } from './browserViewManager';
 import { redactAgentVisibleText } from './pagePerception';
 import type { IHumanLikeInput, InputSink, Point } from './humanLikeInput';
+import type { AgentChat, ChatContent, ChatMessageInput } from '@process/services/agentChat/types';
+
+export type { AgentChat, ChatContent, ChatMessageInput } from '@process/services/agentChat/types';
 
 // ---------------------------------------------------------------------------
 // Public event model (streamed to the renderer chat panel)
@@ -129,23 +132,6 @@ export type IWebAgentRunner = {
  * mixing text and image parts (used to feed the model a page screenshot for the
  * vision step). Providers that lack vision simply receive the text parts.
  */
-export type ChatContent =
-  | string
-  | Array<{ type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } }>;
-
-/** One message in the model conversation. */
-export type ChatMessageInput = { role: string; content: ChatContent };
-
-/**
- * The chat-completion call the runner uses to think. Returns the raw assistant
- * message text. Production wiring supplies {@link createProviderChat} (reads the
- * user's provider from tomnycore); tests inject a deterministic stub.
- */
-export type AgentChat = (params: {
-  model: string;
-  messages: ChatMessageInput[];
-  signal?: AbortSignal;
-}) => Promise<string>;
 
 /** Injected dependencies for {@link createWebAgentRunner}. */
 export type WebAgentRunnerDeps = {

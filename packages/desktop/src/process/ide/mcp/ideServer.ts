@@ -32,7 +32,7 @@
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import type { ISessionMemoryStore } from '../memory/sessionMemoryStore';
+import type { ISessionMemoryStore } from '@process/userUnderstanding/sessionMemoryStore';
 import type { RepoSecretCombo, RepoSecretContext } from '../memory/repoSecretStore';
 import {
   protectedMcpTextContent,

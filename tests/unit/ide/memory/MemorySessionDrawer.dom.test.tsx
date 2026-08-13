@@ -14,7 +14,7 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import type { SuperMemorySnapshot } from '@/process/ide/memory/sessionMemoryStore';
+import type { SuperMemorySnapshot } from '@/process/userUnderstanding/sessionMemoryStore';
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),

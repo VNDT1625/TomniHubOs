@@ -5,7 +5,7 @@
  */
 
 /**
- * Local, dependency-free text embedder for IDE session-memory semantic recall.
+ * Local, dependency-free text embedder for Hub session-memory semantic recall.
  *
  * ## Why a hand-rolled embedder (not a transformer model)
  *

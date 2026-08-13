@@ -33,7 +33,7 @@ import {
   type RememberResult,
   type SuperMemoryKind,
   type SuperMemorySnapshot,
-} from './sessionMemoryStore';
+} from '@process/userUnderstanding/sessionMemoryStore';
 import {
   getRepoSecretStore,
   type RepoSecretCombo,

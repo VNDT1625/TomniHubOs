@@ -59,7 +59,7 @@ import { loadGraph } from '../quickTestBridgeHelpers';
 import { loadWikiForRoot } from '../wiki/wikiBuildBridge';
 import { buildWikiTestProfile } from '../wikiPlanner';
 import { getDbService } from '../db/dbWiring';
-import { getSessionMemoryStore } from '../memory/sessionMemoryStore';
+import { getSessionMemoryStore } from '@process/userUnderstanding/sessionMemoryStore';
 import { getRepoSecretStore } from '../memory/repoSecretStore';
 import { getTeamEditService } from '../teamEdit/teamEditService';
 import { runMtuiInRoot } from '@process/terminal/mtuiBridge';
