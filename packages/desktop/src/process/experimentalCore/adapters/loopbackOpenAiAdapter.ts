@@ -24,20 +24,7 @@ export type LoopbackOpenAiAdapterOptions = {
 };
 
 type OpenAiModelResponse = { data?: Array<{ id?: unknown }> };
-type OpenAiCompletionResponse = { choices?: Array<{ message?: { content?: unknown } }> };
-
-const textContent = (value: unknown): string => {
-  if (typeof value === 'string') return value.trim();
-  if (!Array.isArray(value)) return '';
-  return value
-    .map((part) =>
-      part && typeof part === 'object' && typeof (part as { text?: unknown }).text === 'string'
-        ? (part as { text: string }).text
-        : ''
-    )
-    .join('')
-    .trim();
-};
+type OpenAiStreamFrame = { choices?: Array<{ delta?: { content?: unknown } }> };
 
 /** Reject every non-loopback endpoint before a request can leave the device. */
 export const validateLoopbackOpenAiEndpoint = (value: string): URL => {
@@ -65,6 +52,70 @@ const modelsFromResponse = (value: unknown): ExperimentalCoreModel[] => {
     seen.add(id);
     return [{ key: id, modelId: id, label: id, isDefault: index === 0 }];
   });
+};
+
+const decodeStreamFrame = (raw: string): string => {
+  let value: OpenAiStreamFrame;
+  try {
+    value = JSON.parse(raw) as OpenAiStreamFrame;
+  } catch {
+    throw new Error('The local engine returned an invalid stream frame.');
+  }
+  const content = value.choices?.[0]?.delta?.content;
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return '';
+  return content
+    .map((part) =>
+      part && typeof part === 'object' && typeof (part as { text?: unknown }).text === 'string'
+        ? (part as { text: string }).text
+        : ''
+    )
+    .join('');
+};
+
+const consumeCompletionStream = async (response: Response, input: CoreRunInput): Promise<void> => {
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error('The local engine did not provide a completion stream.');
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let completed = false;
+  let emittedText = false;
+
+  const consumeLine = (line: string): void => {
+    const trimmed = line.trim();
+    if (!trimmed) return;
+    if (!trimmed.startsWith('data:')) throw new Error('The local engine returned an invalid stream event.');
+    const data = trimmed.slice('data:'.length).trim();
+    if (data === '[DONE]') {
+      completed = true;
+      return;
+    }
+    const text = decodeStreamFrame(data);
+    if (!text) return;
+    emittedText = true;
+    input.emit({ type: 'delta', text });
+  };
+
+  try {
+    while (true) {
+      throwIfAborted(input.signal);
+      // Stream reads must remain serial to preserve the engine's token order.
+      // eslint-disable-next-line no-await-in-loop
+      const { done, value } = await reader.read();
+      buffer += decoder.decode(value, { stream: !done });
+      const lines = buffer.split(/\r?\n/u);
+      buffer = lines.pop() ?? '';
+      for (const line of lines) consumeLine(line);
+      if (done) break;
+    }
+    buffer += decoder.decode();
+    if (buffer.trim()) consumeLine(buffer);
+  } finally {
+    reader.releaseLock();
+  }
+  throwIfAborted(input.signal);
+  if (!completed) throw new Error('The local engine ended the completion stream without a terminal marker.');
+  if (!emittedText) throw new Error('The local engine returned an empty completion.');
 };
 
 /** Detects a local OpenAI-compatible engine without exposing any remote endpoint. */
@@ -123,7 +174,7 @@ export class LoopbackOpenAiAdapter implements CoreAdapter {
       signal: input.signal,
       body: JSON.stringify({
         model,
-        stream: false,
+        stream: true,
         messages: [
           {
             role: 'system',
@@ -135,11 +186,7 @@ export class LoopbackOpenAiAdapter implements CoreAdapter {
       }),
     });
     if (!response.ok) throw new Error(`Local engine rejected the completion request (${response.status}).`);
-    const value = (await response.json()) as OpenAiCompletionResponse;
-    const text = textContent(value.choices?.[0]?.message?.content);
-    if (!text) throw new Error('The local engine returned an empty completion.');
-    throwIfAborted(input.signal);
-    input.emit({ type: 'delta', text });
+    await consumeCompletionStream(response, input);
   }
 
   public async dispose(): Promise<void> {

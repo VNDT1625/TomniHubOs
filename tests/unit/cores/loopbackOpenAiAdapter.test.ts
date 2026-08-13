@@ -45,10 +45,18 @@ describe('loopback OpenAI adapter', () => {
   });
 
   it('runs only against the loopback engine and reports its completion', async () => {
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"content":"Local "}}]}\n'));
+        controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"content":"answer"}}]}\n\ndata: [DONE]\n'));
+        controller.close();
+      },
+    });
     const fetchImpl = vi.fn(async (url: string) => {
       if (url.endsWith('/models'))
         return new Response(JSON.stringify({ data: [{ id: 'qwen-local' }] }), { status: 200 });
-      return new Response(JSON.stringify({ choices: [{ message: { content: 'Local answer' } }] }), { status: 200 });
+      return new Response(stream, { status: 200 });
     });
     const adapter = new LoopbackOpenAiAdapter({ endpoint: 'http://127.0.0.1:11434/v1', fetchImpl });
     const events: unknown[] = [];
@@ -64,6 +72,33 @@ describe('loopback OpenAI adapter', () => {
       requestPermission: async () => true,
     });
     expect(fetchImpl.mock.calls.map(([url]) => url)).toEqual(['http://127.0.0.1:11434/v1/chat/completions']);
-    expect(events).toContainEqual({ type: 'delta', text: 'Local answer' });
+    expect(events).toContainEqual({ type: 'delta', text: 'Local ' });
+    expect(events).toContainEqual({ type: 'delta', text: 'answer' });
+  });
+
+  it('fails closed when a loopback engine closes a stream without a terminal marker', async () => {
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('data: {"choices":[{"delta":{"content":"partial"}}]}\n'));
+        controller.close();
+      },
+    });
+    const adapter = new LoopbackOpenAiAdapter({
+      endpoint: 'http://127.0.0.1:11434/v1',
+      fetchImpl: async () => new Response(stream, { status: 200 }),
+    });
+    await expect(
+      adapter.run({
+        sessionId: 'session_1',
+        target,
+        prompt: 'Answer locally.',
+        workspace: 'C:/workspace',
+        modelKey: 'qwen-local',
+        permissionMode: 'workspace-write',
+        signal: new AbortController().signal,
+        emit: () => undefined,
+        requestPermission: async () => true,
+      })
+    ).rejects.toThrow('terminal marker');
   });
 });
