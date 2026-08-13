@@ -13,9 +13,9 @@
  *    (criteria 2.1 / 2.9).
  * 2. Load/save the file through {@link useEditorFile} (the data layer over the fs
  *    bridge) and expose a uniform {@link EditorAdapterProps} contract.
- * 3. Render the registered adapter component for that kind. The concrete adapters
- *    (tasks 8.4–8.9) register themselves via the `./adapters` side-effect import;
- *    a kind with no component yet falls back to the raw-text editor, never crashes.
+ * 3. Render the registered adapter component for that kind. Optional package
+ *    entries register their own adapters; a kind with no installed component
+ *    falls back to the raw-text editor, never crashing.
  *
  * The adapter contract + runtime registry live in `./adapterRegistry` so adapter
  * modules can register without importing this frame (no circular import).
@@ -29,9 +29,6 @@ import { useTranslation } from 'react-i18next';
 import { componentForKind, rawTextFallback, type EditorAdapterProps } from './adapterRegistry';
 import { useUniversalEditor, type UseUniversalEditorResult } from './hooks/useUniversalEditor';
 import { type EditorContentMode, type UseEditorFileResult } from './hooks/useEditorFile';
-// Side-effect: register the concrete adapters (tasks 8.4–8.9) into the registry.
-import './adapters';
-
 export type { AdapterComponent, EditorAdapterProps } from './adapterRegistry';
 export { registerEditorAdapter, ADAPTER_CONTENT_MODE } from './adapterRegistry';
 export type { EditorFsOverride } from './hooks/useEditorFile';

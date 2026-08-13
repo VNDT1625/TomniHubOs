@@ -17,10 +17,8 @@
 import React from 'react';
 import { registerEditorAdapter } from '../adapterRegistry';
 
-registerEditorAdapter(
-  'text-code',
-  React.lazy(() => import('./TextCodeAdapter'))
-);
+// Monaco/LSP is owned by com.tomni.ide. The base document surface deliberately
+// falls back to raw text until that package is installed and mounted.
 registerEditorAdapter(
   'docx',
   React.lazy(() => import('./DocxAdapter'))
