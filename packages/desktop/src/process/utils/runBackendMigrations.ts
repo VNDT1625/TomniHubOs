@@ -376,20 +376,6 @@ const MIGRATION_STEPS: Array<{
     run: async (configFile) => (await ensureBootstrapMcpServersInDb(configFile), true),
   },
   {
-    name: 'ensureTestingMcpRegistered',
-    run: async () => {
-      const { ensureTestingMcpRegistered } = await import('@process/testing/registerTestingMcp');
-      return ensureTestingMcpRegistered();
-    },
-  },
-  {
-    name: 'ensureBrowserControlMcpRegistered',
-    run: async () => {
-      const { ensureBrowserControlMcpRegistered } = await import('@process/browser/registerBrowserControlMcp');
-      return ensureBrowserControlMcpRegistered();
-    },
-  },
-  {
     name: 'ensureCronMcpRegistered',
     run: async () => {
       const { ensureCronMcpRegistered } = await import('@process/cron/registerCronMcp');
@@ -411,35 +397,10 @@ const MIGRATION_STEPS: Array<{
     },
   },
   {
-    name: 'ensureIdeMcpRegistered',
-    run: async () => {
-      const { ensureIdeMcpRegistered } = await import('@process/ide/mcp/registerIdeMcp');
-      return ensureIdeMcpRegistered();
-    },
-  },
-  {
     name: 'ensureAutomationMcpRegistered',
     run: async () => {
       const { ensureAutomationMcpRegistered } = await import('@process/automation/registerAutomationMcp');
       return ensureAutomationMcpRegistered();
-    },
-  },
-  {
-    name: 'ensureOfficeEditorMcpRegistered',
-    run: async () => {
-      const { ensureOfficeEditorMcpRegistered } = await import('@process/editor/registerOfficeEditorMcp');
-      return ensureOfficeEditorMcpRegistered();
-    },
-  },
-  {
-    name: 'ensureMusicMcpRegistered',
-    run: async () => {
-      // Gated: only register the Music MCP server when the feature flag is on,
-      // so the agent plane stays dark until Music Studio is enabled.
-      const { MUSIC_STUDIO_ENABLED } = await import('@/common/config/constants');
-      if (!MUSIC_STUDIO_ENABLED) return false;
-      const { ensureMusicMcpRegistered } = await import('@process/music/registerMusicMcp');
-      return ensureMusicMcpRegistered();
     },
   },
   {

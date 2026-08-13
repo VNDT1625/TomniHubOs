@@ -8,7 +8,6 @@ import { BUILTIN_AGENT_ORCHESTRATOR_NAME } from '@process/agentRuntime/agentMesh
 import { BUILTIN_SECRET_CONTEXT_NAME } from '@process/agentRuntime/agentMesh/mcp/secret-context/server';
 import { configureSecretContextVault } from '@process/agentRuntime/agentMesh/mcp/secret-context/wiring';
 import type { SecretVault } from '@process/agentRuntime/secretVault';
-import { BUILTIN_TESTING_NAME } from '@process/resources/builtinMcp/testingServer';
 import { BUILTIN_TOOL_SELECTOR_NAME } from '@process/resources/builtinMcp/toolSelectorServer';
 
 import type { CoreCapabilityHostContext, CoreMcpServer } from './adapters';
@@ -123,20 +122,6 @@ export const createElectronSurfaceCapabilityHosts = (vault?: SecretVault): Elect
         scope: { id: `core:${context.sessionId}`, surface: context.surface },
       });
       return { name: BUILTIN_SECRET_CONTEXT_NAME, url: host.url, headers: host.headers };
-    },
-    false,
-    false
-  );
-  registry.register(
-    BUILTIN_TESTING_NAME,
-    async () => {
-      const [{ getApplicationMainWindow }, { startTestingMcpHost }, { getTestingServices }] = await Promise.all([
-        import('@process/bridge/applicationBridge'),
-        import('@process/testing/testingMcpHost'),
-        import('@process/testing/testingWiring'),
-      ]);
-      const host = await startTestingMcpHost(getTestingServices(getApplicationMainWindow).orchestrator);
-      return { name: BUILTIN_TESTING_NAME, url: host.url, headers: host.headers };
     },
     false,
     false

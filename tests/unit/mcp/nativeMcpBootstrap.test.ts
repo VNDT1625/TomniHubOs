@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  createCoreNativeMcpRegistrars,
   resetNativeMcpBootstrapForTests,
   runNativeMcpBootstrap,
   type NativeMcpRegistrar,
@@ -10,6 +11,18 @@ beforeEach(() => {
 });
 
 describe('native MCP bootstrap lifecycle', () => {
+  it('keeps optional application MCP registrars out of the Hub base', () => {
+    expect(createCoreNativeMcpRegistrars().map((registrar) => registrar.name)).toEqual([
+      'agent-orchestrator',
+      'secret-context',
+      'cron',
+      'manager',
+      'system-info',
+      'automation',
+      'realtime-knowledge',
+    ]);
+  });
+
   it('seeds and registers MCP servers when the legacy backend is not started', async () => {
     const calls: string[] = [];
     const registrars: NativeMcpRegistrar[] = [

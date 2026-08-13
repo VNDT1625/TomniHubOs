@@ -28,7 +28,11 @@ export type NativeMcpBootstrapResult = {
 
 let bootstrapPromise: Promise<NativeMcpBootstrapResult> | undefined;
 
-const defaultRegistrars = (): NativeMcpRegistrar[] => [
+/**
+ * Built-in MCP services owned by the Hub base. Optional application MCPs are
+ * activated by their installed package and must never be added to this list.
+ */
+export const createCoreNativeMcpRegistrars = (): NativeMcpRegistrar[] => [
   {
     name: 'agent-orchestrator',
     run: async () =>
@@ -39,14 +43,6 @@ const defaultRegistrars = (): NativeMcpRegistrar[] => [
     run: async () =>
       (await import('@process/agentRuntime/agentMesh/mcp/secret-context/register')).ensureSecretContextMcpRegistered(),
   },
-  {
-    name: 'testing',
-    run: async () => (await import('@process/testing/registerTestingMcp')).ensureTestingMcpRegistered(),
-  },
-  {
-    name: 'browser-control',
-    run: async () => (await import('@process/browser/registerBrowserControlMcp')).ensureBrowserControlMcpRegistered(),
-  },
   { name: 'cron', run: async () => (await import('@process/cron/registerCronMcp')).ensureCronMcpRegistered() },
   {
     name: 'manager',
@@ -56,16 +52,10 @@ const defaultRegistrars = (): NativeMcpRegistrar[] => [
     name: 'system-info',
     run: async () => (await import('@process/system/registerSystemInfoMcp')).ensureSystemInfoMcpRegistered(),
   },
-  { name: 'ide', run: async () => (await import('@process/ide/mcp/registerIdeMcp')).ensureIdeMcpRegistered() },
   {
     name: 'automation',
     run: async () => (await import('@process/automation/registerAutomationMcp')).ensureAutomationMcpRegistered(),
   },
-  {
-    name: 'office-editor',
-    run: async () => (await import('@process/editor/registerOfficeEditorMcp')).ensureOfficeEditorMcpRegistered(),
-  },
-  { name: 'music', run: async () => (await import('@process/music/registerMusicMcp')).ensureMusicMcpRegistered() },
   {
     name: 'realtime-knowledge',
     run: async () =>
@@ -163,7 +153,7 @@ export const runNativeMcpBootstrap = (options: NativeMcpBootstrapOptions = {}): 
       failed.push({ name: 'defaults', error: error instanceof Error ? error.message : String(error) });
     }
 
-    const registrars = options.registrars ?? defaultRegistrars();
+    const registrars = options.registrars ?? createCoreNativeMcpRegistrars();
     const results = await Promise.allSettled(registrars.map((registrar) => registrar.run()));
     const registered: string[] = [];
     results.forEach((result, index) => {

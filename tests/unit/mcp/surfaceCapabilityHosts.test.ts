@@ -46,7 +46,6 @@ import { ensureAgentOrchestratorMcpRegistered } from '@process/agentRuntime/agen
 import { startAgentOrchestratorMcpHost } from '@process/agentRuntime/agentMesh/mcp/host';
 import { startSecretContextMcpHost } from '@process/agentRuntime/agentMesh/mcp/secret-context/host';
 import { ensureSecretContextMcpRegistered } from '@process/agentRuntime/agentMesh/mcp/secret-context/register';
-import { startTestingMcpHost } from '@process/testing/testingMcpHost';
 import { ensureTestingMcpRegistered } from '@process/testing/registerTestingMcp';
 
 describe('surface capability host restoration', () => {
@@ -55,7 +54,13 @@ describe('surface capability host restoration', () => {
 
     expect(hosts.names()).toEqual(expect.arrayContaining(['tomny-tool-selector', 'tomny-agent-orchestrator']));
     expect(hosts.names()).not.toEqual(
-      expect.arrayContaining(['tomny-ide', 'tomny-browser-control', 'tomny-office-editor', 'tomny-music'])
+      expect.arrayContaining([
+        'tomny-ide',
+        'tomny-browser-control',
+        'tomny-office-editor',
+        'tomny-music',
+        'tomny-testing',
+      ])
     );
   });
 
@@ -202,19 +207,15 @@ describe('surface capability host restoration', () => {
     });
   });
 
-  it('injects the live Testing bearer header into the core capability', async () => {
+  it('refuses to activate the optional Testing capability from the core registry', async () => {
     const hosts = createElectronSurfaceCapabilityHosts();
 
-    await expect(hosts.resolve(['tomny-testing'])).resolves.toEqual([
-      {
-        name: 'tomny-testing',
-        url: 'http://127.0.0.1:64001/sse',
-        headers: [{ name: 'Authorization', value: 'Bearer testing-token' }],
-      },
-    ]);
+    await expect(hosts.resolve(['tomny-testing'])).rejects.toThrow(
+      'The selected surface requires unavailable capability host tomny-testing.'
+    );
   });
 
-  it('refreshes Secret Context and Testing endpoint credentials after their hosts restart', async () => {
+  it('refreshes Secret Context endpoint credentials after a host restart', async () => {
     vi.mocked(startSecretContextMcpHost)
       .mockResolvedValueOnce({
         url: 'http://127.0.0.1:65100/sse',
@@ -224,15 +225,6 @@ describe('surface capability host restoration', () => {
         url: 'http://127.0.0.1:65101/sse',
         headers: [{ name: 'Authorization', value: 'Bearer secret-two' }],
       } as Awaited<ReturnType<typeof startSecretContextMcpHost>>);
-    vi.mocked(startTestingMcpHost)
-      .mockResolvedValueOnce({
-        url: 'http://127.0.0.1:65200/sse',
-        headers: [{ name: 'Authorization', value: 'Bearer testing-one' }],
-      } as Awaited<ReturnType<typeof startTestingMcpHost>>)
-      .mockResolvedValueOnce({
-        url: 'http://127.0.0.1:65201/sse',
-        headers: [{ name: 'Authorization', value: 'Bearer testing-two' }],
-      } as Awaited<ReturnType<typeof startTestingMcpHost>>);
     const hosts = createElectronSurfaceCapabilityHosts();
 
     const context = Object.freeze({
@@ -244,8 +236,6 @@ describe('surface capability host restoration', () => {
 
     const secretFirst = await hosts.resolve(['tomny-secret-context'], [], context);
     const secretRestarted = await hosts.resolve(['tomny-secret-context'], [], context);
-    const testingFirst = await hosts.resolve(['tomny-testing']);
-    const testingRestarted = await hosts.resolve(['tomny-testing']);
 
     expect(secretFirst[0]).toMatchObject({
       url: 'http://127.0.0.1:65100/sse',
@@ -257,14 +247,6 @@ describe('surface capability host restoration', () => {
     });
     expect(startSecretContextMcpHost).toHaveBeenCalledWith({
       scope: { id: 'core:secret-parent-session', surface: 'browser' },
-    });
-    expect(testingFirst[0]).toMatchObject({
-      url: 'http://127.0.0.1:65200/sse',
-      headers: [{ name: 'Authorization', value: 'Bearer testing-one' }],
-    });
-    expect(testingRestarted[0]).toMatchObject({
-      url: 'http://127.0.0.1:65201/sse',
-      headers: [{ name: 'Authorization', value: 'Bearer testing-two' }],
     });
   });
 
