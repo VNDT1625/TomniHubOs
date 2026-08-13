@@ -2078,6 +2078,108 @@ describe('package manager service', () => {
     }
   }, 60_000);
 
+  it('preserves the extracted IDE package through update, restart, disable, rollback, and uninstall', async () => {
+    const rootDir = await tempRoot();
+    const sourceBundle = JSON.parse(
+      await readFile(path.resolve('store-artifacts', 'com.tomni.ide-1.0.0.tomni-package.json'), 'utf8')
+    ) as {
+      format: 'tomni-package-bundle-v1';
+      manifest: PackageManifest;
+      files: Record<string, string>;
+    };
+    expect(sourceBundle.format).toBe('tomni-package-bundle-v1');
+    const { privateKey, publicKey } = generateKeyPairSync('ed25519');
+    const artifactFor = (version: string): Buffer => {
+      const unsignedManifest: PackageManifest = {
+        ...sourceBundle.manifest,
+        version,
+        artifact: {
+          ...sourceBundle.manifest.artifact!,
+          signature: { algorithm: 'ed25519', keyId: 'ide-lifecycle-key', value: '' },
+        },
+      };
+      const manifest: PackageManifest = {
+        ...unsignedManifest,
+        artifact: {
+          ...unsignedManifest.artifact!,
+          signature: {
+            ...unsignedManifest.artifact!.signature,
+            value: sign(null, Buffer.from(packageSignaturePayload(unsignedManifest)), privateKey).toString('base64'),
+          },
+        },
+      };
+      return Buffer.from(JSON.stringify({ ...sourceBundle, manifest }));
+    };
+    const artifacts = new Map([
+      ['/com.tomni.ide-1.0.0.tomni-package.json', artifactFor('1.0.0')],
+      ['/com.tomni.ide-1.1.0.tomni-package.json', artifactFor('1.1.0')],
+    ]);
+    const server = createServer((request, response) => {
+      const artifact = artifacts.get(request.url ?? '');
+      if (!artifact) {
+        response.writeHead(404).end();
+        return;
+      }
+      response.writeHead(200, {
+        'content-length': String(artifact.byteLength),
+        'content-type': 'application/vnd.tomni.package+json',
+      });
+      response.end(artifact);
+    });
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
+    if (!address || typeof address === 'string') throw new Error('IDE lifecycle package server did not start.');
+
+    let catalogVersion = '1.0.0';
+    const catalogEntry = (): PackageCatalogEntry => {
+      const manifest = JSON.parse(
+        artifacts.get(`/com.tomni.ide-${catalogVersion}.tomni-package.json`)!.toString('utf8')
+      ).manifest as PackageManifest;
+      return {
+        manifest,
+        delivery: 'downloaded-package',
+        trust: 'signed-first-party',
+        artifactUrl: `http://127.0.0.1:${address.port}/com.tomni.ide-${catalogVersion}.tomni-package.json`,
+      };
+    };
+    const createService = () =>
+      createPackageManagerService({
+        rootDir,
+        appVersion: '1.2.0',
+        catalog: [catalogEntry()],
+        catalogLoader: async () => [catalogEntry()],
+        trustedKeys: { 'ide-lifecycle-key': publicKey.export({ type: 'spki', format: 'pem' }).toString() },
+        allowLocalArtifactUrls: true,
+      });
+    let service = createService();
+    await service.initialize();
+    await expect(service.install('com.tomni.ide')).resolves.toMatchObject({ installedVersion: '1.0.0', enabled: true });
+    await expect(service.readAsset('com.tomni.ide', 'app.js')).resolves.toMatchObject({
+      contentType: 'application/javascript',
+    });
+
+    catalogVersion = '1.1.0';
+    await expect(service.refreshCatalog()).resolves.toEqual(
+      expect.arrayContaining([expect.objectContaining({ installedVersion: '1.0.0', updateAvailable: true })])
+    );
+    await expect(service.install('com.tomni.ide')).resolves.toMatchObject({
+      installedVersion: '1.1.0',
+      previousVersion: '1.0.0',
+    });
+    service = createService();
+    await service.initialize();
+    await expect(service.disable('com.tomni.ide')).resolves.toMatchObject({ enabled: false });
+    await expect(service.enable('com.tomni.ide')).resolves.toMatchObject({ enabled: true });
+    await expect(service.rollback('com.tomni.ide')).resolves.toMatchObject({
+      installedVersion: '1.0.0',
+      previousVersion: '1.1.0',
+    });
+    await expect(service.uninstall('com.tomni.ide')).resolves.toMatchObject({ state: 'available' });
+    await expect(service.readAsset('com.tomni.ide', 'app.js')).rejects.toThrow(/not installed/i);
+    await expect(access(path.join(rootDir, 'packages', 'com.tomni.ide'))).rejects.toMatchObject({ code: 'ENOENT' });
+  }, 60_000);
+
   it('restores every installed version when the durable uninstall transaction fails', async () => {
     const rootDir = await tempRoot();
     const id = 'com.tomni.rollback';
