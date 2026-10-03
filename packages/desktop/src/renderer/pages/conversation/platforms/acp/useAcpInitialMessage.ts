@@ -9,8 +9,6 @@ import { isBackendHttpError } from '@/common/adapter/httpBridge';
 import type { AgentStreamErrorInfo } from '@/common/chat/chatLib';
 import type { TMessage } from '@/common/chat/chatLib';
 import { parseError, uuid } from '@/common/utils';
-import { coreIdeClient } from '@/renderer/services/coreIdeClient';
-import { buildPlanningGuard } from '@/renderer/services/planningGuard';
 import { withResponseLanguageDirective } from '@/renderer/services/i18n/responseLanguage';
 import { emitter } from '@/renderer/utils/emitter';
 import { buildDisplayMessage } from '@/renderer/utils/file/messageFiles';
@@ -87,43 +85,10 @@ export const useAcpInitialMessage = ({
         // with sendMessage — which previously produced two duplicated user
         // bubbles on the first conversation render.
         void checkAndUpdateTitle(conversation_id, input);
+        // Base Conversation has no IDE implementation dependency. An installed
+        // IDE Surface may add its own scoped context through the governed package
+        // operation path; ordinary chat sends only the user's assembled message.
         let outgoingMessage = displayMessage;
-        if (workspacePath) {
-          const contextResult = await coreIdeClient.kgContext(workspacePath, input, [], true).catch((): null => null);
-          const pack = contextResult?.ok ? contextResult.data : null;
-          if (pack && pack.slices.length > 0) {
-            outgoingMessage = `${pack.renderedContext}\n\n${displayMessage}`;
-            addOrUpdateMessage(
-              {
-                id: uuid(),
-                msg_id: uuid(),
-                type: 'tips',
-                position: 'center',
-                conversation_id,
-                created_at: Date.now(),
-                content: {
-                  type: 'success',
-                  content: t('conversation.contextPack.loaded', { count: pack.sliceCount }),
-                  kind: 'context_pack',
-                  contextPack: {
-                    sliceCount: pack.sliceCount,
-                    truncated: pack.truncated,
-                    files: pack.slices.map((slice) => ({
-                      path: slice.path,
-                      reason: slice.reason,
-                      layer: slice.layer,
-                      score: slice.score,
-                    })),
-                  },
-                },
-              },
-              true
-            );
-          }
-        }
-        if (workspacePath) {
-          outgoingMessage = await buildPlanningGuard(workspacePath, outgoingMessage);
-        }
         // Keep the model replying in the app's active language even though the
         // codebase/files are mostly English (the visible bubble keeps raw text).
         outgoingMessage = withResponseLanguageDirective(outgoingMessage, conversation_id);

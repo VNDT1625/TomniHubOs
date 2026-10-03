@@ -1,6 +1,10 @@
 import * as path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { createRepoSecretStore, type RepoSecretCrypto, type RepoSecretFs } from '@/process/ide/memory/repoSecretStore';
+import {
+  createRepoSecretStore,
+  type RepoSecretCrypto,
+  type RepoSecretFs,
+} from '@package-apps/ide/process/data/memory/repoSecretStore';
 
 const memoryFs = (initial: Record<string, string> = {}): RepoSecretFs => {
   const files = new Map<string, string>(Object.entries(initial));

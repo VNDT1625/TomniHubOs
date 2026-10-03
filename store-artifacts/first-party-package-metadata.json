@@ -1,0 +1,110 @@
+{
+  "keyId": "tomni-store-2026-02",
+  "publicKey": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAi/hVs+0e8IpjBByOHNww44vumyggLsOLn4p7stxqRTI=\n-----END PUBLIC KEY-----\n",
+  "packages": [
+    {
+      "artifactUrl": "https://github.com/VNDT1625/tomni-hub-agent-os/releases/download/tomni-store-v1/com.tomni.design-studio-1.0.0.tomni-package.json",
+      "manifest": {
+        "schemaVersion": 1,
+        "id": "com.tomni.design-studio",
+        "publisherId": "com.tomni",
+        "name": "Design Studio",
+        "description": "An independently downloaded visual authoring and interactive presentation workspace powered by VIU.",
+        "type": "app",
+        "bundleKind": "single",
+        "version": "1.0.0",
+        "engines": {
+          "tomni": ">=1.0.0"
+        },
+        "modules": [
+          {
+            "id": "design",
+            "title": "Design Studio",
+            "surface": "apps/design-studio",
+            "pinnable": true,
+            "runtime": "trusted-react",
+            "entrypoint": "app.js",
+            "styleEntrypoint": "style.css"
+          }
+        ],
+        "contributions": {
+          "version": 1,
+          "apps": [
+            {
+              "id": "design",
+              "title": "Design Studio",
+              "moduleId": "design"
+            }
+          ]
+        },
+        "permissions": ["workspace.read", "workspace.write"],
+        "dependencies": [],
+        "mainContributions": [
+          {
+            "schemaVersion": 1,
+            "id": "design-viu-v1"
+          }
+        ],
+        "tags": ["design", "visual-authoring", "prototype", "viu"],
+        "artifact": {
+          "integrity": "sha256-08c3027ebc866ed231b24768f777bf79d0faaef98ff224431b843258b2f6aca1",
+          "sizeBytes": 6140620,
+          "signature": {
+            "algorithm": "ed25519",
+            "keyId": "tomni-store-2026-02",
+            "value": "t4HsGHBKJSvUozXthVImObHgJO9Y4KqFwWvgXNhfEZNMqjYLsy+Epj9Y18138Etic/r+aUCVllc2RDwPz0NTAg=="
+          }
+        }
+      }
+    },
+    {
+      "artifactUrl": "https://github.com/VNDT1625/tomni-hub-agent-os/releases/download/tomni-store-v1/com.tomni.document-studio-1.0.0.tomni-package.json",
+      "manifest": {
+        "schemaVersion": 1,
+        "id": "com.tomni.document-studio",
+        "publisherId": "com.tomni",
+        "name": "Document Studio",
+        "description": "An independently downloaded workspace for files, Office documents and live collaboration.",
+        "type": "app",
+        "bundleKind": "single",
+        "version": "1.0.0",
+        "engines": {
+          "tomni": ">=1.0.0"
+        },
+        "modules": [
+          {
+            "id": "document",
+            "title": "Document Studio",
+            "surface": "apps/document-studio",
+            "pinnable": true,
+            "runtime": "trusted-react",
+            "entrypoint": "app.js",
+            "styleEntrypoint": "style.css"
+          }
+        ],
+        "contributions": {
+          "version": 1,
+          "apps": [
+            {
+              "id": "document",
+              "title": "Document Studio",
+              "moduleId": "document"
+            }
+          ]
+        },
+        "permissions": ["workspace.read", "workspace.write"],
+        "dependencies": [],
+        "tags": ["documents", "office", "files", "collaboration"],
+        "artifact": {
+          "integrity": "sha256-7a4112a095f1a9d81dabdd8f79a46979349a5ce964443b80bf90882dac9d6724",
+          "sizeBytes": 5491661,
+          "signature": {
+            "algorithm": "ed25519",
+            "keyId": "tomni-store-2026-02",
+            "value": "PLx+9Ftq0ae4rEH8Iy7K+IpH7LJgCAMCdREQ5y/l2oy7xoQ0rqI6u2JG2r1yj7MjYqV6JytBv+y+/Arxu9fxAw=="
+          }
+        }
+      }
+    }
+  ]
+}

@@ -211,7 +211,10 @@ class JsonPackageAppGroupStore {
 const groupId = (randomId: () => string): string => `group-${randomId()}`;
 
 /** Creates a main-process service with no renderer or package-manager dependency. */
-export const createPackageAppGroupService = ({ filePath, randomId }: PackageAppGroupServiceOptions): PackageAppGroupService => {
+export const createPackageAppGroupService = ({
+  filePath,
+  randomId,
+}: PackageAppGroupServiceOptions): PackageAppGroupService => {
   const store = new JsonPackageAppGroupStore(filePath, randomId);
   const nextId = randomId ?? randomUUID;
 
@@ -251,10 +254,7 @@ export const createPackageAppGroupService = ({ filePath, randomId }: PackageAppG
       const request = parsePackageAppGroupReorderRequest(input);
       return store.mutate(request.scope, (document) => {
         const knownGroups = new Map(document.groups.map((group) => [group.id, group]));
-        if (
-          request.groupIds.length !== document.groups.length ||
-          request.groupIds.some((id) => !knownGroups.has(id))
-        ) {
+        if (request.groupIds.length !== document.groups.length || request.groupIds.some((id) => !knownGroups.has(id))) {
           throw new PackageAppGroupServiceError('APP_GROUP_ORDER_INVALID');
         }
         return {

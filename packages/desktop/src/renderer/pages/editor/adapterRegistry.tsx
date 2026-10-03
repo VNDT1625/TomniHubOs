@@ -23,6 +23,11 @@
 
 import { Button, Input } from '@arco-design/web-react';
 import { Save } from '@icon-park/react';
+import type {
+  EditorSurfaceAdapterComponent,
+  EditorSurfaceAdapterProps,
+  EditorSurfaceAdapterResolver,
+} from '@/common/packages';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AdapterComponentRegistry, EditorAdapterKind } from './editorRegistry';
@@ -33,41 +38,17 @@ import type { EditorContentMode } from './hooks/useEditorFile';
  * surface {@link import('./hooks/useEditorFile').useEditorFile} exposes, so an
  * adapter is a thin presentational view over the shared data layer.
  */
-export type EditorAdapterProps = {
-  /** Absolute (or workspace-relative) path of the file being edited. */
-  filePath: string;
-  /** The current (possibly edited) content buffer. Base64 string in binary mode. */
-  content: string;
-  /** The last-saved/loaded snapshot, for diffing or "revert" affordances. */
-  savedContent: string;
-  /** Whether the content is decoded text or a base64 binary payload. */
-  mode: EditorContentMode;
-  /** True when the buffer differs from the last-saved snapshot. */
-  dirty: boolean;
-  /** True while the initial load / a reload is in flight. */
-  loading: boolean;
-  /** True while a save is in flight. */
-  saving: boolean;
-  /** The most recent read/write error, or `null` when healthy. */
-  error: Error | null;
-  /** Replace the in-memory buffer (does not persist). */
-  onChange: (next: string) => void;
-  /** Persist `next` (or the current buffer) to disk. */
-  onSave: (next?: string) => Promise<void>;
-  /** Re-read the file from disk, discarding unsaved edits. */
-  reload: () => Promise<void>;
-  /** When true, the adapter should present a read-only view (e.g. binary inspect). */
-  readOnly?: boolean;
-  /**
-   * Optional workspace root the file belongs to. The IDE passes its open folder
-   * so a language-aware adapter (e.g. {@link TextCodeAdapter}) can drive a real
-   * language server (LSP) scoped to that root. Absent for non-IDE editor uses.
-   */
-  workspace?: string;
-};
+export type EditorAdapterProps = EditorSurfaceAdapterProps;
 
 /** An editor adapter is any React component accepting {@link EditorAdapterProps}. */
-export type AdapterComponent = React.ComponentType<EditorAdapterProps>;
+export type AdapterComponent = EditorSurfaceAdapterComponent;
+
+/**
+ * A mount-scoped adapter lookup owned by the caller. Optional package apps use
+ * this instead of mutating the Core registry during module evaluation, so
+ * disabling a package also removes its adapter implementation from use.
+ */
+export type EditorAdapterResolver = EditorSurfaceAdapterResolver<EditorAdapterKind>;
 
 /**
  * The content mode each adapter kind needs. Text-ish kinds work on decoded text;
@@ -155,6 +136,22 @@ export const registerEditorAdapter = (kind: EditorAdapterKind, component: Adapte
 
 /** Resolve the component registered for a kind (or `null` if none yet). */
 export const componentForKind = (kind: EditorAdapterKind): AdapterComponent | null => ADAPTER_COMPONENTS[kind];
+
+/**
+ * Creates an immutable package-local resolver. It never mutates Core's global
+ * registrations and deliberately cannot replace the raw-text fallback.
+ */
+export const createEditorAdapterResolver = (
+  registrations: Readonly<Partial<Record<Exclude<EditorAdapterKind, 'raw-text'>, AdapterComponent>>>
+): EditorAdapterResolver => {
+  const components = new Map<EditorAdapterKind, AdapterComponent>();
+  for (const [kind, component] of Object.entries(registrations) as Array<
+    [Exclude<EditorAdapterKind, 'raw-text'>, AdapterComponent | undefined]
+  >) {
+    if (component !== undefined) components.set(kind, component);
+  }
+  return Object.freeze({ componentForKind: (kind) => components.get(kind) ?? null });
+};
 
 /** Access the always-present raw-text fallback component. */
 export const rawTextFallback = (): AdapterComponent | null => ADAPTER_COMPONENTS['raw-text'];

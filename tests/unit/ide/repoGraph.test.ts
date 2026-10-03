@@ -9,8 +9,8 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { buildGraphFromFiles, collectRepoFiles } from '@/process/ide/repoGraph';
-import type { GraphEdge } from '@/process/ide/repoGraph';
+import { buildGraphFromFiles, collectRepoFiles } from '@package-apps/ide/process/knowledge/graph/repoGraph';
+import type { GraphEdge } from '@package-apps/ide/process/knowledge/graph/repoGraph';
 
 /** Find an edge by from/to (helper for assertions). */
 const hasEdge = (edges: GraphEdge[], from: string, to: string): boolean =>

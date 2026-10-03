@@ -3,31 +3,15 @@
  * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  *
- * Unit tests for process/makevideo/voiceGen — TTS generation. fetch + fs are
- * injected so no real network or disk is touched.
- *
- * Covers:
- * - OpenAI-compatible: correct endpoint/headers/body, audio saved with the
- *   configured extension.
- * - ElevenLabs: voice-id endpoint + xi-api-key header.
- * - Empty narration rejected; HTTP failures surface the status + body.
+ * Unit tests for the fail-closed MakeVideo TTS boundary. Voice generation may
+ * persist returned bytes only after a Main-owned authority has performed the
+ * governed transport; this module never forwards caller credentials or URLs.
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import { generateVoice } from '@/process/makevideo/voiceGen';
+import { generateVoice, type VoiceEgressAuthority } from '@/process/makevideo/voiceGen';
 import type { VoiceConfigElevenLabs, VoiceConfigOpenAI } from '@/process/makevideo/makeVideoTypes';
 
-/** Build a fake `fetch` returning binary audio with the given status. */
-const audioFetch = (status = 200) =>
-  vi.fn(
-    async () =>
-      new Response(new Uint8Array([1, 2, 3, 4]).buffer, {
-        status,
-        statusText: status === 200 ? 'OK' : 'Bad',
-      })
-  );
-
-/** In-memory fs capturing the written file. */
 const memFs = () => {
   const writes: Array<{ path: string; size: number }> = [];
   return {
@@ -39,6 +23,10 @@ const memFs = () => {
   };
 };
 
+const authority = (impl: VoiceEgressAuthority['synthesize'] = async () => new Uint8Array([1, 2, 3, 4])) => ({
+  synthesize: vi.fn(impl),
+});
+
 const OPENAI: VoiceConfigOpenAI = {
   type: 'openai',
   base_url: 'https://api.openai.com',
@@ -48,54 +36,113 @@ const OPENAI: VoiceConfigOpenAI = {
   response_format: 'wav',
 };
 
-describe('generateVoice — OpenAI-compatible', () => {
-  it('POSTs to /v1/audio/speech with the right body + saves a .wav', async () => {
-    const fetchImpl = audioFetch();
-    const fs = memFs();
-    const out = await generateVoice('Hello world', OPENAI, 'p1', 's1', { audioDir: '/aud', fs, fetchImpl });
+const ELEVEN_LABS: VoiceConfigElevenLabs = {
+  type: 'elevenlabs',
+  api_key: 'xi-key',
+  voice_id: 'VOICE123',
+  model_id: 'eleven_multilingual_v2',
+};
 
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
-    const [url, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe('https://api.openai.com/v1/audio/speech');
-    expect((init.headers as Record<string, string>).Authorization).toBe('Bearer sk-test');
-    const body = JSON.parse(init.body as string);
-    expect(body).toMatchObject({ model: 'tts-1', input: 'Hello world', voice: 'nova', response_format: 'wav' });
+describe('generateVoice — governed TTS', () => {
+  it('fails closed before any artifact write when no Main-owned egress authority exists', async () => {
+    const fs = memFs();
+
+    await expect(generateVoice('Hello world', OPENAI, 'p1', 's1', { audioDir: '/aud', fs })).rejects.toMatchObject({
+      code: 'VOICE_EGRESS_AUTHORITY_REQUIRED',
+    });
+
+    expect(fs.mkdir).not.toHaveBeenCalled();
+    expect(fs.writeFile).not.toHaveBeenCalled();
+  });
+
+  it('passes a secret-free normalized request to the authority and persists only its bytes', async () => {
+    const fs = memFs();
+    const egressAuthority = authority();
+
+    const out = await generateVoice('Hello world', OPENAI, 'p1', 's1', {
+      audioDir: '/aud',
+      fs,
+      egressAuthority,
+    });
+
     expect(out).toMatch(/voice-p1-s1\.wav$/);
-    expect(fs.writes[0].size).toBe(4);
-  });
-
-  it('rejects empty narration before calling the network', async () => {
-    const fetchImpl = audioFetch();
-    await expect(generateVoice('   ', OPENAI, 'p1', 's1', { fetchImpl, fs: memFs() })).rejects.toThrow(/empty/i);
-    expect(fetchImpl).not.toHaveBeenCalled();
-  });
-
-  it('surfaces an HTTP failure with status', async () => {
-    const fetchImpl = audioFetch(500);
-    await expect(generateVoice('hi', OPENAI, 'p1', 's1', { fetchImpl, fs: memFs(), audioDir: '/a' })).rejects.toThrow(
-      /OpenAI TTS failed \(HTTP 500\)/
+    expect(egressAuthority.synthesize).toHaveBeenCalledWith(
+      {
+        provider: 'openai',
+        text: 'Hello world',
+        model: 'tts-1',
+        voiceId: 'nova',
+        responseFormat: 'wav',
+      },
+      expect.objectContaining({ timeoutMs: 90_000, signal: expect.any(AbortSignal) })
     );
+    expect(JSON.stringify(egressAuthority.synthesize.mock.calls[0])).not.toContain('sk-test');
+    expect(JSON.stringify(egressAuthority.synthesize.mock.calls[0])).not.toContain('api.openai.com');
+    expect(fs.writes[0]).toMatchObject({ size: 4 });
   });
-});
 
-describe('generateVoice — ElevenLabs', () => {
-  const EL: VoiceConfigElevenLabs = {
-    type: 'elevenlabs',
-    api_key: 'xi-key',
-    voice_id: 'VOICE123',
-    model_id: 'eleven_multilingual_v2',
-  };
+  it('does not expose ElevenLabs credentials or construct its destination in the authority request', async () => {
+    const egressAuthority = authority();
 
-  it('POSTs to the voice-id endpoint with the xi-api-key header', async () => {
-    const fetchImpl = audioFetch();
+    await generateVoice('Bonjour', ELEVEN_LABS, 'p2', 's2', { audioDir: '/aud', fs: memFs(), egressAuthority });
+
+    expect(egressAuthority.synthesize).toHaveBeenCalledWith(
+      {
+        provider: 'elevenlabs',
+        text: 'Bonjour',
+        model: 'eleven_multilingual_v2',
+        voiceId: 'VOICE123',
+        responseFormat: 'mp3',
+      },
+      expect.anything()
+    );
+    expect(JSON.stringify(egressAuthority.synthesize.mock.calls[0])).not.toContain('xi-key');
+    expect(JSON.stringify(egressAuthority.synthesize.mock.calls[0])).not.toContain('elevenlabs.io');
+  });
+
+  it('cancels before calling the authority', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const egressAuthority = authority();
+
+    await expect(
+      generateVoice('Hello world', OPENAI, 'p1', 's1', { fs: memFs(), egressAuthority, signal: controller.signal })
+    ).rejects.toMatchObject({ code: 'VOICE_GENERATION_ABORTED' });
+
+    expect(egressAuthority.synthesize).not.toHaveBeenCalled();
+  });
+
+  it('cancels a pending authority call and writes no artifact', async () => {
+    const controller = new AbortController();
     const fs = memFs();
-    const out = await generateVoice('Bonjour', EL, 'p2', 's2', { audioDir: '/aud', fs, fetchImpl });
+    const egressAuthority = authority(
+      async (_request, options) =>
+        new Promise<Uint8Array>((resolve) => {
+          options.signal.addEventListener('abort', () => resolve(new Uint8Array([1, 2, 3, 4])), { once: true });
+        })
+    );
+    const result = generateVoice('Hello world', OPENAI, 'p1', 's1', {
+      audioDir: '/aud',
+      fs,
+      egressAuthority,
+      signal: controller.signal,
+    });
 
-    const [url, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
-    expect(url).toContain('/v1/text-to-speech/VOICE123');
-    expect((init.headers as Record<string, string>)['xi-api-key']).toBe('xi-key');
-    const body = JSON.parse(init.body as string);
-    expect(body).toMatchObject({ text: 'Bonjour', model_id: 'eleven_multilingual_v2' });
-    expect(out).toMatch(/voice-p2-s2\.mp3$/);
+    await Promise.resolve();
+    controller.abort();
+
+    await expect(result).rejects.toMatchObject({ code: 'VOICE_GENERATION_ABORTED' });
+    expect(fs.mkdir).not.toHaveBeenCalled();
+    expect(fs.writeFile).not.toHaveBeenCalled();
+  });
+
+  it('maps transport errors to a stable error without leaking a supplied credential', async () => {
+    const egressAuthority = authority(async () => {
+      throw new Error('upstream failed with Authorization: Bearer sk-test');
+    });
+
+    await expect(
+      generateVoice('Hello world', OPENAI, 'p1', 's1', { fs: memFs(), egressAuthority, audioDir: '/aud' })
+    ).rejects.toMatchObject({ code: 'VOICE_GENERATION_FAILED' });
   });
 });

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { compareQuickTestRuns } from '../../../packages/desktop/src/process/ide/quickTestRunCompare';
-import type { RuntimeTrace, TraceEvent } from '../../../packages/desktop/src/process/ide/quickTestTracer';
+import { compareQuickTestRuns } from '@package-apps/ide/process/execution/quickTest/analysis/quickTestRunCompare';
+import type { RuntimeTrace, TraceEvent } from '@package-apps/ide/process/execution/quickTest/runtime/quickTestTracer';
 
 function trace(events: TraceEvent[], overrides: Partial<Omit<RuntimeTrace, 'events'>> = {}): RuntimeTrace {
   return {

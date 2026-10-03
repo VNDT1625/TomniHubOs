@@ -17,7 +17,7 @@ import { Button } from '@arco-design/web-react';
 import { DeleteFour } from '@icon-park/react';
 import React, { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import GenerationProgress from '../../components/GenerationProgress';
+import GenerationProgress from '@package-apps/shared/renderer/GenerationProgress';
 import type { RunLogLine } from '../useAutomation';
 
 type RunLogPanelProps = {

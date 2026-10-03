@@ -41,9 +41,13 @@ vi.mock('@/renderer/pages/editor/hooks/useEditorFile', () => ({
 //     Importing the editor module triggers `./adapters` (the real lazy imports);
 //     we instead register synchronous markers so we can assert which kind was
 //     chosen without loading Monaco/canvas/etc. -------------------------------
-vi.mock('@/renderer/pages/editor/adapters', () => ({}));
+vi.mock('@package-apps/document-studio/renderer/adapters/formats/index', () => ({}));
 
-import { registerEditorAdapter, type EditorAdapterProps } from '@/renderer/pages/editor/adapterRegistry';
+import {
+  createEditorAdapterResolver,
+  registerEditorAdapter,
+  type EditorAdapterProps,
+} from '@/renderer/pages/editor/adapterRegistry';
 import { UniversalEditor } from '@/renderer/pages/editor/UniversalEditor';
 
 /** Build a trivial marker adapter that renders its kind label. */
@@ -75,6 +79,20 @@ describe('UniversalEditor adapter selection (Requirement 2a, criteria 2.1 / 2.9)
   });
 
   it('selects the text-code adapter for a source file', async () => {
+    renderEditor('main.ts');
+    expect(await screen.findByTestId('adapter')).toHaveTextContent('text-code');
+  });
+
+  it('uses a package-scoped adapter without mutating the Core registry', async () => {
+    const packageResolver = createEditorAdapterResolver({ 'text-code': marker('package-text-code') });
+    const view = render(
+      <ConfigProvider>
+        <UniversalEditor filePath='main.ts' adapterResolver={packageResolver} />
+      </ConfigProvider>
+    );
+    expect(await screen.findByTestId('adapter')).toHaveTextContent('package-text-code');
+    view.unmount();
+
     renderEditor('main.ts');
     expect(await screen.findByTestId('adapter')).toHaveTextContent('text-code');
   });

@@ -20,7 +20,7 @@
  */
 
 import * as path from 'node:path';
-import { buildWorkspacePrimer } from '@process/ide/workspacePrimer';
+import { buildWorkspacePrimer } from '@package-apps/ide/process/workspace/workspacePrimer';
 import type { OmniGatewayState } from './omniGatewayState';
 
 /** One tool advertised by the gateway after bootstrap. */

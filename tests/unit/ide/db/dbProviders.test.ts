@@ -8,7 +8,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { applyProviderPreset, providerFromHost } from '@/process/ide/db/dbProviders';
+import { applyProviderPreset, providerFromHost } from '@package-apps/ide/process/data/db/dbProviders';
 
 describe('applyProviderPreset', () => {
   it('maps supabase to postgres + ssl on (default 5432)', () => {

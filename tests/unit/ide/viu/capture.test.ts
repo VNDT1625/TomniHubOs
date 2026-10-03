@@ -5,8 +5,8 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import { captureSiteProject } from '@/process/ide/viu/capture';
-import type { IBrowserViewManager } from '@/process/browser/browserViewManager';
+import { captureSiteProject } from '@package-apps/design/process/viu/capture';
+import type { IBrowserViewManager } from '@process/browser/browserViewManager';
 
 const nativeImage = {
   toPNG: () => Buffer.from('small-png'),

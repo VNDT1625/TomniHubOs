@@ -34,11 +34,11 @@ const temporaryDirectories: string[] = [];
 const manifest = (version: string): ModelPackManifest => ({
   schemaVersion: 1,
   kind: 'model-adapter',
-  id: 'com.tomny.core.orchestrator',
+  id: 'com.tomny.core.security',
   version,
-  purpose: 'orchestrator',
+  purpose: 'security',
   format: 'peft-lora-safetensors',
-  baseModel: { id: 'Qwen/Qwen3.5-2B', revision: 'immutable-r1', sha256: sha },
+  baseModel: { id: 'Qwen/Qwen3.5-0.8B', revision: 'immutable-r1', sha256: sha },
   runtime: {
     engine: 'transformers-peft',
     peft: '>=0.18.1 <0.19.0',
@@ -46,8 +46,8 @@ const manifest = (version: string): ModelPackManifest => ({
     minTomnyVersion: '0.0.0',
   },
   contracts: {
-    inputSchema: 'tomny.orchestrator.input.v1',
-    outputSchema: 'tomny.orchestrator.output.v1',
+    inputSchema: 'tomny.security.input.v1',
+    outputSchema: 'tomny.security.output.v1',
     policyVersion: 'core-policy-v1',
   },
   files: [
@@ -286,7 +286,7 @@ describe('Model Registry lifecycle', () => {
     ).rejects.toThrow('durable write failed');
     const afterFailure = await durable.read();
     expect(afterFailure.records[key]).toMatchObject({ status: 'pilot' });
-    expect(afterFailure.activeByPurpose.orchestrator).toBeUndefined();
+    expect(afterFailure.activeByPurpose.security).toBeUndefined();
   });
 
   it('persists an approved receipt at every promotion boundary', async () => {
@@ -298,7 +298,7 @@ describe('Model Registry lifecycle', () => {
     snapshot = await store.promote(key, 'pilot', snapshot.revision, promotionReceipt(candidate, 'pilot'));
     snapshot = await store.promote(key, 'active', snapshot.revision, promotionReceipt(candidate, 'active'));
     expect(Object.keys(snapshot.records[key].promotionReceipts ?? {}).sort()).toEqual(['active', 'pilot', 'shadow']);
-    expect(await store.getActive('orchestrator')).toMatchObject({ key, status: 'active' });
+    expect(await store.getActive('security')).toMatchObject({ key, status: 'active' });
   });
 
   it('does not expose a persisted active model after its runtime promotion gate is absent or revoked', async () => {
@@ -307,13 +307,13 @@ describe('Model Registry lifecycle', () => {
     await activate(createPromotionReadyStore(persistence), candidate);
 
     const withoutRuntimeGate = new ModelRegistryStore(persistence);
-    expect(await withoutRuntimeGate.getActive('orchestrator')).toBeUndefined();
+    expect(await withoutRuntimeGate.getActive('security')).toBeUndefined();
 
     const revokedRuntimeGate: ModelPromotionGateVerifier = {
       verify: async () => ({ approved: false, reason: 'approval revoked' }),
     };
     const revoked = new ModelRegistryStore(persistence, undefined, undefined, revokedRuntimeGate);
-    expect(await revoked.getActive('orchestrator')).toBeUndefined();
+    expect(await revoked.getActive('security')).toBeUndefined();
   });
 
   it('does not expose persisted approvals after a large forward or backward clock change', async () => {
@@ -343,8 +343,8 @@ describe('Model Registry lifecycle', () => {
       approvedPromotionGateVerifier
     );
 
-    await expect(beforeApproval.getActive('orchestrator')).resolves.toBeUndefined();
-    await expect(afterExpiry.getActive('orchestrator')).resolves.toBeUndefined();
+    await expect(beforeApproval.getActive('security')).resolves.toBeUndefined();
+    await expect(afterExpiry.getActive('security')).resolves.toBeUndefined();
   });
 
   it('quarantines a failing active adapter and restores previous active', async () => {
@@ -353,7 +353,7 @@ describe('Model Registry lifecycle', () => {
     const failingKey = await activate(store, manifest('0.2.0'));
     const current = await store.read();
     const recovered = await store.quarantine(failingKey, 'schema regression', current.revision);
-    expect(recovered.activeByPurpose.orchestrator).toBe(previousKey);
+    expect(recovered.activeByPurpose.security).toBe(previousKey);
     expect(recovered.records[failingKey].status).toBe('quarantined');
   });
 
@@ -362,9 +362,9 @@ describe('Model Registry lifecycle', () => {
     const firstKey = await activate(store, manifest('0.1.0'));
     const secondKey = await activate(store, manifest('0.2.0'));
     const current = await store.read();
-    const rolledBack = await store.rollback('orchestrator', current.revision);
-    expect(rolledBack.activeByPurpose.orchestrator).toBe(firstKey);
-    expect(rolledBack.previousActiveByPurpose.orchestrator).toBe(secondKey);
+    const rolledBack = await store.rollback('security', current.revision);
+    expect(rolledBack.activeByPurpose.security).toBe(firstKey);
+    expect(rolledBack.previousActiveByPurpose.security).toBe(secondKey);
   });
 
   it('rejects a forged signature when no cryptographic verifier is injected', async () => {
@@ -538,7 +538,7 @@ describe('Model Registry lifecycle', () => {
       approvedPromotionGateVerifier
     );
 
-    await expect(restarted.getActive('orchestrator')).resolves.toBeUndefined();
+    await expect(restarted.getActive('security')).resolves.toBeUndefined();
   });
 
   it('rejects malformed persisted catalog digests', () => {

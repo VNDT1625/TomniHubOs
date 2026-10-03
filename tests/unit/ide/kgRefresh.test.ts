@@ -15,11 +15,14 @@ import {
   createLiveGraphUpdater,
   persistKnowledgeGraphArtifacts,
   type KnowledgeGraphArtifactIo,
-} from '@/process/ide/kgRefresh';
-import { createKnowledgeGraphBuilder, fingerprintOf } from '@/process/ide/knowledgeGraphBuilder';
-import { assessGraphFreshness } from '@/process/ide/graphFreshness';
-import { collectRepoFiles } from '@/process/ide/repoGraph';
-import type { KnowledgeGraph, RepoChangeEvent } from '@/process/ide/understandTypes';
+} from '@package-apps/ide/process/knowledge/graph/kgRefresh';
+import {
+  createKnowledgeGraphBuilder,
+  fingerprintOf,
+} from '@package-apps/ide/process/knowledge/graph/knowledgeGraphBuilder';
+import { assessGraphFreshness } from '@package-apps/ide/process/knowledge/graph/graphFreshness';
+import { collectRepoFiles } from '@package-apps/ide/process/knowledge/graph/repoGraph';
+import type { KnowledgeGraph, RepoChangeEvent } from '@package-apps/ide/process/knowledge/graph/understandTypes';
 
 const tempRoots: string[] = [];
 

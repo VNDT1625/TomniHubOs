@@ -5,6 +5,8 @@ import type {
   AgentContext,
   ContextDocument,
   ContextFact,
+  PersonalLearningCausalChain,
+  PersonalLearningControl,
   PersonalLearningRecord,
   PersonalContext,
   PersonalSecretReference,
@@ -114,8 +116,9 @@ export const createPersonalContextMutationCoordinator = (
         return persist({
           ...profile,
           id: personalId,
-          // Renderer-owned profile fields may change, but opaque bindings remain Core-owned.
+          // Renderer-owned profile fields may change, but Core-owned secret bindings and learning control remain authoritative.
           secretReferences: current.secretReferences,
+          learningControl: current.learningControl,
           updatedAt: now(),
         });
       }),
@@ -145,10 +148,18 @@ export const createPersonalContextMutationCoordinator = (
 };
 
 export type PersonalLearningCoordinator = {
+  /** Creates a new learning proposal only while the user-controlled learning state is active. */
   propose(input: Omit<PersonalLearningRecord, 'id' | 'status' | 'createdAt'>): Promise<PersonalLearningRecord>;
+  getControl(): Promise<PersonalLearningControl>;
+  setPaused(paused: boolean): Promise<PersonalLearningControl>;
   confirm(recordId: string): Promise<boolean>;
   reject(recordId: string): Promise<boolean>;
-  correct(recordId: string, fact: ContextFact, explanation: string): Promise<boolean>;
+  correct(
+    recordId: string,
+    fact: ContextFact,
+    explanation: string,
+    causal: PersonalLearningCausalChain
+  ): Promise<boolean>;
   forget(recordId: string): Promise<boolean>;
   delete(recordId: string): Promise<boolean>;
   recordOutcome(recordId: string, outcome: 'helpful' | 'not_helpful'): Promise<boolean>;
@@ -172,6 +183,10 @@ export const createPersonalLearningCoordinator = (
     );
     return result;
   };
+  const controlFor = (profile: PersonalContext): PersonalLearningControl =>
+    profile.learningControl
+      ? structuredClone(profile.learningControl)
+      : { paused: false, updatedAt: profile.updatedAt };
   const update = async (
     recordId: string,
     operation: (profile: PersonalContext, record: PersonalLearningRecord) => PersonalContext
@@ -184,10 +199,25 @@ export const createPersonalLearningCoordinator = (
     return true;
   };
   return {
+    getControl: async () => {
+      await queue;
+      const profile = await store.getPersonal(personalId);
+      if (!profile) throw new Error(`Personal context not found: ${personalId}`);
+      return controlFor(profile);
+    },
+    setPaused: (paused) =>
+      mutate(async () => {
+        const profile = await store.getPersonal(personalId);
+        if (!profile) throw new Error(`Personal context not found: ${personalId}`);
+        const control: PersonalLearningControl = { paused, updatedAt: now() };
+        await store.upsertPersonal({ ...profile, learningControl: control, updatedAt: control.updatedAt });
+        return control;
+      }),
     propose: (input) =>
       mutate(async () => {
         const profile = await store.getPersonal(personalId);
         if (!profile) throw new Error(`Personal context not found: ${personalId}`);
+        if (controlFor(profile).paused) throw new Error('PERSONAL_LEARNING_PAUSED');
         const record: PersonalLearningRecord = { ...input, id: createId(), status: 'proposed', createdAt: now() };
         await store.upsertPersonal({
           ...profile,
@@ -200,6 +230,15 @@ export const createPersonalLearningCoordinator = (
       mutate(() =>
         update(recordId, (profile, record) => {
           if (record.status !== 'proposed') return profile;
+          if (!record.causal.reasonKnown) {
+            return {
+              ...profile,
+              learningRecords: profile.learningRecords?.map((item) =>
+                item.id === record.id ? { ...item, status: 'needs_reason' } : item
+              ),
+              updatedAt: now(),
+            };
+          }
           const merged = mergeLearnedFact(profile[record.collection], record.fact);
           if (!merged.accepted)
             return {
@@ -229,13 +268,24 @@ export const createPersonalLearningCoordinator = (
           updatedAt: now(),
         }))
       ),
-    correct: (recordId, fact, explanation) =>
+    correct: (recordId, fact, explanation, causal) =>
       mutate(() =>
         update(recordId, (profile, record) => ({
           ...profile,
-          [record.collection]: mergeLearnedFact(profile[record.collection], fact).values,
+          ...(causal.reasonKnown
+            ? { [record.collection]: mergeLearnedFact(profile[record.collection], fact).values }
+            : {}),
           learningRecords: profile.learningRecords?.map((item) =>
-            item.id === record.id ? { ...item, fact, explanation, status: 'corrected', confirmedAt: now() } : item
+            item.id === record.id
+              ? {
+                  ...item,
+                  fact,
+                  explanation,
+                  causal,
+                  status: causal.reasonKnown ? 'corrected' : 'needs_reason',
+                  confirmedAt: now(),
+                }
+              : item
           ),
           updatedAt: now(),
         }))
@@ -338,8 +388,10 @@ const parseFact = (value: unknown): ContextFact => {
     (item.lastConfirmedAt !== undefined && !Number.isSafeInteger(item.lastConfirmedAt)) ||
     !item.scope ||
     typeof item.scope !== 'object' ||
-    (item.scope.kind !== 'global' && item.scope.kind !== 'surface') ||
+    (item.scope.kind !== 'global' && item.scope.kind !== 'surface' && item.scope.kind !== 'workspace') ||
     (item.scope.kind === 'surface' && (typeof item.scope.surface !== 'string' || item.scope.surface.length > 100)) ||
+    (item.scope.kind === 'workspace' &&
+      (typeof item.scope.workspace !== 'string' || item.scope.workspace.length > 500)) ||
     !['user', 'observed', 'imported', 'inferred'].includes(item.source ?? '') ||
     !['normal', 'private'].includes(item.sensitivity ?? '') ||
     typeof item.userLocked !== 'boolean'
@@ -356,9 +408,46 @@ const parseFact = (value: unknown): ContextFact => {
     scope:
       item.scope.kind === 'global'
         ? { kind: 'global' }
-        : { kind: 'surface', surface: boundedText(item.scope.surface, 'surface', 100) },
+        : item.scope.kind === 'surface'
+          ? { kind: 'surface', surface: boundedText(item.scope.surface, 'surface', 100) }
+          : { kind: 'workspace', workspace: boundedText(item.scope.workspace, 'workspace', 500) },
     sensitivity: item.sensitivity,
     userLocked: item.userLocked,
+  };
+};
+/** Older records remain readable but are explicitly non-reusable until a user supplies a reason. */
+const parseLearningCausalChain = (
+  value: unknown,
+  provenance: string,
+  explanation: string
+): PersonalLearningCausalChain => {
+  if (value === undefined) {
+    return {
+      context: 'Legacy learning record',
+      origin: provenance,
+      reason: undefined,
+      reasonKnown: false,
+      proposal: explanation,
+    };
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid learning causal chain.');
+  const causal = value as Partial<PersonalLearningCausalChain>;
+  if (
+    typeof causal.context !== 'string' ||
+    typeof causal.origin !== 'string' ||
+    typeof causal.proposal !== 'string' ||
+    typeof causal.reasonKnown !== 'boolean' ||
+    (causal.reasonKnown && (typeof causal.reason !== 'string' || !causal.reason.trim())) ||
+    (!causal.reasonKnown && causal.reason !== undefined)
+  ) {
+    throw new Error('Invalid learning causal chain.');
+  }
+  return {
+    context: boundedText(causal.context, 'learning causal context', 1_000),
+    origin: boundedText(causal.origin, 'learning causal origin', 2_000),
+    reason: causal.reasonKnown ? boundedText(causal.reason, 'learning causal reason', 4_000) : undefined,
+    reasonKnown: causal.reasonKnown,
+    proposal: boundedText(causal.proposal, 'learning causal proposal', 4_000),
   };
 };
 const emptyStructuredPersonalProfile = (): StructuredPersonalProfile => ({
@@ -443,6 +532,20 @@ const parsePersonal = (value: unknown): PersonalContext => {
   if (refs.length > 100 || refs.some((ref) => !ref || typeof ref !== 'object'))
     throw new Error('Invalid secret references.');
   if (learningRecords.length > 1_000) throw new Error('Invalid learning records.');
+  const learningControl = item.learningControl;
+  if (
+    learningControl !== undefined &&
+    (!learningControl ||
+      typeof learningControl !== 'object' ||
+      typeof learningControl.paused !== 'boolean' ||
+      !Number.isSafeInteger(learningControl.updatedAt))
+  ) {
+    throw new Error('Invalid personal learning control.');
+  }
+  const parsedLearningControl =
+    learningControl === undefined
+      ? undefined
+      : { paused: learningControl.paused, updatedAt: learningControl.updatedAt };
   return {
     id: boundedText(item.id, 'personal id', 200),
     facts: (item.facts ?? []).map(parseFact),
@@ -495,24 +598,33 @@ const parsePersonal = (value: unknown): PersonalContext => {
               !record.fact ||
               typeof record.explanation !== 'string' ||
               typeof record.provenance !== 'string' ||
-              !['proposed', 'applied', 'rejected', 'corrected', 'forgotten'].includes(record.status ?? '') ||
+              !['proposed', 'needs_reason', 'applied', 'rejected', 'corrected', 'forgotten'].includes(
+                record.status ?? ''
+              ) ||
               !Number.isSafeInteger(record.createdAt)
             ) {
               throw new Error('Invalid learning record.');
             }
+            const causal = parseLearningCausalChain(record.causal, record.provenance, record.explanation);
+            const status =
+              !causal.reasonKnown && (record.status === 'applied' || record.status === 'corrected')
+                ? 'needs_reason'
+                : record.status;
             return {
               id: boundedText(record.id, 'learning record id', 200),
               collection: record.collection,
               fact: parseFact(record.fact),
               explanation: boundedText(record.explanation, 'learning explanation', 1_000),
               provenance: boundedText(record.provenance, 'learning provenance', 500),
-              status: record.status,
+              causal,
+              status,
               createdAt: record.createdAt,
               confirmedAt: record.confirmedAt,
               outcome: record.outcome,
             };
           }),
         }),
+    ...(parsedLearningControl === undefined ? {} : { learningControl: parsedLearningControl }),
     updatedAt: item.updatedAt,
   };
 };
@@ -571,7 +683,11 @@ const parseDocumentWithTrailingWriteRecovery = (raw: string): { document: Contex
 };
 const sameScope = (left: ContextFact, right: ContextFact): boolean =>
   left.scope.kind === right.scope.kind &&
-  (left.scope.kind === 'global' || (right.scope.kind === 'surface' && left.scope.surface === right.scope.surface));
+  (left.scope.kind === 'global' ||
+    (left.scope.kind === 'surface' && right.scope.kind === 'surface' && left.scope.surface === right.scope.surface) ||
+    (left.scope.kind === 'workspace' &&
+      right.scope.kind === 'workspace' &&
+      left.scope.workspace === right.scope.workspace));
 
 /** Explicit/locked knowledge cannot be silently overwritten by an inference. */
 export const mergeLearnedFact = (

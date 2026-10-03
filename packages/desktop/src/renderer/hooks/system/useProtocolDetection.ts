@@ -56,7 +56,7 @@ export function useProtocolDetection(
   api_key: string,
   options: UseProtocolDetectionOptions = {}
 ): UseProtocolDetectionResult {
-  const { debounceMs = 800, autoDetect = true, timeout = 10000, testAllKeys = false } = options;
+  const { debounceMs = 300, autoDetect = true, timeout = 3000, testAllKeys = false } = options;
 
   const [isDetecting, setIsDetecting] = useState(false);
   const [result, setResult] = useState<ProtocolDetectionResponse | null>(null);
@@ -93,12 +93,29 @@ export function useProtocolDetection(
       setError(null);
 
       try {
-        const detectionResult = await ipcBridge.mode.detectProtocol.invoke({
-          base_url: url,
-          api_key: key,
-          timeout,
-          testAllKeys,
-        });
+        const detectionResult = await Promise.race([
+          ipcBridge.mode.detectProtocol.invoke({
+            base_url: url,
+            api_key: key,
+            timeout,
+            testAllKeys,
+          }),
+          new Promise<ProtocolDetectionResponse>((resolve) =>
+            setTimeout(
+              () =>
+                resolve({
+                  success: false,
+                  protocol: 'unknown',
+                  confidence: 0,
+                  suggestion: {
+                    type: 'none',
+                    message: 'Protocol detection timed out.',
+                  },
+                }),
+              Math.min(timeout || 2500, 3000)
+            )
+          ),
+        ]);
 
         // 检查是否是最新的请求
         if (currentVersion !== requestVersionRef.current) {

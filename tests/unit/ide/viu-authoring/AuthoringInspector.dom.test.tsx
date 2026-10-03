@@ -14,7 +14,7 @@ import { createDefaultViuVectorGeometry } from '@/common/viu/graphics/vector';
 import AuthoringInspector, {
   type ViuAuthoringInspectorLabels,
   type ViuAuthoringInspectorProps,
-} from '@/renderer/pages/studio/ide/Viu/next/authoring';
+} from '@package-apps/design/renderer/viu/next/authoring/index';
 
 const labels: ViuAuthoringInspectorLabels = {
   title: 'Authoring inspector',

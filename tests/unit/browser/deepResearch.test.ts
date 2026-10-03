@@ -19,7 +19,7 @@ import {
   type ResearchChat,
   type ResearchLeaseGate,
   type SearchHit,
-} from '@/process/browser/research/deepResearch';
+} from '@process/browser/research/deepResearch';
 
 // ---------------------------------------------------------------------------
 // Stubs

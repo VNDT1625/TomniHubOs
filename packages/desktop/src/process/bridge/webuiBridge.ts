@@ -16,10 +16,11 @@
 
 import { ipcBridge } from '@/common';
 import {
+  getDesktopWebUIStatus,
+  restoreDesktopWebUIFromPreferences,
+  setDesktopWebUIInitialPassword,
   startDesktopWebUI,
   stopDesktopWebUI,
-  getDesktopWebUIStatus,
-  setDesktopWebUIInitialPassword,
 } from '@process/utils/webuiConfig';
 import { getTomniGatewayEndpoint } from '@process/tomnigateway';
 
@@ -99,19 +100,72 @@ export async function maybeSeedInitialPassword(): Promise<void> {
   setDesktopWebUIInitialPassword(newPassword);
 }
 
-export function initWebuiBridge(): void {
+export type WebUIAccountExecutionLease = Readonly<{
+  start(): Promise<void>;
+  stop(): Promise<void>;
+}>;
+
+export type WebUIAccountExecutionLeaseOptions = Readonly<{
+  requireAuthenticatedAccount: () => void;
+  restore?: () => Promise<void>;
+  stop?: () => Promise<void>;
+}>;
+
+/**
+ * Main-only background owner for the persisted WebUI preference. A saved
+ * preference is never authority to expose a host or public tunnel before the
+ * account execution lifecycle admits this lease.
+ */
+export const createWebUIAccountExecutionLease = (
+  options: WebUIAccountExecutionLeaseOptions
+): WebUIAccountExecutionLease => {
+  const restore = options.restore ?? restoreDesktopWebUIFromPreferences;
+  const stop = options.stop ?? stopDesktopWebUI;
+  return Object.freeze({
+    start: async () => {
+      options.requireAuthenticatedAccount();
+      try {
+        await restore();
+        // Sign-out may race preference I/O or tunnel startup. Roll back before
+        // this lease is admitted to the lifecycle's active set.
+        options.requireAuthenticatedAccount();
+      } catch (error) {
+        await stop();
+        throw error;
+      }
+    },
+    stop,
+  });
+};
+
+export type WebuiBridgeOptions = Readonly<{
+  requireAuthenticatedAccount: () => void;
+}>;
+
+export function initWebuiBridge(options: WebuiBridgeOptions): void {
   ipcBridge.webui.getStatus.provider(async () => {
+    options.requireAuthenticatedAccount();
     const snapshot = getDesktopWebUIStatus();
     const adminUsername = await fetchAdminUsername();
     return { ...snapshot, adminUsername };
   });
 
   ipcBridge.webui.start.provider(async (params) => {
-    await maybeSeedInitialPassword();
-    const handle = await startDesktopWebUI({
-      port: params?.port,
-      allowRemote: params?.allowRemote,
-    });
+    options.requireAuthenticatedAccount();
+    let handle: Awaited<ReturnType<typeof startDesktopWebUI>> | undefined;
+    try {
+      await maybeSeedInitialPassword();
+      options.requireAuthenticatedAccount();
+      handle = await startDesktopWebUI({
+        port: params?.port,
+        allowRemote: params?.allowRemote,
+      });
+      // Never return a live host or public tunnel after a session transition.
+      options.requireAuthenticatedAccount();
+    } catch (error) {
+      if (handle !== undefined) await stopDesktopWebUI();
+      throw error;
+    }
     ipcBridge.webui.statusChanged.emit({
       running: true,
       port: handle.port,
@@ -126,6 +180,7 @@ export function initWebuiBridge(): void {
   });
 
   ipcBridge.webui.stop.provider(async () => {
+    options.requireAuthenticatedAccount();
     await stopDesktopWebUI();
     ipcBridge.webui.statusChanged.emit({ running: false });
   });

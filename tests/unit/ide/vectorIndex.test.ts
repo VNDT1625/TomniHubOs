@@ -11,8 +11,8 @@ import {
   isVectorIndexFresh,
   VECTOR_INDEX_VERSION,
   type Embedder,
-} from '@/process/ide/vectorIndex';
-import type { KnowledgeGraph, KnowledgeNode } from '@/process/ide/understandTypes';
+} from '@package-apps/ide/process/knowledge/context/vectorIndex';
+import type { KnowledgeGraph, KnowledgeNode } from '@package-apps/ide/process/knowledge/graph/understandTypes';
 
 const makeNode = (
   id: string,

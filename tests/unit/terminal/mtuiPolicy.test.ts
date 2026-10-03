@@ -12,13 +12,13 @@ import {
   parseMtuiOutput,
   resolveDevelopmentMtuiPath,
   resolveInstalledWindowsMtui,
-} from '@/process/terminal/mtuiBridge';
+} from '@/process/resources/nativeFile/mtuiBridge';
 import {
   commandFromTerminalInput,
   detectMtuiViolations,
   isDirectWriteCommand,
   MTUI_POLICY_OPERATION_LIMIT,
-} from '@/process/terminal/mtuiPolicy';
+} from '@/process/resources/nativeFile/mtuiPolicy';
 
 const tempDirs: string[] = [];
 

@@ -12,14 +12,17 @@ import { access, mkdir, mkdtemp, rm, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { pruneInspectEvidence, resolveFullPageSize } from '@/process/ide/elementInspectorBridge';
+import {
+  pruneInspectEvidence,
+  resolveFullPageSize,
+} from '@package-apps/ide/process/execution/inspection/elementInspectorBridge';
 import {
   locateElement,
   renderElementBrief,
   renderMultiElementBrief,
   type PickedElement,
-} from '@/process/ide/elementInspectorLocator';
-import type { KnowledgeGraph } from '@/process/ide/understandTypes';
+} from '@package-apps/ide/process/execution/inspection/elementInspectorLocator';
+import type { KnowledgeGraph } from '@package-apps/ide/process/knowledge/graph/understandTypes';
 import { captureAtIntrinsicZoom, capturePageViewportPng } from '@/process/testing/engines/ffmpegVideoBackend';
 
 const node = (id: string, layer: 'ui' | 'api' | 'service' | 'util' = 'ui', summary = '') => ({

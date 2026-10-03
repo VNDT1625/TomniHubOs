@@ -15,8 +15,25 @@
  * - Assigns sequential index values and generated ids.
  */
 
-import { describe, expect, it } from 'vitest';
-import { parseScenes } from '@/process/makevideo/makeVideoBridge';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+const mocks = vi.hoisted(() => ({
+  providerChat: vi.fn(),
+  runAgentChatMessages: vi.fn(),
+}));
+
+vi.mock('@process/services/agentChat', () => ({
+  createProviderChat: () => mocks.providerChat,
+  runAgentChatMessages: mocks.runAgentChatMessages,
+}));
+
+import { parseScenes, runScript } from '@/process/makevideo/makeVideoBridge';
+
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+  vi.clearAllMocks();
+});
 
 /** Deterministic id generator for stable assertions. */
 const seqIds = () => {
@@ -30,6 +47,60 @@ const CLEAN = JSON.stringify([
 ]);
 
 describe('parseScenes', () => {
+  it('sends provider script generation through the shared broker and retries transient failures', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    mocks.runAgentChatMessages.mockImplementation(
+      (
+        providerRun: (
+          model: string,
+          messages: Array<{ role: string; content: string }>,
+          signal?: AbortSignal
+        ) => Promise<string>,
+        model: string,
+        messages: Array<{ role: string; content: string }>,
+        signal?: AbortSignal
+      ) => providerRun(model, messages, signal)
+    );
+    mocks.providerChat
+      .mockRejectedValueOnce(new Error('PROVIDER_EXECUTION_NETWORK_FAILED'))
+      .mockResolvedValueOnce(CLEAN);
+    vi.useFakeTimers();
+
+    const generated = runScript({
+      topic: 'city at dawn',
+      style: 'anime',
+      language: 'English',
+      sceneCount: 2,
+      model: 'video-model',
+    });
+    await vi.runAllTimersAsync();
+
+    await expect(generated).resolves.toMatchObject([
+      { title: 'Dawn', narration: 'The city wakes.' },
+      { title: 'Chase', narration: 'They run.' },
+    ]);
+    expect(mocks.runAgentChatMessages).toHaveBeenCalledWith(
+      expect.any(Function),
+      'video-model',
+      expect.any(Array),
+      undefined,
+      { surface: 'video', permissionMode: 'read-only' }
+    );
+    expect(mocks.providerChat).toHaveBeenCalledTimes(2);
+    expect(mocks.providerChat).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        model: 'video-model',
+        signal: undefined,
+        messages: expect.arrayContaining([
+          expect.objectContaining({ role: 'system' }),
+          expect.objectContaining({ role: 'user' }),
+        ]),
+      })
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('parses a clean JSON array of scenes', () => {
     const scenes = parseScenes(CLEAN, 2, seqIds());
     expect(scenes).toHaveLength(2);

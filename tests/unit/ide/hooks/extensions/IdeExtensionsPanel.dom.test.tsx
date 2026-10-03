@@ -79,7 +79,7 @@ vi.mock('react-i18next', () => ({
   }),
 }));
 
-import IdeExtensionsPanel from '@/renderer/pages/studio/ide/hooks/extensions/IdeExtensionsPanel';
+import IdeExtensionsPanel from '@package-apps/ide/renderer/hooks/extensions/IdeExtensionsPanel';
 
 const contributionState = (
   revision: number,

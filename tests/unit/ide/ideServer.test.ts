@@ -19,9 +19,9 @@ import {
   type IdeMcpService,
   type IdeServerDeps,
   type QuickTestScenarioAgentService,
-} from '@/process/ide/mcp/ideServer';
-import { startIdeMcpHost } from '@/process/ide/mcp/ideMcpHost';
-import { buildIdeServer } from '@/process/ide/mcp/ideMcpWiring';
+} from '@package-apps/ide/process/mcp/ideServer';
+import { startIdeMcpHost } from '@package-apps/ide/process/mcp/ideMcpHost';
+import { buildIdeServer } from '@package-apps/ide/process/mcp/ideMcpWiring';
 import { createSessionMemoryStore } from '@/process/userUnderstanding/sessionMemoryStore';
 
 const makeService = (overrides: Partial<IdeMcpService> = {}): IdeMcpService => ({
@@ -194,6 +194,13 @@ describe('ideServer', () => {
       'ide_summary',
       'ide_test_script',
     ]);
+  });
+
+  it('never registers VIU tools in the base IDE MCP server', async () => {
+    const client = await connect(makeDeps());
+    expect((await client.listTools()).tools.map((tool) => tool.name).filter((name) => name.startsWith('viu_'))).toEqual(
+      []
+    );
   });
 
   it('builds one bounded MTUI research pack and reads ranked files in parallel', async () => {

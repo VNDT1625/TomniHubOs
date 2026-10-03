@@ -7,22 +7,47 @@
 /**
  * Embedder resolution for Realtime Knowledge.
  *
- * Prefers the user's configured embedding model (resolved from the native Tomny provider catalog,
- * mirroring `ide/knowledgeGraphBridge.ts`); when none is configured it falls back
- * to a deterministic LOCAL hashing embedder so semantic lookup still works
- * offline without a model. The fallback is a bag-of-words term-frequency hash —
+ * Remote embedding is disabled in this module. The only authority shape retained
+ * here is Main-only, secret-free admission metadata; it cannot resolve a
+ * credential or execute a transport. Therefore it must not re-enable direct
+ * egress. Realtime Knowledge always falls back to a deterministic LOCAL hashing
+ * embedder so semantic lookup still works offline.
+ * The fallback is a bag-of-words term-frequency hash —
  * crude, but adequate for the small, curated set of volatile facts and zero-cost.
  *
  * Process boundary: Main-process (Node.js) module. No DOM APIs.
  */
 
-import { listReadyProviders } from '@process/services/tomnyProviderBridge';
-import type { IProvider } from '@/common/config/storage';
-import { hasSpecificModelCapability } from '@/common/utils/modelCapabilities';
 import type { Embedder } from './realtime/rtkVectorIndex';
 
 /** Dimensionality of the local hashing fallback embedder. */
 const HASHING_DIMENSIONS = 256;
+
+/** Metadata only: embedding text and provider credentials never cross this boundary. */
+export type GovernedEmbeddingRequest = Readonly<{
+  providerId: string;
+  model: string;
+  destination: string;
+  textCount: number;
+  textBytes: number;
+}>;
+
+/**
+ * Main-owned admission seam for a possible future remote embedding operation.
+ *
+ * This contract deliberately carries metadata only. It neither exposes a
+ * provider credential nor supplies a network executor, so an allow decision
+ * cannot authorize this module to perform direct network I/O. Enabling remote
+ * embedding requires a separate shared Trust transport with an opaque,
+ * destination-bound secret lease and durable receipt evidence.
+ */
+export type GovernedEmbeddingAuthority = Readonly<{
+  authorizeEmbedding(request: GovernedEmbeddingRequest): Promise<boolean>;
+}>;
+
+export type CreateProviderEmbedderOptions = Readonly<{
+  authority?: GovernedEmbeddingAuthority;
+}>;
 
 /** Tokenise text into lowercase word tokens. */
 const tokenize = (text: string): string[] => text.toLowerCase().match(/[a-z0-9]+/g) ?? [];
@@ -57,88 +82,19 @@ export const createHashingEmbedder = (dimensions: number = HASHING_DIMENSIONS): 
     ),
 });
 
-const isModelEnabled = (provider: IProvider, model: string): boolean => provider.model_enabled?.[model] !== false;
+/**
+ * Remote embedding remains unavailable until its shared Trust transport exists.
+ * This intentionally does not inspect even an injected admission authority:
+ * observing an allow alone must never cause provider inventory, credential
+ * resolution, text serialization, or a direct fetch.
+ */
+export const createProviderEmbedder = async (_options: CreateProviderEmbedderOptions = {}): Promise<Embedder | null> =>
+  null;
 
-const isUsable = (p: IProvider): boolean =>
-  p.enabled !== false && Boolean(p.api_key) && Boolean(p.base_url) && Array.isArray(p.models) && p.models.length > 0;
-
-const loadProviders = (): Promise<IProvider[]> => listReadyProviders().catch(() => [] as IProvider[]);
-
-const firstApiKey = (apiKeys: string): string =>
-  apiKeys
-    .split(/[,\n]/)
-    .map((k) => k.trim())
-    .find((k) => k.length > 0) ?? '';
-
-const resolveEmbeddingUrl = (provider: IProvider): string => {
-  const base = provider.base_url.replace(/\/+$/, '');
-  if (!provider.is_full_url) return `${base}/embeddings`;
-  return `${base.replace(/\/chat\/completions$/i, '').replace(/\/completions$/i, '')}/embeddings`;
-};
-
-const modelHasEmbeddingCapability = (provider: IProvider, model: string): boolean => {
-  if (hasSpecificModelCapability(provider, model, 'embedding') === true) return true;
-  return provider.capabilities?.some((c) => c.type === 'embedding' && c.isUserSelected !== false) ?? false;
-};
-
-const pickEmbeddingModel = (providers: IProvider[]): { provider: IProvider; model: string } | null => {
-  for (const provider of providers.filter(isUsable)) {
-    const model = provider.models.find(
-      (candidate) => isModelEnabled(provider, candidate) && modelHasEmbeddingCapability(provider, candidate)
-    );
-    if (model) return { provider, model };
-  }
-  return null;
-};
-
-type EmbeddingResponse = { data?: Array<{ index?: number; embedding?: unknown }> };
-
-const isNumberArray = (value: unknown): value is number[] =>
-  Array.isArray(value) && value.every((item) => typeof item === 'number' && Number.isFinite(item));
-
-const parseEmbeddingVectors = (json: EmbeddingResponse, expected: number): number[][] => {
-  const vectors: number[][] = Array.from({ length: expected }, (): number[] => []);
-  for (const item of json.data ?? []) {
-    const index = item.index ?? vectors.findIndex((vector) => vector.length === 0);
-    if (index < 0 || index >= vectors.length || !isNumberArray(item.embedding)) continue;
-    vectors[index] = item.embedding;
-  }
-  if (vectors.some((vector) => vector.length === 0)) {
-    throw new Error('Embedding provider returned incomplete vectors.');
-  }
-  return vectors;
-};
-
-/** Build an embedder from the user's configured embedding model, or `null`. */
-export const createProviderEmbedder = async (): Promise<Embedder | null> => {
-  const selected = pickEmbeddingModel(await loadProviders());
-  if (!selected) return null;
-  return {
-    providerId: selected.provider.id,
-    model: selected.model,
-    embed: async (texts, signal) => {
-      const response = await fetch(resolveEmbeddingUrl(selected.provider), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${firstApiKey(selected.provider.api_key)}`,
-        },
-        body: JSON.stringify({ model: selected.model, input: texts }),
-        signal,
-      });
-      if (!response.ok) {
-        const detail = await response.text().catch(() => '');
-        throw new Error(`Embedding request failed (HTTP ${response.status}). ${detail.slice(0, 300)}`);
-      }
-      return parseEmbeddingVectors((await response.json()) as EmbeddingResponse, texts.length);
-    },
-  };
-};
-
-/** Resolve the best available embedder: provider model if configured, else local hashing. */
-export const resolveRtkEmbedder = async (): Promise<Embedder> => {
+/** Resolve the best available embedder: governed provider model or local hashing. */
+export const resolveRtkEmbedder = async (options?: CreateProviderEmbedderOptions): Promise<Embedder> => {
   try {
-    const provider = await createProviderEmbedder();
+    const provider = await createProviderEmbedder(options);
     if (provider) return provider;
   } catch {
     // fall through to the local fallback

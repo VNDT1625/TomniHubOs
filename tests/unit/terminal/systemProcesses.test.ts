@@ -8,7 +8,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { listSystemTerminals, parsePsOutput, parseTasklistCsv } from '@/process/terminal/systemProcesses';
+import { listSystemTerminals, parsePsOutput, parseTasklistCsv } from '@process/ideTerminal/systemProcesses';
 
 describe('parseTasklistCsv', () => {
   it('keeps only shell/terminal images with valid PIDs', () => {

@@ -45,14 +45,14 @@ pub fn undo_operation(
         }
     };
 
-    if file_path.exists() {
-        let current_content =
+    let current_content = if file_path.exists() {
+        let content =
             fs::read_file_bytes(file_path).map_err(|_| MtuiError::PermissionDenied {
                 message: format!("Cannot read current file: {}", file_path.display()),
                 suggestion: "Check file permissions".to_string(),
             })?;
 
-        let current_hash = fs::compute_hash(&current_content);
+        let current_hash = fs::compute_hash(&content);
 
         if let Some(ref expected_hash) = operation.after_hash {
             if current_hash != *expected_hash {
@@ -62,12 +62,15 @@ pub fn undo_operation(
                 });
             }
         }
-    }
+        content
+    } else {
+        Vec::new()
+    };
 
     let backup_content =
-        crate::backup::load_backup(backup_path).map_err(|_| MtuiError::BackupFailed {
-            message: format!("Failed to read backup: {}", backup_path.display()),
-            suggestion: "Backup file may be corrupted".to_string(),
+        crate::backup::restore_backup(backup_path, &current_content).map_err(|e| MtuiError::BackupFailed {
+            message: format!("Failed to restore backup: {}", e),
+            suggestion: "Backup file may be corrupted or cannot be applied".to_string(),
         })?;
 
     fs::atomic_write(file_path, &backup_content).map_err(|e| MtuiError::WriteFailed {

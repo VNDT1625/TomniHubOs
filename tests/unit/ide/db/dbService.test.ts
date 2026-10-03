@@ -8,11 +8,15 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import { createDbService, type DbDriverFactory } from '@/process/ide/db/dbService';
-import { createDbConnectionStore, type DbCrypto, type DbStoreFs } from '@/process/ide/db/dbConnectionStore';
-import type { DbConnectionStore } from '@/process/ide/db/dbConnectionStore';
-import type { DbDriver } from '@/process/ide/db/dbDriver';
-import type { DbConnectionConfig } from '@/process/ide/db/dbTypes';
+import { createDbService, type DbDriverFactory } from '@package-apps/ide/process/data/db/dbService';
+import {
+  createDbConnectionStore,
+  type DbCrypto,
+  type DbStoreFs,
+} from '@package-apps/ide/process/data/db/dbConnectionStore';
+import type { DbConnectionStore } from '@package-apps/ide/process/data/db/dbConnectionStore';
+import type { DbDriver } from '@package-apps/ide/process/data/db/dbDriver';
+import type { DbConnectionConfig } from '@package-apps/ide/process/data/db/dbTypes';
 
 /** In-memory fs fake backing the JSON store. */
 const makeFakeFs = (): DbStoreFs & { dump: () => string | undefined } => {

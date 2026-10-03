@@ -36,6 +36,8 @@ import MessageCronTrigger from './components/MessageCronTrigger';
 import MessageSkillSuggest from './components/MessageSkillSuggest';
 import MessageText from './components/MessageText';
 import MessageThinking from './components/MessageThinking';
+import MessageOutlineNavigator from './components/MessageOutlineNavigator';
+import ConversationSearchBar from './components/ConversationSearchBar';
 import type { WriteFileResult } from './types';
 import { useAutoScroll } from './useAutoScroll';
 import { useAutoPreviewOfficeFiles } from '@/renderer/hooks/file/useAutoPreviewOfficeFiles';
@@ -245,8 +247,26 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
   const locationState = (location.state || {}) as ConversationLocationState;
   const targetMessageId = locationState.targetMessageId;
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | undefined>();
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
   const handledTargetKeyRef = useRef<string>('');
   const handledInitialAnchorRef = useRef<string>('');
+
+  // Ctrl+F in-conversation search hotkey
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+        e.preventDefault();
+        setIsSearchOpen(true);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Track if assistant is currently streaming
+  const isStreaming = useMemo(() => {
+    return list.some((m) => m.status === 'work' || m.status === 'pending');
+  }, [list]);
 
   // Pre-process message list to group tool outputs into summary cards
   const processedList = useMemo(() => {
@@ -360,6 +380,7 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
     scrollToBottom,
     scrollElementIntoView,
     hideScrollButton,
+    scrollerElement,
   } = useAutoScroll({
     messages: list,
     itemCount: processedList.length,
@@ -580,6 +601,25 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
         </ImagePreviewContext.Provider>
       </Image.PreviewGroup>
 
+      {/* Hierarchical Outline Navigator (Turn -> H2 -> H3) */}
+      <MessageOutlineNavigator items={processedList} scrollerElement={scrollerElement} />
+
+      {/* Floating In-Conversation Search Bar (Ctrl+F) */}
+      {isSearchOpen && (
+        <ConversationSearchBar
+          messages={list}
+          onJumpToMessage={(messageId) => {
+            const targetEl = document.getElementById(`message-${messageId}`);
+            if (targetEl) {
+              targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              setHighlightedMessageId(messageId);
+              setTimeout(() => setHighlightedMessageId((c) => (c === messageId ? undefined : c)), 2400);
+            }
+          }}
+          onClose={() => setIsSearchOpen(false)}
+        />
+      )}
+
       {showScrollButton && (
         <>
           {/* Gradient mask */}
@@ -587,12 +627,24 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
           {/* Scroll button */}
           <div className='absolute bottom-20px left-50% transform -translate-x-50% z-100'>
             <div
-              className='flex items-center justify-center w-40px h-40px rd-full bg-base shadow-lg cursor-pointer hover:bg-1 transition-all hover:scale-110 border-1 border-solid border-3'
+              className='relative flex items-center justify-center w-40px h-40px rd-full bg-base shadow-lg cursor-pointer hover:bg-1 transition-all hover:scale-110 border-1 border-solid border-3'
               onClick={handleScrollButtonClick}
-              title={t('messages.scrollToBottom')}
+              title={
+                isStreaming
+                  ? t('messages.generatingResponseScrollDown', {
+                      defaultValue: 'Generating response - click to scroll down',
+                    })
+                  : t('messages.scrollToBottom')
+              }
               style={{ lineHeight: 0 }}
             >
               <Down theme='filled' size='20' fill={iconColors.secondary} style={{ display: 'block' }} />
+              {isStreaming && (
+                <span className='absolute -top-3px -right-3px flex h-10px w-10px'>
+                  <span className='animate-ping absolute inline-flex h-full w-full rounded-full bg-primary-6 opacity-75'></span>
+                  <span className='relative inline-flex rounded-full h-10px w-10px bg-primary-6'></span>
+                </span>
+              )}
             </div>
           </div>
         </>

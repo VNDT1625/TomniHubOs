@@ -16,7 +16,9 @@ import { isNewApiPlatform, MODEL_PLATFORMS, NEW_API_PROTOCOL_OPTIONS } from '@/r
 import EditModeModal from '@/renderer/pages/settings/components/EditModeModal';
 import TomnyScrollArea from '@/renderer/components/base/TomnyScrollArea';
 import { useProvidersQuery } from '@/renderer/hooks/agent/useModelProviderList';
-import Router9ConnectorPanel from '@/renderer/pages/settings/router9/Router9ConnectorPanel';
+import { checkSavedProviderModelHealth } from '@/renderer/hooks/agent/useModeModeList';
+
+import ModelConsumerPanel from '@/renderer/pages/settings/ModelConsumerPanel';
 import { TOMNI_GATEWAY_PROVIDER_ID } from '@/common/router9';
 import { useSettingsViewMode } from '../settingsViewContext';
 import { consumePendingDeepLink } from '@/renderer/hooks/system/useDeepLink';
@@ -101,6 +103,7 @@ const ModelModalContent: React.FC = () => {
   const [collapseKey, setCollapseKey] = useState<Record<string, boolean>>({});
   const [connectionView, setConnectionView] = useState<'direct' | 'gateway'>('direct');
   const [healthCheckLoading, setHealthCheckLoading] = useState<Record<string, boolean>>({});
+  const [oauthLoading, setOauthLoading] = useState(false);
   const { data, mutate } = useProvidersQuery();
   // The managed gateway is an internal routing provider, not a second direct
   // API-key row. It remains available to all model selectors through the
@@ -203,13 +206,10 @@ const ModelModalContent: React.FC = () => {
     const startTime = Date.now();
 
     try {
-      const result = await ipcBridge.acpConversation.checkProviderHealth.invoke({
-        provider_id: platform.id,
-        model: modelName,
-      });
-      const latency = result.elapsed_ms || Date.now() - startTime;
-      const success = result.status === 'healthy';
-      const errorMessage = result.message || t('common.unknownError');
+      const result = await checkSavedProviderModelHealth(platform.id, modelName);
+      const latency = Date.now() - startTime;
+      const success = result.healthy;
+      const errorMessage = success ? undefined : t('common.unknownError');
 
       try {
         // 先获取最新的数据，确保不会覆盖其他并发的更新
@@ -270,6 +270,47 @@ const ModelModalContent: React.FC = () => {
       }
     } finally {
       setHealthCheckLoading((prev) => ({ ...prev, [loadingKey]: false }));
+    }
+  };
+
+  const connectOpenAiOAuth = async (): Promise<void> => {
+    setOauthLoading(true);
+    const providerId = 'openai-oauth';
+    try {
+      const existing = (data ?? []).find((provider) => provider.id === providerId);
+      if (!existing) {
+        await ipcBridge.mode.createProvider.invoke({
+          id: providerId,
+          platform: 'codex',
+          name: 'OpenAI Codex (OAuth)',
+          base_url: 'https://chatgpt.com/backend-api/codex/responses',
+          api_key: '',
+          auth_type: 'oauth',
+          models: ['gpt-5.6-terra', 'gpt-5.6-sol', 'gpt-5.6-luna'],
+          model_protocols: { 'gpt-5.6-terra': 'responses', 'gpt-5.6-sol': 'responses', 'gpt-5.6-luna': 'responses' },
+          is_full_url: true,
+          enabled: true,
+        });
+      }
+      const result = await ipcBridge.providerOAuth.begin.invoke({ providerId });
+      if (result.ok === false) throw new Error(result.error);
+      await mutate();
+      message.success(t('settings.modelOAuthConnected', { defaultValue: 'OAuth connected.' }));
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : String(error));
+    } finally {
+      setOauthLoading(false);
+    }
+  };
+
+  const disconnectOpenAiOAuth = async (): Promise<void> => {
+    try {
+      const result = await ipcBridge.providerOAuth.disconnect.invoke({ providerId: 'openai-oauth' });
+      if (result.ok === false) throw new Error(result.error);
+      await mutate();
+      message.success(t('settings.modelOAuthDisconnected', { defaultValue: 'OAuth disconnected.' }));
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : String(error));
     }
   };
 
@@ -361,6 +402,15 @@ const ModelModalContent: React.FC = () => {
               >
                 {t('settings.addModel')}
               </Button>
+              <Button
+                type='outline'
+                shape='round'
+                loading={oauthLoading}
+                onClick={() => void connectOpenAiOAuth()}
+                className='rd-100px border-1 border-solid border-[var(--color-border-2)] h-34px px-14px text-t-secondary hover:text-t-primary'
+              >
+                {t('settings.modelOAuthConnect', { defaultValue: 'Connect OAuth' })}
+              </Button>
             </div>
           )}
         </div>
@@ -377,7 +427,7 @@ const ModelModalContent: React.FC = () => {
             type={connectionView === 'gateway' ? 'primary' : 'outline'}
             onClick={() => setConnectionView('gateway')}
           >
-            {t('settings.router9.title', { defaultValue: 'Tomny Model Gateway' })}
+            {t('settings.modelConsumerTitle', { defaultValue: 'Tomny gateway consumers' })}
           </Button>
         </div>
         {connectionView === 'direct' && (
@@ -488,6 +538,11 @@ const ModelModalContent: React.FC = () => {
                               checked={getProviderState(platform).checked}
                               onChange={() => toggleProviderEnabled(platform)}
                             />
+                            {platform.id === 'openai-oauth' && (
+                              <Button size='mini' type='text' onClick={() => void disconnectOpenAiOAuth()}>
+                                {t('settings.modelOAuthDisconnect', { defaultValue: 'Disconnect' })}
+                              </Button>
+                            )}
                             <div className='flex items-center gap-4px'>
                               <Button
                                 size='mini'
@@ -655,7 +710,7 @@ const ModelModalContent: React.FC = () => {
         </TomnyScrollArea>
       ) : (
         <TomnyScrollArea className='flex-1 min-h-0' disableOverflow={isPageMode}>
-          <Router9ConnectorPanel onProviderSynced={() => void mutate()} />
+          <ModelConsumerPanel />
         </TomnyScrollArea>
       )}
     </div>

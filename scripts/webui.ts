@@ -30,6 +30,7 @@ import {
   FIRST_PARTY_PACKAGE_SIGNING_POLICIES,
   FIRST_PARTY_PACKAGE_TRUSTED_KEYS,
   DEFAULT_PACKAGE_CATALOG_URL,
+  excludeDefaultSurfaceCatalogEntries,
 } from '../packages/desktop/src/common/packages/index.js';
 import {
   createLocalPackageMutationRuntime,
@@ -60,6 +61,7 @@ const LOCAL_PACKAGE_ARTIFACTS = new Map(
     return fs.existsSync(artifactPath) ? [[filename, artifactPath] as const] : [];
   })
 );
+const USE_LOCAL_DEVELOPMENT_STORE_ARTIFACTS = process.env.TOMNI_STORE_LOCAL_ARTIFACTS === '1';
 
 const args = process.argv.slice(2);
 const has = (name: string): boolean => args.includes(name);
@@ -146,12 +148,12 @@ function resolveStaticDir(): string {
  * Rebuild renderer/main bundles before launching, so that `bun run webui` always
  * serves the latest source. Skipped when:
  *   --no-build flag           : explicit opt-out (e.g., iterating on this script)
- *   $TOMNY_NO_BUILD=1        : env-level opt-out
+ *   $TOMNY_NO_BUILD=1 or $TOMNI_NO_BUILD=1 : env-level opt-out
  *   $TOMNY_STATIC_DIR is set : caller is pointing us at a prebuilt artifact dir
  */
 function runPackageIfNeeded(): void {
   if (has('--no-build')) return;
-  if (parseBoolean(process.env.TOMNY_NO_BUILD)) return;
+  if (parseBoolean(process.env.TOMNY_NO_BUILD ?? process.env.TOMNI_NO_BUILD)) return;
   if (process.env.TOMNY_STATIC_DIR) return;
   console.log('[webui] running "bun run package" to refresh out/renderer (pass --no-build to skip)...');
   const start = Date.now();
@@ -266,27 +268,35 @@ async function main(): Promise<void> {
     },
     createLocalApiHandler: (backendPort) => {
       const packageRoot = path.join(workDir, 'tomny-packages');
+      const remoteCatalogLoader = createRemotePackageCatalogLoader({
+        url: process.env.TOMNI_STORE_CATALOG_URL ?? DEFAULT_PACKAGE_CATALOG_URL,
+        cachePath: path.join(workDir, 'tomny-packages', 'catalog-cache.json'),
+        fallbackCatalog: FIRST_PARTY_PACKAGE_CATALOG,
+        trustedKeys: FIRST_PARTY_PACKAGE_TRUSTED_KEYS,
+        signingPolicies: FIRST_PARTY_PACKAGE_SIGNING_POLICIES,
+      });
       const packageService = createPackageManagerService({
-        rootDir: packageRoot,
         appVersion: '0.0.0',
-        catalog: FIRST_PARTY_PACKAGE_CATALOG,
+        rootDir: packageRoot,
+        catalog: excludeDefaultSurfaceCatalogEntries(FIRST_PARTY_PACKAGE_CATALOG),
         trustedKeys: FIRST_PARTY_PACKAGE_TRUSTED_KEYS,
 
-        catalogLoader: createRemotePackageCatalogLoader({
-          url: process.env.TOMNI_STORE_CATALOG_URL ?? DEFAULT_PACKAGE_CATALOG_URL,
-          cachePath: path.join(workDir, 'tomny-packages', 'catalog-cache.json'),
-          fallbackCatalog: FIRST_PARTY_PACKAGE_CATALOG,
-          trustedKeys: FIRST_PARTY_PACKAGE_TRUSTED_KEYS,
+        catalogLoader: async () => excludeDefaultSurfaceCatalogEntries(await remoteCatalogLoader()),
 
-          signingPolicies: FIRST_PARTY_PACKAGE_SIGNING_POLICIES,
-        }),
         resolveArtifactUrl: (url) => {
           const filename = new URL(url).pathname.split('/').at(-1);
-          return filename && LOCAL_PACKAGE_ARTIFACTS.has(filename)
+          return USE_LOCAL_DEVELOPMENT_STORE_ARTIFACTS && filename && LOCAL_PACKAGE_ARTIFACTS.has(filename)
             ? `http://127.0.0.1:${port}/api/packages/artifacts/${encodeURIComponent(filename)}`
             : url;
         },
-        allowLocalArtifactUrls: process.env.NODE_ENV !== 'production',
+        allowLocalArtifactUrls: USE_LOCAL_DEVELOPMENT_STORE_ARTIFACTS,
+        readArtifactBytes: USE_LOCAL_DEVELOPMENT_STORE_ARTIFACTS
+          ? async (url) => {
+              const filename = new URL(url).pathname.split('/').at(-1);
+              const artifactPath = filename ? LOCAL_PACKAGE_ARTIFACTS.get(filename) : undefined;
+              return artifactPath ? fs.promises.readFile(artifactPath) : undefined;
+            }
+          : undefined,
       });
       const mutation = createLocalPackageMutationRuntime({
         service: packageService,

@@ -5,7 +5,12 @@ import type { OutboundInspectionRequest, OutboundPolicyContext } from '../servic
 import { TrustBroker } from './trustBroker';
 
 export class SecurityAdapter {
-  public constructor(private readonly trustBroker = new TrustBroker()) {}
+  /**
+   * The broker is deliberately observable by Main-only composition code so a
+   * RunKernel can prove that its preflight and a governed execution scope share
+   * one authority. It is never exposed through IPC.
+   */
+  public constructor(public readonly trustBroker = new TrustBroker()) {}
 
   public async preflightCheck(intent: RunIntent): Promise<PolicyDecision> {
     const request: OutboundInspectionRequest = {
@@ -54,10 +59,14 @@ export class SecurityAdapter {
     return this.trustBroker.authorize({
       runId: intent.runId,
       taskId: intent.rootTaskId,
+      actorId: intent.userId,
       operation: 'agent',
       targetId: intent.surface,
       requestedCapabilities: intent.capabilityGrant ?? ['workspace.read', 'execution.safe'],
       workspaceScope: intent.workspaceScope,
+      policyVersion: intent.policyVersion,
+      idempotencyKey: `${intent.runId}:${intent.rootTaskId}:preflight`,
+      reason: 'Foundation run preflight',
     });
   }
 
@@ -65,10 +74,14 @@ export class SecurityAdapter {
     return this.trustBroker.authorize({
       runId: intent.runId,
       taskId: intent.rootTaskId,
+      actorId: intent.userId,
       operation: 'agent',
       targetId,
       requestedCapabilities: ['target.execute'],
       workspaceScope: intent.workspaceScope,
+      policyVersion: intent.policyVersion,
+      idempotencyKey: `${intent.runId}:${intent.rootTaskId}:target-preflight`,
+      reason: 'Foundation target preflight',
     });
   }
 }

@@ -32,14 +32,6 @@ vi.mock('@/renderer/hooks/agent/useModelProviderList', () => ({
   }),
 }));
 
-// Editor/browser surface bodies pull in heavy/native code — stub them out.
-vi.mock('@/renderer/pages/workspace/components/EditorSurfaceView', () => ({
-  default: () => <div data-testid='editor-surface' />,
-}));
-vi.mock('@/renderer/pages/workspace/components/BrowserSurfaceView', () => ({
-  default: () => <div data-testid='browser-surface' />,
-}));
-
 const bridgeMocks = vi.hoisted(() => {
   let listener: ((e: WorkspaceEvent) => void) | null = null;
   return {

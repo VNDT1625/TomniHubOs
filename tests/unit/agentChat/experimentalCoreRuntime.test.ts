@@ -1427,6 +1427,107 @@ describe('experimental direct core runtime', () => {
     ]);
   });
 
+  it('keeps a sterile derivation away from personal context, tools, and MCP hosts', async () => {
+    const sessionStore = new MemoryCoreSessionStore();
+    const contextComposer = { composePrompt: vi.fn(async (input: { prompt: string }) => `[context] ${input.prompt}`) };
+    const resolveCapabilityHosts = vi.fn(async () => [{ name: 'unexpected-host', url: 'http://127.0.0.1/mcp' }]);
+    const sterileRuntime = new ExperimentalCoreRuntime((event) => events.push(event), {
+      detectTargets: vi.fn().mockResolvedValue([target]),
+      adapters: [adapter],
+      coordinator,
+      sessionStore,
+      contextComposer,
+      resolveCapabilityHosts,
+    });
+    await sterileRuntime.listTargets();
+
+    const started = sterileRuntime.start(
+      'sterile-request',
+      'codex',
+      'derive capabilities only',
+      'C:/workspace',
+      undefined,
+      'read-only',
+      undefined,
+      undefined,
+      {
+        sterile: true,
+        personalId: 'must-not-read',
+        mcpServers: [{ name: 'must-not-send', transport: 'sse', url: 'http://127.0.0.1/private' }],
+        conversationContext: 'must-not-compose',
+        savedMemoryContext: 'must-not-compose',
+        superMode: true,
+      }
+    );
+    await vi.waitFor(() =>
+      expect(events.some((event) => event.requestId === 'sterile-request' && event.type === 'completed')).toBe(true)
+    );
+
+    expect(contextComposer.composePrompt).not.toHaveBeenCalled();
+    expect(resolveCapabilityHosts).not.toHaveBeenCalled();
+    expect(adapter.run).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: 'derive capabilities only',
+        mcpServers: [],
+        toolCatalog: { mode: 'surface', patterns: [] },
+      })
+    );
+    expect(await sessionStore.get(started.sessionId)).toEqual(expect.objectContaining({ personalId: 'sterile' }));
+  });
+
+  it('suppresses personal context and built-in tools while preserving one Main-injected C4 operation host', async () => {
+    const sessionStore = new MemoryCoreSessionStore();
+    const contextComposer = { composePrompt: vi.fn(async (input: { prompt: string }) => `[context] ${input.prompt}`) };
+    const operationHost = { name: 'c4-operation', transport: 'sse' as const, url: 'http://127.0.0.1/c4-operation' };
+    const resolveCapabilityHosts = vi.fn(
+      async (_names: string[], sessionServers: (typeof operationHost)[]) => sessionServers
+    );
+    const c4Runtime = new ExperimentalCoreRuntime((event) => events.push(event), {
+      detectTargets: vi.fn().mockResolvedValue([target]),
+      adapters: [adapter],
+      coordinator,
+      sessionStore,
+      contextComposer,
+      resolveCapabilityHosts,
+    });
+    await c4Runtime.listTargets();
+
+    const started = c4Runtime.start(
+      'c4-operation-request',
+      'codex',
+      'write only the approved files',
+      'C:/workspace',
+      undefined,
+      'workspace-write',
+      undefined,
+      undefined,
+      {
+        suppressPersonalContext: true,
+        personalId: 'must-not-read',
+        mcpServers: [operationHost],
+        conversationContext: 'must-not-compose',
+        savedMemoryContext: 'must-not-compose',
+        superMode: true,
+      }
+    );
+    await vi.waitFor(() =>
+      expect(events.some((event) => event.requestId === 'c4-operation-request' && event.type === 'completed')).toBe(
+        true
+      )
+    );
+
+    expect(contextComposer.composePrompt).not.toHaveBeenCalled();
+    expect(resolveCapabilityHosts).toHaveBeenCalledWith([], [operationHost], expect.any(Object));
+    expect(adapter.run).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: 'write only the approved files',
+        mcpServers: [operationHost],
+        toolCatalog: { mode: 'surface', patterns: [] },
+      })
+    );
+    expect(await sessionStore.get(started.sessionId)).toEqual(expect.objectContaining({ personalId: 'sterile' }));
+  });
+
   it('persists and replays completed run events after the in-memory run is gone', async () => {
     const eventStore = new MemoryDurableEventStore();
     const durableRuntime = new ExperimentalCoreRuntime((event) => events.push(event), {

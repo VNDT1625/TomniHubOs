@@ -22,13 +22,32 @@ import {
   parseExperimentalHandshakeModels,
 } from '../../../packages/desktop/src/process/experimentalCore/experimentalCoreProtocol';
 import {
+  parsePersonalLearningCausalChain,
+  parsePersonalLearningControlRequest,
   parsePersonalLearningCorrectRequest,
   parsePersonalLearningOutcomeRequest,
   parsePersonalLearningProposeRequest,
   parsePersonalLearningRecordId,
 } from '../../../packages/desktop/src/process/experimentalCore/experimentalCoreBridge';
+import {
+  ACCOUNT_EXECUTION_REJECTED,
+  guardAccountExecution,
+} from '../../../packages/desktop/src/process/services/database/nativeConversation/bridge';
 
 describe('experimental core protocol', () => {
+  it('fails closed before runtime work without an authenticated Main account, then admits a verified account', () => {
+    const operation = vi.fn((value: string) => `completed:${value}`);
+    const blocked = guardAccountExecution(() => {
+      throw new Error('ACCOUNT_SESSION_ONLINE_REQUIRED');
+    }, operation);
+    expect(() => blocked('request_1')).toThrow(ACCOUNT_EXECUTION_REJECTED);
+    expect(operation).not.toHaveBeenCalled();
+
+    const allowed = guardAccountExecution(() => undefined, operation);
+    expect(allowed('request_2')).toBe('completed:request_2');
+    expect(operation).toHaveBeenCalledTimes(1);
+  });
+
   it.each([
     [{ agent_type: 'tomnyagentic', agent_source: 'builtin' }, 'builtin'],
     [{ agent_type: 'acp', agent_source: 'internal' }, 'acp'],
@@ -49,12 +68,20 @@ describe('experimental core protocol', () => {
       sensitivity: 'private',
       userLocked: false,
     } as const;
+    const causal = {
+      context: 'Preparing a Vietnamese support reply.',
+      origin: 'run:run_1',
+      reason: 'The user explicitly asked for Vietnamese.',
+      reasonKnown: true,
+      proposal: 'Reply in Vietnamese for this support surface.',
+    } as const;
     expect(
       parsePersonalLearningProposeRequest({
         collection: 'preferences',
         fact,
         explanation: 'Observed during a confirmed task.',
         provenance: 'run:run_1',
+        causal,
       })
     ).toMatchObject({ collection: 'preferences', fact: { ...fact, value: '[REDACTED]' } });
     expect(
@@ -62,12 +89,43 @@ describe('experimental core protocol', () => {
         recordId: 'learning_1',
         fact: { ...fact, value: 'corrected value' },
         explanation: 'The user corrected this preference.',
+        causal,
       })
     ).toMatchObject({ recordId: 'learning_1', fact: { ...fact, value: 'corrected value' } });
     expect(parsePersonalLearningOutcomeRequest({ recordId: 'learning_1', outcome: 'helpful' })).toEqual({
       recordId: 'learning_1',
       outcome: 'helpful',
     });
+  });
+
+  it('accepts only an explicit bounded learning pause control', () => {
+    expect(parsePersonalLearningControlRequest({ paused: true })).toEqual({ paused: true });
+    expect(parsePersonalLearningControlRequest({ paused: false })).toEqual({ paused: false });
+    expect(() => parsePersonalLearningControlRequest({ paused: true, unexpected: true })).toThrow(
+      'INVALID_PERSONAL_LEARNING_CONTROL'
+    );
+    expect(() => parsePersonalLearningControlRequest({ paused: 'true' })).toThrow('INVALID_PERSONAL_LEARNING_CONTROL');
+  });
+
+  it('makes an unknown reason explicit instead of accepting an inferred reusable rule', () => {
+    expect(
+      parsePersonalLearningCausalChain({
+        context: 'Reviewing a job application.',
+        origin: 'run:job-1',
+        reason: null,
+        reasonKnown: false,
+        proposal: 'Ask why this CV should be reused before applying it.',
+      })
+    ).toMatchObject({ reason: undefined, reasonKnown: false });
+    expect(() =>
+      parsePersonalLearningCausalChain({
+        context: 'Reviewing a job application.',
+        origin: 'run:job-1',
+        reason: null,
+        reasonKnown: true,
+        proposal: 'Reuse this CV.',
+      })
+    ).toThrow('INVALID_PERSONAL_LEARNING_CAUSAL_CHAIN');
   });
 
   it.each([

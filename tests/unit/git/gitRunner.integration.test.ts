@@ -20,7 +20,7 @@ import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { createGitRunner } from '@/process/git/gitRunner';
+import { createGitRunner, type GitRemoteExecution, type GitRemoteOperation } from '@/process/git/gitRunner';
 
 /** True when a `git` binary is on PATH. */
 const gitAvailable = (): boolean => {
@@ -35,6 +35,15 @@ const gitAvailable = (): boolean => {
 const HAS_GIT = gitAvailable();
 // Skip the whole suite (not fail) on a machine without git.
 const describeGit = HAS_GIT ? describe : describe.skip;
+
+/** The real runner requires an explicit Main-owned remote admission, even for this local test remote. */
+const remoteExecution = (operation: GitRemoteOperation, branch = 'main'): GitRemoteExecution => ({
+  authority: { authorizeRemoteOperation: async () => true },
+  request: {
+    operation,
+    repository: { id: 'integration-repo', remoteOrigin: 'file://local-test', branch, credentialConfigured: false },
+  },
+});
 
 describeGit('gitRunner — real git end-to-end (local bare remote)', () => {
   const runner = createGitRunner();
@@ -77,7 +86,7 @@ describeGit('gitRunner — real git end-to-end (local bare remote)', () => {
     expect(commit.ok).toBe(true);
 
     // Push to the remote.
-    const push = await runner.push(workA, 'main');
+    const push = await runner.push(workA, 'main', undefined, remoteExecution('push'));
     expect(push.ok).toBe(true);
 
     // The bare remote now has the branch ref.
@@ -86,7 +95,7 @@ describeGit('gitRunner — real git end-to-end (local bare remote)', () => {
   });
 
   it('CLONE (the "down" direction) brings the pushed content back', async () => {
-    const clone = await runner.clone(remoteUrl, workB, 'main');
+    const clone = await runner.clone(remoteUrl, workB, 'main', undefined, remoteExecution('clone'));
     expect(clone.ok).toBe(true);
     // The cloned working tree has the file we pushed.
     expect(fs.existsSync(path.join(workB, 'README.md'))).toBe(true);
@@ -126,14 +135,14 @@ describeGit('gitRunner — real git end-to-end (local bare remote)', () => {
       expect(init.ok).toBe(true);
       fs.writeFileSync(path.join(pullA, 'README.md'), '# Pull fixture\n', 'utf-8');
       expect((await runner.commitAll(pullA, 'feat: seed pull fixture', author)).ok).toBe(true);
-      expect((await runner.push(pullA, 'main')).ok).toBe(true);
+      expect((await runner.push(pullA, 'main', undefined, remoteExecution('push'))).ok).toBe(true);
 
-      expect((await runner.clone(pullRemoteUrl, pullB, 'main')).ok).toBe(true);
+      expect((await runner.clone(pullRemoteUrl, pullB, 'main', undefined, remoteExecution('clone'))).ok).toBe(true);
       fs.writeFileSync(path.join(pullB, 'CHANGES.md'), 'v2\n', 'utf-8');
       expect((await runner.commitAll(pullB, 'docs: add CHANGES', author)).ok).toBe(true);
-      expect((await runner.push(pullB, 'main')).ok).toBe(true);
+      expect((await runner.push(pullB, 'main', undefined, remoteExecution('push'))).ok).toBe(true);
 
-      const pull = await runner.pull(pullA, 'main');
+      const pull = await runner.pull(pullA, 'main', undefined, remoteExecution('pull'));
       expect(pull.ok).toBe(true);
       expect(fs.existsSync(path.join(pullA, 'CHANGES.md'))).toBe(true);
     } finally {

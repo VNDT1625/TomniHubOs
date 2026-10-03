@@ -1,0 +1,1045 @@
+/**
+ * @license
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
+ * Wires the agent-facing IDE MCP server for the Main process.
+ * All new MTUI-backed tools (understand/compass/context/map/analyze/compact)
+ * delegate to the MTUI CLI via runMtuiInRoot so the IDE plane and MTUI stay in sync.
+ *
+ * Process boundary: Main-process (Node.js / Electron) module. No DOM APIs.
+ */
+
+import { promises as fsp } from 'node:fs';
+import * as path from 'node:path';
+import {
+  buildGraphFromFiles,
+  collectRepoFiles,
+  type CollectRepoFilesDeps,
+} from '@package-apps/ide/process/knowledge/graph/repoGraph';
+import {
+  KNOWLEDGE_GRAPH_VERSION,
+  buildRunbook,
+  detectLanguage,
+  extractSymbols,
+  fingerprintOf,
+  inferLayer,
+} from '@package-apps/ide/process/knowledge/graph/knowledgeGraphBuilder';
+import type { KnowledgeGraph, KnowledgeNode } from '@package-apps/ide/process/knowledge/graph/understandTypes';
+import { grepText, buildSearchRegExp } from '@package-apps/ide/process/coding/search/grepCore';
+import { findDeclarations, findReferences } from '@package-apps/ide/process/coding/nav/symbolNav';
+import {
+  createIdeServer,
+  type IdeMcpService,
+  type IdeSearchHit,
+  type IdeSymbolHit,
+  type IdeResearchExactHit,
+  type IdeReadResult,
+  type IdeMtuiResult,
+  type IdeDirEntry,
+  type QuickTestRunner,
+  type QuickTestScenarioAgentService,
+  type QuickTestScenarioRunStatus,
+  type DbAgentService,
+  type ExperienceAgentService,
+} from '@package-apps/ide/process/mcp/ideServer';
+import { createQuickTestService } from '@package-apps/ide/process/execution/quickTest/runtime/quickTestService';
+
+import {
+  QuickTestScenarioRunner,
+  loadSavedQuickTestScenario,
+  type ScenarioRunSnapshot,
+  type ScenarioRuntimeEvidence,
+} from '@package-apps/ide/process/mcp/quickTestScenarioRunner';
+import type {
+  ReplayScenario,
+  ReplayStep,
+} from '@package-apps/ide/process/execution/quickTest/analysis/quickTestReplay';
+import { getBrowserServices } from '@process/browser/browserBridge';
+import { openNativeLogStream } from '@package-apps/ide/process/execution/quickTest/runtime/quickTestNativeStream';
+import { createNativeQuickTestReplayAdapter } from '@process/testing/engines/nativeQuickTestReplayAdapter';
+import { loadGraph } from '@package-apps/ide/process/execution/quickTest/bridges/quickTestBridgeHelpers';
+import { loadWikiForRoot } from '@package-apps/ide/process/knowledge/wiki/wikiBuildBridge';
+import { buildWikiTestProfile } from '@package-apps/ide/process/knowledge/graph/wikiPlanner';
+import { getDbService } from '@package-apps/ide/process/data/db/dbWiring';
+import { getSessionMemoryStore } from '@process/userUnderstanding/sessionMemoryStore';
+import { getRepoSecretStore } from '@package-apps/ide/process/data/memory/repoSecretStore';
+import { getTeamEditService } from '@package-apps/ide/process/collaboration/teamEdit/teamEditService';
+import { runMtuiInRoot } from '@process/resources/nativeFile/mtuiBridge';
+import { runCommand } from '@package-apps/ide/process/coding/command/commandRunner';
+import {
+  createQuickTestTracer,
+  type CdpWebContents,
+} from '@package-apps/ide/process/execution/quickTest/runtime/quickTestTracer';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { getExperienceServiceForRoot, getExperienceWorkflowForRoot } from '@process/experience/experienceBridge';
+import {
+  analyzeVisualArtifact,
+  renderVisualArtifactMockUi,
+  renderVisualArtifactSemanticText,
+} from '@process/visualArtifact';
+
+import type { ToolGuard } from '@package-apps/ide/process/mcp/ideServerToolGuard';
+
+const DEFAULT_SCAN_FILES = 4000;
+const DEFAULT_SEARCH_RESULTS = 200;
+const DEFAULT_SYMBOL_RESULTS = 200;
+const DEFAULT_READ_LINES = 2000;
+
+const CODE_FILE_RE = /\.(?:c|cc|cpp|cs|go|java|js|jsx|kt|kts|mjs|cjs|php|py|rb|rs|swift|ts|tsx|vue)$/i;
+
+const SKIP_DIRS = new Set([
+  'node_modules',
+  '.git',
+  'dist',
+  'out',
+  'build',
+  '.next',
+  'coverage',
+  '.cache',
+  'target',
+  '.mtui',
+  '.tomny',
+  '.turbo',
+  '.tmp',
+]);
+
+// ---------------------------------------------------------------------------
+// Glob helpers
+// ---------------------------------------------------------------------------
+const globToRegExp = (pattern: string): RegExp => {
+  const p = pattern.replace(/\\/g, '/');
+  let re = '';
+  let i = 0;
+  while (i < p.length) {
+    const ch = p[i];
+    if (ch === '*') {
+      if (p[i + 1] === '*') {
+        i += 2;
+        if (p[i] === '/') i++;
+        re += '(?:.+/)?';
+      } else {
+        re += '[^/]*';
+        i++;
+      }
+    } else if (ch === '?') {
+      re += '[^/]';
+      i++;
+    } else if (ch === '{') {
+      const end = p.indexOf('}', i);
+      if (end === -1) {
+        re += '\\{';
+        i++;
+      } else {
+        re += `(?:${p
+          .slice(i + 1, end)
+          .split(',')
+          .map((s) => globToRegExp(s).source.slice(1, -1))
+          .join('|')})`;
+        i = end + 1;
+      }
+    } else if (ch === '[') {
+      const end = p.indexOf(']', i);
+      if (end === -1) {
+        re += '\\[';
+        i++;
+      } else {
+        re += p.slice(i, end + 1);
+        i = end + 1;
+      }
+    } else {
+      re += ch.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+      i++;
+    }
+  }
+  return new RegExp(`^${re}$`, 'i');
+};
+
+const matchGlob = (relPath: string, pattern: string): boolean => {
+  const norm = relPath.replace(/\\/g, '/');
+  const hasSlash = pattern.replace(/\\/g, '/').includes('/');
+  const re = globToRegExp(pattern);
+  return hasSlash ? re.test(norm) : re.test(norm.split('/').pop() ?? norm);
+};
+
+// ---------------------------------------------------------------------------
+// Binary detection
+// ---------------------------------------------------------------------------
+const isBinaryBuffer = (buf: Buffer): boolean => {
+  const sample = buf.subarray(0, Math.min(buf.length, 8192));
+  let nonText = 0;
+  for (let i = 0; i < sample.length; i++) {
+    const b = sample[i];
+    if (b === 0 || b < 8 || (b >= 14 && b < 32 && b !== 27)) nonText++;
+  }
+  return sample.length > 0 && nonText / sample.length > 0.003;
+};
+
+// ---------------------------------------------------------------------------
+// MTUI helper
+// ---------------------------------------------------------------------------
+const runMtui = async (rootPath: string, args: string[]): Promise<Record<string, unknown>> => {
+  const result = await runMtuiInRoot(['--json', ...args], rootPath);
+  return result as Record<string, unknown>;
+};
+
+const mtuiSummaryText = (env: Record<string, unknown>, ...keys: string[]): string => {
+  for (const key of keys) {
+    const v = env[key];
+    if (typeof v === 'string' && v.trim().length > 0) return v;
+  }
+  return JSON.stringify(env, null, 2);
+};
+
+// ---------------------------------------------------------------------------
+// fsDeps helper
+// ---------------------------------------------------------------------------
+const fsDeps = (rootPath: string): CollectRepoFilesDeps => ({
+  listDir: async (dir) => {
+    const entries = await fsp.readdir(dir, { withFileTypes: true });
+    return entries.map((entry) => ({
+      name: entry.name,
+      fullPath: path.join(dir, entry.name),
+      isDir: entry.isDirectory(),
+    }));
+  },
+  readFile: (filePath) => fsp.readFile(filePath, 'utf-8'),
+  toRel: (full) => path.relative(rootPath, full).replace(/\\/g, '/'),
+});
+
+/** Build current structural test intelligence without a model when Understand has not run or is stale. */
+const buildStructuralTestGraph = async (rootPath: string): Promise<KnowledgeGraph> => {
+  const files = await collectRepoFiles(rootPath, fsDeps(rootPath), {
+    maxFiles: DEFAULT_SCAN_FILES,
+    codeOnly: false,
+  });
+  const normalized = files.map((file) => ({ ...file, relPath: file.relPath.replace(/\\/g, '/') }));
+  const codeFiles = normalized.filter((file) => CODE_FILE_RE.test(file.relPath));
+  const structural = buildGraphFromFiles(rootPath, codeFiles);
+  const contentByPath = new Map(normalized.map((file) => [file.relPath, file.content] as const));
+  const importedBy = new Map<string, number>();
+  for (const edge of structural.edges) importedBy.set(edge.to, (importedBy.get(edge.to) ?? 0) + 1);
+  const nodes: KnowledgeNode[] = structural.nodes.map((node): KnowledgeNode => {
+    const content = contentByPath.get(node.id) ?? '';
+    const language = detectLanguage(node.id);
+    const symbols = extractSymbols(content, language);
+    const layer = inferLayer(node.id);
+    return {
+      id: node.id,
+      label: node.label,
+      group: node.group,
+      layer,
+      summary: `${node.label} is a current ${layer} file declaring ${
+        symbols
+          .slice(0, 4)
+          .map((symbol) => symbol.name)
+          .join(', ') || 'no indexed symbols'
+      }.`,
+      summarySource: 'fallback',
+      tags: [],
+      symbols,
+      language,
+      importedBy: importedBy.get(node.id) ?? 0,
+      fingerprint: fingerprintOf(content),
+    };
+  });
+  return {
+    rootPath,
+    version: KNOWLEDGE_GRAPH_VERSION,
+    builtAt: Date.now(),
+    sourceSnapshotAt: Date.now(),
+    nodes,
+    edges: structural.edges,
+    tours: [],
+    runbook: buildRunbook(contentByPath),
+    truncated: structural.truncated,
+    fileCount: structural.fileCount,
+  };
+};
+
+// ---------------------------------------------------------------------------
+// Main service implementation
+// ---------------------------------------------------------------------------
+export const getIdeMcpService = (): IdeMcpService => ({
+  // --- listDir: single-level + recursive + glob ----------------------------
+  listDir: async (dir, opts) => {
+    const trimmed = dir?.trim();
+    if (!trimmed) throw new Error('A folder path is required.');
+    const maxResults = Math.min(opts?.maxResults ?? 100, 2000);
+
+    if (!opts?.recursive && !opts?.glob) {
+      // Fast path: original single-level listing
+      const dirents = await fsp.readdir(trimmed, { withFileTypes: true });
+      const entries: IdeDirEntry[] = dirents.slice(0, 2000).map((d) => ({
+        name: d.name,
+        fullPath: path.join(trimmed, d.name),
+        isDir: d.isDirectory(),
+      }));
+      entries.sort((a, b) => (a.isDir !== b.isDir ? (a.isDir ? -1 : 1) : a.name.localeCompare(b.name)));
+      return entries;
+    }
+
+    // Recursive / glob walk
+    const collected: IdeDirEntry[] = [];
+    const walk = async (cur: string): Promise<void> => {
+      if (collected.length >= maxResults) return;
+      let dirents: import('node:fs').Dirent[];
+      try {
+        dirents = await fsp.readdir(cur, { withFileTypes: true });
+      } catch {
+        return;
+      }
+      for (const d of dirents) {
+        if (collected.length >= maxResults) break;
+        const full = path.join(cur, d.name);
+        const rel = path.relative(trimmed, full).replace(/\\/g, '/');
+        if (d.isDirectory()) {
+          if (!SKIP_DIRS.has(d.name)) await walk(full);
+        } else {
+          if (opts?.glob && !matchGlob(rel, opts.glob)) continue;
+          let sizeBytes: number | undefined;
+          let mtimeMs: number | undefined;
+          try {
+            const st = await fsp.stat(full);
+            sizeBytes = st.size;
+            mtimeMs = st.mtimeMs;
+          } catch {
+            /* ok */
+          }
+          collected.push({ name: d.name, fullPath: full, relativePath: rel, isDir: false, sizeBytes });
+        }
+      }
+    };
+    await walk(trimmed);
+    return collected.slice(0, maxResults);
+  },
+
+  // --- readFile: full parity with Read tool — line range, all, line numbers
+  readFile: async (filePath, opts) => {
+    const trimmed = filePath?.trim();
+    if (!trimmed) throw new Error('A file path is required.');
+    const buf = await fsp.readFile(trimmed);
+    const sizeBytes = buf.length;
+
+    if (isBinaryBuffer(buf)) {
+      return {
+        text: `(binary file, ${sizeBytes} bytes)`,
+        lineStart: 1,
+        lineEnd: 1,
+        totalLines: 0,
+        returnedLines: 0,
+        truncated: false,
+        binary: true,
+        sizeBytes,
+      };
+    }
+
+    const raw = buf.toString('utf-8').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    const allLines = raw.split('\n');
+    const totalLines = allLines.length;
+    const all = opts?.all === true;
+    const lineNumbers = opts?.lineNumbers !== false;
+    const maxLines = all ? Infinity : (opts?.maxLines ?? DEFAULT_READ_LINES);
+    const maxBytes = all ? Infinity : (opts?.maxBytes ?? Infinity);
+    const from = Math.max(1, opts?.from ?? 1);
+    const to = Math.min(totalLines, opts?.to ?? totalLines);
+    if (from > to) throw new Error(`Invalid range: from (${from}) > to (${to})`);
+
+    const window = allLines.slice(from - 1, to);
+    let charCount = 0;
+    const limited: string[] = [];
+    let truncated = false;
+
+    for (const line of window) {
+      if (limited.length >= maxLines) {
+        truncated = true;
+        break;
+      }
+      const candidate = lineNumbers ? `${from + limited.length}: ${line}` : line;
+      if (charCount > 0 && charCount + candidate.length + 1 > maxBytes) {
+        truncated = true;
+        break;
+      }
+      limited.push(candidate);
+      charCount += candidate.length + 1;
+    }
+    if (!truncated && window.length > limited.length) truncated = true;
+
+    return {
+      text: limited.join('\n'),
+      lineStart: from,
+      lineEnd: from + limited.length - 1,
+      totalLines,
+      returnedLines: limited.length,
+      truncated,
+      binary: false,
+      sizeBytes,
+    };
+  },
+
+  // --- scanRepo ------------------------------------------------------------
+  scanRepo: async (rootPath, maxFiles) => {
+    const trimmed = rootPath?.trim();
+    if (!trimmed) throw new Error('A folder path is required.');
+    const files = await collectRepoFiles(trimmed, fsDeps(trimmed), { maxFiles: maxFiles ?? DEFAULT_SCAN_FILES });
+    const graph = buildGraphFromFiles(trimmed, files);
+    const byGroup = new Map<string, number>();
+    for (const node of graph.nodes) byGroup.set(node.group, (byGroup.get(node.group) ?? 0) + 1);
+    const topGroups = Array.from(byGroup.entries())
+      .map(([group, count]) => ({ group, files: count }))
+      .toSorted((a, b) => b.files - a.files)
+      .slice(0, 12);
+    return {
+      fileCount: graph.fileCount,
+      edgeCount: graph.edges.length,
+      topGroups,
+      truncated: graph.truncated || (maxFiles !== undefined && files.length >= maxFiles),
+    };
+  },
+
+  // --- search: + glob filter + column --------------------------------------
+  search: async (rootPath, query, opts) => {
+    const trimmed = rootPath?.trim();
+    if (!trimmed) throw new Error('A folder path is required.');
+    if (!query || query.length === 0) throw new Error('A search query is required.');
+    const limit = opts?.maxResults && opts.maxResults > 0 ? opts.maxResults : DEFAULT_SEARCH_RESULTS;
+    const files = await collectRepoFiles(trimmed, fsDeps(trimmed), { maxFiles: DEFAULT_SCAN_FILES, codeOnly: false });
+    const re = buildSearchRegExp(query, opts ?? {});
+    const hits: IdeSearchHit[] = [];
+    for (const file of files) {
+      if (opts?.glob && !matchGlob(file.relPath, opts.glob)) continue;
+      if (file.content.length === 0) continue;
+      for (const m of grepText(file.content, query, opts)) {
+        const lineText = file.content.split('\n')[m.line - 1] ?? '';
+        re.lastIndex = 0;
+        const match = re.exec(lineText);
+        hits.push({ file: file.relPath, line: m.line, column: match ? match.index + 1 : 1, text: m.text });
+        if (hits.length >= limit) return hits;
+      }
+    }
+    return hits;
+  },
+
+  // --- researchExact: one repository collection for a complete query plan --
+  researchExact: async (rootPath, options) => {
+    const trimmed = rootPath?.trim();
+    if (!trimmed) throw new Error('A folder path is required.');
+    const queries = Array.from(new Set(options.queries.map((query) => query.trim()).filter(Boolean))).slice(0, 8);
+    const symbols = Array.from(new Set(options.symbols.map((symbol) => symbol.trim()).filter(Boolean))).slice(0, 6);
+    const maxResults = Math.max(1, Math.min(options.maxResults, 500));
+    const files = await collectRepoFiles(trimmed, fsDeps(trimmed), {
+      maxFiles: DEFAULT_SCAN_FILES,
+      codeOnly: false,
+    });
+    const bucketCount = Math.max(1, queries.length + symbols.length * 2);
+    const perBucketLimit = Math.max(2, Math.ceil(maxResults / bucketCount));
+    const textBuckets = queries.map((): IdeResearchExactHit[] => []);
+    const definitionBuckets = symbols.map((): IdeResearchExactHit[] => []);
+    const referenceBuckets = symbols.map((): IdeResearchExactHit[] => []);
+
+    for (const file of files) {
+      if (
+        !options.includeTests &&
+        /(?:^|\/)(?:tests?|__tests__|fixtures?|mocks?)(?:\/|$)|\.(?:spec|test)\.[^/]+$/i.test(file.relPath)
+      ) {
+        continue;
+      }
+      const lines = file.content.split('\n');
+      for (const [queryIndex, query] of queries.entries()) {
+        const bucket = textBuckets[queryIndex];
+        if (bucket.length >= perBucketLimit) continue;
+        for (const match of grepText(file.content, query)) {
+          const text = lines[match.line - 1] ?? match.text;
+          const column = text.toLocaleLowerCase().indexOf(query.toLocaleLowerCase()) + 1;
+          bucket.push({ file: file.relPath, line: match.line, column: Math.max(1, column), text, kind: 'text' });
+          if (bucket.length >= perBucketLimit) break;
+        }
+      }
+      for (const [symbolIndex, symbol] of symbols.entries()) {
+        const definitionBucket = definitionBuckets[symbolIndex];
+        if (definitionBucket.length < perBucketLimit) {
+          for (const hit of findDeclarations(file.content, symbol)) {
+            definitionBucket.push({ file: file.relPath, ...hit, kind: 'definition' });
+            if (definitionBucket.length >= perBucketLimit) break;
+          }
+        }
+        const referenceBucket = referenceBuckets[symbolIndex];
+        if (referenceBucket.length < perBucketLimit) {
+          for (const hit of findReferences(file.content, symbol)) {
+            referenceBucket.push({ file: file.relPath, ...hit, kind: 'reference' });
+            if (referenceBucket.length >= perBucketLimit) break;
+          }
+        }
+      }
+    }
+    const seen = new Set<string>();
+    const hits = [...definitionBuckets.flat(), ...textBuckets.flat(), ...referenceBuckets.flat()]
+      .filter((hit) => {
+        const key = `${hit.kind}\u0000${hit.file}\u0000${hit.line}\u0000${hit.column ?? 0}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .slice(0, maxResults);
+    return { hits };
+  },
+
+  // --- findDefinition / findReferences -------------------------------------
+  findDefinition: async (rootPath, name, maxResults) => {
+    const trimmed = rootPath?.trim();
+    if (!trimmed) throw new Error('A folder path is required.');
+    const limit = maxResults && maxResults > 0 ? maxResults : DEFAULT_SYMBOL_RESULTS;
+    const files = await collectRepoFiles(trimmed, fsDeps(trimmed), { maxFiles: DEFAULT_SCAN_FILES });
+    const hits: IdeSymbolHit[] = [];
+    for (const file of files) {
+      for (const h of findDeclarations(file.content, name)) {
+        hits.push({ file: file.relPath, line: h.line, column: h.column, text: h.text });
+        if (hits.length >= limit) return hits;
+      }
+    }
+    return hits;
+  },
+
+  findReferences: async (rootPath, name, maxResults) => {
+    const trimmed = rootPath?.trim();
+    if (!trimmed) throw new Error('A folder path is required.');
+    const limit = maxResults && maxResults > 0 ? maxResults : DEFAULT_SYMBOL_RESULTS;
+    const files = await collectRepoFiles(trimmed, fsDeps(trimmed), { maxFiles: DEFAULT_SCAN_FILES });
+    const hits: IdeSymbolHit[] = [];
+    for (const file of files) {
+      for (const h of findReferences(file.content, name)) {
+        hits.push({ file: file.relPath, line: h.line, column: h.column, text: h.text });
+        if (hits.length >= limit) return hits;
+      }
+    }
+    return hits;
+  },
+
+  // --- understand (summary / info) -----------------------------------------
+  understand: async (rootPath, target, kind, detailed) => {
+    const cmd = detailed ? 'info' : 'summary';
+    const subCmd = kind === 'folder' ? 'folder' : 'file';
+    const result = await runMtui(rootPath, [cmd, subCmd, target]);
+    return {
+      summary: mtuiSummaryText(result, 'summary'),
+      details: detailed ? result : undefined,
+      stale: result['stale'] === true,
+    };
+  },
+
+  // --- compassRead ---------------------------------------------------------
+  compassRead: async (rootPath, filePath, query, maxLines) => {
+    const args = ['compass', 'read', filePath];
+    if (query) args.push('--query', query);
+    if (maxLines) args.push('--max-lines', String(maxLines));
+    const result = await runMtui(rootPath, args);
+    return {
+      summary: mtuiSummaryText(result, 'text', 'output', 'summary'),
+      stale: result['stale'] === true,
+    };
+  },
+
+  // --- context -------------------------------------------------------------
+  context: async (rootPath, intent, limit) => {
+    const args = ['context', intent];
+    if (limit) args.push('--limit', String(limit));
+    const result = await runMtui(rootPath, args);
+    const candidates = result['candidates'];
+    let summary = mtuiSummaryText(result, 'summary');
+    if (Array.isArray(candidates) && candidates.length > 0) {
+      const lines = (candidates as Array<Record<string, unknown>>).map(
+        (c) => `- ${c['path']} [${c['layer'] ?? c['role'] ?? ''}] — ${c['summary'] ?? c['reason'] ?? ''}`
+      );
+      summary = `${candidates.length} candidates:\n${lines.join('\n')}`;
+    }
+    return { summary, details: result, stale: result['stale'] === true };
+  },
+
+  // --- map -----------------------------------------------------------------
+  // `mtui map` requires a subcommand: `repo`, `folder <path>`, or `intent <text>`.
+  // `folder`/`intent` take their target as a positional argument (not a flag).
+  map: async (rootPath, scope, target, limit) => {
+    const effectiveScope = scope ?? 'repo';
+    if (effectiveScope === 'folder' && !target?.trim()) {
+      throw new Error('map scope "folder" requires a target folder path.');
+    }
+    if (effectiveScope === 'intent' && !target?.trim()) {
+      throw new Error('map scope "intent" requires a target intent string.');
+    }
+    const args: string[] = ['map', effectiveScope];
+    if ((effectiveScope === 'folder' || effectiveScope === 'intent') && target) {
+      args.push(target);
+    }
+    if (limit) args.push('--limit', String(limit));
+    const result = await runMtui(rootPath, args);
+    return {
+      summary: mtuiSummaryText(result, 'summary'),
+      details: result,
+      stale: result['stale'] === true,
+    };
+  },
+
+  // --- analyze -------------------------------------------------------------
+  analyze: async (rootPath, target) => {
+    const args = target ? ['analyze', target] : ['analyze', 'type'];
+    const result = await runMtui(rootPath, args);
+    return { summary: mtuiSummaryText(result, 'summary', 'output') };
+  },
+
+  // --- analyzeImage: explicit VisualArtifact tool -------------------------
+  analyzeImage: async (filePath, mimeType) => {
+    const artifact = await analyzeVisualArtifact(filePath, { mimeType });
+    return {
+      json: artifact,
+      semanticText: renderVisualArtifactSemanticText(artifact),
+      mockUi: renderVisualArtifactMockUi(artifact),
+    };
+  },
+
+  // --- compact -------------------------------------------------------------
+  compact: async (rootPath, input, profile, maxLines) => {
+    const args = ['compact'];
+    if (profile) args.push('--profile', profile);
+    if (maxLines) args.push('--max-lines', String(maxLines));
+    const result = await runMtuiInRoot(['--json', ...args], rootPath);
+    // compact accepts input via stdin — fallback: pass as --input flag if available
+    // For now use the direct MTUI compact result
+    const r = result as Record<string, unknown>;
+    return { summary: mtuiSummaryText(r, 'text', 'output', 'summary') };
+  },
+
+  // --- runCommand: guarded arbitrary shell execution -----------------------
+  runCommand: async (rootPath, command, opts) => {
+    return runCommand(command, rootPath, { cwd: opts?.cwd, timeoutMs: opts?.timeoutMs, env: opts?.env });
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Saved Quick Test scenarios (agent plane)
+// ---------------------------------------------------------------------------
+type ScenarioAssetFile = {
+  scenarios?: Array<{ id?: unknown }>;
+};
+
+const publicReplayStep = (step: ReplayStep): Record<string, unknown> => {
+  if (step.kind === 'navigate') return { id: step.id, kind: step.kind, url: step.url };
+  if (step.kind === 'click') return { id: step.id, kind: step.kind, selector: step.selector };
+  return { id: step.id, kind: step.kind, selector: step.selector, redacted: step.redacted };
+};
+
+const scenarioSummary = (scenario: ReplayScenario) => ({
+  id: scenario.id,
+  name: scenario.name,
+  platform: scenario.platform,
+  ...(scenario.target ? { target: scenario.target } : {}),
+  stepCount: scenario.steps.length,
+  createdAt: scenario.createdAt,
+});
+
+const normalizeScenarioStatus = (snapshot: ScenarioRunSnapshot): QuickTestScenarioRunStatus => {
+  const status = snapshot.status === 'timed-out' ? 'failed' : snapshot.status;
+  if (snapshot.status === 'running') {
+    return {
+      runId: snapshot.runId,
+      scenarioId: snapshot.testId,
+      status,
+      queuedAt: snapshot.startedAt,
+      startedAt: snapshot.startedAt,
+    };
+  }
+  return {
+    runId: snapshot.runId,
+    scenarioId: snapshot.testId,
+    status,
+    queuedAt: snapshot.startedAt,
+    startedAt: snapshot.startedAt,
+    finishedAt: snapshot.finishedAt,
+    ...(snapshot.failedStep === null ? {} : { failedStepIndex: snapshot.failedStep }),
+    ...(snapshot.reason ? { error: snapshot.reason } : {}),
+    result: {
+      durationMs: snapshot.durationMs,
+      actionCount: snapshot.actions.length,
+      actions: snapshot.actions,
+      timedOut: snapshot.status === 'timed-out',
+    },
+    evidence: snapshot.evidence,
+    assessment: { ...snapshot.assessment },
+  };
+};
+
+const getQuickTestWindow = (): import('electron').BrowserWindow | null => {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { BrowserWindow } = require('electron') as typeof import('electron');
+    return BrowserWindow.getFocusedWindow();
+  } catch {
+    return null;
+  }
+};
+
+let savedScenarioRunner: QuickTestScenarioRunner | undefined;
+
+const getSavedScenarioRunner = (): QuickTestScenarioRunner => {
+  if (savedScenarioRunner) return savedScenarioRunner;
+  savedScenarioRunner = new QuickTestScenarioRunner({
+    createAdapter: async ({ rootPath, runId, scenario, target, tabId }) => {
+      if (scenario.platform !== 'web') {
+        return createNativeQuickTestReplayAdapter({ rootPath, runId, scenario, target });
+      }
+      const viewManager = getBrowserServices(getQuickTestWindow).viewManager;
+      let effectiveTabId = tabId;
+      let ownsTab = false;
+      if (!effectiveTabId) {
+        const initialUrl = scenario.steps.find(
+          (step): step is Extract<ReplayStep, { kind: 'navigate' }> => step.kind === 'navigate'
+        )?.url;
+        effectiveTabId = viewManager.createTab({
+          ...(initialUrl ? { url: initialUrl } : {}),
+          bounds: { x: 0, y: 0, width: 1280, height: 720 },
+          visible: false,
+          background: true,
+        });
+        ownsTab = true;
+      }
+      const resolvedTabId = effectiveTabId;
+      const contents = viewManager.getWebContents(resolvedTabId);
+      if (!contents) throw new Error('The Quick Test browser tab is unavailable.');
+
+      const tracer = createQuickTestTracer({
+        getWebContents: () => contents as unknown as CdpWebContents,
+      });
+      const tracing = await tracer.start(rootPath);
+      if (!tracing) throw new Error('The Quick Test browser could not start runtime tracing.');
+      let traceCollected = false;
+      const collectTraceEvidence = async (): Promise<ScenarioRuntimeEvidence> => {
+        if (traceCollected) {
+          return { consoleErrors: [], networkFailures: [], attachments: [], relatedFiles: [] };
+        }
+        traceCollected = true;
+        await tracer.finalizeCoverage();
+        const trace = tracer.stop();
+        const consoleErrors = trace.events.flatMap((event) => {
+          if (event.kind === 'exception') return [event.message];
+          if (event.kind === 'console' && event.level === 'error') return [event.message];
+          return [];
+        });
+        const networkFailures = trace.events.flatMap((event) =>
+          event.kind === 'network' && (event.status >= 400 || event.error)
+            ? [`${event.method} ${event.url} — ${event.error ?? event.status}`]
+            : []
+        );
+        const relatedFiles = [...new Set((trace.coverage ?? []).map((entry) => entry.file))];
+        return { consoleErrors, networkFailures, attachments: [], relatedFiles };
+      };
+
+      return {
+        navigate: (url) => viewManager.loadURL(resolvedTabId, url),
+        click: async (selector) => {
+          await contents.executeJavaScript(`(() => {
+            const element = document.querySelector(${JSON.stringify(selector)});
+            if (!(element instanceof HTMLElement)) throw new Error('Replay element was not found.');
+            element.scrollIntoView({ block: 'center', inline: 'center' });
+            element.click();
+          })()`);
+        },
+        input: async (selector, value) => {
+          await contents.executeJavaScript(`(() => {
+            const element = document.querySelector(${JSON.stringify(selector)});
+            if (!(element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement || element instanceof HTMLSelectElement)) {
+              throw new Error('Replay input was not found.');
+            }
+            const prototype = element instanceof HTMLTextAreaElement
+              ? HTMLTextAreaElement.prototype
+              : element instanceof HTMLSelectElement
+                ? HTMLSelectElement.prototype
+                : HTMLInputElement.prototype;
+            const setter = Object.getOwnPropertyDescriptor(prototype, 'value')?.set;
+            if (setter) setter.call(element, ${JSON.stringify(value)});
+            else element.value = ${JSON.stringify(value)};
+            element.dispatchEvent(new Event('input', { bubbles: true }));
+            element.dispatchEvent(new Event('change', { bubbles: true }));
+          })()`);
+        },
+        collectEvidence: collectTraceEvidence,
+        dispose: async () => {
+          if (tracer.isActive()) {
+            await tracer.finalizeCoverage().catch((): void => undefined);
+            tracer.stop();
+          }
+          if (ownsTab) viewManager.destroyTab(resolvedTabId);
+        },
+      };
+    },
+  });
+  return savedScenarioRunner;
+};
+
+const assertRunRoot = (snapshot: ScenarioRunSnapshot, rootPath: string): void => {
+  if (path.resolve(snapshot.rootPath) !== path.resolve(rootPath)) {
+    throw new Error('The Quick Test run belongs to a different workspace.');
+  }
+};
+
+export const getQuickTestScenarioAgentService = (): QuickTestScenarioAgentService => {
+  const runner = getSavedScenarioRunner();
+  return {
+    list: async ({ rootPath, platform, limit }) => {
+      const assetPath = path.join(path.resolve(rootPath), '.omni', 'quick-test', 'assets.json');
+      const parsed = JSON.parse(await fsp.readFile(assetPath, 'utf8')) as ScenarioAssetFile;
+      const ids = Array.isArray(parsed.scenarios)
+        ? parsed.scenarios.map((item) => (typeof item?.id === 'string' ? item.id : '')).filter((id) => id.length > 0)
+        : [];
+      const scenarios: ReplayScenario[] = [];
+      for (const id of ids) {
+        try {
+          // eslint-disable-next-line no-await-in-loop -- each stored scenario is independently validated.
+          const scenario = await loadSavedQuickTestScenario(rootPath, id);
+          if (!platform || scenario.platform === platform) scenarios.push(scenario);
+        } catch {
+          // Ignore malformed entries while keeping the remaining library usable.
+        }
+      }
+      return { scenarios: scenarios.slice(0, limit).map(scenarioSummary), total: scenarios.length };
+    },
+    describe: async ({ rootPath, scenarioId }) => {
+      const scenario = await loadSavedQuickTestScenario(rootPath, scenarioId);
+      return {
+        ...scenarioSummary(scenario),
+        rootPath: path.resolve(rootPath),
+        steps: scenario.steps.map(publicReplayStep),
+      };
+    },
+    run: async ({ rootPath, scenarioId, target, tabId, mode, timeoutMs, inputOverrides }) =>
+      normalizeScenarioStatus(
+        await runner.start({
+          rootPath,
+          testId: scenarioId,
+          target,
+          tabId,
+          mode,
+          timeoutMs,
+          inputOverrides,
+        })
+      ),
+    status: async ({ rootPath, runId }) => {
+      const snapshot = runner.get(runId);
+      if (!snapshot) throw new Error(`Quick Test run ${runId} was not found.`);
+      assertRunRoot(snapshot, rootPath);
+      return normalizeScenarioStatus(snapshot);
+    },
+    cancel: async ({ rootPath, runId }) => {
+      const snapshot = runner.get(runId);
+      if (!snapshot) throw new Error(`Quick Test run ${runId} was not found.`);
+      assertRunRoot(snapshot, rootPath);
+      if (snapshot.status === 'running') runner.cancel(runId);
+      return normalizeScenarioStatus(await runner.wait(runId));
+    },
+    compare: async ({ rootPath, baselineRunId, currentRunId }) => {
+      const baseline = runner.get(baselineRunId);
+      const current = runner.get(currentRunId);
+      if (!baseline || baseline.status === 'running') throw new Error('The baseline Quick Test run is not complete.');
+      if (!current || current.status === 'running') throw new Error('The current Quick Test run is not complete.');
+      assertRunRoot(baseline, rootPath);
+      assertRunRoot(current, rootPath);
+      return {
+        baselineRunId,
+        currentRunId,
+        baselineStatus: baseline.status,
+        currentStatus: current.status,
+        fixed: baseline.status !== 'passed' && current.status === 'passed',
+        durationDeltaMs: current.durationMs - baseline.durationMs,
+        failedStepChanged: baseline.failedStep !== current.failedStep,
+        baselineError: baseline.reason,
+        currentError: current.reason,
+        actionCountDelta: current.actions.length - baseline.actions.length,
+        evidence: {
+          baseline: baseline.evidence,
+          current: current.evidence,
+        },
+      };
+    },
+  };
+};
+
+// ---------------------------------------------------------------------------
+// Quick Test runner
+// ---------------------------------------------------------------------------
+export const getQuickTestRunner = (): QuickTestRunner => {
+  const service = createQuickTestService({
+    getWebContents: (): CdpWebContents | null => {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { webContents } = require('electron') as typeof import('electron');
+        const focused = webContents.getFocusedWebContents();
+        return (focused as unknown as CdpWebContents | null) ?? null;
+      } catch {
+        return null;
+      }
+    },
+    openNativeStream: openNativeLogStream,
+    loadGraph,
+    captureScreenshot: async (rootPath: string): Promise<string | undefined> => {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { webContents } = require('electron') as typeof import('electron');
+        const focused = webContents.getFocusedWebContents();
+        if (!focused || focused.isDestroyed()) return undefined;
+        const image = await focused.capturePage();
+        if (image.isEmpty()) return undefined;
+        const evidenceDir = path.join(rootPath, '.tomni', 'quick-test', 'agent-evidence');
+        await fsp.mkdir(evidenceDir, { recursive: true });
+        const screenshotPath = path.join(evidenceDir, `quick-test-${Date.now()}.png`);
+        await fsp.writeFile(screenshotPath, image.toPNG());
+
+        const screenshots = (await fsp.readdir(evidenceDir, { withFileTypes: true }))
+          .filter((entry) => entry.isFile() && /^quick-test-\d+\.png$/.test(entry.name))
+          .map((entry) => entry.name)
+          .toSorted()
+          .toReversed();
+        await Promise.all(
+          screenshots
+            .slice(20)
+            .map((name) => fsp.unlink(path.join(evidenceDir, name)).catch((): undefined => undefined))
+        );
+        return screenshotPath;
+      } catch {
+        return undefined;
+      }
+    },
+  });
+  return service as QuickTestRunner;
+};
+
+// ---------------------------------------------------------------------------
+// Build the server
+// ---------------------------------------------------------------------------
+const NATIVE_TOOL_DENYLIST = new Set([
+  'read',
+  'read0',
+  'grep',
+  'grep0',
+  'rg',
+  'glob',
+  'glob0',
+  'bash',
+  'bash0',
+  'sh',
+  'shell',
+  'write',
+  'write0',
+  'edit',
+  'edit0',
+  'notebookedit',
+  'notebookedit0',
+  'applypatch',
+  'strreplace',
+  'sed',
+  'awk',
+  'cat',
+  'ls',
+  'find',
+  'execute',
+  'runterminalcmd',
+  'terminal_run',
+  'run_terminal_cmd',
+]);
+
+const nativeToolGuard: ToolGuard = (toolName) => {
+  const normalized = toolName.trim().toLowerCase().replace(/[_\s]/g, '');
+  if (NATIVE_TOOL_DENYLIST.has(normalized)) {
+    return {
+      allow: false,
+      reason:
+        'Native tool "' +
+        toolName +
+        '" is blocked in IDE workspaces. Use tomny_* tools instead (ide_* / team_* remain compatibility aliases).',
+    };
+  }
+  return { allow: true };
+};
+
+const experienceAgentService: ExperienceAgentService = {
+  search: async (projectRoot, query, options) => {
+    const service = await getExperienceServiceForRoot(projectRoot);
+    await service.drainInbox();
+    return service.search(query, options);
+  },
+  record: async (projectRoot, draft) => {
+    const result = await (await getExperienceServiceForRoot(projectRoot)).record(draft);
+    return { action: result.action, entryId: result.entry.id };
+  },
+  recordFeedback: async (projectRoot, entryId, helped) =>
+    (await getExperienceServiceForRoot(projectRoot)).recordFeedback(entryId, helped),
+  verifyOutcome: async (projectRoot, episode, outcome) => {
+    const service = await getExperienceServiceForRoot(projectRoot);
+    await service.drainInbox();
+    const workflow = await getExperienceWorkflowForRoot(projectRoot);
+    const result = await workflow.onVerifyOutcome(episode, service.projectId, outcome);
+    // Keep the first failure only in the bounded Tomny CLI session ExpBase. Once
+    // the same verification fails again, persist a compact repo lesson. The
+    // capture service deduplicates close matches, preventing log/data growth.
+    if (outcome === 'failed' && result.decision.failureCount >= 2) {
+      const symptom = (episode.errorText ?? episode.errorMessages?.[0] ?? episode.command ?? 'verification failed')
+        .replace(/\s+/g, ' ')
+        .slice(0, 280);
+      await service.record({
+        kind: 'failed_attempt',
+        symptoms: { summary: symptom },
+        context: {
+          files: episode.files,
+          commands: episode.command ? [episode.command] : undefined,
+          frameworks: episode.frameworks,
+          packages: episode.packages,
+          errorCategory: episode.errorCategory,
+        },
+        lesson:
+          'This verification failure repeated. Do not retry the same command or approach without inspecting new evidence.',
+        tags: ['auto', 'repeat-failure'],
+        confidence: 0.3,
+      });
+    }
+    return result;
+  },
+};
+
+export const buildIdeServer = (): McpServer => {
+  const ide = getIdeMcpService();
+  try {
+    return createIdeServer({
+      ide,
+
+      quickTest: getQuickTestRunner(),
+
+      quickTestScenarios: getQuickTestScenarioAgentService(),
+      db: getDbService() as DbAgentService,
+      memory: getSessionMemoryStore(),
+      repoSecrets: getRepoSecretStore(),
+      experience: experienceAgentService,
+      wikiTestIntelligence: {
+        plan: async ({ rootPath, intent, targetFiles, symbols, graphFresh }) => {
+          const [persistedGraph, wiki] = await Promise.all([loadGraph(rootPath), loadWikiForRoot(rootPath)]);
+          const usePersistedGraph = persistedGraph !== null && graphFresh;
+          const graph = persistedGraph && graphFresh ? persistedGraph : await buildStructuralTestGraph(rootPath);
+          return buildWikiTestProfile({
+            graph,
+            wiki,
+            intent,
+            targetFiles,
+            symbols,
+            graphFresh: usePersistedGraph ? graphFresh : true,
+          });
+        },
+      },
+      teamEdit: getTeamEditService(),
+      toolGuard: nativeToolGuard,
+    });
+  } catch (error) {
+    // Optional IDE capabilities must not prevent the SSE handshake and block
+    // every chat turn. Keep the core repo/MTUI tools available and preserve the
+    // original error in logs so the failing extension can be repaired.
+    console.error('[IdeMCP] Full server build failed; starting core IDE tools only:', error);
+    return createIdeServer({ ide, toolGuard: nativeToolGuard });
+  }
+};

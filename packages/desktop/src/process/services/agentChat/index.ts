@@ -36,97 +36,28 @@ export type { DirectCliAgentDriver, DirectCliAgentDriverDeps, DirectCliExecution
 export type { MarkdownMessageNormalizerDeps } from './markdownMessageNormalizer';
 
 import type { AgentChat, ChatMessageInput } from './types';
-import { listReadyProviders } from '@process/services/tomnyProviderBridge';
-import type { IProvider } from '@/common/config/storage';
 import { withCliAgent } from './cliAgentChat';
 import type { DirectCliExecutionContext } from './directCliAgent';
+import type { ProviderExecutionBroker } from '@process/services/security/providerExecution/providerExecutionBroker';
+
+let sharedProviderExecutionBroker: ProviderExecutionBroker | undefined;
+
+/** Main composition supplies the one account-bound provider egress authority. */
+export const configureProviderChatBroker = (broker: ProviderExecutionBroker): void => {
+  sharedProviderExecutionBroker = broker;
+};
 
 /** A flat completion call shared by the non-runner bridges. */
 export type FlatChat = (model: string, messages: ChatMessageInput[], signal?: AbortSignal) => Promise<string>;
 export type { AgentChat, ChatContent, ChatMessageInput } from './types';
 
-const PROVIDER_CHAT_TIMEOUT_MS = 90_000;
-
-const isProviderModelEnabled = (provider: IProvider, model: string): boolean =>
-  provider.model_enabled?.[model] !== false;
-
-const isUsableProvider = (provider: IProvider): boolean =>
-  provider.enabled !== false &&
-  Boolean(provider.api_key) &&
-  Boolean(provider.base_url) &&
-  Array.isArray(provider.models) &&
-  provider.models.length > 0;
-
-const resolveProviderChatUrl = (provider: IProvider): string => {
-  const base = provider.base_url.replace(/\/+$/, '');
-  return provider.is_full_url ? base : `${base}/chat/completions`;
-};
-
-const firstProviderApiKey = (apiKeys: string): string =>
-  apiKeys
-    .split(/[,\n]/)
-    .map((key) => key.trim())
-    .find(Boolean) ?? '';
-
-const pickProviderForModel = (providers: IProvider[], model: string): { provider: IProvider; model: string } | null => {
-  const usable = providers.filter(isUsableProvider);
-  const owner = usable.find((provider) => provider.models.includes(model) && isProviderModelEnabled(provider, model));
-  if (owner) return { provider: owner, model };
-  for (const provider of usable) {
-    const fallback =
-      provider.models.find((candidate) => isProviderModelEnabled(provider, candidate)) ?? provider.models[0];
-    if (fallback) return { provider, model: fallback };
-  }
-  return null;
-};
-
-/** Creates a Hub-owned provider chat target usable by core services and package adapters. */
+/** Creates a Hub-owned provider chat target from an injected Main-only broker. */
 export const createProviderChat =
-  (): AgentChat =>
+  (broker?: ProviderExecutionBroker): AgentChat =>
   async ({ model, messages, signal }) => {
-    const providers = (await listReadyProviders().catch((): IProvider[] => [])) ?? [];
-    const selected = pickProviderForModel(providers, model);
-    if (!selected) {
-      throw new Error('No usable model is configured. Open Settings → Model and add a provider/model, then try again.');
-    }
-
-    const timeout = new AbortController();
-    const timer = setTimeout(() => timeout.abort(), PROVIDER_CHAT_TIMEOUT_MS);
-    if (signal) {
-      if (signal.aborted) timeout.abort();
-      else signal.addEventListener('abort', () => timeout.abort(), { once: true });
-    }
-
-    let response: Awaited<ReturnType<typeof fetch>>;
-    try {
-      response = await fetch(resolveProviderChatUrl(selected.provider), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${firstProviderApiKey(selected.provider.api_key)}`,
-        },
-        body: JSON.stringify({ model: selected.model, messages, stream: false }),
-        signal: timeout.signal,
-      });
-    } catch (error) {
-      if (timeout.signal.aborted && !signal?.aborted) {
-        throw new Error(`The model did not respond within ${Math.round(PROVIDER_CHAT_TIMEOUT_MS / 1000)}s.`, {
-          cause: error,
-        });
-      }
-      throw error instanceof Error ? error : new Error(String(error));
-    } finally {
-      clearTimeout(timer);
-    }
-
-    if (!response.ok) {
-      const detail = await response.text().catch(() => '');
-      throw new Error(`Model request failed (HTTP ${response.status}). ${detail.slice(0, 300)}`);
-    }
-    const json = (await response.json()) as { choices?: Array<{ message?: { content?: string | null } }> };
-    const content = json.choices?.[0]?.message?.content;
-    if (typeof content !== 'string') throw new Error('The model returned an empty response.');
-    return content;
+    const activeBroker = broker ?? sharedProviderExecutionBroker;
+    if (!activeBroker) throw new Error('PROVIDER_EXECUTION_BROKER_REQUIRED');
+    return (await activeBroker.execute({ model, messages, signal })).content;
   };
 
 /**

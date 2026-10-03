@@ -1,7 +1,7 @@
 import type { IProvider } from '@/common/config/storage';
 import ModalHOC from '@/renderer/utils/ui/ModalHOC';
 import TomnyModal from '@/renderer/components/base/TomnyModal';
-import { Button, Select, Tag } from '@arco-design/web-react';
+import { Select } from '@arco-design/web-react';
 import React, { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import useModeModeList from '@renderer/hooks/agent/useModeModeList';
@@ -10,6 +10,7 @@ import {
   MODEL_PLATFORMS,
   NEW_API_PROTOCOL_OPTIONS,
   detectNewApiProtocol,
+  getSuggestedModelsForPlatform,
 } from '@/renderer/utils/model/modelPlatforms';
 
 const AddModelModal = ModalHOC<{ data?: IProvider; onSubmit: (model: IProvider) => void }>(
@@ -24,20 +25,20 @@ const AddModelModal = ModalHOC<{ data?: IProvider; onSubmit: (model: IProvider) 
         (p) => p.skipProtocolDetection && p.base_url && data.base_url.includes(new URL(p.base_url).host)
       );
     }, [data?.base_url]);
-    const { data: modelList, isLoading } = useModeModeList(data?.platform, data?.base_url, data?.api_key);
+    const { data: modelList, isLoading } = useModeModeList(data?.id);
     const existingModels = data?.models || [];
     const optionsList = useMemo(() => {
-      // 处理新的数据格式，可能包含 fix_base_url
       const models = Array.isArray(modelList) ? modelList : modelList?.models || [];
-      if (!models || !data?.models) return models;
-      return models.map((item) => {
-        return { ...item, disabled: data.models.includes(item.value) };
+      if (models.length > 0) {
+        return models.map((item) => {
+          return Object.assign({}, item, { disabled: data?.models?.includes(item.value) ?? false });
+        });
+      }
+      const fallbackModels = getSuggestedModelsForPlatform(data?.platform);
+      return fallbackModels.map((item) => {
+        return Object.assign({}, item, { disabled: data?.models?.includes(item.value) ?? false });
       });
-    }, [modelList, data?.models]);
-    const previewModels = useMemo(() => existingModels.slice(0, 6), [existingModels]);
-    const remainingCount =
-      existingModels.length > previewModels.length ? existingModels.length - previewModels.length : 0;
-
+    }, [modelList, data?.models, data?.platform]);
     const handleConfirm = useCallback(() => {
       if (!model) return;
       const updatedData: IProvider = { ...data, models: [...existingModels, model] };
@@ -83,6 +84,15 @@ const AddModelModal = ModalHOC<{ data?: IProvider; onSubmit: (model: IProvider) 
               value={model}
               allowCreate
               placeholder={t('settings.addModelPlaceholder')}
+              filterOption={(inputValue, option) => {
+                const props = (option as React.ReactElement<{ value?: string; children?: React.ReactNode }>)?.props;
+                const val = typeof props?.value === 'string' ? props.value : '';
+                const lab = typeof props?.children === 'string' ? props.children : '';
+                return (
+                  val.toLowerCase().includes(inputValue.toLowerCase()) ||
+                  lab.toLowerCase().includes(inputValue.toLowerCase())
+                );
+              }}
             ></Select>
           </div>
 

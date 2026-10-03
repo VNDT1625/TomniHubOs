@@ -58,6 +58,15 @@ describe('Tomny Core source builder', () => {
     expect(stagedBinaryName('win32')).toBe('tomny-core.exe');
   });
 
+  it('checks out the pinned commit instead of assuming the release label is a remote branch', () => {
+    const source = readFileSync(join(process.cwd(), 'packages/shared-scripts/src/prepare-tomny-core.js'), 'utf8');
+
+    expect(source).toContain("['clone', '--no-checkout', UPSTREAM_REPOSITORY, sourceDir]");
+    expect(source).toContain("['-C', sourceDir, 'fetch', '--depth', '1', 'origin', commit]");
+    expect(source).toContain("['-C', sourceDir, 'checkout', '--detach', commit]");
+    expect(source).not.toContain("['clone', '--depth', '1', '--branch', version");
+  });
+
   it('only accepts artifacts whose binary and full source identity match', () => {
     const directory = mkdtempSync(join(tmpdir(), 'tomny-core-manifest-'));
     const manifestPath = join(directory, 'manifest.json');

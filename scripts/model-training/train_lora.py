@@ -11,6 +11,8 @@ import os
 import platform
 import re
 import subprocess
+import shutil
+import tempfile
 import sys
 import time
 from datetime import UTC, datetime
@@ -20,6 +22,7 @@ from typing import Any
 
 import psutil
 import torch
+from accelerate.utils import GradScalerKwargs
 from safetensors.torch import load_file
 from datasets import DatasetDict, load_dataset
 from peft import (
@@ -43,12 +46,14 @@ from transformers import (
 )
 from transformers.trainer_utils import get_last_checkpoint
 from data_quality import split_isolation_report
+from warm_start_loader import load_standalone_adapter
+
 
 PURPOSE_FILES = {
     "security": "security",
     "user-understanding": "user-understanding",
-    "orchestrator": "orchestrator",
-    "assistant": "assistant",
+    "semantic-analysis": "semantic-analysis",
+
 }
 
 # Qwen3.5 mixes normal attention and gated linear-attention layers. This list
@@ -80,6 +85,9 @@ MIN_MEMORY_PRESSURE_FREE_MIB = 1536
 MAX_PRIMARY_LABEL_TOTAL_VARIATION = 0.20
 TRAINING_CACHE_CLEAR_STEPS = 10
 EVALUATION_CACHE_CLEAR_INTERVAL = 32
+AMP_INITIAL_LOSS_SCALE = 2048.0
+AMP_MAX_LOSS_SCALE = 2048.0
+AMP_GROWTH_INTERVAL = 2_147_483_647
 
 
 def validation_tolerance(best_metric: float) -> float:
@@ -132,6 +140,40 @@ def load_safe_finalization_state(
     return state
 
 
+def load_standalone_adapter_weights(
+    model: torch.nn.Module,
+    adapter_path: str,
+    expected_sha256: str,
+    expected_tensor_count: int = 44,
+) -> dict[str, Any]:
+    """Load one frozen adapter artifact strictly before Trainer construction."""
+    path = Path(adapter_path).resolve()
+    if not path.is_file():
+        raise FileNotFoundError(f"Warm-start adapter does not exist: {path}")
+    actual_sha = sha256_file(path)
+    if actual_sha != expected_sha256:
+        raise ValueError(f"Warm-start adapter SHA mismatch: expected {expected_sha256}, got {actual_sha}")
+    parent_state = load_file(str(path), device="cpu")
+    if len(parent_state) != expected_tensor_count:
+        raise ValueError(f"Warm-start adapter tensor count mismatch: {len(parent_state)}")
+    if any(not torch.isfinite(value).all() for value in parent_state.values()):
+        raise FloatingPointError("Warm-start adapter contains non-finite values")
+    adapter_keys = {name for name, _ in model.named_parameters() if ".lora_" in name}
+    if adapter_keys != set(parent_state):
+        missing = sorted(adapter_keys - set(parent_state))
+        unexpected = sorted(set(parent_state) - adapter_keys)
+        raise ValueError(f"Warm-start adapter key mismatch: missing={missing}, unexpected={unexpected}")
+    before = {name: parameter.detach().cpu().clone() for name, parameter in model.named_parameters() if name in parent_state}
+    result = set_peft_model_state_dict(model, parent_state)
+    if result.missing_keys or result.unexpected_keys:
+        raise ValueError(f"Warm-start adapter load mismatch: missing={result.missing_keys}, unexpected={result.unexpected_keys}")
+    mismatches = [name for name, parameter in model.named_parameters() if name in parent_state and not torch.equal(parameter.detach().cpu(), parent_state[name])]
+    if mismatches:
+        raise ValueError(f"Warm-start adapter value mismatch after load: {mismatches}")
+    return {"sha256": actual_sha, "tensorCount": len(parent_state), "loadedKeys": sorted(parent_state), "valueMismatches": 0, "preexistingKeys": len(before)}
+
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Train an immutable, provenance-complete Tomny Qwen3.5 QLoRA candidate."
@@ -158,7 +200,21 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--resume-from", help="Checkpoint path inside this candidate, or 'latest'."
+
     )
+    parser.add_argument("--warm-start-adapter", help="Standalone adapter weights to load before Trainer construction.")
+    parser.add_argument("--execution-id", default=None, help="Stable execution identifier for heartbeat/receipt evidence.")
+    parser.add_argument("--heartbeat-path", default=None, help="Persistent heartbeat JSON path.")
+    parser.add_argument("--diagnostic-pre-train-only", action="store_true", help="Stop after Trainer construction without calling train().")
+    parser.add_argument(
+        "--force-failure-phase",
+        choices=("before-model-load", "after-trainer-construction"),
+        default=None,
+        help="Test-only deterministic failure injection; never set by production recipes.",
+    )
+
+
+
     parser.add_argument(
         "--validate-recipe",
         action="store_true",
@@ -250,6 +306,81 @@ def atomic_write_json(path: Path, value: dict[str, Any]) -> None:
         json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
     os.replace(temporary, path)
+
+def execution_heartbeat(
+    heartbeat_path: str | None, execution_id: str, marker: str, **details: Any
+) -> None:
+    """Emit a flushed marker and persist the latest bounded execution state."""
+    payload: dict[str, Any] = {
+        "schemaVersion": "tomny.training-heartbeat.v1",
+        "executionId": execution_id,
+        "marker": marker,
+        "updatedAt": datetime.now(UTC).isoformat(),
+        "pid": os.getpid(),
+        **details,
+    }
+    print(json.dumps(payload, ensure_ascii=False), flush=True)
+    if heartbeat_path:
+        path = Path(heartbeat_path).resolve()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        atomic_write_json(path, payload)
+
+
+
+def execution_success_receipt(
+    heartbeat_path: str | None, execution_id: str, optimizer_steps: int = 0
+) -> None:
+    payload = {
+        "schemaVersion": "tomny.training-diagnostic-success.v1",
+        "executionId": execution_id,
+        "status": "DIAGNOSTIC_PRETRAIN_SUCCESS",
+        "optimizerSteps": optimizer_steps,
+        "trainerTrainCalled": False,
+        "candidateCreated": False,
+        "trainingStarted": False,
+        "timestamp": datetime.now(UTC).isoformat(),
+    }
+    print(json.dumps(payload, ensure_ascii=False), flush=True)
+    if heartbeat_path:
+        path = Path(heartbeat_path).resolve()
+        atomic_write_json(path.with_name(f"{path.stem}.success.json"), payload)
+
+def execution_failure_receipt(
+    heartbeat_path: str | None, execution_id: str, error: BaseException
+) -> None:
+    """Persist a bounded terminal failure receipt without exposing a traceback."""
+    last_heartbeat: dict[str, Any] = {}
+    if heartbeat_path:
+        heartbeat_file = Path(heartbeat_path).resolve()
+        if heartbeat_file.is_file():
+            try:
+                loaded = json.loads(heartbeat_file.read_text(encoding="utf-8"))
+                if isinstance(loaded, dict):
+                    last_heartbeat = loaded
+            except (OSError, json.JSONDecodeError):
+                last_heartbeat = {}
+    failure_phase = str(last_heartbeat.get("marker", "UNKNOWN"))
+
+    payload = {
+        "schemaVersion": "tomny.training-failure.v1",
+        "executionId": execution_id,
+        "status": "FAILED",
+        "lastHeartbeat": last_heartbeat,
+        "failurePhase": failure_phase,
+        "optimizerStepsCompleted": 0,
+        "candidateCreated": False,
+        "trainingStarted": False,
+        "timestamp": datetime.now(UTC).isoformat(),
+
+        "updatedAt": datetime.now(UTC).isoformat(),
+        "errorType": type(error).__name__,
+        "message": str(error)[:500],
+    }
+    print(json.dumps(payload, ensure_ascii=False), flush=True)
+    if heartbeat_path:
+        path = Path(heartbeat_path).resolve()
+        atomic_write_json(path.with_name(f"{path.stem}.failure.json"), payload)
+
 
 
 def observe_memory_pressure(
@@ -459,6 +590,33 @@ def validate_recipe(recipe_path: Path) -> dict[str, Any]:
     if not re.fullmatch(r"[0-9a-f]{64}", expected_hash):
         raise ValueError("recipe.baseModel.contentSha256 must be lowercase SHA-256")
     training = require_object(recipe.get("training"), "recipe.training")
+    for key in ("earlyStoppingEnabled", "loadBestModelAtEnd"):
+        if key in training and not isinstance(training[key], bool):
+            raise ValueError(f"recipe.training.{key} must be boolean")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     required_ints = {
         "maxSteps": 1,
         "maxLength": 64,
@@ -468,11 +626,15 @@ def validate_recipe(recipe_path: Path) -> dict[str, Any]:
         "evalSteps": 1,
         "saveSteps": 1,
         "loggingSteps": 1,
-        "earlyStoppingPatience": 1,
     }
     for key, minimum in required_ints.items():
         require_int(training.get(key), f"recipe.training.{key}", minimum)
-    for key in ("learningRate", "earlyStoppingThreshold", "maxValidationRegression"):
+    if training.get("earlyStoppingEnabled", True):
+        require_int(training.get("earlyStoppingPatience"), "recipe.training.earlyStoppingPatience", 1)
+    numeric_keys = ["learningRate"]
+    if training.get("earlyStoppingEnabled", True):
+        numeric_keys.extend(["earlyStoppingThreshold", "maxValidationRegression"])
+    for key in numeric_keys:
         value = training.get(key)
         if (
             not isinstance(value, (int, float))
@@ -481,8 +643,11 @@ def validate_recipe(recipe_path: Path) -> dict[str, Any]:
             or value < 0
         ):
             raise ValueError(f"recipe.training.{key} must be a finite number >= 0")
-    if training["learningRate"] <= 0:
-        raise ValueError("recipe.training.learningRate must be > 0")
+    if training["learningRate"] <= 0: raise ValueError("recipe.training.learningRate must be > 0")
+    precision_value = training.get("precision", "fp16")
+    precision = require_string(precision_value, "recipe.training.precision")
+    if precision not in {"fp16", "bf16"}:
+        raise ValueError("recipe.training.precision must be fp16 or bf16")
     target_profile = require_string(
         training.get("targetProfile"), "recipe.training.targetProfile"
     )
@@ -492,6 +657,8 @@ def validate_recipe(recipe_path: Path) -> dict[str, Any]:
         "full-attention",
         "small-gpu",
         "all-linear",
+        "topology-aware-last-four",
+        "shield-full-24",
     }:
         raise ValueError("recipe.training.targetProfile is unsupported")
     if training["saveSteps"] % training["evalSteps"] != 0:
@@ -529,6 +696,106 @@ def enforce_finite_gradient_smoke_gate(
         raise ValueError(
             "RTX 3050 4 GB production training requires finiteGradientSmokePassed=true; run a bounded smoke first"
         )
+
+
+def verify_finite_gradient_smoke_evidence(
+    recipe: dict[str, Any], recipe_path: Path, args: argparse.Namespace
+) -> None:
+    """Bind an RTX production recipe to one completed finite-gradient smoke artifact."""
+    hardware = recipe["hardwareProfile"]
+    if (
+        hardware["profile"] != "rtx-3050-4gb"
+        or hardware["finiteGradientSmokePassed"] is not True
+        or args.smoke
+    ):
+        return
+    evidence = hardware.get("stabilitySmokeEvidence")
+    expected_fields = {
+        "candidateId",
+        "candidateVersion",
+        "manifestSha256",
+        "verificationReportSha256",
+        "recipeSha256",
+        "steps",
+        "precision",
+    }
+    if not isinstance(evidence, dict) or set(evidence) != expected_fields:
+        raise ValueError(
+            "RTX 3050 production recipe requires exact stabilitySmokeEvidence"
+        )
+    candidate_id = evidence["candidateId"]
+    candidate_version = evidence["candidateVersion"]
+    if not (
+        isinstance(candidate_id, str)
+        and SAFE_COMPONENT.fullmatch(candidate_id)
+        and isinstance(candidate_version, str)
+        and SAFE_COMPONENT.fullmatch(candidate_version)
+    ):
+        raise ValueError("stability smoke candidate identity is invalid")
+    for name in ("manifestSha256", "verificationReportSha256", "recipeSha256"):
+        value = evidence[name]
+        if not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{64}", value):
+            raise ValueError(f"stability smoke {name} is invalid")
+    if evidence["steps"] != 25 or evidence["precision"] != "fp16":
+        raise ValueError("finite-gradient smoke evidence must bind the approved v6 25-step FP16 protocol")
+
+    repository_root = recipe_path.parents[2]
+    smoke_root = (
+        repository_root
+        / ".model-adapters"
+        / "candidates"
+        / candidate_id
+        / candidate_version
+    )
+    manifest_path = smoke_root / "training_manifest.json"
+    report_path = smoke_root / "verification-report.json"
+    if not manifest_path.is_file() or not report_path.is_file():
+        raise FileNotFoundError("stability smoke evidence is missing its immutable artifacts")
+    if sha256_file(manifest_path) != evidence["manifestSha256"]:
+        raise ValueError("stability smoke manifest hash mismatch")
+    if sha256_file(report_path) != evidence["verificationReportSha256"]:
+        raise ValueError("stability smoke verification report hash mismatch")
+    manifest = load_json_object(manifest_path, "stability smoke training manifest")
+    if (
+        manifest.get("completed") is not True
+        or manifest.get("status") != "candidate"
+        or manifest.get("purpose") != recipe["purpose"]
+        or manifest.get("candidate", {}).get("id") != candidate_id
+        or manifest.get("candidate", {}).get("version") != candidate_version
+        or manifest.get("steps") != evidence["steps"]
+        or manifest.get("precision") != evidence["precision"]
+        or manifest.get("smokeOnly") is not True
+        or manifest.get("fullValidation") is not False
+        or manifest.get("recipe", {}).get("sha256") != evidence["recipeSha256"]
+    ):
+        raise ValueError("stability smoke manifest does not match the required protocol")
+    curves = manifest.get("curves")
+    if not isinstance(curves, list) or not curves:
+        raise ValueError("stability smoke curve evidence is missing")
+    for index, row in enumerate(curves):
+        if not isinstance(row, dict):
+            raise ValueError(f"stability smoke curve row {index} is invalid")
+        for name, value in row.items():
+            if isinstance(value, float) and not math.isfinite(value):
+                raise ValueError(f"stability smoke curve contains non-finite {name}")
+    validation = manifest.get("metrics", {}).get("validation", {})
+    if not isinstance(validation.get("eval_loss"), (int, float)) or not math.isfinite(
+        validation["eval_loss"]
+    ):
+        raise ValueError("stability smoke validation metric is missing or non-finite")
+    report = load_json_object(report_path, "stability smoke verification report")
+    adapter = report.get("adapters", [None])
+    if (
+        report.get("verified") is not True
+        or report.get("adapterCount") != 1
+        or not isinstance(adapter, list)
+        or len(adapter) != 1
+        or not isinstance(adapter[0], dict)
+        or adapter[0].get("manifestSha256") != evidence["manifestSha256"]
+        or adapter[0].get("allFinite") is not True
+        or adapter[0].get("purpose") != recipe["purpose"]
+    ):
+        raise ValueError("stability smoke verification report does not attest a finite adapter")
 
 
 def validate_dataset_manifest(
@@ -660,7 +927,10 @@ def sha256_tree(root: Path) -> str:
     if not root.is_dir():
         raise FileNotFoundError(f"Base model directory does not exist: {root}")
     digest = hashlib.sha256()
-    files = sorted(path for path in root.rglob("*") if path.is_file())
+    files = sorted(
+        (path for path in root.rglob("*") if path.is_file()),
+        key=lambda path: tuple(part.lower() for part in path.relative_to(root).parts),
+    )
     if not files:
         raise ValueError(f"Base model directory is empty: {root}")
     for path in files:
@@ -692,6 +962,7 @@ def resolve_candidate(args: argparse.Namespace, allow_existing: bool = False) ->
 
 
 def git_provenance() -> dict[str, Any]:
+    if __import__("shutil").which("git") is None: return {"gitAvailable": False, "revision": "unavailable", "dirty": False}
     def run(*values: str) -> str:
         result = subprocess.run(
             ["git", *values], capture_output=True, text=True, check=False
@@ -700,6 +971,7 @@ def git_provenance() -> dict[str, Any]:
 
     return {
         "revision": run("rev-parse", "HEAD"),
+        "gitAvailable": True,
         "dirty": bool(run("status", "--porcelain")),
     }
 
@@ -741,6 +1013,8 @@ def verify_environment(args: argparse.Namespace) -> dict[str, Any]:
         raise RuntimeError(
             "CUDA is required for the 4-bit bitsandbytes training profile."
         )
+    if args.precision == "bf16" and not torch.cuda.is_bf16_supported():
+        raise RuntimeError("Recipe requires bf16 but the active CUDA device does not support it")
     if not args.model:
         raise ValueError("--model is required for load-only and training")
     model_path = Path(args.model)
@@ -772,7 +1046,7 @@ def verify_environment(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def load_text_only_qwen35(
-    model_path: str,
+    model_path: str, compute_dtype: torch.dtype
 ) -> tuple[torch.nn.Module, Any, dict[str, Any]]:
     tokenizer = AutoTokenizer.from_pretrained(
         model_path, local_files_only=True, trust_remote_code=False
@@ -790,7 +1064,7 @@ def load_text_only_qwen35(
     quantization = BitsAndBytesConfig(
         load_in_4bit=True,
         bnb_4bit_quant_type="nf4",
-        bnb_4bit_compute_dtype=torch.float16,
+        bnb_4bit_compute_dtype=compute_dtype,
         bnb_4bit_use_double_quant=True,
     )
 
@@ -802,6 +1076,9 @@ def load_text_only_qwen35(
         config=text_config,
         quantization_config=quantization,
         device_map={"": 0},
+        # The 4-bit base remains in the small-GPU storage dtype.  BF16 is an
+        # autocast/4-bit compute choice; PEFT keeps trainable adapters in its
+        # preparation dtype instead of loading a second full BF16 base.
         dtype=torch.float16,
         local_files_only=True,
         trust_remote_code=False,
@@ -879,6 +1156,29 @@ def attach_lora(
         lora_kwargs["layers_to_transform"] = full_attention_layers[-3:]
         lora_kwargs["layers_pattern"] = "layers"
 
+    elif args.target_profile == "shield-full-24":
+        resolved_targets = [
+            name
+            for name in ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+            if name in available
+        ]
+        target_modules = resolved_targets
+        lora_kwargs["layers_to_transform"] = list(range(model.config.num_hidden_layers))
+        lora_kwargs["layers_pattern"] = "layers"
+        lora_kwargs["use_rslora"] = True
+    elif args.target_profile == "topology-aware-last-four":
+        resolved_targets = [
+            name
+            for name in [
+                "q_proj", "k_proj", "v_proj", "o_proj",
+                "in_proj_qkv", "out_proj",
+                "gate_proj", "up_proj", "down_proj",
+            ]
+            if name in available
+        ]
+        target_modules = resolved_targets
+        lora_kwargs["layers_to_transform"] = [20, 21, 22, 23]
+        lora_kwargs["layers_pattern"] = "layers"
     elif args.target_profile == "full-attention":
         resolved_targets = [
             name
@@ -946,22 +1246,19 @@ def tokenize_dataset(
         if not messages or messages[-1].get("role") != "assistant":
             raise ValueError("Each training row must end with an assistant message")
         prompt_text = tokenizer.apply_chat_template(
-            messages[:-1], tokenize=False, add_generation_prompt=True
+            messages[:-1], tokenize=False, add_generation_prompt=True, enable_thinking=False
         )
         full_text = tokenizer.apply_chat_template(
-            messages, tokenize=False, add_generation_prompt=False
+            messages, tokenize=False, add_generation_prompt=False, enable_thinking=False
         )
-        prompt_ids = tokenizer(
-            prompt_text,
-            add_special_tokens=False,
-            truncation=True,
-            max_length=max_length,
-        )["input_ids"]
-        encoded = tokenizer(
-            full_text, add_special_tokens=False, truncation=True, max_length=max_length
-        )
+        prompt_ids = tokenizer(prompt_text, add_special_tokens=False)["input_ids"]
+        encoded = tokenizer(full_text, add_special_tokens=False)
         input_ids = encoded["input_ids"]
-        prompt_length = min(len(prompt_ids), len(input_ids))
+        if len(input_ids) > max_length:
+            raise ValueError("Complete training target exceeds maxLength; do not truncate labels")
+        if input_ids[:len(prompt_ids)] != prompt_ids:
+            raise ValueError("Chat template prompt is not a token prefix of the full conversation")
+        prompt_length = len(prompt_ids)
         labels = [-100] * prompt_length + list(input_ids[prompt_length:])
         target_tokens = sum(token != -100 for token in labels)
         return {
@@ -1012,12 +1309,11 @@ def make_training_arguments(
         "eval_steps": args.eval_steps,
         "save_strategy": "steps",
         "eval_strategy": "steps",
-        "load_best_model_at_end": True,
-        "metric_for_best_model": "eval_loss",
-        "greater_is_better": False,
+        "load_best_model_at_end": args.load_best_model_at_end,
         "save_total_limit": 3,
-        "fp16": True,
-        "bf16": False,
+        "fp16": args.precision == "fp16",
+        "bf16": args.precision == "bf16",
+        "tf32": args.precision == "bf16",
         "optim": "paged_adamw_8bit",
         "gradient_checkpointing": use_gradient_checkpointing,
         "gradient_checkpointing_kwargs": {"use_reentrant": False}
@@ -1037,6 +1333,9 @@ def make_training_arguments(
         "data_seed": args.seed,
         "save_only_model": False,
     }
+    if args.load_best_model_at_end:
+        requested["metric_for_best_model"] = "eval_loss"
+        requested["greater_is_better"] = False
     signature = inspect.signature(TrainingArguments.__init__).parameters
     if "eval_strategy" not in signature and "evaluation_strategy" in signature:
         requested["evaluation_strategy"] = requested.pop("eval_strategy")
@@ -1048,8 +1347,108 @@ def make_training_arguments(
     return TrainingArguments(**requested)
 
 
+
+def _non_finite_gradient_names(model: torch.nn.Module) -> list[str]:
+    names = []
+    for name, parameter in model.named_parameters():
+        if parameter.requires_grad and parameter.grad is not None:
+            if not torch.isfinite(parameter.grad).all():
+                names.append(name)
+                if len(names) >= 8:
+                    break
+    return names
+
+
+def _amp_overflow_detected(optimizer: Any) -> bool:
+    scaler = getattr(optimizer, "scaler", None)
+    if scaler is None:
+        return False
+    base_optimizer = getattr(optimizer, "optimizer", optimizer)
+    state = getattr(scaler, "_per_optimizer_states", {}).get(id(base_optimizer), {})
+    found_inf = state.get("found_inf_per_device", {})
+    return any(bool(value.detach().item()) for value in found_inf.values())
+
+
+class AmpNumericalGuardCallback(TrainerCallback):
+    """Allow recoverable AMP overflow, but fail closed after unscale."""
+
+    def __init__(self) -> None:
+        self.overflow_batches = 0
+        self.non_finite_batches = 0
+        self.scales: list[float] = []
+
+    def on_pre_optimizer_step(self, _args, _state, control, **kwargs):
+        optimizer = kwargs.get("optimizer")
+        if _amp_overflow_detected(optimizer):
+            self.overflow_batches += 1
+            return control
+        model = kwargs.get("model")
+        if not isinstance(model, torch.nn.Module):
+            raise RuntimeError("Trainer did not provide the model for gradient validation")
+        non_finite = _non_finite_gradient_names(model)
+        if non_finite:
+            self.non_finite_batches += 1
+            raise FloatingPointError(
+                "Non-finite effective gradients after AMP unscale: "
+                f"{non_finite}"
+            )
+        return control
+
+    def on_optimizer_step(self, _args, _state, control, **kwargs):
+        optimizer = kwargs.get("optimizer")
+        scaler = getattr(optimizer, "scaler", None)
+        if scaler is not None:
+            current = float(scaler.get_scale())
+            self.scales.append(current)
+            if current > AMP_MAX_LOSS_SCALE and getattr(scaler, "_scale", None) is not None:
+                scaler._scale.fill_(AMP_MAX_LOSS_SCALE)
+        return control
+
+
+
+
 class FiniteGradientTrainer(Trainer):
     peak_process_rss = 0
+
+    def _build_accelerator_args(self, **kwargs: Any) -> dict[str, Any]:
+        args = super()._build_accelerator_args(**kwargs)
+        handlers = list(args.get("kwargs_handlers", []))
+        handlers.append(
+            GradScalerKwargs(
+                init_scale=AMP_INITIAL_LOSS_SCALE,
+                growth_interval=AMP_GROWTH_INTERVAL,
+            )
+        )
+        args["kwargs_handlers"] = handlers
+        return args
+
+    def create_accelerator_and_postprocess(self) -> None:
+        super().create_accelerator_and_postprocess()
+        scaler = getattr(self.accelerator, "scaler", None)
+        if scaler is not None and float(scaler.get_scale()) > AMP_MAX_LOSS_SCALE:
+            scaler._scale.fill_(AMP_MAX_LOSS_SCALE)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     def _record_memory(self) -> None:
         self.peak_process_rss = max(
@@ -1066,20 +1465,21 @@ class FiniteGradientTrainer(Trainer):
         self._record_memory()
         if not torch.isfinite(loss).all():
             raise FloatingPointError("Non-finite training loss detected")
-        non_finite = []
-        for name, parameter in model.named_parameters():
-            if (
-                parameter.requires_grad
-                and parameter.grad is not None
-                and not torch.isfinite(parameter.grad).all()
-            ):
-                non_finite.append(name)
-                if len(non_finite) >= 8:
-                    break
-        if non_finite:
-            raise FloatingPointError(
-                f"Non-finite gradients detected; refusing to save adapter: {non_finite}"
-            )
+        # Effective-gradient checks run in AmpNumericalGuardCallback after unscale.
+        # Non-finite gradients detected; refusing to save adapter is enforced by callbacks after unscale.
+
+
+
+
+
+
+
+
+
+
+
+
+
         return loss
 
     def evaluate(self, *args: Any, **kwargs: Any) -> dict[str, float]:
@@ -1106,6 +1506,19 @@ class FiniteGradientTrainer(Trainer):
             model, inputs, prediction_loss_only, ignore_keys=ignore_keys
         )
         self._evaluation_batch_count = getattr(self, "_evaluation_batch_count", 0) + 1
+        loss = result[0]
+        if loss is None or not torch.isfinite(loss).all():
+            labels = inputs.get("labels")
+            supervised_tokens = (
+                int((labels != -100).sum().item())
+                if isinstance(labels, torch.Tensor)
+                else None
+            )
+            raise FloatingPointError(
+                "Non-finite evaluation loss "
+                f"at batch={self._evaluation_batch_count} "
+                f"supervisedTokens={supervised_tokens}"
+            )
         if (
             torch.cuda.is_available()
             and self._evaluation_batch_count % EVALUATION_CACHE_CLEAR_INTERVAL == 0
@@ -1137,6 +1550,47 @@ def assert_trainable_weights_finite(model: torch.nn.Module) -> None:
         raise FloatingPointError(
             f"Non-finite trainable weights detected; adapter is invalid: {non_finite}"
         )
+
+
+class FiniteWeightCallback(TrainerCallback):
+    """Stop before evaluation/save if an optimizer update made LoRA weights invalid."""
+
+    def on_step_end(
+        self,
+        _args: TrainingArguments,
+        state: TrainerState,
+        control: TrainerControl,
+        **kwargs: Any,
+    ) -> TrainerControl:
+        model = kwargs.get("model")
+        if not isinstance(model, torch.nn.Module):
+            raise RuntimeError("Trainer did not provide the model for finite-weight validation")
+        try:
+            assert_trainable_weights_finite(model)
+        except FloatingPointError as error:
+            raise FloatingPointError(
+                f"Non-finite trainable weights after optimizer step {state.global_step}"
+            ) from error
+        return control
+
+
+def build_callbacks(
+    training_config: dict[str, Any], memory_pressure_low_mib: int
+) -> list[TrainerCallback]:
+    """Build callbacks while preserving legacy early-stopping defaults."""
+    callbacks: list[TrainerCallback] = [AmpNumericalGuardCallback()]
+    if training_config.get("earlyStoppingEnabled", True):
+        callbacks.append(
+            EarlyStoppingCallback(
+                early_stopping_patience=training_config["earlyStoppingPatience"],
+                early_stopping_threshold=float(training_config["earlyStoppingThreshold"]),
+            )
+        )
+    callbacks.extend(
+        [MemoryPressurePauseCallback(memory_pressure_low_mib), FiniteWeightCallback()]
+    )
+    return callbacks
+
 
 
 def pause_for_memory_pressure(
@@ -1226,7 +1680,9 @@ def apply_recipe_args(args: argparse.Namespace, recipe: dict[str, Any]) -> None:
     args.lora_alpha = training["loraAlpha"]
     args.grad_acc = training["gradientAccumulationSteps"]
     args.learning_rate = float(training["learningRate"])
+    args.precision = training.get("precision", "fp16")
     args.target_profile = training["targetProfile"]
+    args.load_best_model_at_end = training.get("loadBestModelAtEnd", True)
     args.eval_steps = training["evalSteps"]
     args.save_steps = training["saveSteps"]
     args.logging_steps = training["loggingSteps"]
@@ -1266,6 +1722,9 @@ def artifact_hashes(output: Path) -> dict[str, dict[str, Any]]:
 def main() -> None:
     args = parse_args()
     os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+    execution_id = args.execution_id or os.environ.get("TOMNY_EXECUTION_ID", "unknown")
+    heartbeat_path = args.heartbeat_path or os.environ.get("TOMNY_HEARTBEAT_PATH")
+    execution_heartbeat(heartbeat_path, execution_id, "BOOT_00_CONTAINER_ENTRY", gpuRequested=False)
     os.environ.setdefault("HF_HUB_OFFLINE", "1")
     os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
     os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
@@ -1285,7 +1744,9 @@ def main() -> None:
     recipe = validate_recipe(recipe_path)
     recipe_hash = sha256_file(recipe_path)
     apply_recipe_args(args, recipe)
+    execution_heartbeat(heartbeat_path, execution_id, "BOOT_01_ARGS_LOADED", recipeSha256=recipe_hash)
     enforce_finite_gradient_smoke_gate(recipe, args)
+    verify_finite_gradient_smoke_evidence(recipe, recipe_path, args)
     if args.validate_recipe:
         print(
             json.dumps(
@@ -1299,6 +1760,8 @@ def main() -> None:
         )
         return
     require_safe_resume_runtime(args.resume_from)
+    execution_heartbeat(heartbeat_path, execution_id, "BOOT_02_RUNLOCK_VERIFIED", resumeFrom=args.resume_from)
+
     if not args.model or not args.dataset_manifest:
         raise ValueError(
             "--model and --dataset-manifest are required except with --validate-recipe"
@@ -1325,14 +1788,33 @@ def main() -> None:
         raise ValueError("Dataset id does not match the recipe binding")
     if dataset_manifest["datasetVersion"] != dataset_binding["datasetVersion"]:
         raise ValueError("Dataset version does not match the recipe binding")
+
+
+
+
+    execution_heartbeat(heartbeat_path, execution_id, "BOOT_03_DATASET_READY", datasetManifestSha256=manifest_hash)
+
     model_path = Path(args.model).resolve()
+    execution_heartbeat(heartbeat_path, execution_id, "BOOT_04_BASE_LOAD_START", modelPath=str(args.model))
+    if args.force_failure_phase == "before-model-load":
+        raise RuntimeError("forced failure phase: before-model-load")
+
     base_hash = sha256_tree(model_path)
     if base_hash != recipe["baseModel"]["contentSha256"]:
         raise ValueError(
             "Base-model content hash mismatch: "
             f"expected {recipe['baseModel']['contentSha256']}, got {base_hash}"
         )
-    candidate = resolve_candidate(args, allow_existing=bool(args.resume_from))
+    diagnostic_candidate = False
+    if args.diagnostic_pre_train_only:
+        diagnostic_root = Path(".tmp") / "tomny-diagnostic"
+        diagnostic_root.mkdir(parents=True, exist_ok=True)
+        candidate = Path(tempfile.mkdtemp(prefix="execution-", dir=diagnostic_root))
+        diagnostic_candidate = True
+    else:
+        candidate = resolve_candidate(args, allow_existing=bool(args.resume_from))
+
+
     resume_contract = {
         "purpose": args.purpose,
         "candidateId": args.candidate_id,
@@ -1372,7 +1854,9 @@ def main() -> None:
     gc.collect()
     torch.cuda.empty_cache()
     torch.cuda.reset_peak_memory_stats(0)
-    model, tokenizer, load_summary = load_text_only_qwen35(str(model_path))
+    compute_dtype = torch.bfloat16 if args.precision == "bf16" else torch.float16
+    model, tokenizer, load_summary = load_text_only_qwen35(str(model_path), compute_dtype)
+    execution_heartbeat(heartbeat_path, execution_id, "BOOT_05_BASE_LOAD_DONE", load=load_summary)
     after_load = memory_snapshot()
     print(
         json.dumps(
@@ -1393,6 +1877,25 @@ def main() -> None:
         return
 
     model, resolved_targets, use_gradient_checkpointing = attach_lora(model, args)
+    warm_start_result = None
+    if args.warm_start_adapter:
+        if args.resume_from:
+            raise ValueError("--warm-start-adapter cannot be combined with --resume-from")
+        warm_start_result = load_standalone_adapter(
+
+
+            model,
+            Path(args.warm_start_adapter),
+            recipe.get("training", {}).get("parentAdapterSha256", ""),
+            44,
+
+
+        )
+
+
+
+    execution_heartbeat(heartbeat_path, execution_id, "BOOT_06_PARENT_ADAPTER_LOAD_DONE", warmStart=warm_start_result)
+
     trainable_params, total_params = model.get_nb_trainable_parameters()
     print(
         json.dumps(
@@ -1417,6 +1920,12 @@ def main() -> None:
     )
     dataset = limit_split(dataset, args.train_limit, args.validation_limit, args.seed)
     tokenized, token_stats = tokenize_dataset(dataset, tokenizer, args.max_length)
+
+
+
+
+
+
     receipt_path = candidate / "training_preflight.json"
     if args.resume_from:
         completed = candidate / "training_manifest.json"
@@ -1443,7 +1952,7 @@ def main() -> None:
                     "--resume-from must be a checkpoint directory inside this candidate"
                 )
     else:
-        candidate.mkdir(parents=True, exist_ok=False)
+        candidate.mkdir(parents=True, exist_ok=True)
         receipt = {
             "schemaVersion": "tomny.training-preflight.v1",
             "createdAt": datetime.now(UTC).isoformat(),
@@ -1463,19 +1972,36 @@ def main() -> None:
         return_tensors="pt",
     )
     training_args = make_training_arguments(args, candidate, use_gradient_checkpointing)
-    early_stopping = EarlyStoppingCallback(
-        early_stopping_patience=recipe["training"]["earlyStoppingPatience"],
-        early_stopping_threshold=float(recipe["training"]["earlyStoppingThreshold"]),
-    )
-    memory_pressure = MemoryPressurePauseCallback(args.memory_pressure_low_mib)
+    callbacks = build_callbacks(recipe["training"], args.memory_pressure_low_mib)
+
+
+
+    memory_pressure = next(callback for callback in callbacks if isinstance(callback, MemoryPressurePauseCallback))
     trainer = FiniteGradientTrainer(
         model=model,
         args=training_args,
         train_dataset=tokenized["train"],
         eval_dataset=tokenized["validation"],
         data_collator=collator,
-        callbacks=[early_stopping, memory_pressure],
+        callbacks=callbacks,
+
+
     )
+    execution_heartbeat(heartbeat_path, execution_id, "BOOT_07_TRAINER_CONSTRUCTED", trainableParams=trainable_params, totalParams=total_params)
+    if args.force_failure_phase == "after-trainer-construction":
+        raise RuntimeError("forced failure phase: post-trainer-construction")
+
+
+    if args.diagnostic_pre_train_only:
+        execution_heartbeat(heartbeat_path, execution_id, "BOOT_08_READY_BEFORE_TRAIN", optimizerSteps=0, trainerTrainCalled=False)
+        execution_success_receipt(heartbeat_path, execution_id, optimizer_steps=0)
+        if diagnostic_candidate:
+            shutil.rmtree(candidate)
+
+
+        print(json.dumps({"diagnosticPreTrainOnly": True, "optimizerSteps": 0}, indent=2), flush=True)
+        return
+
     safe_finalization_state = (
         load_safe_finalization_state(model, resume_checkpoint, args.steps)
         if resume_checkpoint
@@ -1490,6 +2016,8 @@ def main() -> None:
         }
     else:
         try:
+            execution_heartbeat(heartbeat_path, execution_id, "BOOT_08_READY_BEFORE_TRAIN", optimizerSteps=trainer.state.global_step, trainerTrainCalled=False)
+
             train_result = trainer.train(resume_from_checkpoint=resume_checkpoint)
         except MemoryPressurePause as error:
             pause_for_memory_pressure(candidate, args, resume_contract, error.details)
@@ -1510,19 +2038,34 @@ def main() -> None:
         pause_for_memory_pressure(
             candidate, args, resume_contract, memory_pressure.details
         )
-    best_metric = trainer.state.best_metric
     eval_loss = eval_metrics.get("eval_loss")
-    if not isinstance(best_metric, (int, float)) or not math.isfinite(best_metric):
-        raise RuntimeError("Best-model selection produced no finite eval_loss")
     if not isinstance(eval_loss, (int, float)) or not math.isfinite(eval_loss):
         raise FloatingPointError("Final validation loss is missing or non-finite")
-    configured_regression = float(recipe["training"]["maxValidationRegression"])
-    numeric_tolerance = validation_tolerance(best_metric)
-    maximum = best_metric + configured_regression + numeric_tolerance
-    if validation_regressed(eval_loss, best_metric, configured_regression):
-        raise RuntimeError(
-            f"Validation regression: final eval_loss={eval_loss} exceeds allowed {maximum}"
-        )
+    best_metric = trainer.state.best_metric
+    if args.load_best_model_at_end:
+        if not isinstance(best_metric, (int, float)) or not math.isfinite(best_metric):
+            raise RuntimeError("Best-model selection produced no finite eval_loss")
+        configured_regression = float(recipe["training"].get("maxValidationRegression", 0.0))
+        numeric_tolerance = validation_tolerance(best_metric)
+        maximum = best_metric + configured_regression + numeric_tolerance
+        if validation_regressed(eval_loss, best_metric, configured_regression):
+            raise RuntimeError(
+                f"Validation regression: final eval_loss={eval_loss} exceeds allowed {maximum}"
+            )
+        validation_gate = {
+            "enabled": True,
+            "configuredRegression": configured_regression,
+            "numericTolerance": numeric_tolerance,
+            "observedDelta": eval_loss - best_metric,
+            "allowedMaximum": maximum,
+            "policy": "absolute-or-relative-floating-point-tolerance",
+        }
+    else:
+        best_metric = None
+        validation_gate = {
+            "enabled": False,
+            "policy": "observational-only; final epoch state is retained",
+        }
 
     finalization_evidence = None
     if safe_finalization_state is not None and resume_checkpoint is not None:
@@ -1573,6 +2116,7 @@ def main() -> None:
         },
         "steps": trainer.state.global_step,
         "maxLength": args.max_length,
+        "precision": args.precision,
         "rank": args.rank,
         "loraAlpha": args.lora_alpha,
         "targetProfile": args.target_profile,
@@ -1589,13 +2133,7 @@ def main() -> None:
             "validation": eval_metrics,
             "bestEvalLoss": best_metric,
         },
-        "validationGate": {
-            "configuredRegression": configured_regression,
-            "numericTolerance": numeric_tolerance,
-            "observedDelta": eval_loss - best_metric,
-            "allowedMaximum": maximum,
-            "policy": "absolute-or-relative-floating-point-tolerance",
-        },
+        "validationGate": validation_gate,
         "finalization": finalization_evidence,
         "curves": curves,
         "tokenStats": token_stats,
@@ -1663,5 +2201,16 @@ def main() -> None:
     print(json.dumps(manifest, ensure_ascii=False, indent=2))
 
 
+
+def run_with_failure_receipt() -> None:
+    args = parse_args()
+    execution_id = args.execution_id or os.environ.get("TOMNY_EXECUTION_ID", "unknown")
+    heartbeat_path = args.heartbeat_path or os.environ.get("TOMNY_HEARTBEAT_PATH")
+    try:
+        main()
+    except Exception as error:
+        execution_failure_receipt(heartbeat_path, execution_id, error)
+        raise
+
 if __name__ == "__main__":
-    main()
+    run_with_failure_receipt()

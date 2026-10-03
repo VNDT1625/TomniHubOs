@@ -2,6 +2,12 @@ import { defineConfig } from 'vitest/config';
 import path from 'path';
 
 const aliases = {
+  '@package-apps/browser/': path.resolve(__dirname, './packages/package-apps/browser/src') + '/',
+
+  '@package-apps/ide/': path.resolve(__dirname, './packages/package-apps/ide/src') + '/',
+  '@package-apps/design/': path.resolve(__dirname, './packages/package-apps/design/src') + '/',
+  '@package-apps/document-studio/': path.resolve(__dirname, './packages/package-apps/document-studio/src') + '/',
+  '@package-apps/shared/': path.resolve(__dirname, './packages/package-apps/shared') + '/',
   '@/': path.resolve(__dirname, './packages/desktop/src') + '/',
   '@process/': path.resolve(__dirname, './packages/desktop/src/process') + '/',
   '@renderer/': path.resolve(__dirname, './packages/desktop/src/renderer') + '/',

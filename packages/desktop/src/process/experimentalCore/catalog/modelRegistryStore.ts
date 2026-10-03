@@ -24,7 +24,7 @@ import {
 const SHA256_PATTERN = /^[0-9a-f]{64}$/u;
 const PROMOTION_RECEIPT_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 const PROMOTION_RECEIPT_FUTURE_SKEW_MS = 5 * 60 * 1000;
-const MODEL_PURPOSES = new Set<CoreModelPurpose>(['security', 'user-understanding', 'orchestrator', 'assistant']);
+const MODEL_PURPOSES = new Set<CoreModelPurpose>(['security', 'user-understanding', 'semantic-analysis']);
 const PROMOTION_TARGETS = new Set<ModelPromotionTarget>(['shadow', 'pilot', 'active']);
 const MODEL_LIFECYCLE_STATUSES = new Set<ModelPackLifecycleStatus>([
   'discovered',

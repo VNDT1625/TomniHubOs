@@ -8,7 +8,7 @@
  * useAutoScroll - Auto-scroll hook for a plain scroll container
  *
  * Strategy:
- * - Track whether the user has intentionally scrolled away from the bottom.
+ * - Track whether the user has intentionally scrolled away from the bottom (>80px threshold).
  * - Observe content/scroller size changes and keep the list pinned to bottom
  *   only while auto-follow mode is active.
  * - Use DOM-native scrollIntoView for explicit message jumps.
@@ -17,7 +17,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { TMessage } from '@/common/chat/chatLib';
 
 const PROGRAMMATIC_SCROLL_GUARD_MS = 150;
-const AT_BOTTOM_THRESHOLD_PX = 100;
+const AT_BOTTOM_THRESHOLD_PX = 80;
 const FOLLOW_BOTTOM_THRESHOLD_PX = 4;
 
 interface UseAutoScrollOptions {
@@ -41,6 +41,7 @@ interface UseAutoScrollReturn {
   scrollToBottom: (behavior?: ScrollBehavior) => void;
   scrollElementIntoView: (element: HTMLElement | null, options?: ScrollElementIntoViewOptions) => void;
   hideScrollButton: () => void;
+  scrollerElement: HTMLDivElement | null;
 }
 
 const getBottomGap = (element: HTMLElement): number => {
@@ -74,6 +75,8 @@ export function useAutoScroll({ messages, itemCount }: UseAutoScrollOptions): Us
       userScrolledRef.current = false;
       userInputActiveRef.current = false;
       lastProgrammaticScrollTimeRef.current = Date.now() - (PROGRAMMATIC_SCROLL_GUARD_MS - 50);
+    } else if (bottomGap > AT_BOTTOM_THRESHOLD_PX) {
+      userScrolledRef.current = true;
     }
 
     return pinnedToBottom;
@@ -147,7 +150,7 @@ export function useAutoScroll({ messages, itemCount }: UseAutoScrollOptions): Us
 
       if (
         !pinnedToBottom &&
-        Math.abs(delta) > 2 &&
+        (Math.abs(delta) > 2 || bottomGap > AT_BOTTOM_THRESHOLD_PX) &&
         (userInputActiveRef.current || timeSinceGuard >= PROGRAMMATIC_SCROLL_GUARD_MS)
       ) {
         userScrolledRef.current = true;
@@ -241,5 +244,6 @@ export function useAutoScroll({ messages, itemCount }: UseAutoScrollOptions): Us
     scrollToBottom,
     scrollElementIntoView,
     hideScrollButton,
+    scrollerElement: scrollerEl,
   };
 }

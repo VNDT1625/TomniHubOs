@@ -24,6 +24,66 @@ export type TomniGatewayEvent = {
   timestamp?: number;
 };
 
+export type TomniGatewayQuotaSnapshot = Readonly<{
+  status: 'unknown' | 'reported' | 'stale';
+  source: 'unsupported' | 'provider' | 'cache';
+  unit: 'tokens' | 'requests' | 'credits';
+  consumerId: string;
+  model?: string;
+  providerId?: string;
+  observedAt: number;
+  resetAt?: number;
+  staleAfter?: number;
+  remaining?: number;
+  limit?: number;
+}>;
+
+/** Main-owned model execution service for isolated consumer credentials. */
+export type TomniGatewayModelService = {
+  /** Resolves a gateway credential to an opaque consumer identity. */
+  authorize: (input: {
+    credential: string;
+    origin?: string;
+    path: string;
+  }) => Promise<{ consumerId: string } | undefined>;
+  /** Executes one already-authorized Chat Completions request. */
+  chatCompletions: (input: {
+    consumerId: string;
+    model: string;
+    messages: readonly unknown[];
+    signal: AbortSignal;
+    /** Server-generated opaque identifiers, never client-supplied attribution. */
+    requestId?: string;
+    sessionId?: string;
+  }) => Promise<{
+    model: string;
+    content: string;
+    usage?: Readonly<{
+      prompt_tokens?: number;
+      completion_tokens?: number;
+      total_tokens?: number;
+      cached_tokens?: number;
+      reasoning_tokens?: number;
+    }>;
+    requestId?: string;
+    receiptId?: string;
+  }>;
+  listRequestHistory?: (
+    query?: Readonly<{
+      consumerId?: string;
+      sessionId?: string;
+      model?: string;
+      providerId?: string;
+      from?: number;
+      to?: number;
+    }>
+  ) => Promise<readonly Record<string, unknown>[]>;
+  getQuota?: (input: Readonly<{ consumerId: string; model?: string }>) => Promise<TomniGatewayQuotaSnapshot>;
+  replayPreview?: () => Promise<{ enabled: boolean; count: number; bytes: number; oldestExpiresAt?: number }>;
+  replayExport?: () => Promise<readonly Record<string, unknown>[]>;
+  deleteReplay?: (sampleId?: string) => Promise<number>;
+};
+
 export type TomniGatewaySpeechRequest = {
   audioBuffer: Uint8Array;
   file_name: string;
@@ -59,6 +119,8 @@ export type TomniGatewayServices = {
   collections: Record<TomniGatewayCollectionName, TomniGatewayCollection>;
   conversationMessages: (conversationId: string, query: Readonly<Record<string, string>>) => Promise<unknown>;
   mcp?: TomniGatewayMcpService;
+  /** Isolated OpenAI-compatible model ingress. Omitted until Main admits a model gateway. */
+  model?: TomniGatewayModelService;
 
   speechTranscribe?: (request: TomniGatewaySpeechRequest) => Promise<unknown>;
   subscribe?: (listener: (event: TomniGatewayEvent) => void) => () => void;

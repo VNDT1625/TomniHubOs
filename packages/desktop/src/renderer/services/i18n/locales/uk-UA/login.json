@@ -2,6 +2,7 @@
   "pageTitle": "Omni — Вхід",
   "brand": "Tomny",
   "subtitle": "З поверненням, будь ласка, увійдіть у свій обліковий запис",
+
   "username": "Ім'я користувача",
   "usernamePlaceholder": "Введіть ім'я користувача",
   "password": "Пароль",
@@ -21,6 +22,26 @@
     "tooManyAttempts": "Занадто багато спроб, будь ласка, спробуйте пізніше",
     "networkError": "Помилка з'єднання, будь ласка, спробуйте ще раз",
     "serverError": "Помилка сервера, будь ласка, спробуйте пізніше",
-    "unknown": "Помилка входу, будь ласка, спробуйте ще раз"
-  }
+    "unknown": "Помилка входу, будь ласка, спробуйте ще раз",
+    "passwordMismatch": "Паролі не збігаються",
+    "usernameLength": "Ім'я користувача має містити щонайменше 3 символи",
+    "passwordLength": "Пароль має містити щонайменше 6 символів",
+    "userExists": "Ім'я користувача вже існує"
+  },
+  "tabLogin": "Вхід",
+  "tabRegister": "Реєстрація",
+  "registerSubtitle": "Створіть обліковий запис, щоб почати",
+  "confirmPassword": "Підтвердження пароля",
+  "confirmPasswordPlaceholder": "Введіть пароль ще раз",
+  "registerSubmit": "Створити акаунт",
+  "registerSubmitting": "Створення...",
+  "registerSuccess": "Реєстрація успішна! Перенаправлення...",
+  "switchToRegisterPrompt": "Немає облікового запису?",
+  "switchToRegister": "Зареєструватися",
+  "switchToLoginPrompt": "Вже є акаунт?",
+  "switchToLogin": "Увійти",
+
+  "emailOrUsername": "Email або Ім'я користувача",
+  "emailOrUsernamePlaceholder": "Введіть email або ім'я користувача",
+  "supabaseBadge": "Захищено Supabase Cloud"
 }

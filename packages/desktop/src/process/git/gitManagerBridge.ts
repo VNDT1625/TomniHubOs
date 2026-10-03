@@ -25,7 +25,14 @@
 import { bridge } from '@office-ai/platform';
 import type { IGitCredentialStore } from './gitCredentialStore';
 import type { IGitRepoStore } from './gitRepoStore';
-import type { IGitRunner } from './gitRunner';
+import {
+  GIT_REMOTE_OPERATION_DENIED,
+  type GitRemoteAuthority,
+  type GitRemoteExecution,
+  type GitRemoteOperation,
+  type GitRemoteOperationRequest,
+  type IGitRunner,
+} from './gitRunner';
 import type {
   GitCommit,
   GitCredential,
@@ -99,11 +106,23 @@ export type GitManagerServices = {
   repoStore: IGitRepoStore;
   credentialStore: IGitCredentialStore;
   runner: IGitRunner;
+  /** Main-only admission for clone, pull, and push. Missing authority denies. */
+  remoteAuthority?: GitRemoteAuthority;
 };
 
 export type RegisterGitManagerBridgeOptions = { services: GitManagerServices };
 
 let unsubscribers: Array<() => void> = [];
+
+/** Strip a configured remote to non-secret destination evidence for authority. */
+const remoteOrigin = (remoteUrl: string): string | null => {
+  try {
+    const url = new URL(remoteUrl);
+    return `${url.protocol}//${url.host}${url.pathname}`;
+  } catch {
+    return null;
+  }
+};
 
 /**
  * Register the Git Manager IPC handlers + the repos-changed push stream.
@@ -111,7 +130,7 @@ let unsubscribers: Array<() => void> = [];
  * subscriptions. Invoked once during Main-process bootstrap.
  */
 export function registerGitManagerBridge(options: RegisterGitManagerBridgeOptions): void {
-  const { repoStore, credentialStore, runner } = options.services;
+  const { repoStore, credentialStore, runner, remoteAuthority } = options.services;
 
   /** Wrap a handler so it ALWAYS resolves a {@link GitResult}. */
   const safe =
@@ -133,6 +152,32 @@ export function registerGitManagerBridge(options: RegisterGitManagerBridgeOption
     return resolved ?? undefined;
   };
 
+  /**
+   * Admit remote egress before resolving a credential. The runner repeats this
+   * check at its child-process seam, so a future direct runner caller is denied
+   * unless it brings the same explicit Main-only authority.
+   */
+  const authorizeRemote = async (operation: GitRemoteOperation, repo: GitRepo): Promise<GitRemoteExecution> => {
+    if (!remoteAuthority) throw new Error(GIT_REMOTE_OPERATION_DENIED);
+    const request: GitRemoteOperationRequest = {
+      operation,
+      repository: {
+        id: repo.id,
+        remoteOrigin: remoteOrigin(repo.remoteUrl),
+        branch: repo.branch,
+        credentialConfigured: repo.credentialId !== null,
+      },
+    };
+    let admitted = false;
+    try {
+      admitted = (await remoteAuthority.authorizeRemoteOperation(request)) === true;
+    } catch {
+      admitted = false;
+    }
+    if (!admitted) throw new Error(GIT_REMOTE_OPERATION_DENIED);
+    return { authority: remoteAuthority, request };
+  };
+
   // --- repos --------------------------------------------------------------
   gitManagerChannels.listRepos.provider(safe('listRepos', () => repoStore.list()));
 
@@ -147,8 +192,9 @@ export function registerGitManagerBridge(options: RegisterGitManagerBridgeOption
       });
       // Optionally clone the remote down right away (the "down" direction).
       if (req.cloneNow) {
+        const execution = await authorizeRemote('clone', repo);
         const cred = await resolveCred(repo.credentialId);
-        await runner.clone(repo.remoteUrl, repo.localPath, repo.branch, cred);
+        await runner.clone(repo.remoteUrl, repo.localPath, repo.branch, cred, execution);
       }
       return repo;
     })
@@ -185,8 +231,9 @@ export function registerGitManagerBridge(options: RegisterGitManagerBridgeOption
     safe('clone', async ({ id }: RepoIdRequest): Promise<GitOpResult> => {
       const repo = await repoStore.get(id);
       if (!repo) throw new Error('Repo not found.');
+      const execution = await authorizeRemote('clone', repo);
       const cred = await resolveCred(repo.credentialId);
-      const res = await runner.clone(repo.remoteUrl, repo.localPath, repo.branch, cred);
+      const res = await runner.clone(repo.remoteUrl, repo.localPath, repo.branch, cred, execution);
       if (res.ok) await repoStore.patch(id, { lastPullAt: Date.now() });
       return res;
     })
@@ -205,8 +252,9 @@ export function registerGitManagerBridge(options: RegisterGitManagerBridgeOption
     safe('push', async ({ id }: RepoIdRequest): Promise<GitOpResult> => {
       const repo = await repoStore.get(id);
       if (!repo) throw new Error('Repo not found.');
+      const execution = await authorizeRemote('push', repo);
       const cred = await resolveCred(repo.credentialId);
-      const res = await runner.push(repo.localPath, repo.branch, cred);
+      const res = await runner.push(repo.localPath, repo.branch, cred, execution);
       if (res.ok) await repoStore.patch(id, { lastPushAt: Date.now() });
       return res;
     })
@@ -216,8 +264,9 @@ export function registerGitManagerBridge(options: RegisterGitManagerBridgeOption
     safe('pull', async ({ id }: RepoIdRequest): Promise<GitOpResult> => {
       const repo = await repoStore.get(id);
       if (!repo) throw new Error('Repo not found.');
+      const execution = await authorizeRemote('pull', repo);
       const cred = await resolveCred(repo.credentialId);
-      const res = await runner.pull(repo.localPath, repo.branch, cred);
+      const res = await runner.pull(repo.localPath, repo.branch, cred, execution);
       if (res.ok) await repoStore.patch(id, { lastPullAt: Date.now() });
       return res;
     })

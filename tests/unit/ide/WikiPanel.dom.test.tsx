@@ -19,8 +19,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ConfigProvider } from '@arco-design/web-react';
-import WikiPanel from '@/renderer/pages/studio/ide/components/WikiPanel';
-import type { UseRepoWiki, WikiSectionState } from '@/renderer/pages/studio/ide/useRepoWiki';
+import WikiPanel from '@package-apps/ide/renderer/components/WikiPanel';
+import type { UseRepoWiki, WikiSectionState } from '@package-apps/ide/renderer/hooks/useRepoWiki';
 
 // --- i18n: identity translator so assertions use raw key strings -------------
 vi.mock('react-i18next', () => ({

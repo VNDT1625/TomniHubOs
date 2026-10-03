@@ -31,7 +31,7 @@ const metrics = vi.fn();
 const search = vi.fn();
 const feedback = vi.fn();
 const forget = vi.fn();
-vi.mock('@/renderer/pages/studio/ide/expbase/experienceClient', () => ({
+vi.mock('@package-apps/ide/renderer/expbase/experienceClient', () => ({
   experienceClient: {
     list: (...a: unknown[]) => list(...a),
     metrics: (...a: unknown[]) => metrics(...a),
@@ -41,7 +41,7 @@ vi.mock('@/renderer/pages/studio/ide/expbase/experienceClient', () => ({
   },
 }));
 
-import ExpBasePanel from '@/renderer/pages/studio/ide/expbase/ExpBasePanel';
+import ExpBasePanel from '@package-apps/ide/renderer/expbase/ExpBasePanel';
 
 const entry = (overrides: Partial<ExperienceEntry> = {}): ExperienceEntry => ({
   id: 'e1',

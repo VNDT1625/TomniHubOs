@@ -32,7 +32,6 @@ const mappings: Array<{
   { mode: 'automation', packageId: 'com.tomni.automation-studio', moduleId: 'automation' },
   { mode: 'makeVideo', packageId: 'com.tomni.video-studio', moduleId: 'video' },
   { mode: 'music', packageId: 'com.tomni.music-studio', moduleId: 'music' },
-  { mode: 'ide', packageId: 'com.tomni.ide', moduleId: 'ide' },
 ];
 
 describe('Studio compatibility resolver v1', () => {
@@ -98,7 +97,7 @@ describe('Studio compatibility resolver v1', () => {
       requestedMode: null,
       normalizedMode: 'dashboard',
       reason: 'default-mode',
-      target: { packageId: 'com.tomni.document-studio', moduleId: 'document' },
+      target: { kind: 'package', packageId: 'com.tomni.document-studio', moduleId: 'document' },
     });
   });
 
@@ -110,7 +109,7 @@ describe('Studio compatibility resolver v1', () => {
       requestedMode: mode,
       normalizedMode: 'dashboard',
       reason: 'unknown-mode-fallback',
-      target: { packageId: 'com.tomni.document-studio', moduleId: 'document' },
+      target: { kind: 'package', packageId: 'com.tomni.document-studio', moduleId: 'document' },
       availability: 'install-required',
     });
   });
@@ -209,7 +208,7 @@ describe('Studio compatibility runtime navigation', () => {
 
     expect(result).toEqual({
       kind: 'target-runtime',
-      target: { packageId: 'com.tomni.document-studio', moduleId: 'document' },
+      target: { kind: 'package', packageId: 'com.tomni.document-studio', moduleId: 'document' },
     });
   });
 
@@ -222,8 +221,14 @@ describe('Studio compatibility runtime navigation', () => {
 
     expect(result).toEqual({
       kind: 'package-gate',
-      target: { packageId: 'com.tomni.document-studio', moduleId: 'document' },
+      target: { kind: 'package', packageId: 'com.tomni.document-studio', moduleId: 'document' },
     });
+  });
+
+  it('routes legacy IDE links to the default IDE surface without Store state', () => {
+    const result = resolveStudioCompatibilityNavigation({ kind: 'route', pathname: '/studio', mode: 'ide' }, [], false);
+
+    expect(result).toEqual({ kind: 'default-runtime', target: { kind: 'default-surface', pathname: '/ide' } });
   });
 
   it('keeps the legacy runtime when the target is not in the available package catalog', () => {
@@ -253,10 +258,9 @@ describe('Studio compatibility runtime navigation', () => {
   });
 
   it('keeps the legacy runtime when the trusted bootstrap is absent', () => {
-    const result = resolveStudioCompatibilityNavigation(
-      { kind: 'route', pathname: '/studio' },
-      [documentPackage({ state: 'installed', enabled: true })]
-    );
+    const result = resolveStudioCompatibilityNavigation({ kind: 'route', pathname: '/studio' }, [
+      documentPackage({ state: 'installed', enabled: true }),
+    ]);
 
     expect(result).toEqual({ kind: 'legacy-runtime', reason: 'redirect-disabled' });
   });

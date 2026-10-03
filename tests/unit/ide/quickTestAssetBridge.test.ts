@@ -27,10 +27,16 @@ import {
   QT_ASSET_CHANNELS,
   registerQuickTestAssetBridge,
   type QuickTestAssetState,
-} from '@/process/ide/quickTestAssetBridge';
-import type { ReplayRunResult, ReplayScenario } from '@/process/ide/quickTestReplay';
-import type { CdpWebContents, RuntimeTrace } from '@/process/ide/quickTestTracer';
-import type { UnderstandResult } from '@/process/ide/understandTypes';
+} from '@package-apps/ide/process/execution/quickTest/bridges/quickTestAssetBridge';
+import type {
+  ReplayRunResult,
+  ReplayScenario,
+} from '@package-apps/ide/process/execution/quickTest/analysis/quickTestReplay';
+import type {
+  CdpWebContents,
+  RuntimeTrace,
+} from '@package-apps/ide/process/execution/quickTest/runtime/quickTestTracer';
+import type { UnderstandResult } from '@package-apps/ide/process/knowledge/graph/understandTypes';
 
 const trace = (rootPath: string): RuntimeTrace => ({
   rootPath,

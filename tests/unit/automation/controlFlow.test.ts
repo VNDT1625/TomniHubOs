@@ -10,12 +10,19 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import { createWorkflowEngine } from '@/process/automation/workflowEngine';
+import { createWorkflowEngine as createRawWorkflowEngine } from '@/process/automation/workflowEngine';
 import { evaluateCondition, resolveValue } from '@/process/automation/conditions';
 import { runSet, runCode, createFilesystemAction } from '@/process/automation/connectors/dataActions';
 import { createAutomationScheduler } from '@/process/automation/automationScheduler';
 import type { NodeExecutorMap } from '@/process/automation/nodeExecutors';
 import type { RunEvent, Workflow, WorkflowNode } from '@/process/automation/automationTypes';
+
+/** Existing interpreter tests exercise behavior after a Main-owned admission. */
+const createWorkflowEngine = (deps: Parameters<typeof createRawWorkflowEngine>[0]) =>
+  createRawWorkflowEngine({
+    egressAuthority: { authorizeExternalEgress: () => undefined },
+    ...deps,
+  });
 
 // ---------------------------------------------------------------------------
 // Helpers

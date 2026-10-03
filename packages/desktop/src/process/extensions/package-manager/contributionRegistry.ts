@@ -138,6 +138,31 @@ const registerUnique = <T extends { id: string }>(
   });
 };
 
+/**
+ * Older signed app artifacts can declare a runnable sandbox module without the
+ * later `contributions.apps` projection. The fallback is deliberately limited
+ * to app packages and sandboxed-web modules; the manifest has already passed
+ * identity and trust validation before this value is admitted to the registry.
+ */
+const fallbackSandboxedAppContributions = (manifest: PackageManifest): PackageAppContribution[] => {
+  if (manifest.type !== 'app') return [];
+
+  const explicitApps = manifest.contributions?.apps ?? [];
+  const explicitModuleIds = new Set(explicitApps.map((contribution) => contribution.moduleId));
+  const explicitIds = new Set(explicitApps.map((contribution) => contribution.id));
+
+  return manifest.modules.flatMap((module) => {
+    if (module.runtime !== 'sandboxed-web' || explicitModuleIds.has(module.id)) return [];
+    return [
+      {
+        id: explicitIds.has(module.id) ? `legacy-${module.id}` : module.id,
+        title: module.title,
+        moduleId: module.id,
+      },
+    ];
+  });
+};
+
 /** Atomic in-memory projection of contributions from the durable installed-package registry. */
 export class PackageContributionRegistry {
   private records = new Map<string, InstalledPackageRecord>();
@@ -197,11 +222,10 @@ export class PackageContributionRegistry {
     }
 
     const accepted = new Map<string, InstalledPackageRecord>();
-    let pending = [...unique.values()].toSorted((left, right) => {
-      if (left.id === 'com.tomni.ide') return -1;
-      if (right.id === 'com.tomni.ide') return 1;
-      return left.id.localeCompare(right.id);
-    });
+    // Restore uses declared package dependencies rather than a privileged
+    // package-name ordering. The retry loop below admits a dependency before
+    // its dependents, so every Package App follows the same contract.
+    let pending = [...unique.values()].toSorted((left, right) => left.id.localeCompare(right.id));
 
     while (pending.length > 0) {
       let progressed = false;
@@ -359,18 +383,20 @@ export class PackageContributionRegistry {
     const settings = new Map<string, RegisteredPackageContribution<PackageSettingContribution>>();
     for (const { manifest } of active.values()) {
       const contributions = manifest.contributions;
-      if (!contributions) continue;
-      for (const contribution of contributions.apps ?? []) registerUnique(apps, contribution, manifest, 'App');
-      for (const contribution of contributions.ide?.activityGroups ?? []) {
+      for (const contribution of contributions?.apps ?? []) registerUnique(apps, contribution, manifest, 'App');
+      for (const contribution of fallbackSandboxedAppContributions(manifest)) {
+        registerUnique(apps, contribution, manifest, 'App');
+      }
+      for (const contribution of contributions?.ide?.activityGroups ?? []) {
         registerUnique(activityGroups, contribution, manifest, 'IDE activity group');
       }
-      for (const contribution of contributions.ide?.subtabs ?? []) {
+      for (const contribution of contributions?.ide?.subtabs ?? []) {
         registerUnique(subtabs, contribution, manifest, 'IDE subtab');
       }
-      for (const contribution of contributions.ide?.commands ?? []) {
+      for (const contribution of contributions?.ide?.commands ?? []) {
         registerUnique(commands, contribution, manifest, 'Command');
       }
-      for (const contribution of contributions.ide?.settings ?? []) {
+      for (const contribution of contributions?.ide?.settings ?? []) {
         registerUnique(settings, contribution, manifest, 'Setting');
       }
     }

@@ -212,7 +212,9 @@ const parseGrant = (
     throw new PackageSandboxPermissionPolicyError(`Sandbox capability is not supported and is denied: ${capability}.`);
   }
   if (!manifestPermissions.has(capability)) {
-    throw new PackageSandboxPermissionPolicyError(`Sandbox capability is not declared by the package manifest: ${capability}.`);
+    throw new PackageSandboxPermissionPolicyError(
+      `Sandbox capability is not declared by the package manifest: ${capability}.`
+    );
   }
   const runtimeCapability = capability as PackageSandboxRuntimeCapability;
   const expectedScope = CAPABILITY_SCOPE[runtimeCapability];
@@ -244,7 +246,9 @@ export const compilePackageSandboxPermissionPolicy = (
   if (!Array.isArray(manifest.permissions)) {
     throw new PackageSandboxPermissionPolicyError('Manifest permissions must be an array.');
   }
-  const manifestPermissions = new Set(manifest.permissions.map((capability) => requireCapabilityId(capability, 'Manifest permission')));
+  const manifestPermissions = new Set(
+    manifest.permissions.map((capability) => requireCapabilityId(capability, 'Manifest permission'))
+  );
   const candidate = requireRecord(policy, 'Package sandbox permission policy');
   rejectUnknownKeys(candidate, ['version', 'packageId', 'capabilities'], 'Package sandbox permission policy');
   if (candidate.version !== PACKAGE_SANDBOX_PERMISSION_POLICY_VERSION) {
@@ -252,7 +256,9 @@ export const compilePackageSandboxPermissionPolicy = (
   }
   const packageId = requireCanonicalPackageId(candidate.packageId, 'Package sandbox permission policy packageId');
   if (packageId !== manifestId) {
-    throw new PackageSandboxPermissionPolicyError('Package sandbox permission policy does not bind the manifest package.');
+    throw new PackageSandboxPermissionPolicyError(
+      'Package sandbox permission policy does not bind the manifest package.'
+    );
   }
   if (!Array.isArray(candidate.capabilities)) {
     throw new PackageSandboxPermissionPolicyError('Package sandbox permission policy capabilities must be an array.');
@@ -261,7 +267,9 @@ export const compilePackageSandboxPermissionPolicy = (
   const capabilityIds = new Set<string>();
   for (const grant of grants) {
     if (capabilityIds.has(grant.capability)) {
-      throw new PackageSandboxPermissionPolicyError(`Package sandbox permission policy duplicates ${grant.capability}.`);
+      throw new PackageSandboxPermissionPolicyError(
+        `Package sandbox permission policy duplicates ${grant.capability}.`
+      );
     }
     capabilityIds.add(grant.capability);
   }

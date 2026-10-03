@@ -58,11 +58,32 @@ describe('Bounded Core Model Output Validator', () => {
   });
 
   it('enforces bounded security redactions and their closed values', () => {
+    expect(
+      validator.validate('tomny.security.output.v1', {
+        riskType: 'linked_identity',
+        action: 'allow',
+        confidence: 0.9,
+        reasonCode: 'LINKED_IDENTITY_EXPOSURE',
+        requiresBackendValidation: false,
+        redactions: [],
+      })
+    ).toEqual({ valid: false, code: 'invalid-enum' });
+    expect(
+      validator.validate('tomny.security.output.v1', {
+        riskType: 'private_document',
+        action: 'local_only',
+        confidence: 0.9,
+        reasonCode: 'PRIVATE_DOCUMENT_EXPOSURE',
+        requiresBackendValidation: true,
+        redactions: [],
+      })
+    ).toEqual({ valid: false, code: 'invalid-enum' });
+
     const output = {
       riskType: 'prompt_injection',
       action: 'block',
       confidence: 0.98,
-      reasonCode: 'UNTRUSTED_OVERRIDE',
+      reasonCode: 'PROMPT_INJECTION',
       requiresBackendValidation: true,
       redactions: ['credential'],
     };
@@ -73,7 +94,86 @@ describe('Bounded Core Model Output Validator', () => {
     });
   });
 
+  it('accepts semantic security V2 without a model action field', () => {
+    expect(
+      validator.validate('tomny.security.semantic.output.v2', {
+        riskType: 'prompt_injection',
+        reasonCode: 'PROMPT_INJECTION',
+        requiresBackendValidation: true,
+        redactions: [],
+      })
+    ).toEqual({ valid: true });
+    expect(
+      validator.validate('tomny.security.semantic.output.v2', {
+        riskType: 'prompt_injection',
+        reasonCode: 'PROMPT_INJECTION',
+        requiresBackendValidation: true,
+        redactions: [],
+        action: 'allow',
+      })
+    ).toEqual({ valid: false, code: 'unexpected-key' });
+  });
+
+  it('accepts semantic security V3 and rejects removed fields', () => {
+    expect(
+      validator.validate('tomny.security.semantic.output.v3', {
+        riskType: 'prompt_injection',
+        reasonCode: 'PROMPT_INJECTION',
+        requiresBackendValidation: true,
+      })
+    ).toEqual({ valid: true });
+    expect(
+      validator.validate('tomny.security.semantic.output.v3', {
+        riskType: 'prompt_injection',
+        reasonCode: 'PROMPT_INJECTION',
+        requiresBackendValidation: true,
+        redactions: [],
+      })
+    ).toEqual({ valid: false, code: 'unexpected-key' });
+  });
+
   it('accepts the benchmark-compatible user understanding contract', () => {
+    expect(
+      validator.validate('tomny.user-understanding.output.v2', {
+        hasMemorySignal: true,
+        kind: 'preference',
+        scopeHint: 'workspace',
+        confidence: 0.96,
+        reason: 'The user explicitly requested concise complete answers.',
+        requiresUserConfirmation: true,
+      })
+    ).toEqual({ valid: true });
+  });
+
+  it('accepts a combined semantic response with either bounded result or null', () => {
+    expect(
+      validator.validate('tomny.semantic-analysis.output.v1', {
+        security: {
+          riskType: 'prompt_injection',
+          action: 'block',
+          confidence: 0.98,
+          reasonCode: 'PROMPT_INJECTION',
+          requiresBackendValidation: true,
+          redactions: ['credential'],
+        },
+        userUnderstanding: null,
+      })
+    ).toEqual({ valid: true });
+  });
+
+  it('rejects combined output with an invalid nested result or extra key', () => {
+    expect(
+      validator.validate('tomny.semantic-analysis.output.v1', {
+        security: null,
+        userUnderstanding: { hasMemorySignal: true },
+      })
+    ).toEqual({ valid: false, code: 'missing-key' });
+    expect(
+      validator.validate('tomny.semantic-analysis.output.v1', { security: null, userUnderstanding: null, extra: true })
+    ).toEqual({ valid: false, code: 'unexpected-key' });
+  });
+
+  it('keeps the v1 user-understanding contract valid for existing candidate artifacts', () => {
     expect(
       validator.validate('tomny.user-understanding.output.v1', {
         hypothesis: 'prefers_concise_complete_answers',
@@ -85,7 +185,6 @@ describe('Bounded Core Model Output Validator', () => {
       })
     ).toEqual({ valid: true });
   });
-
   it('accepts the benchmark-compatible orchestrator contract', () => {
     expect(
       validator.validate('tomny.orchestrator.output.v1', {

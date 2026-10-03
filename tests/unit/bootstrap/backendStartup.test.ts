@@ -6,13 +6,21 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import { startBackendOrExit } from '@/process/startup/backendStartup';
-import { resolveCoreBootPolicy } from '@/process/startup/coreBootPolicy';
+import { isDevelopmentCompatibilityOptIn, resolveCoreBootPolicy } from '@/process/startup/coreBootPolicy';
 
 describe('resolveCoreBootPolicy', () => {
-  it('keeps compatibility services available by default while legacy startup stays optional', () => {
+  it('recognizes only the exact development opt-in environment value', () => {
+    expect(isDevelopmentCompatibilityOptIn(undefined)).toBe(false);
+    expect(isDevelopmentCompatibilityOptIn('')).toBe(false);
+    expect(isDevelopmentCompatibilityOptIn('true')).toBe(false);
+    expect(isDevelopmentCompatibilityOptIn('yes')).toBe(false);
+    expect(isDevelopmentCompatibilityOptIn('1')).toBe(true);
+  });
+
+  it('fails closed to native Tomny Core by default', () => {
     expect(resolveCoreBootPolicy()).toEqual({
-      mode: 'compat',
-      startLegacyBackend: true,
+      mode: 'tomny',
+      startLegacyBackend: false,
       requireLegacyBackend: false,
     });
   });
@@ -25,16 +33,28 @@ describe('resolveCoreBootPolicy', () => {
     });
   });
 
-  it('keeps the legacy backend optional in compatibility mode', () => {
-    expect(resolveCoreBootPolicy({ requestedMode: 'compat' })).toEqual({
+  it('allows compatibility only for an unpackaged development build with an explicit opt-in', () => {
+    expect(
+      resolveCoreBootPolicy({
+        requestedMode: 'compat',
+        isPackaged: false,
+        developmentCompatibilityOptIn: true,
+      })
+    ).toEqual({
       mode: 'compat',
       startLegacyBackend: true,
       requireLegacyBackend: false,
     });
   });
 
-  it('makes the legacy backend fail-fast only when explicitly required', () => {
-    expect(resolveCoreBootPolicy({ requestedMode: 'legacy' })).toEqual({
+  it('allows fail-fast legacy mode only with the same development opt-in', () => {
+    expect(
+      resolveCoreBootPolicy({
+        requestedMode: 'legacy',
+        isPackaged: false,
+        developmentCompatibilityOptIn: true,
+      })
+    ).toEqual({
       mode: 'legacy',
       startLegacyBackend: true,
       requireLegacyBackend: true,
@@ -45,16 +65,8 @@ describe('resolveCoreBootPolicy', () => {
     expect(() => resolveCoreBootPolicy({ requestedMode: 'future' })).toThrow('Invalid Tomny Core boot mode');
   });
 
-  it('keeps the legacy backend optional for WebUI in default compatibility mode', () => {
+  it('does not let WebUI or reset modes widen the backend policy', () => {
     expect(resolveCoreBootPolicy({ isWebUIMode: true })).toEqual({
-      mode: 'compat',
-      startLegacyBackend: true,
-      requireLegacyBackend: false,
-    });
-  });
-
-  it('allows backend-free mode for native WebUI and password reset', () => {
-    expect(resolveCoreBootPolicy({ requestedMode: 'tomny', isWebUIMode: true })).toEqual({
       mode: 'tomny',
       startLegacyBackend: false,
       requireLegacyBackend: false,
@@ -66,10 +78,40 @@ describe('resolveCoreBootPolicy', () => {
     });
   });
 
-  it('preserves explicit compatibility mode for WebUI', () => {
-    expect(resolveCoreBootPolicy({ requestedMode: 'compat', isWebUIMode: true })).toEqual({
-      mode: 'compat',
-      startLegacyBackend: true,
+  it('rejects legacy compatibility requests in a packaged app even with the opt-in environment value', () => {
+    expect(
+      resolveCoreBootPolicy({
+        requestedMode: 'compat',
+        isPackaged: true,
+        developmentCompatibilityOptIn: true,
+      })
+    ).toEqual({
+      mode: 'tomny',
+      startLegacyBackend: false,
+      requireLegacyBackend: false,
+    });
+    expect(
+      resolveCoreBootPolicy({
+        requestedMode: 'legacy',
+        isPackaged: true,
+        developmentCompatibilityOptIn: true,
+      })
+    ).toEqual({
+      mode: 'tomny',
+      startLegacyBackend: false,
+      requireLegacyBackend: false,
+    });
+  });
+
+  it('requires both the unpackaged signal and exact opt-in for an explicit compatibility request', () => {
+    expect(resolveCoreBootPolicy({ requestedMode: 'compat', isPackaged: false })).toEqual({
+      mode: 'tomny',
+      startLegacyBackend: false,
+      requireLegacyBackend: false,
+    });
+    expect(resolveCoreBootPolicy({ requestedMode: 'compat', developmentCompatibilityOptIn: true })).toEqual({
+      mode: 'tomny',
+      startLegacyBackend: false,
       requireLegacyBackend: false,
     });
   });

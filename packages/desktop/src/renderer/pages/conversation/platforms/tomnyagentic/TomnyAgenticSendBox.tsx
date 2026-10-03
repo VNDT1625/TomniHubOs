@@ -10,6 +10,8 @@ import { ROUTER9_REASONING_EFFORTS, TOMNI_GATEWAY_PROVIDER_ID } from '@/common/r
 import { parseError } from '@/common/utils';
 import type { IConversationMcpStatus } from '@/common/config/storage';
 import AgentModeSelector from '@/renderer/components/agent/AgentModeSelector';
+import ContextUsageIndicator from '@/renderer/components/agent/ContextUsageIndicator';
+import { getModelContextLimit } from '@/renderer/utils/model/modelContextLimits';
 import CommandQueuePanel from '@/renderer/components/chat/CommandQueuePanel';
 import MobileActionSheet, {
   type MobileActionSheetEntry,
@@ -39,7 +41,6 @@ import {
 import { getConversationOrNull } from '@/renderer/pages/conversation/utils/conversationCache';
 import { warmupConversation } from '@/renderer/pages/conversation/utils/warmupConversation';
 import { usePreviewContext } from '@/renderer/pages/conversation/Preview';
-import { buildPlanningGuard } from '@/renderer/services/planningGuard';
 import {
   expandGoalCommand,
   isGoalOffCommand,
@@ -67,8 +68,9 @@ import { emitter, useAddEventListener } from '@/renderer/utils/emitter';
 import { mergeFileSelectionItems } from '@/renderer/utils/file/fileSelection';
 import { buildDisplayMessage, collectSelectedFiles } from '@/renderer/utils/file/messageFiles';
 import { mergeWithCapabilities, type AgentModeOption } from '@/renderer/utils/model/agentModes';
-import { Message, Tag } from '@arco-design/web-react';
-import { Brain, MagicHat, Shield } from '@icon-park/react';
+import AgentSessionDrawer from '@/renderer/components/agent/AgentSessionDrawer';
+import { Button, Message, Tag, Tooltip } from '@arco-design/web-react';
+import { Brain, Lock, MagicHat, Shield, Write } from '@icon-park/react';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useTomnyAgenticMessage } from './useTomnyAgenticMessage';
@@ -128,6 +130,13 @@ const TomnyAgenticSendBox: React.FC<{
   const [dynamicModes, setDynamicModes] = useState<AgentModeOption[]>([]);
   const [currentMode, setCurrentMode] = useState<string | undefined>(session_mode);
   const [isMobileSheetOpen, setIsMobileSheetOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerTab, setDrawerTab] = useState<'save' | 'context' | 'secret'>('save');
+
+  const openDrawer = useCallback((tab: 'save' | 'context' | 'secret') => {
+    setDrawerTab(tab);
+    setDrawerOpen(true);
+  }, []);
   const layout = useLayoutContext();
   const isMobile = Boolean(layout?.isMobile);
   const conversationContext = useConversationContextSafe();
@@ -145,7 +154,7 @@ const TomnyAgenticSendBox: React.FC<{
   const teamPermission = useTeamPermission();
   const propagateMode = teamPermission?.propagateMode;
 
-  const { thought, running, hasHydratedRunningState, setActiveMsgId, setWaitingResponse, resetState } =
+  const { thought, running, hasHydratedRunningState, setActiveMsgId, setWaitingResponse, resetState, tokenUsage } =
     useTomnyAgenticMessage(conversation_id, {
       onConfigChanged: (capabilities) => {
         const modes = (capabilities as { modes?: string[] })?.modes;
@@ -154,6 +163,8 @@ const TomnyAgenticSendBox: React.FC<{
         }
       },
     });
+
+  const contextLimit = useMemo(() => getModelContextLimit(current_model?.use_model), [current_model?.use_model]);
 
   const { atPath, uploadFile, setAtPath, setUploadFile, content, setContent } = useSendBoxDraft(conversation_id);
 
@@ -243,10 +254,9 @@ const TomnyAgenticSendBox: React.FC<{
   const executeCommand = useCallback(
     async ({ input, files }: Pick<ConversationCommandQueueItem, 'input' | 'files'>) => {
       if (teamPermission) await teamPermission.warmupSession();
-      if (!current_model?.use_model) {
-        Message.warning(t('conversation.chat.noModelSelected'));
-        throw new Error('No model selected');
-      }
+
+      // Allow execution without model - pipeline will handle tool routing or prompt for model connection
+      // Model check will be performed by the chat pipeline stage (ToolRouterStage + ModelRoutingStage)
 
       let msg_id: string | null = null;
       try {
@@ -267,7 +277,8 @@ const TomnyAgenticSendBox: React.FC<{
         const baseModelMessage = commandExpansion
           ? buildDisplayMessage(commandExpansion, files, workspacePath)
           : displayMessage;
-        const guardedMessage = await buildPlanningGuard(workspacePath, baseModelMessage);
+        // Package-specific IDE planning is intentionally not a base-chat concern.
+        const guardedMessage = baseModelMessage;
         // Goal Mode steering: bind every ordinary turn to the mandatory pipeline.
         const steeredMessage = withGoalSteeringDirective(guardedMessage, conversation_id);
         // Keep the pinned Team task contract out of the visible user bubble.
@@ -351,9 +362,9 @@ const TomnyAgenticSendBox: React.FC<{
     onExecute: executeCommand,
   });
 
-  // Handle initial message from Guid page — wait until model is ready
+  // Handle initial message from Guid page — allow execution without model check
   useEffect(() => {
-    if (!conversation_id || !current_model?.use_model) return;
+    if (!conversation_id) return;
 
     const storageKey = `tomnyagentic_initial_message_${conversation_id}`;
     const processedKey = `tomnyagentic_initial_processed_${conversation_id}`;
@@ -377,7 +388,7 @@ const TomnyAgenticSendBox: React.FC<{
     };
 
     void processInitialMessage();
-  }, [conversation_id, current_model?.use_model, executeCommand]);
+  }, [conversation_id, executeCommand]);
 
   const onSendHandler = async (message: string) => {
     // `/goal verify <cmd>` / `/goal verify off` — configure independent verification.
@@ -732,9 +743,7 @@ const TomnyAgenticSendBox: React.FC<{
   // enough. Mirrors executeCommand's request flow but skips the optimistic
   // right-side bubble (the user did not type anything).
   const silentResume = useCallback(async (): Promise<void> => {
-    if (!current_model?.use_model) {
-      throw new Error('No model selected');
-    }
+    // Allow silent resume without model - pipeline will handle
     const continueInstruction =
       'Hãy tiếp tục công việc đang dở từ chỗ bị gián đoạn. / Continue the unfinished work from where it was interrupted.';
     const modelInput = continueInstruction;
@@ -751,7 +760,7 @@ const TomnyAgenticSendBox: React.FC<{
       setWaitingResponse(false);
       throw error;
     }
-  }, [conversation_id, current_model?.use_model, setActiveMsgId, setWaitingResponse]);
+  }, [conversation_id, setActiveMsgId, setWaitingResponse]);
 
   // Silent interruption recovery for ordinary turns. Disabled while Goal Mode is
   // active because useGoalRunner already drives its own stall watchdog and
@@ -826,15 +835,11 @@ const TomnyAgenticSendBox: React.FC<{
           setAtPath(items);
         }}
         loading={isBusy}
-        disabled={!current_model?.use_model}
-        placeholder={
-          current_model?.use_model
-            ? t('acp.sendbox.placeholder', {
-                backend: agent_name || 'Tomny Agentic',
-                defaultValue: `Send message to {{backend}}...`,
-              })
-            : t('conversation.chat.noModelSelected')
-        }
+        disabled={false}
+        placeholder={t('acp.sendbox.placeholder', {
+          backend: agent_name || 'Tomny Agentic',
+          defaultValue: `Send message to {{backend}}...`,
+        })}
         onStop={handleStop}
         className='z-10'
         onFilesAdded={handleFilesAdded}
@@ -850,18 +855,51 @@ const TomnyAgenticSendBox: React.FC<{
           />
         }
         rightTools={
-          <AgentModeSelector
-            backend='tomnyagentic'
-            conversation_id={conversation_id}
-            compact
-            initialMode={session_mode}
-            dynamicModes={dynamicModes}
-            compactLeadingIcon={<Shield theme='outline' size='14' fill={iconColors.secondary} />}
-            modeLabelFormatter={(mode) => t(`agentMode.${mode.value}`, { defaultValue: mode.label })}
-            compactLabelPrefix={t('agentMode.permission')}
-            hideCompactLabelPrefixOnMobile
-            onModeChanged={propagateMode}
-          />
+          <div className='flex items-center gap-6px'>
+            <Tooltip content={t('ide.memory.tabs.save', { defaultValue: 'Notes & Memory' })}>
+              <Button
+                type='text'
+                shape='circle'
+                size='small'
+                icon={<Write theme='outline' size='14' fill='currentColor' />}
+                onClick={() => openDrawer('save')}
+                aria-label={t('ide.memory.tabs.save', { defaultValue: 'Notes & Memory' })}
+              />
+            </Tooltip>
+            <Tooltip content={t('ide.memory.tabs.context', { defaultValue: 'Context Inspector' })}>
+              <Button
+                type='text'
+                shape='circle'
+                size='small'
+                icon={<Brain theme='outline' size='14' fill='currentColor' />}
+                onClick={() => openDrawer('context')}
+                aria-label={t('ide.memory.tabs.context', { defaultValue: 'Context Inspector' })}
+              />
+            </Tooltip>
+            <Tooltip content={t('ide.memory.tabs.secret', { defaultValue: 'Repository Secrets' })}>
+              <Button
+                type='text'
+                shape='circle'
+                size='small'
+                icon={<Lock theme='outline' size='14' fill='currentColor' />}
+                onClick={() => openDrawer('secret')}
+                aria-label={t('ide.memory.tabs.secret', { defaultValue: 'Repository Secrets' })}
+              />
+            </Tooltip>
+            <ContextUsageIndicator tokenUsage={tokenUsage} context_limit={contextLimit} size={22} />
+            <AgentModeSelector
+              backend='tomnyagentic'
+              conversation_id={conversation_id}
+              compact
+              initialMode={session_mode}
+              dynamicModes={dynamicModes}
+              compactLeadingIcon={<Shield theme='outline' size='14' fill={iconColors.secondary} />}
+              modeLabelFormatter={(mode) => t(`agentMode.${mode.value}`, { defaultValue: mode.label })}
+              compactLabelPrefix={t('agentMode.permission')}
+              hideCompactLabelPrefixOnMobile
+              onModeChanged={propagateMode}
+            />
+          </div>
         }
         prefix={
           <>
@@ -922,6 +960,15 @@ const TomnyAgenticSendBox: React.FC<{
           {attachHiddenInput}
         </>
       )}
+
+      <AgentSessionDrawer
+        visible={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        initialTab={drawerTab}
+        conversationId={conversation_id}
+        conversationType='tomnyagentic'
+        repository={workspacePath}
+      />
     </div>
   );
 };

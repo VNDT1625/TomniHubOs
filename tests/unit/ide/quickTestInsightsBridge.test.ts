@@ -16,11 +16,11 @@ import {
   QT_INSIGHTS_CHANNELS,
   registerQuickTestInsightsBridge,
   type RepeatReplayOutcome,
-} from '@/process/ide/quickTestInsightsBridge';
-import type { QuickTestAssetState } from '@/process/ide/quickTestAssetBridge';
-import type { ReplayScenario } from '@/process/ide/quickTestReplay';
-import type { RuntimeTrace } from '@/process/ide/quickTestTracer';
-import type { UnderstandResult } from '@/process/ide/understandTypes';
+} from '@package-apps/ide/process/execution/quickTest/bridges/quickTestInsightsBridge';
+import type { QuickTestAssetState } from '@package-apps/ide/process/execution/quickTest/bridges/quickTestAssetBridge';
+import type { ReplayScenario } from '@package-apps/ide/process/execution/quickTest/analysis/quickTestReplay';
+import type { RuntimeTrace } from '@package-apps/ide/process/execution/quickTest/runtime/quickTestTracer';
+import type { UnderstandResult } from '@package-apps/ide/process/knowledge/graph/understandTypes';
 import type { RetentionPolicy } from '@/process/services/quick-test/workflow';
 
 const trace = (failed = false): RuntimeTrace => ({

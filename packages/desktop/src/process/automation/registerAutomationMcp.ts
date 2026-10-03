@@ -23,6 +23,7 @@
 
 import { getMcpRegistry } from '@process/resources/mcpRegistry';
 import { BUILTIN_AUTOMATION_NAME } from './automationMcpServer';
+import { requireAutomationExecution } from './automationBridge';
 import { startAutomation } from './automationMcpWiring';
 
 /** Human-readable description shown for the Automation MCP server in the catalog. */
@@ -38,6 +39,7 @@ const AUTOMATION_MCP_DESCRIPTION =
  */
 export const ensureAutomationMcpRegistered = async (): Promise<boolean> => {
   try {
+    requireAutomationExecution();
     const host = await startAutomation();
 
     const transport = { type: 'sse' as const, url: host.url };

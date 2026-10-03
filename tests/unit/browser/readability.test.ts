@@ -10,7 +10,7 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import { extractReadable, READABILITY_SCRIPT, type ReadabilityDriver } from '@/process/browser/research/readability';
+import { extractReadable, READABILITY_SCRIPT, type ReadabilityDriver } from '@process/browser/research/readability';
 
 const driverReturning = (value: unknown): ReadabilityDriver => ({
   executeJavaScript: vi.fn(async () => value),

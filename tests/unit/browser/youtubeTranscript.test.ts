@@ -19,7 +19,7 @@ import {
   parseTimedtextJson3,
   parseTimedtextXml,
   type FetchLike,
-} from '@/process/browser/research/youtubeTranscript';
+} from '@process/browser/research/youtubeTranscript';
 
 // ---------------------------------------------------------------------------
 // Fake fetch — routes by URL substring to a scripted body.

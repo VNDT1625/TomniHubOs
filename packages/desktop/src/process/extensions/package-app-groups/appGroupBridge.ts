@@ -8,10 +8,7 @@ import {
   parsePackageAppGroupReorderRequest,
   type PackageAppGroupDocument,
 } from '@/common/packages';
-import {
-  PACKAGE_APP_GROUP_NATIVE_CHANNELS,
-  type PackageAppGroupNativeResult,
-} from '@/common/types/platform/electron';
+import { PACKAGE_APP_GROUP_NATIVE_CHANNELS, type PackageAppGroupNativeResult } from '@/common/types/platform/electron';
 import { PackageAppGroupServiceError, type PackageAppGroupService } from './appGroupService';
 
 export type PackageAppGroupBridgeErrorCode =
@@ -26,7 +23,10 @@ export type PackageAppGroupBridgeErrorCode =
 export type PackageAppGroupBridgeResult<T> = PackageAppGroupNativeResult<T>;
 
 export type TrustedPackageAppGroupIpcHost<Sender> = {
-  handle(channel: string, handler: (sender: Sender, payload: unknown) => Promise<PackageAppGroupBridgeResult<unknown>>): void;
+  handle(
+    channel: string,
+    handler: (sender: Sender, payload: unknown) => Promise<PackageAppGroupBridgeResult<unknown>>
+  ): void;
   removeHandler(channel: string): void;
 };
 

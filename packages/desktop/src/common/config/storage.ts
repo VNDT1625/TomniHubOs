@@ -272,6 +272,8 @@ interface IChatConversation<T, Extra> {
 // Token 使用统计数据类型
 export interface TokenUsageData {
   total_tokens: number;
+  input_tokens?: number;
+  output_tokens?: number;
 }
 
 export type TChatConversation =
@@ -550,6 +552,8 @@ export interface IProvider {
   name: string;
   base_url: string;
   api_key: string;
+  /** Provider credential transport; OAuth tokens remain in the Main-only OAuth vault. */
+  auth_type?: 'api-key' | 'oauth';
   models: string[];
   /**
    * 模型能力标签列表。打了标签就是支持，没打就是不支持

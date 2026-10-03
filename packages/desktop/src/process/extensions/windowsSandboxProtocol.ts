@@ -396,7 +396,9 @@ export const createWindowsCreatorSandboxDriver = (
   const destroyedSandboxes = new Set<string>();
   const destroyInFlight = new Map<string, Promise<void>>();
 
-  const requireLiveSandbox = (value: unknown): { sandboxId: string; session: WindowsCreatorSandboxLifecycleSession } => {
+  const requireLiveSandbox = (
+    value: unknown
+  ): { sandboxId: string; session: WindowsCreatorSandboxLifecycleSession } => {
     const sandboxId = requireTechnicalIdentifier(value, 'Sandbox id');
     const session = liveSandboxes.get(sandboxId);
     if (!session) throw new Error('Sandbox id is not owned by this native driver instance.');

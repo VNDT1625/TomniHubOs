@@ -21,8 +21,8 @@ vi.mock('@/common', () => ({
   },
 }));
 
-import { useTomnyAgenticContext } from '@/renderer/pages/studio/ide/memory/useTomnyAgenticContext';
-import TomnyAgenticContextPanel from '@/renderer/pages/studio/ide/memory/TomnyAgenticContextPanel';
+import { useTomnyAgenticContext } from '@package-apps/ide/renderer/memory/useTomnyAgenticContext';
+import TomnyAgenticContextPanel from '@package-apps/ide/renderer/memory/TomnyAgenticContextPanel';
 
 const snapshot = {
   model: 'test-model',

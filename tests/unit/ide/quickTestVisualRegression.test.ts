@@ -11,7 +11,7 @@ import {
   createVisualCheckpoint,
   type RgbaImage,
   type VisualCheckpoint,
-} from '@/process/ide/quickTestVisualRegression';
+} from '@package-apps/ide/process/execution/quickTest/analysis/quickTestVisualRegression';
 
 const image = (width: number, height: number, pixels: number[][]): RgbaImage => ({
   width,

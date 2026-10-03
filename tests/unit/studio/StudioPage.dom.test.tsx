@@ -12,11 +12,11 @@ vi.mock('react-router-dom', () => ({
   useLocation: () => ({ state: null }),
 }));
 
-vi.mock('@/renderer/pages/studio/editorToolsProvider', () => ({
+vi.mock('@package-apps/document-studio/renderer/studio/editorToolsProvider', () => ({
   useEditorToolsProvider: vi.fn(),
 }));
 
-vi.mock('@/renderer/pages/studio/components/StudioDashboard', () => ({
+vi.mock('@package-apps/document-studio/renderer/studio/components/StudioDashboard', () => ({
   default: ({ onOpenIde }: { onOpenIde: () => void }) => (
     <button data-testid='open-ide' onClick={onOpenIde}>
       Open IDE
@@ -24,13 +24,13 @@ vi.mock('@/renderer/pages/studio/components/StudioDashboard', () => ({
   ),
 }));
 
-vi.mock('@/renderer/pages/studio/components/StudioEditorView', () => ({ default: () => null }));
-vi.mock('@/renderer/pages/studio/components/StudioPeerView', () => ({ default: () => null }));
+vi.mock('@package-apps/document-studio/renderer/studio/components/StudioEditorView', () => ({ default: () => null }));
+vi.mock('@package-apps/document-studio/renderer/studio/components/StudioPeerView', () => ({ default: () => null }));
 vi.mock('@/renderer/pages/studio/automation/AutomationView', () => ({ default: () => null }));
 vi.mock('@/renderer/pages/studio/makevideo/MakeVideoView', () => ({ default: () => null }));
 vi.mock('@renderer/pages/music', () => ({ default: () => null }));
 
-import StudioPage from '@/renderer/pages/studio/StudioPage';
+import StudioPage from '@package-apps/document-studio/renderer/studio/StudioPage';
 
 const store = new Map<string, string>();
 

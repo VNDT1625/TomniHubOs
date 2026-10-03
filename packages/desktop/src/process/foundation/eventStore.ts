@@ -96,6 +96,11 @@ export class EventStore {
     return this.events.filter((e) => e.runId === runId);
   }
 
+  /** Read-only recovery support for projections; callers must enforce their own account boundary. */
+  public getAllEvents(): readonly FoundationEvent[] {
+    return [...this.events];
+  }
+
   public getNextSequence(runId: string): number {
     const runEvents = this.getEventsByRunId(runId);
     return runEvents.length;

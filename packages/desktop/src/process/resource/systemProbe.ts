@@ -61,8 +61,7 @@ const bytesToMB = (bytes: number): number => {
   return Math.round(bytes / BYTES_PER_MB);
 };
 
-const toNonNegativeCoreCount = (value: number): number =>
-  Number.isFinite(value) && value > 0 ? Math.trunc(value) : 0;
+const toNonNegativeCoreCount = (value: number): number => (Number.isFinite(value) && value > 0 ? Math.trunc(value) : 0);
 
 /**
  * The set of low-level system reads the probe depends on. Declared explicitly

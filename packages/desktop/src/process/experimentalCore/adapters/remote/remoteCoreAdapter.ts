@@ -38,6 +38,15 @@ const DEFAULT_HANDSHAKE_TIMEOUT_MS = 15_000;
 
 const DEFAULT_STREAM_IDLE_TIMEOUT_MS = 45_000;
 
+/**
+ * Main-only admission required before a Remote Core adapter can resolve a
+ * target, a credential, or any transport. A signed-in account alone is not
+ * an admission for remote execution.
+ */
+export type RemoteCoreExecutionAuthority = Readonly<{
+  authorizeRemoteCoreTarget(target: DetectedCoreTarget): Promise<boolean>;
+}>;
+
 const defaultSocketFactory = (url: string): RemoteSocket => {
   const SocketConstructor = (globalThis as { WebSocket?: new (value: string) => RemoteSocket }).WebSocket;
   if (!SocketConstructor) throw new Error('WebSocket is unavailable in this runtime.');
@@ -93,7 +102,8 @@ export class RemoteCoreAdapter implements CoreAdapter {
   public constructor(
     private readonly targetResolver: RemoteTargetResolver,
     private readonly credentialProvider: RemoteCredentialProvider,
-    options: RemoteAdapterOptions = {}
+    options: RemoteAdapterOptions = {},
+    private readonly executionAuthority?: RemoteCoreExecutionAuthority
   ) {
     this.fetchImpl = options.fetchImpl ?? ((url: string, init?: RequestInit) => fetch(url, init));
     this.socketFactory = options.socketFactory ?? defaultSocketFactory;
@@ -106,7 +116,20 @@ export class RemoteCoreAdapter implements CoreAdapter {
     this.sleep = options.sleep ?? defaultSleep;
   }
 
+  private async requireExecutionAuthority(target: DetectedCoreTarget): Promise<void> {
+    // This deliberately precedes resolver, vault, HTTP and WebSocket work.
+    // The adapter is inert until a Main-owned authority admits this exact
+    // discovered target.
+    try {
+      if (this.executionAuthority && (await this.executionAuthority.authorizeRemoteCoreTarget(target))) return;
+    } catch {
+      // Do not expose policy or authority failures to the caller.
+    }
+    throw new Error('REMOTE_CORE_EGRESS_DENIED');
+  }
+
   private async clientFor(target: DetectedCoreTarget): Promise<{ client: RemoteGatewayClient; base: URL }> {
+    await this.requireExecutionAuthority(target);
     const connection = await this.targetResolver.resolve(target);
     const base = validateRemoteEndpoint(connection.endpoint, connection.allowInsecureLoopback);
     const credential = await this.credentialProvider.resolve(connection.credentialHandle, {
@@ -139,6 +162,7 @@ export class RemoteCoreAdapter implements CoreAdapter {
 
   public async run(input: CoreRunInput): Promise<void> {
     throwIfAborted(input.signal);
+    await this.requireExecutionAuthority(input.target);
     const connection = await this.targetResolver.resolve(input.target);
     const base = validateRemoteEndpoint(connection.endpoint, connection.allowInsecureLoopback);
     const credential = await this.credentialProvider.resolve(connection.credentialHandle, {

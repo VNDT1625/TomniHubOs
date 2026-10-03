@@ -17,7 +17,7 @@ import { usePresetAssistantInfo, resolveAssistantConfigId } from '@/renderer/hoo
 import { iconColors } from '@/renderer/styles/colors';
 import { Button, Dropdown, Menu, Tooltip, Typography } from '@arco-design/web-react';
 import { History } from '@icon-park/react';
-import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import useSWR from 'swr';
@@ -39,6 +39,7 @@ import TomnyAgenticModelSelector from '../platforms/tomnyagentic/TomnyAgenticMod
 import { useTomnyAgenticModelSelection } from '../platforms/tomnyagentic/useTomnyAgenticModelSelection';
 import { usePreviewContext } from '../Preview';
 import StarOfficeMonitorCard from '../platforms/openclaw/StarOfficeMonitorCard.tsx';
+import { ChatPipelineButton, ChatPipelineDrawer } from './pipeline';
 // import SkillRuleGenerator from './components/SkillRuleGenerator'; // Temporarily hidden
 
 /** Check whether a specific skill is mounted on the conversation. */
@@ -181,6 +182,8 @@ const TomnyAgenticConversationPanel: React.FC<{
   // Mobile: model selection moved into the sendbox `+` action sheet to free up
   // header space; the dropdown stays available on desktop and tablets ≥768px.
   const isMobile = Boolean(layout?.isMobile);
+  const [pipelineDrawerOpen, setPipelineDrawerOpen] = useState(false);
+  const [activePipelineStages, setActivePipelineStages] = useState(2);
 
   const chatLayoutProps = {
     title: conversation.name,
@@ -189,6 +192,7 @@ const TomnyAgenticConversationPanel: React.FC<{
     headerExtra: (
       <div className='flex items-center gap-8px'>
         <ConversationSurfaces conversation={conversation} />
+        <ChatPipelineButton activeCount={activePipelineStages} onClick={() => setPipelineDrawerOpen(true)} />
         <CronJobManager
           conversation_id={conversation.id}
           cron_job_id={conversation.extra?.cron_job_id as string | undefined}
@@ -221,6 +225,12 @@ const TomnyAgenticConversationPanel: React.FC<{
         agent_name={presetAssistantInfo?.name}
         beforeSendBox={<ConversationWatchOverlay conversationId={conversation.id} />}
       />
+      <ChatPipelineDrawer
+        visible={pipelineDrawerOpen}
+        onClose={() => setPipelineDrawerOpen(false)}
+        conversationId={conversation.id}
+        onPipelineUpdated={(count) => setActivePipelineStages(count)}
+      />
     </ChatLayout>
   );
 };
@@ -241,6 +251,8 @@ const ChatConversation: React.FC<{
   const workspaceEnabled = Boolean(conversation?.extra?.workspace);
   const layout = useLayoutContext();
   const isMobile = Boolean(layout?.isMobile);
+  const [pipelineDrawerOpen, setPipelineDrawerOpen] = useState(false);
+  const [activePipelineStages, setActivePipelineStages] = useState(2);
 
   const isTomnyAgenticConversation = isTomnyCompatibilityConversation(conversation);
 
@@ -432,6 +444,7 @@ const ChatConversation: React.FC<{
   const headerExtraNode = (
     <div className='flex items-center gap-8px'>
       <ConversationSurfaces conversation={conversation} />
+      <ChatPipelineButton activeCount={activePipelineStages} onClick={() => setPipelineDrawerOpen(true)} />
       {conversation?.type === 'openclaw-gateway' && (
         <div className='shrink-0'>
           <StarOfficeMonitorCard
@@ -470,6 +483,12 @@ const ChatConversation: React.FC<{
       conversation_id={conversation?.id}
     >
       {conversationNode}
+      <ChatPipelineDrawer
+        visible={pipelineDrawerOpen}
+        onClose={() => setPipelineDrawerOpen(false)}
+        conversationId={conversation?.id}
+        onPipelineUpdated={(count) => setActivePipelineStages(count)}
+      />
     </ChatLayout>
   );
 };

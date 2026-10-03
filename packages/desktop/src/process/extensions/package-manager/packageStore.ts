@@ -8,7 +8,11 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import semver from 'semver';
-import { parsePackageManifest, type InstalledPackageRecord } from '../../../common/packages';
+import {
+  parsePackageManifest,
+  type InstalledPackageRecord,
+  type PackagePublicationReview,
+} from '../../../common/packages';
 
 type PersistedPackageState = {
   schemaVersion: 1;
@@ -23,6 +27,7 @@ const MAX_PACKAGE_STATE_BYTES = 8 * 1024 * 1024;
 const MAX_PACKAGE_ID_LENGTH = 200;
 const MAX_VERSION_LENGTH = 128;
 const MAX_CORRUPT_BACKUPS = 8;
+const REVIEW_FINGERPRINT = /^sha256-[a-f0-9]{64}$/;
 const corruptBackupPath = (filePath: string): string =>
   path.join(path.dirname(filePath), `${path.basename(filePath)}.corrupt-${Date.now()}-${randomUUID()}`);
 const corruptBackupPrefix = (filePath: string): string => `${path.basename(filePath)}.corrupt-`;
@@ -47,6 +52,24 @@ const hasValidProvenance = (
     validIntegrity &&
     (delivery !== 'downloaded-package' || provenance.integrity !== undefined)
   );
+};
+
+const isValidPublicationReview = (value: unknown): value is PackagePublicationReview => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const review = value as Partial<PackagePublicationReview> & { reviewerId?: unknown };
+  const common =
+    (review.schemaVersion === 1 || review.schemaVersion === 2) &&
+    (review.disposition === 'auto-approved' || review.disposition === 'human-approved') &&
+    typeof review.fingerprint === 'string' &&
+    REVIEW_FINGERPRINT.test(review.fingerprint) &&
+    (review.schemaVersion === 1 ||
+      (typeof review.artifactIntegrity === 'string' && SHA256_INTEGRITY.test(review.artifactIntegrity))) &&
+    typeof review.reviewedAt === 'string' &&
+    Number.isFinite(Date.parse(review.reviewedAt));
+  if (!common) return false;
+  return review.disposition === 'auto-approved'
+    ? review.reviewerId === undefined
+    : typeof review.reviewerId === 'string' && /^[A-Za-z0-9._:-]{1,200}$/.test(review.reviewerId);
 };
 
 const parseInstalledPackageRecord = (value: unknown): InstalledPackageRecord | undefined => {
@@ -80,9 +103,16 @@ const parseInstalledPackageRecord = (value: unknown): InstalledPackageRecord | u
       record.previousTrust === 'trusted-first-party' ||
       record.previousTrust === 'signed-first-party' ||
       record.previousTrust === 'signed-store') &&
+    (record.publicationReview === undefined || isValidPublicationReview(record.publicationReview)) &&
+    (record.previousPublicationReview === undefined || isValidPublicationReview(record.previousPublicationReview)) &&
     hasValidProvenance(record.provenance, record.version, record.delivery) &&
     hasValidProvenance(record.previousProvenance, record.previousVersion, record.delivery) &&
-    (!(record.previousManifest || record.previousTrust || record.previousProvenance) ||
+    (!(
+      record.previousManifest ||
+      record.previousTrust ||
+      record.previousProvenance ||
+      record.previousPublicationReview
+    ) ||
       record.previousVersion !== undefined);
   if (!valid) return undefined;
   try {
@@ -98,9 +128,23 @@ const parseInstalledPackageRecord = (value: unknown): InstalledPackageRecord | u
     if (record.provenance?.integrity && manifest?.artifact?.integrity !== record.provenance.integrity) {
       return undefined;
     }
+
+    if (
+      record.publicationReview?.schemaVersion === 2 &&
+      record.publicationReview.artifactIntegrity !== manifest?.artifact?.integrity
+    ) {
+      return undefined;
+    }
     if (
       record.previousProvenance?.integrity &&
       previousManifest?.artifact?.integrity !== record.previousProvenance.integrity
+    ) {
+      return undefined;
+    }
+
+    if (
+      record.previousPublicationReview?.schemaVersion === 2 &&
+      record.previousPublicationReview.artifactIntegrity !== previousManifest?.artifact?.integrity
     ) {
       return undefined;
     }

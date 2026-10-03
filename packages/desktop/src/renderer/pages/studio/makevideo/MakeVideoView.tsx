@@ -48,7 +48,7 @@ import NewProjectDialog from './components/NewProjectDialog';
 import VoiceConfigDialog from './components/VoiceConfigDialog';
 import VideoClipConfigDialog from './components/VideoClipConfigDialog';
 import VideoEditor from './components/VideoEditor';
-import GenerationProgress, { getGenEstimate } from '../components/GenerationProgress';
+import GenerationProgress, { getGenEstimate } from '@package-apps/shared/renderer/GenerationProgress';
 import type { FilmTimeline, VideoProject } from './makeVideoClient';
 
 type MakeVideoViewProps = {

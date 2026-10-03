@@ -12,7 +12,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { docxToText, textToDocxBase64 } from '@/renderer/pages/editor/adapters/docxCodec';
+import { docxToText, textToDocxBase64 } from '@package-apps/document-studio/renderer/adapters/formats/docxCodec';
 
 describe('docxCodec round-trip (Requirement 2a, criterion 2.2)', () => {
   it('preserves multi-paragraph text through build → read', async () => {

@@ -12,7 +12,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 // Mock the renderer-bound connector so runTool can be exercised in node.
-vi.mock('@renderer/pages/editor/adapters/onlyOfficeConnector', () => ({
+vi.mock('@package-apps/document-studio/renderer/adapters/office/onlyOfficeConnector', () => ({
   readText: vi.fn(async () => 'hello world'),
   replaceAllText: vi.fn(async () => undefined),
   searchReplace: vi.fn(async () => undefined),
@@ -42,7 +42,7 @@ import {
   applyHeadings,
   insertTableOfContents,
   runOfficeScript,
-} from '@renderer/pages/editor/adapters/onlyOfficeConnector';
+} from '@package-apps/document-studio/renderer/adapters/office/onlyOfficeConnector';
 
 import {
   TOOL_GUIDE,
@@ -54,7 +54,7 @@ import {
   parseAction,
   runTool,
   type PremiumDeckPlan,
-} from '@/renderer/pages/studio/docAgentTools';
+} from '@package-apps/document-studio/renderer/studio/docAgentTools';
 
 const strongDeckPlan = (): PremiumDeckPlan => ({
   title: 'AI Security Armor',

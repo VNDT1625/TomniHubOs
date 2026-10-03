@@ -1,0 +1,545 @@
+{
+  "keyId": "tomni-store-dev-local",
+  "publicKey": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAWufWjwAjEv6NyoSrtHo2TM19/vZ08Kz8ktwoUpt5itE=\n-----END PUBLIC KEY-----\n",
+  "packages": [
+    {
+      "artifactUrl": "com.tomni.automation-studio-1.0.0.dev.tomni-package.json",
+      "manifest": {
+        "schemaVersion": 1,
+        "id": "com.tomni.automation-studio",
+        "publisherId": "com.tomni",
+        "name": "Automation Studio",
+        "description": "An independently downloaded workflow builder for scheduled, agentic and connected automations.",
+        "type": "app",
+        "bundleKind": "single",
+        "version": "1.0.0",
+        "engines": {
+          "tomni": ">=1.0.0"
+        },
+        "modules": [
+          {
+            "id": "automation",
+            "title": "Automation Studio",
+            "surface": "apps/automation-studio",
+            "pinnable": true,
+            "runtime": "trusted-react",
+            "entrypoint": "app.js",
+            "styleEntrypoint": "style.css"
+          }
+        ],
+        "contributions": {
+          "version": 1,
+          "apps": [
+            {
+              "id": "automation",
+              "title": "Automation Studio",
+              "moduleId": "automation"
+            }
+          ]
+        },
+        "permissions": [
+          "agent.invoke",
+          "automation.execute",
+          "browser.control",
+          "credentials.manage",
+          "model.invoke",
+          "network.access",
+          "notifications.show",
+          "scheduler.manage",
+          "workspace.read",
+          "workspace.write"
+        ],
+        "dependencies": [],
+        "tags": ["automation", "workflows", "agents", "scheduling"],
+        "artifact": {
+          "integrity": "sha256-4d840301033e4f52638e2fb5961712bfc97fe05307f3fa8a4d929f71a319c388",
+          "sizeBytes": 5473394,
+          "signature": {
+            "algorithm": "ed25519",
+            "keyId": "tomni-store-dev-local",
+            "value": "lucOFphPPFyxw436gRdMTGP0z/9HaaRF1jky1+HCpMinK+4ZdbIslJgLm+dBFQ7zFXDJ8j/vB/dAy/9snxPKCw=="
+          }
+        }
+      }
+    },
+    {
+      "artifactUrl": "com.tomni.browser-1.0.0.dev.tomni-package.json",
+      "manifest": {
+        "schemaVersion": 1,
+        "id": "com.tomni.browser",
+        "publisherId": "com.tomni",
+        "name": "Browser",
+        "description": "A signed embedded browser and web-agent workspace installed as a package.",
+        "type": "app",
+        "bundleKind": "single",
+        "version": "1.0.0",
+        "engines": {
+          "tomni": ">=1.0.0"
+        },
+        "modules": [
+          {
+            "id": "browser",
+            "title": "Browser",
+            "surface": "apps/browser",
+            "pinnable": true,
+            "runtime": "trusted-react",
+            "entrypoint": "app.js"
+          }
+        ],
+        "contributions": {
+          "version": 1,
+          "apps": [
+            {
+              "id": "browser",
+              "title": "Browser",
+              "moduleId": "browser"
+            }
+          ]
+        },
+        "permissions": ["browser.control", "network.access", "model.invoke"],
+        "dependencies": [],
+        "tags": ["browser", "web-agent", "research"],
+        "artifact": {
+          "integrity": "sha256-ed29dd1cb8295155b9674af877c6fde0dd17b0d3ea922fdf32bbd02f5b4deecc",
+          "sizeBytes": 794461,
+          "signature": {
+            "algorithm": "ed25519",
+            "keyId": "tomni-store-dev-local",
+            "value": "3koaupJMQ5s1K2of3XajZyiRP2Ue2dIxHBYBC9klGtRzMxGTbAJ3xw31NCmePfATVoSvVxbQ27N/6NmElddqAQ=="
+          }
+        }
+      }
+    },
+    {
+      "artifactUrl": "com.tomni.company-1.0.0.dev.tomni-package.json",
+      "manifest": {
+        "schemaVersion": 1,
+        "id": "com.tomni.company",
+        "publisherId": "com.tomni",
+        "name": "Company",
+        "description": "A signed multi-agent company workspace installed as a package.",
+        "type": "app",
+        "bundleKind": "single",
+        "version": "1.0.0",
+        "engines": {
+          "tomni": ">=1.0.0"
+        },
+        "modules": [
+          {
+            "id": "company",
+            "title": "Company",
+            "surface": "apps/company",
+            "pinnable": true,
+            "runtime": "trusted-react",
+            "entrypoint": "app.js"
+          }
+        ],
+        "contributions": {
+          "version": 1,
+          "apps": [
+            {
+              "id": "company",
+              "title": "Company",
+              "moduleId": "company"
+            }
+          ]
+        },
+        "permissions": ["agent.invoke", "model.invoke"],
+        "dependencies": [],
+        "tags": ["company", "agents", "orchestration"],
+        "artifact": {
+          "integrity": "sha256-82c6c018ffcf25126dd0efb2b967d4a6bf815601e607245ec1b6fdf392382691",
+          "sizeBytes": 972602,
+          "signature": {
+            "algorithm": "ed25519",
+            "keyId": "tomni-store-dev-local",
+            "value": "0jC+vHcHkvOpXwQeLi6w0MjdGpDeDIIapnHN3WqeYM4s8vlQ61j3h+DXujawSlwatP5k1URZyI59+H1k2D3zBg=="
+          }
+        }
+      }
+    },
+    {
+      "artifactUrl": "com.tomni.design-studio-1.0.0.dev.tomni-package.json",
+      "manifest": {
+        "schemaVersion": 1,
+        "id": "com.tomni.design-studio",
+        "publisherId": "com.tomni",
+        "name": "Design Studio",
+        "description": "An independently downloaded visual authoring and interactive presentation workspace powered by VIU.",
+        "type": "app",
+        "bundleKind": "single",
+        "version": "1.0.0",
+        "engines": {
+          "tomni": ">=1.0.0"
+        },
+        "modules": [
+          {
+            "id": "design",
+            "title": "Design Studio",
+            "surface": "apps/design-studio",
+            "pinnable": true,
+            "runtime": "trusted-react",
+            "entrypoint": "app.js",
+            "styleEntrypoint": "style.css"
+          }
+        ],
+        "contributions": {
+          "version": 1,
+          "apps": [
+            {
+              "id": "design",
+              "title": "Design Studio",
+              "moduleId": "design"
+            }
+          ]
+        },
+        "permissions": ["workspace.read", "workspace.write"],
+        "dependencies": [],
+        "mainContributions": [
+          {
+            "schemaVersion": 1,
+            "id": "design-viu-v1"
+          }
+        ],
+        "tags": ["design", "visual-authoring", "prototype", "viu"],
+        "artifact": {
+          "integrity": "sha256-04dea172ddfbc488ebd5927f225ca5744f4fa04d8b69dfc6c4b8c563bdf35036",
+          "sizeBytes": 6139468,
+          "signature": {
+            "algorithm": "ed25519",
+            "keyId": "tomni-store-dev-local",
+            "value": "As4vo2xWT0zRdmdzfo8MDt/qNKcsNp61TFaOAaxG9xrBBL1Mgp0tRjRFLKORxKBGdNICtvMfBLKBTCM1p8V/Cw=="
+          }
+        }
+      }
+    },
+    {
+      "artifactUrl": "com.tomni.document-studio-1.0.0.dev.tomni-package.json",
+      "manifest": {
+        "schemaVersion": 1,
+        "id": "com.tomni.document-studio",
+        "publisherId": "com.tomni",
+        "name": "Document Studio",
+        "description": "An independently downloaded workspace for files, Office documents and live collaboration.",
+        "type": "app",
+        "bundleKind": "single",
+        "version": "1.0.0",
+        "engines": {
+          "tomni": ">=1.0.0"
+        },
+        "modules": [
+          {
+            "id": "document",
+            "title": "Document Studio",
+            "surface": "apps/document-studio",
+            "pinnable": true,
+            "runtime": "trusted-react",
+            "entrypoint": "app.js",
+            "styleEntrypoint": "style.css"
+          }
+        ],
+        "contributions": {
+          "version": 1,
+          "apps": [
+            {
+              "id": "document",
+              "title": "Document Studio",
+              "moduleId": "document"
+            }
+          ]
+        },
+        "permissions": ["workspace.read", "workspace.write"],
+        "dependencies": [],
+        "tags": ["documents", "office", "files", "collaboration"],
+        "artifact": {
+          "integrity": "sha256-374162c0c52d44bcbe335d5b6fd57350a69621eb8e100ee0f84ebd7ade8c88ae",
+          "sizeBytes": 5490525,
+          "signature": {
+            "algorithm": "ed25519",
+            "keyId": "tomni-store-dev-local",
+            "value": "oiKP3S9V1E71Ku6k8JO0kE7xgb7DocN8VgX4vwqpo+gkxRHEWIXVu1t0g2bUdOx/lMSsthjTIyzAjKiU/eoKDA=="
+          }
+        }
+      }
+    },
+    {
+      "artifactUrl": "com.tomni.ide-1.0.0.dev.tomni-package.json",
+      "manifest": {
+        "schemaVersion": 1,
+        "id": "com.tomni.ide",
+        "publisherId": "com.tomni",
+        "name": "IDE",
+        "description": "A full agentic development workspace downloaded and installed as a signed Tomny app package.",
+        "type": "app",
+        "bundleKind": "single",
+        "version": "1.0.0",
+        "engines": {
+          "tomni": ">=0.0.0"
+        },
+        "modules": [
+          {
+            "id": "ide",
+            "title": "IDE & App Builder",
+            "surface": "apps/ide",
+            "pinnable": true,
+            "runtime": "trusted-react",
+            "entrypoint": "app.js",
+            "styleEntrypoint": "style.css"
+          }
+        ],
+        "contributions": {
+          "version": 1,
+          "apps": [
+            {
+              "id": "ide",
+              "title": "IDE",
+              "moduleId": "ide"
+            }
+          ]
+        },
+        "permissions": ["workspace.read", "workspace.write", "model.invoke", "terminal.execute"],
+        "dependencies": [],
+        "tags": ["ide", "development", "code", "agentic"],
+        "artifact": {
+          "integrity": "sha256-04d9818e972e85a512c3ccab833beecc4a5d64838605c4686929e6df45c7e8bb",
+          "sizeBytes": 25428197,
+          "signature": {
+            "algorithm": "ed25519",
+            "keyId": "tomni-store-dev-local",
+            "value": "7cFatjRhpugx0swXY4/WUDGOPSo5mirwe46jyVpGIm2WpnWPgj9aGPkGAjGVFZ1ThxQpjA6FexqCk1XKUVMqAw=="
+          }
+        }
+      }
+    },
+    {
+      "artifactUrl": "com.tomni.knowledge-1.0.0.dev.tomni-package.json",
+      "manifest": {
+        "schemaVersion": 1,
+        "id": "com.tomni.knowledge",
+        "publisherId": "com.tomni",
+        "name": "Knowledge",
+        "description": "A signed realtime knowledge inspector installed as a package.",
+        "type": "app",
+        "bundleKind": "single",
+        "version": "1.0.0",
+        "engines": {
+          "tomni": ">=1.0.0"
+        },
+        "modules": [
+          {
+            "id": "knowledge",
+            "title": "Knowledge",
+            "surface": "apps/knowledge",
+            "pinnable": true,
+            "runtime": "trusted-react",
+            "entrypoint": "app.js"
+          }
+        ],
+        "contributions": {
+          "version": 1,
+          "apps": [
+            {
+              "id": "knowledge",
+              "title": "Knowledge",
+              "moduleId": "knowledge"
+            }
+          ]
+        },
+        "permissions": ["knowledge.read"],
+        "dependencies": [],
+        "tags": ["knowledge", "facts", "research"],
+        "artifact": {
+          "integrity": "sha256-e5c1ddb85bed074daa039c0660b92d540f8d37ae68d2c3c0eaa82e7c3958ef90",
+          "sizeBytes": 504379,
+          "signature": {
+            "algorithm": "ed25519",
+            "keyId": "tomni-store-dev-local",
+            "value": "bYt679tR0lDJs/aQA4zuRyvC3KK9DvMdc+gpmgLDn2a0y0jYp1NtWrf/8K/++Me7LX5zwzg2zCkhESdIxUGtBQ=="
+          }
+        }
+      }
+    },
+
+    {
+      "artifactUrl": "com.tomni.pet-1.0.0.dev.tomni-package.json",
+      "manifest": {
+        "schemaVersion": 1,
+        "id": "com.tomni.pet",
+        "publisherId": "com.tomni",
+        "name": "Pet",
+        "description": "A signed desktop companion controls package.",
+        "type": "app",
+        "bundleKind": "single",
+        "version": "1.0.0",
+        "engines": {
+          "tomni": ">=1.0.0"
+        },
+        "modules": [
+          {
+            "id": "pet",
+            "title": "Pet",
+            "surface": "apps/pet",
+            "pinnable": true,
+            "runtime": "trusted-react",
+            "entrypoint": "app.js"
+          }
+        ],
+        "contributions": {
+          "version": 1,
+          "apps": [
+            {
+              "id": "pet",
+              "title": "Pet",
+              "moduleId": "pet"
+            }
+          ]
+        },
+        "permissions": ["desktop.pet.control"],
+        "dependencies": [],
+        "tags": ["pet", "desktop", "companion"],
+        "artifact": {
+          "integrity": "sha256-8856fe1c9b8e0b5a384ecdfe2bf7f6d7afb8d295a228be75101c32b3a08b995f",
+          "sizeBytes": 424166,
+          "signature": {
+            "algorithm": "ed25519",
+            "keyId": "tomni-store-dev-local",
+            "value": "ZPbcQoOHBRWch/R53R04fFjbvI9AXyIkgg0XGrpV296WEa1UR6zL4Id1m61H02nDIKdm5T0+ytF7qtVHBmciBw=="
+          }
+        }
+      }
+    },
+    {
+      "artifactUrl": "com.tomni.runtime-pilot-1.0.0.dev.tomny",
+      "manifest": {
+        "schemaVersion": 1,
+        "id": "com.tomni.runtime-pilot",
+        "publisherId": "com.tomni",
+        "name": "Runtime Capability Pilot",
+        "description": "A minimal signed sandbox package that verifies the supervised host capability ABI.",
+        "type": "app",
+        "bundleKind": "single",
+        "version": "1.0.0",
+        "engines": {
+          "tomni": ">=0.0.0"
+        },
+        "modules": [
+          {
+            "id": "runtime-pilot",
+            "title": "Runtime Capability Pilot",
+            "surface": "apps/runtime-pilot",
+            "pinnable": false,
+            "runtime": "sandboxed-web",
+            "entrypoint": "index.html"
+          }
+        ],
+        "contributions": {
+          "version": 1,
+          "apps": [
+            {
+              "id": "runtime-pilot",
+              "title": "Runtime Capability Pilot",
+              "moduleId": "runtime-pilot"
+            }
+          ]
+        },
+        "permissions": ["host.ipc"],
+        "dependencies": [],
+        "aiAccess": {
+          "schemaVersion": 1,
+          "operations": [
+            {
+              "id": "apply-instruction",
+              "capability": "surface.ai.runtime-pilot.apply-instruction",
+              "inputSchemaVersion": 1,
+              "dataClasses": ["conversation"],
+              "destinationIds": []
+            }
+          ]
+        },
+        "tags": ["runtime", "security", "capability", "pilot"],
+        "artifact": {
+          "integrity": "sha256-5ffa7259893c90b43a28d65fbc309b6eaeda10e521a77ddbf0360542ccb20d3c",
+          "sizeBytes": 4936,
+          "signature": {
+            "algorithm": "ed25519",
+            "keyId": "tomni-store-dev-local",
+            "value": "zY1Rm/uPrWeHMtFLDNMeEXFG5l3oiFGK1kFbxbg5eHGEh52tAurIfyTxvvDGjjuEjtYJvrNIZX8IncKkW6KnBQ=="
+          }
+        }
+      }
+    },
+    {
+      "artifactUrl": "com.tomni.studio-1.0.0.dev.tomni-package.json",
+      "manifest": {
+        "schemaVersion": 1,
+        "id": "com.tomni.studio",
+        "publisherId": "com.tomni",
+        "name": "Studio",
+        "description": "A production suite for documents, UI design, media creation and automation.",
+        "type": "app",
+        "bundleKind": "suite",
+        "version": "1.0.0",
+        "engines": {
+          "tomni": ">=0.0.0"
+        },
+        "modules": [
+          {
+            "id": "studio",
+            "title": "Studio",
+            "surface": "apps/studio",
+            "pinnable": true,
+            "runtime": "trusted-react",
+            "entrypoint": "app.js",
+            "styleEntrypoint": "style.css"
+          },
+          {
+            "id": "editor",
+            "title": "Universal Editor",
+            "surface": "studio/editor",
+            "pinnable": true
+          },
+          {
+            "id": "ui-designer",
+            "title": "UI Designer",
+            "surface": "studio/design",
+            "pinnable": true
+          },
+          {
+            "id": "media",
+            "title": "Media Studio",
+            "surface": "studio/media",
+            "pinnable": true
+          },
+          {
+            "id": "automation",
+            "title": "Automation Builder",
+            "surface": "studio/automation",
+            "pinnable": true
+          }
+        ],
+        "contributions": {
+          "version": 1,
+          "apps": [
+            {
+              "id": "studio",
+              "title": "Studio",
+              "moduleId": "studio"
+            }
+          ]
+        },
+        "permissions": ["workspace.read", "workspace.write", "model.invoke"],
+        "dependencies": [],
+        "tags": ["studio", "design", "media", "automation", "documents"],
+        "artifact": {
+          "integrity": "sha256-a0d8abacdc3a166c3ac15ede3b43fc6d2c77eabfecec5893bb32f0ca21e052e7",
+          "sizeBytes": 25486263,
+          "signature": {
+            "algorithm": "ed25519",
+            "keyId": "tomni-store-dev-local",
+            "value": "NEx0iCuQQnX86IdfwTPWJ9ajCHD0hfuHfm0MAeUJLq7IcmreVWWuunQEO9FSGV3zrucpu9QChse4XQsa572sDQ=="
+          }
+        }
+      }
+    }
+  ]
+}

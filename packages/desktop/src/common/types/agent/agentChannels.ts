@@ -1,11 +1,6 @@
 import { bridge } from '@office-ai/platform';
-import type {
-  AgentHealthResult,
-  AgentMetadata,
-  CustomAgentRequest,
-  ProviderHealthCheckRequest,
-  ProviderHealthCheckResponse,
-} from './agentMetadata';
+import '@/common/adapter/bridgeErrorWrapper';
+import type { AgentHealthResult, AgentMetadata, CustomAgentRequest } from './agentMetadata';
 
 export const agentChannels = {
   getAvailableAgents: bridge.buildProvider<AgentMetadata[], void>('tomni-agent.list'),
@@ -19,7 +14,4 @@ export const agentChannels = {
   deleteCustomAgent: bridge.buildProvider<{ deleted: boolean }, { id: string }>('tomni-agent.remove'),
   setAgentEnabled: bridge.buildProvider<AgentMetadata, { id: string; enabled: boolean }>('tomni-agent.set-enabled'),
   checkAgentHealth: bridge.buildProvider<AgentHealthResult, { backend: string }>('tomni-agent.health'),
-  checkProviderHealth: bridge.buildProvider<ProviderHealthCheckResponse, ProviderHealthCheckRequest>(
-    'tomni-agent.provider-health'
-  ),
 };

@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import sharp from 'sharp';
 import { describe, expect, it } from 'vitest';
-import { analyzeImageProject } from '@/process/ide/viu/image';
+import { analyzeImageProject } from '@package-apps/design/process/viu/image';
 
 describe('Viu image reconstruction evidence', () => {
   it('keeps the raster reference and emits editable regions with explicit z-confidence limits', async () => {

@@ -5,17 +5,15 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import type { RunIntent } from '../../../../common/foundation/runTypes';
-import type { CoreModelPurpose, ModelPackRegistryRecord } from '../../catalog/modelPackTypes';
+import type { CoreModelPurpose, ModelPackBaseBinding, ModelPackRegistryRecord } from '../../catalog/modelPackTypes';
 import type { CoreModelOutputValidationErrorCode, CoreModelOutputValidationResult } from './outputContractValidator';
 import {
-  TwoBaseRuntimeError,
-  TwoBaseRuntimeRouter,
+  LocalInferenceRuntimeError,
+  LocalInferenceRuntimeRouter,
   type BaseRouteTelemetry,
   type LoadedBase,
-  type TwoBaseLifecycleProvider,
-  type TwoBaseRuntimeBindings,
-} from './twoBaseRuntimeRouter';
+  type LocalInferenceLifecycleProvider,
+} from './localInferenceRuntimeRouter';
 
 export type CoreModelRequest = {
   requestId: string;
@@ -48,7 +46,7 @@ export type CoreModelProviderOutput = {
   latencyMs?: number;
 };
 
-export type LocalInferenceProvider = TwoBaseLifecycleProvider & {
+export type LocalInferenceProvider = LocalInferenceLifecycleProvider & {
   prepareAdapter(
     record: ModelPackRegistryRecord,
     base: LoadedBase,
@@ -98,7 +96,7 @@ export type CoreModelResponse = {
     | 'contract-mismatch'
     | 'adapter-incompatible'
     | 'base-binding-mismatch'
-    | 'base-switch-failed'
+    | 'base-load-failed'
     | 'cancelled'
     | 'provider-failed'
     | 'output-invalid'
@@ -107,7 +105,7 @@ export type CoreModelResponse = {
 };
 
 export type LocalInferenceBrokerOptions = {
-  baseBindings: TwoBaseRuntimeBindings;
+  baseBinding: ModelPackBaseBinding;
   now?: () => number;
   createReceiptId?: (requestId: string) => string;
   resolveOutputSchema?: (purpose: CoreModelPurpose, contractVersion: string) => string | undefined;
@@ -131,7 +129,7 @@ export class LocalInferenceBroker {
   private readonly now: () => number;
   private readonly createReceiptId: (requestId: string) => string;
   private readonly resolveOutputSchema: (purpose: CoreModelPurpose, contractVersion: string) => string | undefined;
-  private readonly router: TwoBaseRuntimeRouter;
+  private readonly router: LocalInferenceRuntimeRouter;
 
   public constructor(
     private readonly registry: ModelRegistryReader,
@@ -142,7 +140,7 @@ export class LocalInferenceBroker {
   ) {
     this.now = options.now ?? Date.now;
 
-    this.router = new TwoBaseRuntimeRouter(provider, options.baseBindings, this.now);
+    this.router = new LocalInferenceRuntimeRouter(provider, options.baseBinding, this.now);
     this.createReceiptId = options.createReceiptId ?? ((requestId) => `${requestId}:${randomUUID()}`);
     this.resolveOutputSchema = options.resolveOutputSchema ?? (() => undefined);
   }
@@ -164,7 +162,7 @@ export class LocalInferenceBroker {
       const route = await this.withDeadline(
         request,
         (deadlineSignal) =>
-          this.router.execute(request.purpose, record!.manifest.baseModel, deadlineSignal, async (base) => {
+          this.router.execute(record!.manifest.baseModel, deadlineSignal, async (base) => {
             const preparation = await this.provider.prepareAdapter(record!, base, deadlineSignal);
             if (preparation.compatible === false) {
               throw new BrokerFailure('adapter-incompatible', preparation.reason);
@@ -208,7 +206,7 @@ export class LocalInferenceBroker {
       const failure =
         error instanceof BrokerFailure
           ? error
-          : error instanceof TwoBaseRuntimeError
+          : error instanceof LocalInferenceRuntimeError
             ? new BrokerFailure(error.code, error.message)
             : new BrokerFailure('provider-failed', error instanceof Error ? error.message : String(error));
       return this.fallback(request, record, failure, receiptId, startedAt);
@@ -335,109 +333,6 @@ export class LocalInferenceBroker {
   }
 }
 
-export type LocalInferenceHubExecutionRequest = {
-  intent: RunIntent;
-  signal?: AbortSignal;
-};
-
-export type LocalInferenceHubExecutionResult = {
-  text: string;
-  evidenceRefs: readonly string[];
-};
-
-export type LocalInferenceHubTargetExecutor = {
-  execute(request: LocalInferenceHubExecutionRequest): Promise<LocalInferenceHubExecutionResult>;
-};
-
-export type LocalInferenceHubTargetAdapterOptions = {
-  contractVersion: string;
-  deadlineMs(intent: RunIntent): number;
-  purpose?: CoreModelPurpose;
-  priority?: CoreModelRequest['priority'];
-  payload?(intent: RunIntent): unknown;
-  serializeOutput?(value: unknown, response: CoreModelResponse): string;
-};
-
-export class LocalInferenceHubTargetError extends Error {
-  public constructor(
-    public readonly code:
-      | 'LOCAL_INFERENCE_CANCELLED'
-      | 'LOCAL_INFERENCE_DEADLINE_EXCEEDED'
-      | 'LOCAL_INFERENCE_DEADLINE_INVALID'
-      | 'LOCAL_INFERENCE_FAILED'
-  ) {
-    super(code);
-    this.name = 'LocalInferenceHubTargetError';
-  }
-}
-
-const defaultHubPayload = (intent: RunIntent): Record<string, unknown> => ({
-  goal: intent.goal,
-  successCriteria: intent.successCriteria,
-  constraints: intent.constraints,
-  workspaceScope: intent.workspaceScope,
-});
-
-const defaultHubOutputSerializer = (value: unknown): string => {
-  if (typeof value === 'string' && value.length > 0) return value;
-  try {
-    const serialized = JSON.stringify(value);
-    if (serialized && serialized.length > 0) return serialized;
-  } catch {
-    // A provider result that cannot be safely serialized is not Hub output.
-  }
-  throw new LocalInferenceHubTargetError('LOCAL_INFERENCE_FAILED');
-};
-
-/**
- * Adapts a verified local model response to the structural target contract consumed by HubExecutionAdapter.
- * Fallbacks are deliberately disabled: a local target can only report success after adapter-backed inference.
- */
-export const createLocalInferenceHubTargetExecutor = (
-  broker: LocalInferenceBroker,
-  options: LocalInferenceHubTargetAdapterOptions
-): LocalInferenceHubTargetExecutor => ({
-  async execute({ intent, signal }): Promise<LocalInferenceHubExecutionResult> {
-    if (signal?.aborted) throw new LocalInferenceHubTargetError('LOCAL_INFERENCE_CANCELLED');
-    const deadlineMs = options.deadlineMs(intent);
-    if (!Number.isFinite(deadlineMs)) throw new LocalInferenceHubTargetError('LOCAL_INFERENCE_DEADLINE_INVALID');
-    const response = await broker.infer(
-      {
-        requestId: intent.runId,
-        purpose: options.purpose ?? 'assistant',
-        contractVersion: options.contractVersion,
-        priority: options.priority ?? 'P1',
-        deadlineMs,
-        payload: options.payload?.(intent) ?? defaultHubPayload(intent),
-        fallback: 'abstain',
-      },
-      signal
-    );
-    if (response.failureCode === 'cancelled') throw new LocalInferenceHubTargetError('LOCAL_INFERENCE_CANCELLED');
-    if (response.failureCode === 'deadline-exceeded') {
-      throw new LocalInferenceHubTargetError('LOCAL_INFERENCE_DEADLINE_EXCEEDED');
-    }
-    if (response.source !== 'adapter' || response.value === undefined || !response.adapter || !response.baseModel) {
-      throw new LocalInferenceHubTargetError('LOCAL_INFERENCE_FAILED');
-    }
-    let text: string;
-    try {
-      text = (options.serializeOutput ?? defaultHubOutputSerializer)(response.value, response);
-    } catch {
-      throw new LocalInferenceHubTargetError('LOCAL_INFERENCE_FAILED');
-    }
-    if (text.length === 0) throw new LocalInferenceHubTargetError('LOCAL_INFERENCE_FAILED');
-    return {
-      text,
-      evidenceRefs: [
-        `local-inference:${response.receiptId}`,
-        `local-inference:adapter:${response.adapter.key}`,
-        `local-inference:base:${response.baseModel.sha256}`,
-      ],
-    };
-  },
-});
-
 export class InMemoryInferenceProvider implements LocalInferenceProvider {
   public readonly calls: Array<{ requestId: string; adapterKey: string }> = [];
   public readonly lifecycleCalls: Array<{ operation: 'load' | 'unload'; poolId: LoadedBase['poolId'] }> = [];
@@ -446,7 +341,7 @@ export class InMemoryInferenceProvider implements LocalInferenceProvider {
     slotId: 'fake-slot',
     rank: 8,
     alpha: 16,
-    poolId: 'general-2b',
+    poolId: 'qwen-0.8b',
     baseSha256: '',
   };
   private output: CoreModelProviderOutput = { value: {} };

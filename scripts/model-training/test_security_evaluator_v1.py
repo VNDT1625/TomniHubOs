@@ -1,0 +1,6 @@
+import json,subprocess,sys
+p=subprocess.run([sys.executable,'scripts/model-training/security_evaluator_v1.py'],input=json.dumps([{'language':'en','scenarioFamily':'f','reasonCode':'NO_SEMANTIC_RISK','expected':{'riskType':'none','action':'allow','confidence':.9,'reasonCode':'NO_SEMANTIC_RISK','requiresBackendValidation':True,'redactions':[]}}]),text=True,capture_output=True,check=True)
+r=json.loads(p.stdout); assert r['totals']['schemaValid']==1; assert r['totals']['fullObjectExact']==1
+bad={'language':'en','scenarioFamily':'f','reasonCode':'NO_SEMANTIC_RISK','expected':{'riskType':'none','action':'allow','confidence':.9,'reasonCode':'NO_SEMANTIC_RISK','requiresBackendValidation':True,'redactions':[]},'predicted':{'riskType':'credential_exposure','action':'allow','confidence':.9,'reasonCode':'CREDENTIAL_EXPOSURE','requiresBackendValidation':True,'redactions':['credential']}}
+r=subprocess.run([sys.executable,'scripts/model-training/security_evaluator_v1.py'],input=json.dumps([bad]),text=True,capture_output=True,check=True); q=json.loads(r.stdout); assert q['totals']['fullObjectExact']==0; assert q['confusionMatrices']['riskType']['none']['credential_exposure']==1
+print('PASS evaluator strict and mismatch assertions')

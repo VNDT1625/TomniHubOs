@@ -197,15 +197,17 @@ const ApiKeyEditorModal: React.FC<ApiKeyEditorModalProps> = ({ visible, api_keys
                     <>
                       {/* 状态图标 - 在测试按钮左边 */}
                       {key.status !== 'pending' && <div className='flex items-center'>{getStatusIcon(key.status)}</div>}
-                      <Tooltip content={t('settings.testKey')}>
-                        <Button
-                          type='text'
-                          size='mini'
-                          icon={<Shield theme='outline' size={16} className='flex' />}
-                          onClick={() => testKey(key.id)}
-                          loading={key.status === 'testing'}
-                        />
-                      </Tooltip>
+                      {onTestKey && (
+                        <Tooltip content={t('settings.testKey')}>
+                          <Button
+                            type='text'
+                            size='mini'
+                            icon={<Shield theme='outline' size={16} className='flex' />}
+                            onClick={() => testKey(key.id)}
+                            loading={key.status === 'testing'}
+                          />
+                        </Tooltip>
+                      )}
                       <Tooltip content={t('common.edit')}>
                         <Button
                           type='text'
@@ -235,7 +237,7 @@ const ApiKeyEditorModal: React.FC<ApiKeyEditorModalProps> = ({ visible, api_keys
         <div className='flex items-center justify-between pt-12px border-t border-line-2'>
           <span className='text-11px text-t-secondary'>{t('settings.multiKeyTip')}</span>
           <div className='flex items-center gap-8px'>
-            {hasMultipleKeys && (
+            {hasMultipleKeys && onTestKey && (
               <>
                 {hasTestedKeys && hasInvalidKeys && (
                   <Tooltip content={t('settings.deleteInvalidKeys')}>

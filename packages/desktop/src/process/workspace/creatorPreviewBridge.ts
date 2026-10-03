@@ -830,7 +830,6 @@ let activeProductionWindowsSandbox: ActiveWindowsCreatorSandboxBoundary | undefi
 let productionWindowsSandboxActivation: Promise<WindowsCreatorSandboxProductionActivationResult> | undefined;
 let productionWindowsSandboxEpoch = 0;
 
-
 /**
  * This is the only production registration seam for the Windows Creator Sandbox.
  * Supplying no configuration leaves the registry empty; callers cannot inject a fake

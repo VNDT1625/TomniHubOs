@@ -9,7 +9,11 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { buildIdeMemorySection, buildWorkspacePrimer, withIdeMemorySection } from '@/process/ide/workspacePrimer';
+import {
+  buildIdeMemorySection,
+  buildWorkspacePrimer,
+  withIdeMemorySection,
+} from '@package-apps/ide/process/workspace/workspacePrimer';
 
 const baseInput = {
   rootPath: '/repo/Tomny',

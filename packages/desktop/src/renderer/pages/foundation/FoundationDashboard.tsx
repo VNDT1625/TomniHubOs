@@ -13,15 +13,7 @@ import {
   Table,
   Badge,
 } from '@arco-design/web-react';
-import {
-  Play,
-  Shield,
-  Cpu,
-  User,
-
-
-  Refresh,
-} from '@icon-park/react';
+import { Play, Shield, Cpu, User, Refresh } from '@icon-park/react';
 
 const { Title, Text, Paragraph } = Typography;
 const { Row, Col } = Grid;
@@ -104,7 +96,10 @@ export const FoundationDashboard: React.FC = () => {
 
   const handleAddPreference = () => {
     if (!prefKey || !prefValue) return;
-    setPrefList((prev) => [...prev.filter((p) => p.key !== prefKey), { key: prefKey, value: prefValue, scope: 'global' }]);
+    setPrefList((prev) => [
+      ...prev.filter((p) => p.key !== prefKey),
+      { key: prefKey, value: prefValue, scope: 'global' },
+    ]);
     setPrefKey('');
     setPrefValue('');
     Message.success('Preference added');
@@ -114,41 +109,41 @@ export const FoundationDashboard: React.FC = () => {
     <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto' }}>
       <Title heading={3}>
         <Space>
-          <Cpu theme="outline" size="28" fill="#165DFF" />
+          <Cpu theme='outline' size='28' fill='#165DFF' />
           TomniHubOS 3-Core Foundation Dashboard
         </Space>
       </Title>
-      <Paragraph type="secondary">
+      <Paragraph type='secondary'>
         Quản lý và theo dõi trực quan RunKernel, Security Core, Efficiency Core và User Understanding Core.
       </Paragraph>
 
-      <Tabs defaultActiveTab="runkernel" type="card">
+      <Tabs defaultActiveTab='runkernel' type='card'>
         {/* RunKernel Tab */}
         <TabPane
-          key="runkernel"
+          key='runkernel'
           title={
             <span>
-              <Play theme="outline" size="16" style={{ marginRight: 6 }} />
+              <Play theme='outline' size='16' style={{ marginRight: 6 }} />
               Run Kernel Executor
             </span>
           }
         >
           <Row gutter={16}>
             <Col span={12}>
-              <Card title="Khởi Tạo Task RunIntent">
-                <Form layout="vertical">
-                  <Form.Item label="Goal (Mục tiêu)">
-                    <Input value={goal} onChange={setGoal} placeholder="Nhập mục tiêu..." />
+              <Card title='Khởi Tạo Task RunIntent'>
+                <Form layout='vertical'>
+                  <Form.Item label='Goal (Mục tiêu)'>
+                    <Input value={goal} onChange={setGoal} placeholder='Nhập mục tiêu...' />
                   </Form.Item>
-                  <Form.Item label="Surface">
+                  <Form.Item label='Surface'>
                     <Input value={surface} onChange={setSurface} />
                   </Form.Item>
-                  <Form.Item label="Workspace Scope">
+                  <Form.Item label='Workspace Scope'>
                     <Input value={workspace} onChange={setWorkspace} />
                   </Form.Item>
                   <Button
-                    type="primary"
-                    icon={<Play theme="outline" />}
+                    type='primary'
+                    icon={<Play theme='outline' />}
                     loading={running}
                     onClick={handleExecuteRun}
                     style={{ width: '100%' }}
@@ -160,10 +155,10 @@ export const FoundationDashboard: React.FC = () => {
             </Col>
 
             <Col span={12}>
-              <Card title="Biên Nhận OutcomeReceipt">
+              <Card title='Biên Nhận OutcomeReceipt'>
                 {lastReceipt ? (
                   <div>
-                    <Space direction="vertical" style={{ width: '100%' }}>
+                    <Space direction='vertical' style={{ width: '100%' }}>
                       <div>
                         <Text bold>Status: </Text>
                         <Tag color={lastReceipt.status === 'verified' ? 'green' : 'red'}>
@@ -181,21 +176,21 @@ export const FoundationDashboard: React.FC = () => {
                     </Space>
                   </div>
                 ) : (
-                  <Text type="secondary">Chưa có lượt chạy nào.</Text>
+                  <Text type='secondary'>Chưa có lượt chạy nào.</Text>
                 )}
               </Card>
 
               {events.length > 0 && (
-                <Card title="Event Log (Append-only)" style={{ marginTop: '16px' }}>
+                <Card title='Event Log (Append-only)' style={{ marginTop: '16px' }}>
                   <Table
-                    size="small"
+                    size='small'
                     pagination={{ pageSize: 5 }}
                     columns={[
                       { title: 'Seq', dataIndex: 'sequence', width: 60 },
                       { title: 'Type', dataIndex: 'eventType' },
                     ]}
                     data={events}
-                    rowKey="eventId"
+                    rowKey='eventId'
                   />
                 </Card>
               )}
@@ -205,27 +200,22 @@ export const FoundationDashboard: React.FC = () => {
 
         {/* Security Core Tab */}
         <TabPane
-          key="security"
+          key='security'
           title={
             <span>
-              <Shield theme="outline" size="16" style={{ marginRight: 6 }} />
+              <Shield theme='outline' size='16' style={{ marginRight: 6 }} />
               Security Core
             </span>
           }
         >
-          <Card title="Kiểm Tra An Toàn Văn Bản Outbound">
-            <Form layout="vertical">
-              <Form.Item label="Văn bản cần kiểm tra">
-                <Input.TextArea
-                  rows={4}
-                  value={inspectText}
-                  onChange={setInspectText}
-                  placeholder="Nhập văn bản..."
-                />
+          <Card title='Kiểm Tra An Toàn Văn Bản Outbound'>
+            <Form layout='vertical'>
+              <Form.Item label='Văn bản cần kiểm tra'>
+                <Input.TextArea rows={4} value={inspectText} onChange={setInspectText} placeholder='Nhập văn bản...' />
               </Form.Item>
               <Button
-                type="primary"
-                icon={<Shield theme="outline" />}
+                type='primary'
+                icon={<Shield theme='outline' />}
                 onClick={() => {
                   if (inspectText.includes('sk-')) {
                     setInspectResult('Sanitized: Secret detected and redacted.');
@@ -241,9 +231,7 @@ export const FoundationDashboard: React.FC = () => {
             {inspectResult && (
               <div style={{ marginTop: '16px' }}>
                 <Text bold>Kết quả: </Text>
-                <Tag color={inspectResult.startsWith('Sanitized') ? 'gold' : 'green'}>
-                  {inspectResult}
-                </Tag>
+                <Tag color={inspectResult.startsWith('Sanitized') ? 'gold' : 'green'}>{inspectResult}</Tag>
               </div>
             )}
           </Card>
@@ -251,25 +239,21 @@ export const FoundationDashboard: React.FC = () => {
 
         {/* Efficiency Core Tab */}
         <TabPane
-          key="efficiency"
+          key='efficiency'
           title={
             <span>
-              <Cpu theme="outline" size="16" style={{ marginRight: 6 }} />
+              <Cpu theme='outline' size='16' style={{ marginRight: 6 }} />
               Efficiency Core
             </span>
           }
         >
           <Row gutter={16}>
             <Col span={12}>
-              <Card title="Pressure Sampler & Concurrency">
-                <Space direction="vertical" style={{ width: '100%' }}>
+              <Card title='Pressure Sampler & Concurrency'>
+                <Space direction='vertical' style={{ width: '100%' }}>
                   <div>
                     <Text bold>CPU Usage Simulator: </Text>
-                    <Input
-                      type="number"
-                      value={String(cpuUsage)}
-                      onChange={(val) => setCpuUsage(Number(val))}
-                    />
+                    <Input type='number' value={String(cpuUsage)} onChange={(val) => setCpuUsage(Number(val))} />
                   </div>
                   <div>
                     <Text bold>Áp Lực Tài Nguyên: </Text>
@@ -289,12 +273,14 @@ export const FoundationDashboard: React.FC = () => {
             </Col>
 
             <Col span={12}>
-              <Card title="Choice Advisor (Rule-First Candidate Ranking)">
+              <Card title='Choice Advisor (Rule-First Candidate Ranking)'>
                 <Paragraph>
-                  Candidate: <Text code>agent_primary</Text> (Score: 1.85) $\rightarrow$ <Tag color="green">SELECTED</Tag>
+                  Candidate: <Text code>agent_primary</Text> (Score: 1.85) $\rightarrow${' '}
+                  <Tag color='green'>SELECTED</Tag>
                 </Paragraph>
                 <Paragraph>
-                  Candidate: <Text code>agent_fallback</Text> (Score: 1.40) $\rightarrow$ <Tag color="arcoblue">AVAILABLE</Tag>
+                  Candidate: <Text code>agent_fallback</Text> (Score: 1.40) $\rightarrow${' '}
+                  <Tag color='arcoblue'>AVAILABLE</Tag>
                 </Paragraph>
               </Card>
             </Col>
@@ -303,38 +289,38 @@ export const FoundationDashboard: React.FC = () => {
 
         {/* User Understanding Tab */}
         <TabPane
-          key="user_understanding"
+          key='user_understanding'
           title={
             <span>
-              <User theme="outline" size="16" style={{ marginRight: 6 }} />
+              <User theme='outline' size='16' style={{ marginRight: 6 }} />
               User Understanding Core
             </span>
           }
         >
-          <Card title="Quản Lý Preference Người Dùng">
-            <Form layout="inline" style={{ marginBottom: '16px' }}>
-              <Form.Item label="Key">
-                <Input value={prefKey} onChange={setPrefKey} placeholder="key" />
+          <Card title='Quản Lý Preference Người Dùng'>
+            <Form layout='inline' style={{ marginBottom: '16px' }}>
+              <Form.Item label='Key'>
+                <Input value={prefKey} onChange={setPrefKey} placeholder='key' />
               </Form.Item>
-              <Form.Item label="Value">
-                <Input value={prefValue} onChange={setPrefValue} placeholder="value" />
+              <Form.Item label='Value'>
+                <Input value={prefValue} onChange={setPrefValue} placeholder='value' />
               </Form.Item>
               <Form.Item>
-                <Button type="primary" onClick={handleAddPreference}>
+                <Button type='primary' onClick={handleAddPreference}>
                   Thêm / Xác Nhận
                 </Button>
               </Form.Item>
             </Form>
 
             <Table
-              size="small"
+              size='small'
               columns={[
                 { title: 'Key', dataIndex: 'key' },
                 { title: 'Value', dataIndex: 'value' },
                 { title: 'Scope', dataIndex: 'scope' },
               ]}
               data={prefList}
-              rowKey="key"
+              rowKey='key'
             />
           </Card>
         </TabPane>

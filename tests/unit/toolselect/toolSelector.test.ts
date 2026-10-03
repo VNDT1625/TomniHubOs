@@ -156,54 +156,66 @@ describe('semanticFilter (Tier 2)', () => {
 });
 
 describe('toolSelector select → try → re-select loop', () => {
+  describe('toolSelector explanations and advisor', () => {
+    it('uses a validated advisor only for ambiguous candidates', async () => {
+      const log = fakeSelectionLog();
+      const advisor = vi.fn(async () => ({ candidateId: 'skill:excel', explanation: 'lower execution cost' }));
+      const selector = createToolSelector({
+        catalog: fakeCatalog(),
+        selectionLog: log,
+        advisor,
+        ambiguityDelta: 10,
+        factors: (entry) => ({ compatibility: 1, monetaryCost: entry.id === 'skill:excel' ? 0.9 : 0.2 }),
+      });
 
+      const result = await selector.select('web spreadsheet presentation audio', async () => ({ ok: true }));
 
-describe('toolSelector explanations and advisor', () => {
-  it('uses a validated advisor only for ambiguous candidates', async () => {
-    const log = fakeSelectionLog();
-    const advisor = vi.fn(async () => ({ candidateId: 'skill:excel', explanation: 'lower execution cost' }));
-    const selector = createToolSelector({
-      catalog: fakeCatalog(),
-      selectionLog: log,
-      advisor,
-      ambiguityDelta: 10,
-      factors: (entry) => ({ compatibility: 1, monetaryCost: entry.id === 'skill:excel' ? 0.9 : 0.2 }),
+      expect(advisor).toHaveBeenCalledTimes(1);
+      expect(result.chosen?.id).toBe('skill:excel');
+      expect(result).toMatchObject({ tier: 'advisor', explanation: 'lower execution cost' });
+      expect(result.factors.monetaryCost).toBe(0.9);
     });
 
-    const result = await selector.select('web spreadsheet presentation audio', async () => ({ ok: true }));
+    it('rejects unknown advisor candidates and skips advisor for an easy case', async () => {
+      const invalidAdvisor = vi.fn(async () => ({ candidateId: 'unknown', explanation: 'invalid' }));
+      const ambiguous = createToolSelector({
+        catalog: fakeCatalog(),
+        selectionLog: fakeSelectionLog(),
+        advisor: invalidAdvisor,
+        ambiguityDelta: 10,
+      });
+      const fallback = await ambiguous.select('web spreadsheet presentation audio', async () => ({ ok: true }));
+      expect(fallback.chosen?.id).not.toBe('unknown');
 
-    expect(advisor).toHaveBeenCalledTimes(1);
-    expect(result.chosen?.id).toBe('skill:excel');
-    expect(result).toMatchObject({ tier: 'advisor', explanation: 'lower execution cost' });
-    expect(result.factors.monetaryCost).toBe(0.9);
-  });
-
-  it('rejects unknown advisor candidates and skips advisor for an easy case', async () => {
-    const invalidAdvisor = vi.fn(async () => ({ candidateId: 'unknown', explanation: 'invalid' }));
-    const ambiguous = createToolSelector({ catalog: fakeCatalog(), selectionLog: fakeSelectionLog(), advisor: invalidAdvisor, ambiguityDelta: 10 });
-    const fallback = await ambiguous.select('web spreadsheet presentation audio', async () => ({ ok: true }));
-    expect(fallback.chosen?.id).not.toBe('unknown');
-
-    const easyAdvisor = vi.fn();
-    const easy = createToolSelector({ catalog: fakeCatalog(), selectionLog: fakeSelectionLog(), advisor: easyAdvisor, ambiguityDelta: 0, advisorThreshold: 0 });
-    await easy.select('presentation slides ppt', async () => ({ ok: true }));
-    expect(easyAdvisor).not.toHaveBeenCalled();
-  });
-
-  it('reports rejected eligibility and failed-attempt reasons', async () => {
-    const selector = createToolSelector({
-      catalog: fakeCatalog(),
-      selectionLog: fakeSelectionLog(),
-      eligible: (entry) => (entry.id === 'skill:excel' ? 'package unavailable' : true),
-      maxRounds: 2,
+      const easyAdvisor = vi.fn();
+      const easy = createToolSelector({
+        catalog: fakeCatalog(),
+        selectionLog: fakeSelectionLog(),
+        advisor: easyAdvisor,
+        ambiguityDelta: 0,
+        advisorThreshold: 0,
+      });
+      await easy.select('presentation slides ppt', async () => ({ ok: true }));
+      expect(easyAdvisor).not.toHaveBeenCalled();
     });
 
-    const result = await selector.select('web spreadsheet presentation audio', async (entry) => ({ ok: false, detail: `${entry.id} unhealthy` }));
+    it('reports rejected eligibility and failed-attempt reasons', async () => {
+      const selector = createToolSelector({
+        catalog: fakeCatalog(),
+        selectionLog: fakeSelectionLog(),
+        eligible: (entry) => (entry.id === 'skill:excel' ? 'package unavailable' : true),
+        maxRounds: 2,
+      });
 
-    expect(result.rejected.some((candidate) => candidate.reason === 'package unavailable')).toBe(true);
-    expect(result.rejected.some((candidate) => candidate.reason.endsWith('unhealthy'))).toBe(true);
+      const result = await selector.select('web spreadsheet presentation audio', async (entry) => ({
+        ok: false,
+        detail: `${entry.id} unhealthy`,
+      }));
+
+      expect(result.rejected.some((candidate) => candidate.reason === 'package unavailable')).toBe(true);
+      expect(result.rejected.some((candidate) => candidate.reason.endsWith('unhealthy'))).toBe(true);
+    });
   });
-});
 
   it('returns the first candidate that succeeds and logs it', async () => {
     const log = fakeSelectionLog();

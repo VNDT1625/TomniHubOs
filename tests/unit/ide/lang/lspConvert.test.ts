@@ -10,7 +10,7 @@ import {
   parseDocumentSymbols,
   parseTextEditArray,
   parseWorkspaceEdit,
-} from '../../../../packages/desktop/src/process/ide/lang/lspConvert';
+} from '@package-apps/ide/process/coding/lang/lspConvert';
 
 describe('fromUri', () => {
   it('decodes a posix file uri', () => {

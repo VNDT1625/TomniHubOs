@@ -22,9 +22,9 @@ vi.mock('react-i18next', () => ({
 
 const mockClient = vi.hoisted(() => ({ profileTable: vi.fn() }));
 
-vi.mock('@/renderer/pages/studio/ide/db/dbClient', () => ({ dbClient: mockClient }));
+vi.mock('@package-apps/ide/renderer/db/dbClient', () => ({ dbClient: mockClient }));
 
-import TableAnalyzePanel from '@/renderer/pages/studio/ide/db/TableAnalyzePanel';
+import TableAnalyzePanel from '@package-apps/ide/renderer/db/TableAnalyzePanel';
 
 const renderPanel = () =>
   render(

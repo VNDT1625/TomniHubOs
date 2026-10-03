@@ -471,7 +471,7 @@ describe('released Web CLI Package API', () => {
     ]);
   });
 
-  it('downloads a remote package and preserves its installed state across host restarts', async () => {
+  it('keeps the free signed Store package consent-bound through restart and removes it cleanly', async () => {
     await startHost();
     const install = await mutatePackage('install', 'install-contribution-wait-1');
 
@@ -496,6 +496,14 @@ describe('released Web CLI Package API', () => {
       },
     });
     await expect(fs.access(path.join(dataDir, 'tomny-packages', 'installed.json'))).resolves.toBeUndefined();
+
+    const uninstall = await mutatePackage('uninstall', 'uninstall-after-restart-1');
+    expect(uninstall.status).toBe(200);
+    await expect(uninstall.json()).resolves.toMatchObject({ data: { state: 'available', enabled: false } });
+
+    const afterUninstall = await fetch(`${handle!.localUrl}/api/packages?installedOnly=true`);
+    await expect(afterUninstall.json()).resolves.toEqual({ data: [] });
+    expect((await contributionState()).snapshot.packageIds).toEqual([]);
   });
 
   it('preserves the catalog URL by default and supports a configurable remote mirror', () => {

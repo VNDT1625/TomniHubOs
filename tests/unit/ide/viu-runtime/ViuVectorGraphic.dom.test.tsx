@@ -14,7 +14,7 @@ import {
   createViuBooleanGeometry,
   createViuMaskGeometry,
 } from '@/common/viu/graphics/vector';
-import ViuVectorGraphic from '@/renderer/pages/studio/ide/Viu/next/runtime/ViuVectorGraphic';
+import ViuVectorGraphic from '@package-apps/design/renderer/viu/next/runtime/ViuVectorGraphic';
 
 afterEach(cleanup);
 

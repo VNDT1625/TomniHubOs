@@ -384,3 +384,64 @@ export const searchPlatformsByName = (keyword: string): PlatformConfig[] => {
   const lowerKeyword = keyword.toLowerCase();
   return MODEL_PLATFORMS.filter((p) => p.name.toLowerCase().includes(lowerKeyword));
 };
+
+/**
+ * Suggested models per platform or general fallback for custom/proxy endpoints.
+ */
+export const getSuggestedModelsForPlatform = (platformValue?: string): Array<{ label: string; value: string }> => {
+  const normalized = (platformValue ?? '').toLowerCase();
+
+  if (normalized === 'gemini' || normalized === 'gemini-vertex-ai') {
+    return [
+      { label: 'gemini-2.5-flash', value: 'gemini-2.5-flash' },
+      { label: 'gemini-2.5-pro', value: 'gemini-2.5-pro' },
+      { label: 'gemini-2.0-flash', value: 'gemini-2.0-flash' },
+      { label: 'gemini-2.0-flash-lite', value: 'gemini-2.0-flash-lite' },
+      { label: 'gemini-1.5-pro', value: 'gemini-1.5-pro' },
+      { label: 'gemini-1.5-flash', value: 'gemini-1.5-flash' },
+    ];
+  }
+
+  if (normalized === 'anthropic') {
+    return [
+      { label: 'claude-3-7-sonnet', value: 'claude-3-7-sonnet' },
+      { label: 'claude-3-5-sonnet', value: 'claude-3-5-sonnet' },
+      { label: 'claude-3-5-haiku', value: 'claude-3-5-haiku' },
+      { label: 'claude-3-opus', value: 'claude-3-opus' },
+    ];
+  }
+
+  if (normalized === 'openai') {
+    return [
+      { label: 'gpt-4o', value: 'gpt-4o' },
+      { label: 'gpt-4o-mini', value: 'gpt-4o-mini' },
+      { label: 'o3-mini', value: 'o3-mini' },
+      { label: 'o1', value: 'o1' },
+      { label: 'o1-mini', value: 'o1-mini' },
+      { label: 'gpt-4-turbo', value: 'gpt-4-turbo' },
+    ];
+  }
+
+  if (normalized === 'deepseek') {
+    return [
+      { label: 'deepseek-chat', value: 'deepseek-chat' },
+      { label: 'deepseek-reasoner', value: 'deepseek-reasoner' },
+    ];
+  }
+
+  // Custom, New API, 9Router, local proxy, and other platforms:
+  return [
+    { label: 'ag/gemini-3.8-flash-medium (Codex / Proxy)', value: 'ag/gemini-3.8-flash-medium' },
+    { label: 'gemini-2.5-flash', value: 'gemini-2.5-flash' },
+    { label: 'gemini-2.5-pro', value: 'gemini-2.5-pro' },
+    { label: 'gemini-2.0-flash', value: 'gemini-2.0-flash' },
+    { label: 'gpt-4o', value: 'gpt-4o' },
+    { label: 'gpt-4o-mini', value: 'gpt-4o-mini' },
+    { label: 'claude-3-7-sonnet', value: 'claude-3-7-sonnet' },
+    { label: 'claude-3-5-sonnet', value: 'claude-3-5-sonnet' },
+    { label: 'deepseek-chat', value: 'deepseek-chat' },
+    { label: 'deepseek-reasoner', value: 'deepseek-reasoner' },
+    { label: 'o3-mini', value: 'o3-mini' },
+    { label: 'qwen-2.5-coder-32b', value: 'qwen-2.5-coder-32b' },
+  ];
+};

@@ -7,7 +7,7 @@
 export const MODEL_PACK_MANIFEST_SCHEMA_VERSION = 1;
 export const MODEL_REGISTRY_SCHEMA_VERSION = 1;
 
-export type CoreModelPurpose = 'security' | 'user-understanding' | 'orchestrator' | 'assistant';
+export type CoreModelPurpose = 'security' | 'user-understanding' | 'semantic-analysis';
 
 export type ModelPackBaseBinding = {
   id: string;

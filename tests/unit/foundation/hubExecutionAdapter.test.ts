@@ -1,4 +1,7 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { mkdtemp, rm } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 
 import type { RunIntent } from '../../../packages/desktop/src/common/foundation/runTypes';
 import {
@@ -6,6 +9,8 @@ import {
   type HubTargetKind,
 } from '../../../packages/desktop/src/process/foundation/hubExecutionAdapter';
 import { RunKernel } from '../../../packages/desktop/src/process/foundation/runKernel';
+import { EventStore } from '../../../packages/desktop/src/process/foundation/eventStore';
+import { JsonlDurableEventStore } from '../../../packages/desktop/src/process/services/agentChat/durability';
 import { TrustBroker } from '../../../packages/desktop/src/process/foundation/trustBroker';
 
 const intent = (runId: string): RunIntent => ({
@@ -20,6 +25,12 @@ const intent = (runId: string): RunIntent => ({
   createdAt: 1,
   correlationId: `${runId}_correlation`,
   policyVersion: '1.0.0',
+});
+
+const temporaryDirectories: string[] = [];
+
+afterEach(async () => {
+  await Promise.all(temporaryDirectories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })));
 });
 
 describe('HubExecutionAdapter', () => {
@@ -69,7 +80,7 @@ describe('HubExecutionAdapter', () => {
 
   it('requires origin, capability, and final egress approval for a cloud target', async () => {
     const trustBroker = new TrustBroker({
-      allowedCapabilities: ['workspace.read'],
+      allowedCapabilities: ['target.execute', 'workspace.read'],
       allowedNetworkHosts: ['api.example.test'],
       allowedOrigins: ['app://hub'],
     });
@@ -130,6 +141,47 @@ describe('HubExecutionAdapter', () => {
     expect(executed).toBe(false);
     expect(inspectOutbound).toHaveBeenCalledWith(
       expect.objectContaining({ serializedPayload: 'Answer a governed goal.' })
+    );
+    expect(result.receipt.status).not.toBe('verified');
+  });
+
+  it('treats a supervised CLI with a discovered network host as an inspected network target', async () => {
+    const trustBroker = new TrustBroker({
+      allowedNetworkHosts: ['cli.example.test'],
+      allowedOrigins: ['app://hub'],
+    });
+    const inspectOutbound = vi.spyOn(trustBroker, 'inspectFinalEgress').mockImplementation((request) => ({
+      runId: request.runId,
+      taskId: request.taskId,
+      targetId: request.targetId,
+      capabilities: request.requestedCapabilities,
+      receiptId: 'cli-outbound-denied',
+      decision: 'deny',
+      reasonCode: 'FINAL_EGRESS_SECRET_DETECTED',
+    }));
+    let executed = false;
+    const hub = new HubExecutionAdapter(
+      new RunKernel(),
+      [
+        {
+          id: 'supervised_cli_egress_guard',
+          kind: 'cli',
+          priority: 1,
+          networkHost: 'cli.example.test',
+          execute: async () => {
+            executed = true;
+            return { text: 'unexpected', evidenceRefs: [] };
+          },
+        },
+      ],
+      { trustBroker, origin: 'app://hub' }
+    );
+
+    const result = await hub.execute(intent('run_cli_egress'));
+
+    expect(executed).toBe(false);
+    expect(inspectOutbound).toHaveBeenCalledWith(
+      expect.objectContaining({ operation: 'network', serializedPayload: 'Answer a governed goal.' })
     );
     expect(result.receipt.status).not.toBe('verified');
   });
@@ -223,5 +275,50 @@ describe('HubExecutionAdapter', () => {
 
     expect(result).toMatchObject({ receipt: { status: 'failed' } });
     expect(result.text).toBeUndefined();
+  });
+
+  it('persists one Trust-governed cloud receipt across restart without replaying its terminal run', async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), 'tomny-c2-hub-'));
+    temporaryDirectories.push(directory);
+    const journalPath = path.join(directory, 'foundation.jsonl');
+    const trustBroker = new TrustBroker({
+      allowedCapabilities: ['target.execute'],
+      allowedNetworkHosts: ['api.example.test'],
+      allowedOrigins: ['app://hub'],
+    });
+    const writer = new RunKernel({ eventStore: new EventStore({ journal: new JsonlDurableEventStore(journalPath) }) });
+    const hub = new HubExecutionAdapter(
+      writer,
+      [
+        {
+          id: 'cloud_c2',
+          kind: 'cloud',
+          priority: 1,
+          networkHost: 'api.example.test',
+          execute: async () => ({ text: 'governed result', evidenceRefs: ['cloud-c2-evidence'] }),
+        },
+      ],
+      { trustBroker, origin: 'app://hub' }
+    );
+
+    const result = await hub.execute(intent('run_c2_restart'));
+    expect(result).toMatchObject({ targetId: 'cloud_c2', receipt: { status: 'verified' } });
+
+    const restarted = new EventStore({ journal: new JsonlDurableEventStore(journalPath) });
+    await restarted.initialize();
+    const recovered = restarted.getEventsByRunId('run_c2_restart');
+    expect(recovered.at(-1)).toMatchObject({ eventType: 'outcome.verified' });
+    expect(recovered.filter((event) => event.eventType === 'outcome.verified')).toHaveLength(1);
+    await expect(
+      restarted.appendDurably(
+        {
+          ...recovered.at(-1)!,
+          eventId: 'evt_after_terminal',
+          eventType: 'lease.released',
+          sequence: recovered.length,
+        },
+        'run_c2_restart:after-terminal'
+      )
+    ).rejects.toThrow('Cannot append event after terminal state');
   });
 });

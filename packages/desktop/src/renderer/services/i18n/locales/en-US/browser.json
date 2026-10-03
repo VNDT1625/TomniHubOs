@@ -5,6 +5,16 @@
   "desktopOnly": "The embedded browser is only available in the desktop app.",
   "bridgeUnavailable": "The browser service is not running yet. It will be available once the desktop bridge is wired up.",
   "retry": "Retry",
+  "openLinksInApp": {
+    "description": "Open links from Tomny in this Browser instead of your system browser."
+  },
+  "defaultBrowser": {
+    "description": "Register Tomny as a browser option, then select it in Windows Settings.",
+    "active": "Tomny is your default browser.",
+    "action": "Set as Default",
+    "current": "Default",
+    "error": "Failed to update the default browser setting."
+  },
   "address": {
     "placeholder": "Search or type a URL",
     "go": "Go",

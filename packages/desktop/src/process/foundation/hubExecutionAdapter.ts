@@ -1,6 +1,6 @@
 import type { OutcomeReceipt } from '../../common/foundation/receiptTypes';
 import type { RunIntent } from '../../common/foundation/runTypes';
-import type { RunKernel } from './runKernel';
+import type { ActiveRunExecutionContext, RunKernel } from './runKernel';
 import type { TrustBroker, TrustOperation } from './trustBroker';
 
 export type HubTargetKind = 'cli' | 'cloud' | 'local' | 'mcp';
@@ -17,6 +17,8 @@ export type HubExecutionTarget = {
   execute: (request: {
     intent: RunIntent;
     signal?: AbortSignal;
+    /** Opaque RunKernel scope for Main-owned child operations only. */
+    activeRun: ActiveRunExecutionContext;
   }) => Promise<{ text: string; evidenceRefs: readonly string[] }>;
 };
 
@@ -31,8 +33,15 @@ export type HubExecutionAdapterOptions = {
   origin?: string;
 };
 
-const operationFor = (kind: HubTargetKind): TrustOperation =>
-  kind === 'cloud' ? 'network' : kind === 'local' ? 'provider' : kind;
+const requiresNetworkEgressInspection = (target: HubExecutionTarget): boolean =>
+  target.kind === 'cloud' || target.networkHost !== undefined;
+
+const operationFor = (target: HubExecutionTarget): TrustOperation =>
+  target.kind === 'cloud' || target.networkHost !== undefined
+    ? 'network'
+    : target.kind === 'local'
+      ? 'provider'
+      : target.kind;
 
 const targetMatchesIntent = (target: HubExecutionTarget, intent: RunIntent): boolean => {
   if (target.health === 'unavailable') return false;
@@ -80,41 +89,48 @@ export class HubExecutionAdapter {
           estimatedCostMB: target.estimatedCostMB ?? 128,
           priority: target.priority,
         })),
-      async (_leaseId, executorSignal, targetId) => {
+      async (_leaseId, executorSignal, targetId, activeRun) => {
         if (targetId === undefined) throw new Error('Run Kernel did not select an execution target.');
+        if (activeRun === undefined) throw new Error('Run Kernel did not provide an active execution scope.');
         const target = this.targets.get(targetId);
         if (target === undefined) throw new Error(`Selected execution target is not registered: ${targetId}`);
         if (this.options.trustBroker && this.options.origin) {
           const request = {
             runId: intent.runId,
             taskId: intent.rootTaskId,
-            operation: operationFor(target.kind),
+            actorId: intent.userId,
+            operation: operationFor(target),
             targetId: target.id,
-            requestedCapabilities: target.requestedCapabilities ?? [],
+            requestedCapabilities: [...new Set(['target.execute', ...(target.requestedCapabilities ?? [])])],
             workspaceScope: intent.workspaceScope,
+            policyVersion: intent.policyVersion,
+            idempotencyKey: `${intent.runId}:${intent.rootTaskId}:${target.id}`,
+            reason: `Execute Hub target ${target.id}`,
             networkHost: target.networkHost,
           };
-          const capability = this.options.trustBroker.requestCapability(request, this.options.origin);
+          const capability = await this.options.trustBroker.requestCapability(request, this.options.origin);
           if (capability.decision !== 'allow') throw new Error(`Hub target denied: ${capability.reasonCode}`);
-          if (target.kind === 'cloud') {
-            const outbound = this.options.trustBroker.inspectFinalEgress({
+          if (requiresNetworkEgressInspection(target)) {
+            const outbound = await this.options.trustBroker.inspectFinalEgress({
               ...request,
               origin: this.options.origin,
               serializedPayload: intent.goal,
+              grantId: capability.grantId,
             });
             if (outbound.decision !== 'allow') throw new Error('HUB_OUTBOUND_EGRESS_DENIED');
           }
-          const result = await target.execute({ intent, signal: executorSignal });
-          const egress = this.options.trustBroker.inspectFinalEgress({
+          const result = await target.execute({ intent, signal: executorSignal, activeRun });
+          const egress = await this.options.trustBroker.inspectFinalEgress({
             ...request,
             origin: this.options.origin,
             serializedPayload: result.text,
+            grantId: capability.grantId,
           });
           if (egress.decision !== 'allow') throw new Error('HUB_FINAL_EGRESS_DENIED');
           output = { targetId, text: result.text };
           return { evidenceRefs: result.evidenceRefs };
         }
-        const result = await target.execute({ intent, signal: executorSignal });
+        const result = await target.execute({ intent, signal: executorSignal, activeRun });
         output = { targetId, text: result.text };
         return { evidenceRefs: result.evidenceRefs };
       },

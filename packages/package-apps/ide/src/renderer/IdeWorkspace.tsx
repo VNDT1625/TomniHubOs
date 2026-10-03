@@ -1,0 +1,2033 @@
+/**
+ * @license
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
+ * `IdeWorkspace` — the unified IDE Studio surface. One picked folder powers four
+ * modes, switched from a single left activity bar:
+ *
+ *  - **Files** — a file tree (left) + the {@link UniversalEditor} (right). Open,
+ *    read, and edit any file in the repo. This is the working IDE.
+ *  - **Understand** — an interactive knowledge graph ({@link UnderstandPanel}):
+ *    a C4-level dependency view that teaches the codebase.
+ *  - **Chat** — a multi-tab CLI-agent chat ({@link IdeChatPanel}) that reuses the
+ *    MAIN conversation system. Each tab is a real conversation pinned to the open
+ *    folder (`extra.workspace = rootPath`), so a CLI agent (Claude Code / Codex /
+ *    Gemini …) runs with it as the cwd and can read every subdirectory. Multiple
+ *    tabs = multiple agents working the same folder in parallel.
+ *  - **Wiki** — DeepWiki-style generated architecture documentation
+ *    ({@link WikiPanel}): a structured, navigable wiki with Mermaid diagrams.
+ *
+ * This merges the former standalone `StudioIde` (file tree + editor) and
+ * `RepoIntelView` (graph + explain) into one workspace and adds the Wiki, so
+ * "understand the code" is a first-class feature of the IDE rather than a
+ * separate screen. The earlier weak in-IDE Ask + Agent panels were removed in
+ * favour of the Chat mode's full CLI-agent system. Shared repo state lives in
+ * {@link useIdeWorkspace}; the Wiki's generation state lives in {@link useRepoWiki}.
+ * Editor instances are kept MOUNTED (hidden when inactive) so an in-progress AI
+ * edit keeps running while the user explores other tabs.
+ *
+ * Renderer-only; all text via i18n; Arco + icon-park + UnoCSS tokens only.
+ */
+
+import {
+  Button,
+  Divider,
+  Dropdown,
+  Empty,
+  Input,
+  Menu,
+  Message,
+  Modal,
+  Popconfirm,
+  Spin,
+  Tag,
+  Tooltip,
+  Tree,
+} from '@arco-design/web-react';
+import type { RefInputType } from '@arco-design/web-react/es/Input';
+import {
+  AllApplication,
+  Book,
+  Brain,
+  Branch,
+  Bug,
+  Close,
+  Cloudy,
+  Code,
+  Copy,
+  DataSheet,
+  Delete,
+  Edit,
+  FileAdditionOne,
+  FileEditingOne,
+  FileCode,
+  FolderOpen,
+  FolderPlus,
+  Left,
+  Lightning,
+  MessageOne,
+  People,
+  Puzzle,
+  Refresh,
+  Search,
+  Terminal,
+  Play,
+  Link,
+  Right,
+  TreeList,
+} from '@icon-park/react';
+import { ipcBridge } from '@/common';
+import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { baseName } from '@package-apps/shared/filePath';
+import { collectTreeFilePaths, useIdeWorkspace, type TreeNode } from '@package-apps/ide/renderer/hooks/useIdeWorkspace';
+import { useRepoWiki } from '@package-apps/ide/renderer/hooks/useRepoWiki';
+import { useRepoChanges } from '@package-apps/ide/renderer/hooks/useRepoChanges';
+import WikiPanel from '@package-apps/ide/renderer/components/WikiPanel';
+import UnderstandPanel from '@package-apps/ide/renderer/components/UnderstandPanel';
+import IdeChatPanel from '@package-apps/ide/renderer/components/IdeChatPanel';
+import IdeHooksPanel from '@package-apps/ide/renderer/components/IdeHooksPanel';
+import CommandPalette, { type PaletteCommand } from '@package-apps/ide/renderer/palette/CommandPalette';
+import NavResultsPanel from '@package-apps/ide/renderer/components/NavResultsPanel';
+import { useIdeHooks } from '@package-apps/ide/renderer/hooks/useIdeHooks';
+import { emitter, useAddEventListener } from '@renderer/utils/emitter';
+import type { NavHit } from '@package-apps/ide/renderer/services/ideClient';
+import DiffReviewPanel from '@package-apps/ide/renderer/components/DiffReviewPanel';
+import SearchPanel from '@package-apps/ide/renderer/components/SearchPanel';
+import GitPage from '@renderer/pages/git/GitPage';
+import DatabasePanel from '@package-apps/ide/renderer/db/DatabasePanel';
+import SpecManagerPanel from '@package-apps/ide/renderer/components/SpecManagerPanel';
+import LspServersPanel from '@package-apps/ide/renderer/components/LspServersPanel';
+import ExpBasePanel from '@package-apps/ide/renderer/expbase/ExpBasePanel';
+import TeamEditPanel from '@package-apps/ide/renderer/teamEdit/TeamEditPanel';
+import TeamCollabBar from '@package-apps/ide/renderer/teamEdit/TeamCollabBar';
+import { useTeamCollab } from '@package-apps/ide/renderer/teamEdit/useTeamCollab';
+import PeerWorkspace from '@package-apps/ide/renderer/teamEdit/PeerWorkspace';
+import {
+  cloudWorkspaceClient,
+  type CloudWorkspacePublishProgress,
+} from '@package-apps/ide/renderer/teamEdit/cloud/cloudWorkspaceClient';
+import { useCloudWorkspace } from '@package-apps/ide/renderer/teamEdit/cloud/useCloudWorkspace';
+import { getReadFileText, ideClient } from '@package-apps/ide/renderer/services/ideClient';
+import { lspClient } from '@package-apps/ide/renderer/services/lspClient';
+import {
+  buildQuickCommands,
+  cwdForNode,
+  parseScripts,
+  sepOf,
+  type QuickCommand,
+} from '@package-apps/ide/renderer/services/quickCommands';
+import { relationsFor } from '@package-apps/ide/renderer/services/codeRelations';
+import type { RepoGraph } from '@package-apps/ide/renderer/services/ideClient';
+import { emitEditorGoto } from '@renderer/pages/editor/editorGoto';
+import type { EditorAdapterResolver, EditorFsOverride } from '@renderer/pages/editor/UniversalEditor';
+
+const UniversalEditor = React.lazy(() => import('@renderer/pages/editor/UniversalEditor'));
+const IdeExtensionsPanel = React.lazy(() => import('@package-apps/ide/renderer/hooks/extensions/IdeExtensionsPanel'));
+
+const CLOUD_BOOTSTRAP_EXCLUDED_DIRS = new Set([
+  '.git',
+  '.hg',
+  '.svn',
+  'node_modules',
+  'dist',
+  'out',
+  'build',
+  '.next',
+  '.nuxt',
+  'coverage',
+  '.cache',
+  '.turbo',
+  '.vite',
+  'target',
+]);
+const CLOUD_BOOTSTRAP_MAX_FILES = 2000;
+const CLOUD_BOOTSTRAP_MAX_BYTES = 1024 * 1024;
+
+const hashTextSha256 = async (content: string): Promise<string> => {
+  const bytes = new TextEncoder().encode(content);
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+};
+
+type IdeWorkspaceProps = {
+  onBack?: () => void;
+  /** Opens an already-installed Design module through the package host; never installs it. */
+  onOpenDesign?: () => void;
+  /** Legacy Viu deep-link input redirects only when an installed package host provides an opener. */
+  initialMode?: 'files' | 'viu';
+  /** Package-scoped Monaco resolver; absent base compatibility routes retain Core fallback. */
+  adapterResolver?: EditorAdapterResolver;
+};
+
+/** The IDE modes selectable from the activity bar. */
+type IdeMode =
+  | 'files'
+  | 'understand'
+  | 'chat'
+  | 'wiki'
+  | 'search'
+  | 'git'
+  | 'quicktest'
+  | 'database'
+  | 'hooks'
+  | 'spec'
+  | 'lsp'
+  | 'extensions'
+  | 'expbase'
+  | 'team';
+
+const IdeWorkspace: React.FC<IdeWorkspaceProps> = (props) => {
+  const { onBack = () => window.history.back(), onOpenDesign, initialMode = 'files' } = props;
+  const { t } = useTranslation();
+  const ide = useIdeWorkspace();
+  // Keep Quick Test services alive across IDE mode switches. The embedded
+  // browser remains panel-owned and is destroyed while the tab is hidden.
+  const wiki = useRepoWiki();
+  const changes = useRepoChanges(ide.rootPath);
+  const collab = useTeamCollab(ide.rootPath);
+  const cloud = useCloudWorkspace();
+  const [mode, setMode] = useState<IdeMode>(initialMode === 'viu' ? 'files' : initialMode);
+  const [activityRailVisible, setActivityRailVisible] = useState(true);
+
+  useEffect(() => {
+    if (initialMode === 'viu') onOpenDesign?.();
+  }, [initialMode, onOpenDesign]);
+  const [joinCollabOpen, setJoinCollabOpen] = useState(false);
+  const [connectCloudOpen, setConnectCloudOpen] = useState(false);
+  const [cloudBootstrapPublishing, setCloudBootstrapPublishing] = useState(false);
+  const [cloudBootstrapProgress, setCloudBootstrapProgress] = useState<CloudWorkspacePublishProgress | null>(null);
+  const cloudMountingPathRef = useRef<string | null>(null);
+  const cloudFileCount = useMemo(
+    () => Object.values(cloud.manifest?.files ?? {}).filter((file) => !file.deleted).length,
+    [cloud.manifest]
+  );
+
+  useEffect(() => {
+    const cachePath = cloud.session?.cachePath;
+    if (cloudFileCount <= 0) return;
+    if (!cloud.connected || !cachePath || ide.rootPath === cachePath) return;
+    if (cloudMountingPathRef.current === cachePath) return;
+    cloudMountingPathRef.current = cachePath;
+    void ide
+      .openFolderPath(cachePath, { persist: false })
+      .catch((error: unknown) => {
+        Message.error(error instanceof Error ? error.message : String(error));
+      })
+      .finally(() => {
+        if (cloudMountingPathRef.current === cachePath) cloudMountingPathRef.current = null;
+      });
+  }, [cloud.connected, cloud.session?.cachePath, cloudFileCount, ide.openFolderPath, ide.rootPath]);
+
+  const [specMounted, setSpecMounted] = useState(false);
+  const [diffOpen, setDiffOpen] = useState(false);
+
+  // Command palette (Ctrl/Cmd+P = files, Ctrl/Cmd+Shift+P = commands).
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [paletteCommandMode, setPaletteCommandMode] = useState(false);
+  // Go-to-definition / find-references results.
+  const [navOpen, setNavOpen] = useState(false);
+  const [navLoading, setNavLoading] = useState(false);
+  const [navMode, setNavMode] = useState<'definition' | 'references'>('definition');
+  const [navSymbol, setNavSymbol] = useState('');
+  const [navHits, setNavHits] = useState<NavHit[]>([]);
+
+  // Own ONE hooks controller for the whole workspace so file events fire hooks
+  // regardless of which mode is open. An askAgent firing switches to Chat mode
+  // and drops the prompt into the composer via the emitter.
+  const hooksController = useIdeHooks(ide.rootPath, {
+    dispatch: true,
+    onAskAgent: (prompt, hookName) => {
+      if (ide.rootPath) {
+        emitter.emit('ide.hook.askAgent', { rootPath: ide.rootPath, prompt, hookName });
+      }
+      setMode('chat');
+    },
+    onRunCommand: (command, rootPath, hookName) => {
+      emitter.emit('ide.hook.runCommand', { command, rootPath, hookName });
+    },
+  });
+
+  const groupCount = useMemo(() => {
+    if (!ide.graph) return 0;
+    return new Set(ide.graph.nodes.map((n) => n.group)).size;
+  }, [ide.graph]);
+
+  // File list for the @-mention picker. The graph can be empty for doc-only or
+  // tiny folders, so include the loaded file tree that the user can already see.
+  const repoFiles = useMemo<string[]>(() => {
+    const files = new Set<string>();
+    if (ide.graph) {
+      for (const node of ide.graph.nodes) files.add(node.id);
+    }
+    for (const file of collectTreeFilePaths(ide.tree, ide.rootPath)) files.add(file);
+    return [...files].toSorted((a, b) => a.localeCompare(b));
+  }, [ide.graph, ide.rootPath, ide.tree]);
+
+  const editorFs = useMemo(() => {
+    const cachePath = cloud.session?.cachePath;
+    if (!cloud.connected || !cloud.session || !cachePath || ide.rootPath !== cachePath) return ide.editorFs;
+    const cloudSession = cloud.session;
+    const toCloudRel = (filePath: string): string => relWithinRoot(filePath, cachePath);
+    return {
+      readText: async (filePath: string): Promise<string | null> => {
+        const res = await cloudWorkspaceClient
+          .file(cloudSession.workspaceId, toCloudRel(filePath))
+          .catch((): null => null);
+        if (!res || res.ok === false) return null;
+        return res.data.content;
+      },
+      readBase64: (filePath: string): Promise<string | null> => ide.editorFs.readBase64(filePath),
+      writeText: async (filePath: string, data: string): Promise<boolean> => {
+        const relPath = toCloudRel(filePath);
+        const res = await cloudWorkspaceClient.write(cloudSession.workspaceId, relPath, data).catch((): null => null);
+        if (!res || res.ok === false) return false;
+        await ide.editorFs.writeText(filePath, data).catch((): false => false);
+        await cloud.refreshStatus().catch((): undefined => undefined);
+        return true;
+      },
+      writeBase64: async (): Promise<boolean> => false,
+    };
+  }, [cloud.connected, cloud.session, cloud.refreshStatus, ide.editorFs, ide.rootPath]);
+
+  const publishLocalFolderToCloud = async (rootPath: string): Promise<boolean> => {
+    const session = cloud.session;
+    if (!session || cloudBootstrapPublishing) return false;
+    const root = rootPath.replace(/[\\/]+$/, '');
+    const toRel = (absPath: string): string => {
+      const normalizedRoot = root.replace(/\\/g, '/');
+      const normalizedAbs = absPath.replace(/\\/g, '/');
+      return normalizedAbs.startsWith(`${normalizedRoot}/`)
+        ? normalizedAbs.slice(normalizedRoot.length + 1)
+        : normalizedAbs;
+    };
+    const joinPath = (dir: string, name: string): string => {
+      const sep = dir.includes('\\') && !dir.includes('/') ? '\\' : '/';
+      return `${dir.replace(/[\\/]+$/, '')}${sep}${name}`;
+    };
+    const progress: CloudWorkspacePublishProgress = {
+      uploaded: 0,
+      skipped: 0,
+      failed: 0,
+      totalBytes: 0,
+      errors: [],
+      running: true,
+      done: false,
+      totalDiscovered: 0,
+      startedAt: Date.now(),
+    };
+    setCloudBootstrapPublishing(true);
+    setCloudBootstrapProgress(progress);
+    try {
+      const localPaths = new Set<string>();
+      const cloudFiles = cloud.manifest?.files ?? {};
+      const visit = async (dir: string): Promise<void> => {
+        if (progress.totalDiscovered >= CLOUD_BOOTSTRAP_MAX_FILES) return;
+        const listed = await ideClient.listDir(dir).catch((error): null => {
+          progress.failed += 1;
+          if (progress.errors.length < 20) progress.errors.push({ path: toRel(dir) || '.', error: String(error) });
+          return null;
+        });
+        if (!listed || listed.ok === false) {
+          if (listed && progress.errors.length < 20)
+            progress.errors.push({
+              path: toRel(dir) || '.',
+              error: 'error' in listed ? listed.error : 'Could not list directory.',
+            });
+          if (listed) progress.failed += 1;
+          return;
+        }
+        for (const entry of listed.data) {
+          if (progress.totalDiscovered >= CLOUD_BOOTSTRAP_MAX_FILES) return;
+          if (entry.isDir) {
+            if (CLOUD_BOOTSTRAP_EXCLUDED_DIRS.has(entry.name)) continue;
+            await visit(entry.fullPath || joinPath(dir, entry.name));
+            continue;
+          }
+          const absPath = entry.fullPath || joinPath(dir, entry.name);
+          const relPath = toRel(absPath);
+          localPaths.add(relPath);
+          progress.currentPath = relPath;
+          progress.totalDiscovered += 1;
+          const read = await ideClient
+            .readFile({ path: absPath, maxBytes: CLOUD_BOOTSTRAP_MAX_BYTES + 1 })
+            .catch((error): null => {
+              progress.failed += 1;
+              if (progress.errors.length < 20) progress.errors.push({ path: relPath, error: String(error) });
+              return null;
+            });
+          if (!read || read.ok === false) {
+            if (read && progress.errors.length < 20)
+              progress.errors.push({ path: relPath, error: 'error' in read ? read.error : 'Could not read file.' });
+            if (read) progress.failed += 1;
+            setCloudBootstrapProgress({ ...progress });
+            continue;
+          }
+          if (read.data.binary || read.data.truncated || read.data.sizeBytes > CLOUD_BOOTSTRAP_MAX_BYTES) {
+            progress.skipped += 1;
+            setCloudBootstrapProgress({ ...progress });
+            continue;
+          }
+          const content = getReadFileText(read.data);
+          const localHash = await hashTextSha256(content);
+          const remoteMeta = cloudFiles[relPath];
+          if (remoteMeta && !remoteMeta.deleted && remoteMeta.hash === localHash) {
+            progress.skipped += 1;
+            setCloudBootstrapProgress({ ...progress });
+            continue;
+          }
+          const written = await cloudWorkspaceClient
+            .write(session.workspaceId, relPath, content)
+            .catch((error): null => {
+              progress.failed += 1;
+              if (progress.errors.length < 20) progress.errors.push({ path: relPath, error: String(error) });
+              return null;
+            });
+          if (!written || written.ok === false) {
+            if (written && progress.errors.length < 20)
+              progress.errors.push({
+                path: relPath,
+                error: 'error' in written ? written.error : 'Could not write file.',
+              });
+            if (written) progress.failed += 1;
+          } else {
+            progress.uploaded += 1;
+            progress.totalBytes += read.data.sizeBytes;
+          }
+          setCloudBootstrapProgress({ ...progress });
+        }
+      };
+      await visit(root);
+      const cloudOnlyCount = Object.values(cloudFiles).filter(
+        (file) => !file.deleted && !localPaths.has(file.path.replace(/\\/g, '/'))
+      ).length;
+      progress.running = false;
+      progress.done = true;
+      progress.currentPath = undefined;
+      progress.finishedAt = Date.now();
+      setCloudBootstrapProgress({ ...progress });
+      await cloud.refreshStatus();
+      if (progress.failed > 0) {
+        const first = progress.errors[0];
+        Message.error(
+          first
+            ? `${t('ide.cloudWorkspace.publishPartial', { failed: progress.failed })}: ${first.path} - ${first.error}`
+            : t('ide.cloudWorkspace.publishPartial', { failed: progress.failed })
+        );
+      } else if (progress.uploaded > 0) {
+        Message.success(t('ide.cloudWorkspace.publishSuccess'));
+      } else if (progress.totalDiscovered > 0) {
+        Message.info(t('ide.cloudWorkspace.publishUpToDate'));
+      } else {
+        Message.warning(t('ide.cloudWorkspace.publishNoFiles'));
+      }
+      if (cloudOnlyCount > 0) Message.warning(t('ide.cloudWorkspace.publishCloudOnly', { count: cloudOnlyCount }));
+      return progress.uploaded > 0 && progress.failed === 0;
+    } finally {
+      setCloudBootstrapPublishing(false);
+    }
+  };
+
+  const openFile = (path: string): void => {
+    ide.openFile(path);
+    setMode('files');
+  };
+
+  // Open a repo-relative path from the palette (resolve against the root).
+  const openRelFile = (relPath: string): void => {
+    if (!ide.rootPath) return;
+    const root = ide.rootPath.replace(/[/\\]+$/, '');
+    const sep = root.includes('\\') && !root.includes('/') ? '\\' : '/';
+    const abs = `${root}${sep}${relPath.replace(/\//g, sep)}`;
+    openFile(abs);
+  };
+
+  // Open an absolute path at a line:col (used by nav results).
+  const openFileAt = (absPath: string, line: number, column: number): void => {
+    openFile(absPath);
+    emitEditorGoto(absPath, line, column);
+    setNavOpen(false);
+  };
+
+  // Resolve a symbol nav request from the editor (F12 / Shift+F12). A single
+  // definition jumps straight there; otherwise the results panel opens.
+  useAddEventListener(
+    'ide.nav.request',
+    (payload) => {
+      const root = ide.rootPath;
+      if (!root) return;
+      setNavMode(payload.mode);
+      setNavSymbol(payload.symbol);
+      setNavHits([]);
+      setNavLoading(true);
+      setNavOpen(true);
+      // Prefer the attached language server (type-aware, accurate); fall back to
+      // the heuristic repo scan when no server is attached or it returns nothing.
+      const resolveHits = async (): Promise<NavHit[]> => {
+        if (payload.lsp) {
+          const { serverId, filePath, line, column } = payload.lsp;
+          const lspRes =
+            payload.mode === 'definition'
+              ? await lspClient.definition(root, serverId, filePath, line, column).catch((): null => null)
+              : await lspClient.references(root, serverId, filePath, line, column).catch((): null => null);
+          if (lspRes && lspRes.ok && lspRes.data.length > 0) {
+            return lspRes.data.map((loc) => ({ path: loc.path, line: loc.line, column: loc.column, text: '' }));
+          }
+        }
+        const res =
+          payload.mode === 'definition'
+            ? await ideClient.findDefinition(root, payload.symbol)
+            : await ideClient.findReferences(root, payload.symbol);
+        return res.ok ? res.data : [];
+      };
+      void resolveHits()
+        .then((hits) => {
+          if (payload.mode === 'definition' && hits.length === 1) {
+            setNavOpen(false);
+            openFileAt(hits[0].path, hits[0].line, hits[0].column);
+            return;
+          }
+          setNavHits(hits);
+        })
+        .catch(() => setNavHits([]))
+        .finally(() => setNavLoading(false));
+    },
+    [ide.rootPath]
+  );
+
+  // Command-palette commands (Ctrl/Cmd+Shift+P). Localised here; the palette
+  // fuzzy-matches their labels.
+  const paletteCommands = useMemo<PaletteCommand[]>(() => {
+    const goto =
+      (m: IdeMode): (() => void) =>
+      () =>
+        setMode(m);
+    return [
+      { id: 'files', label: t('ide.mode.files'), hint: t('ide.palette.category.go'), run: goto('files') },
+      {
+        id: 'understand',
+        label: t('ide.mode.understand'),
+        hint: t('ide.palette.category.go'),
+        run: goto('understand'),
+      },
+      { id: 'chat', label: t('ide.mode.chat'), hint: t('ide.palette.category.go'), run: goto('chat') },
+      { id: 'team', label: t('ide.mode.team'), hint: t('ide.palette.category.go'), run: goto('team') },
+      { id: 'wiki', label: t('ide.mode.wiki'), hint: t('ide.palette.category.go'), run: goto('wiki') },
+      { id: 'search', label: t('ide.mode.search'), hint: t('ide.palette.category.go'), run: goto('search') },
+      { id: 'git', label: t('ide.mode.git'), hint: t('ide.palette.category.go'), run: goto('git') },
+      { id: 'quicktest', label: t('ide.mode.quicktest'), hint: t('ide.palette.category.go'), run: goto('quicktest') },
+      { id: 'database', label: t('ide.mode.database'), hint: t('ide.palette.category.go'), run: goto('database') },
+      { id: 'hooks', label: t('ide.mode.hooks'), hint: t('ide.palette.category.go'), run: goto('hooks') },
+      { id: 'spec', label: t('ide.mode.spec'), hint: t('ide.palette.category.go'), run: goto('spec') },
+      { id: 'lsp', label: t('ide.mode.lsp'), hint: t('ide.palette.category.go'), run: goto('lsp') },
+      {
+        id: 'extensions',
+        label: t('ide.mode.extensions'),
+        hint: t('ide.palette.category.go'),
+        run: goto('extensions'),
+      },
+      { id: 'expbase', label: t('ide.mode.expbase'), hint: t('ide.palette.category.go'), run: goto('expbase') },
+      {
+        id: 'rescan',
+        label: t('ide.intel.rescan'),
+        hint: t('ide.palette.category.action'),
+        run: () => void ide.rescan(),
+      },
+    ];
+  }, [t, ide]);
+
+  // Global shortcut: Ctrl/Cmd+P (files) and Ctrl/Cmd+Shift+P (commands).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'p' || e.key === 'P')) {
+        e.preventDefault();
+        setPaletteCommandMode(e.shiftKey);
+        setPaletteOpen(true);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  // Switching folders discards the current editors. If any have unsaved edits,
+  // warn first (those changes will be lost); otherwise switch straight away.
+  const requestPickFolder = (): void => {
+    if (ide.hasUnsaved) {
+      Modal.confirm({
+        title: t('ide.workspace.switchFolderTitle'),
+        content: t('ide.workspace.unsavedWarning', { count: ide.dirtyFiles.size }),
+        okText: t('ide.workspace.switchAnyway'),
+        cancelText: t('common.cancel'),
+        okButtonProps: { status: 'danger' },
+        onOk: () => void ide.pickFolder(),
+      });
+      return;
+    }
+    void ide.pickFolder();
+  };
+
+  // Close the current folder back to the welcome screen. Warn about unsaved
+  // edits first (closing discards their editors).
+  const requestCloseFolder = (): void => {
+    if (ide.hasUnsaved) {
+      Modal.confirm({
+        title: t('ide.workspace.closeFolderTitle'),
+        content: t('ide.workspace.closeFolderWarning', { count: ide.dirtyFiles.size }),
+        okText: t('ide.workspace.closeAnyway'),
+        cancelText: t('common.cancel'),
+        okButtonProps: { status: 'danger' },
+        onOk: () => ide.closeFolder(),
+      });
+      return;
+    }
+    ide.closeFolder();
+  };
+
+  // Restoring a previously-open folder: show a spinner instead of the empty
+  // call-to-action so a returning user isn't told to open a folder again.
+  if (ide.restoring && !ide.rootPath) {
+    return (
+      <div className='size-full flex flex-col min-h-0 bg-1'>
+        <Header rootName={null} onBack={onBack} statsLine={null} onPickFolder={requestPickFolder} onRescan={null} />
+        <div className='flex-1 flex-center'>
+          <Spin tip={t('ide.workspace.restoring')} />
+        </div>
+      </div>
+    );
+  }
+
+  // Peer mode: we joined a host's repo without opening a local folder. Render
+  // the remote workspace (tree + viewer/editor over `/team/*`).
+  if (!ide.rootPath && collab.role === 'peer' && collab.peer) {
+    return <PeerWorkspace collab={collab} onBack={onBack} />;
+  }
+
+  if (!ide.rootPath && cloud.connected && cloud.session) {
+    return (
+      <div className='size-full flex flex-col min-h-0 bg-1'>
+        <Header
+          rootName={cloud.session.workspaceId}
+          onBack={onBack}
+          statsLine={null}
+          onPickFolder={requestPickFolder}
+          onRescan={null}
+        />
+        <CloudMountedBar
+          cloud={cloud}
+          fileCount={cloudFileCount}
+          localRootPath={null}
+          onPickFolder={requestPickFolder}
+          publishing={cloudBootstrapPublishing}
+          progress={cloudBootstrapProgress}
+          onPublishLocal={publishLocalFolderToCloud}
+        />
+        <div className='flex-1 flex-center'>
+          {cloudFileCount > 0 ? (
+            <Spin tip={t('ide.cloudWorkspace.mounting')} />
+          ) : (
+            <Empty description={t('ide.cloudWorkspace.emptyTitle')} />
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // No folder yet: an open-folder CTA plus a Join-collab fallback for peers
+  // arriving without their own repo (they live entirely off the host's disk).
+  if (!ide.rootPath) {
+    return (
+      <div className='size-full flex flex-col min-h-0 bg-1'>
+        <Header rootName={null} onBack={onBack} statsLine={null} onPickFolder={requestPickFolder} onRescan={null} />
+        <div className='flex-1 flex-center flex-col gap-16px'>
+          <span className='size-64px flex-center rd-18px bg-primary-light-1 text-primary'>
+            <Code theme='outline' size={32} />
+          </span>
+          <p className='m-0 text-16px font-600 text-t-primary'>{t('ide.workspace.welcomeTitle')}</p>
+          <p className='m-0 max-w-440px text-13px text-t-secondary leading-relaxed text-center'>
+            {t('ide.workspace.welcomeHint')}
+          </p>
+          <Button type='primary' icon={<FolderOpen theme='outline' size={15} />} onClick={requestPickFolder}>
+            {t('ide.intel.openFolder')}
+          </Button>
+          <Button
+            icon={<People theme='outline' size={15} />}
+            loading={collab.busy}
+            onClick={() => setJoinCollabOpen(true)}
+          >
+            {t('ide.teamCollab.join')}
+          </Button>
+          <Button
+            icon={<Cloudy theme='outline' size={15} />}
+            loading={cloud.busy}
+            onClick={() => setConnectCloudOpen(true)}
+          >
+            {t('ide.cloudWorkspace.connect')}
+          </Button>
+          <span className='text-11px text-t-tertiary max-w-440px text-center'>
+            {t(
+              'ide.teamCollab.joinHint',
+              'Tham gia phiên collab của người khác — bạn sẽ làm việc trực tiếp trên repo của họ qua mạng, không cần tải về.'
+            )}
+          </span>
+        </div>
+        <JoinCollabModal visible={joinCollabOpen} onClose={() => setJoinCollabOpen(false)} collab={collab} />
+        <CloudConnectModal visible={connectCloudOpen} onClose={() => setConnectCloudOpen(false)} cloud={cloud} />
+      </div>
+    );
+  }
+
+  const statsLine =
+    ide.graph && ide.scanStatus === 'ready' ? (
+      <span className='text-12px text-t-tertiary'>
+        · {t('ide.intel.stats', { files: ide.graph.fileCount, deps: ide.graph.edges.length, groups: groupCount })}
+        {ide.graph.truncated ? ` · ${t('ide.intel.truncated')}` : ''}
+      </span>
+    ) : null;
+
+  return (
+    <div className='size-full flex flex-col min-h-0 bg-1'>
+      <Header
+        rootName={ide.rootPath ? baseName(ide.rootPath) : null}
+        onBack={onBack}
+        statsLine={statsLine}
+        hasUnsaved={ide.hasUnsaved}
+        changeCount={changes.changes.length}
+        onReview={() => setDiffOpen(true)}
+        onPickFolder={requestPickFolder}
+        onCloseFolder={ide.rootPath ? requestCloseFolder : undefined}
+        onRescan={ide.rootPath ? () => void ide.rescan() : null}
+        rescanning={ide.scanStatus === 'scanning'}
+        onShowActivityRail={activityRailVisible ? undefined : () => setActivityRailVisible(true)}
+      />
+      {cloud.connected && cloud.session ? (
+        <CloudMountedBar
+          cloud={cloud}
+          fileCount={cloudFileCount}
+          localRootPath={ide.rootPath}
+          onPickFolder={requestPickFolder}
+          publishing={cloudBootstrapPublishing}
+          progress={cloudBootstrapProgress}
+          onPublishLocal={publishLocalFolderToCloud}
+        />
+      ) : null}
+
+      <div className='flex-1 min-h-0 flex relative'>
+        <nav
+          className={
+            !activityRailVisible
+              ? 'w-0 overflow-hidden shrink-0 flex flex-col items-center gap-6px py-12px border-r-0 border-b-1'
+              : 'w-60px shrink-0 flex flex-col items-center gap-6px py-12px border-r border-b-1'
+          }
+        >
+          <Tooltip content={t('ide.quicktest.hideIdeSidebars')} position='right'>
+            <Button
+              type='text'
+              size='mini'
+              aria-label={t('ide.quicktest.hideIdeSidebars')}
+              icon={<Close theme='outline' size={15} />}
+              className='!text-t-secondary shrink-0'
+              onClick={() => setActivityRailVisible(false)}
+            />
+          </Tooltip>
+          <ActivityItem
+            icon={<Code theme='outline' size={20} />}
+            label={t('ide.mode.files')}
+            active={mode === 'files'}
+            onClick={() => setMode('files')}
+          />
+          <ActivityItem
+            icon={<TreeList theme='outline' size={20} />}
+            label={t('ide.mode.understand')}
+            active={mode === 'understand'}
+            onClick={() => setMode('understand')}
+          />
+          <ActivityItem
+            icon={<MessageOne theme='outline' size={20} />}
+            label={t('ide.mode.chat')}
+            active={mode === 'chat'}
+            onClick={() => setMode('chat')}
+          />
+          <ActivityItem
+            icon={<People theme='outline' size={20} />}
+            label={t('ide.mode.team')}
+            active={mode === 'team'}
+            onClick={() => setMode('team')}
+          />
+          <ActivityItem
+            icon={<Book theme='outline' size={20} />}
+            label={t('ide.mode.wiki')}
+            active={mode === 'wiki'}
+            onClick={() => setMode('wiki')}
+          />
+          <ActivityItem
+            icon={<Search theme='outline' size={20} />}
+            label={t('ide.mode.search')}
+            active={mode === 'search'}
+            onClick={() => setMode('search')}
+          />
+          <ActivityItem
+            icon={<Branch theme='outline' size={20} />}
+            label={t('ide.mode.git')}
+            active={mode === 'git'}
+            onClick={() => setMode('git')}
+          />
+          <ActivityItem
+            icon={<Bug theme='outline' size={20} />}
+            label={t('ide.mode.quicktest')}
+            active={mode === 'quicktest'}
+            onClick={() => setMode('quicktest')}
+          />
+          <ActivityItem
+            icon={<DataSheet theme='outline' size={20} />}
+            label={t('ide.mode.database')}
+            active={mode === 'database'}
+            onClick={() => setMode('database')}
+          />
+          <ActivityItem
+            icon={<Lightning theme='outline' size={20} />}
+            label={t('ide.mode.hooks')}
+            active={mode === 'hooks'}
+            onClick={() => setMode('hooks')}
+          />
+          <ActivityItem
+            icon={<FileCode theme='outline' size={20} />}
+            label={t('ide.mode.spec')}
+            active={mode === 'spec'}
+            onClick={() => {
+              setSpecMounted(true);
+              setMode('spec');
+            }}
+          />
+          <ActivityItem
+            icon={<Puzzle theme='outline' size={20} />}
+            label={t('ide.mode.lsp')}
+            active={mode === 'lsp'}
+            onClick={() => setMode('lsp')}
+          />
+          <ActivityItem
+            icon={<AllApplication theme='outline' size={20} />}
+            label={t('ide.mode.extensions')}
+            active={mode === 'extensions'}
+            onClick={() => setMode('extensions')}
+          />
+          <ActivityItem
+            icon={<Brain theme='outline' size={20} />}
+            label={t('ide.mode.expbase')}
+            active={mode === 'expbase'}
+            onClick={() => setMode('expbase')}
+          />
+        </nav>
+        {/* Mode body. Files keeps editors mounted; others render on demand. */}
+
+        <div className='flex-1 min-w-0 min-h-0 relative'>
+          <div className='absolute inset-0 flex' style={{ display: mode === 'files' ? 'flex' : 'none' }}>
+            <FilesPane ide={ide} editorFs={editorFs} onOpenFile={openFile} adapterResolver={props.adapterResolver} />
+          </div>
+
+          {mode === 'understand' ? (
+            <div className='absolute inset-0'>
+              <UnderstandPanel rootPath={ide.rootPath} />
+            </div>
+          ) : null}
+
+          {mode === 'chat' ? (
+            <div className='absolute inset-0'>
+              <IdeChatPanel
+                rootPath={ide.rootPath}
+                activeFile={ide.activeFile}
+                repoFiles={repoFiles}
+                cloudWorkspace={cloud.connected ? cloud.session : null}
+              />
+            </div>
+          ) : null}
+
+          {mode === 'team' ? (
+            <div className='absolute inset-0 flex flex-col min-h-0'>
+              <TeamCollabBar rootPath={ide.rootPath} collab={collab} cloud={cloud} />
+              <div className='flex-1 min-h-0'>
+                <TeamEditPanel
+                  rootPath={ide.rootPath}
+                  activeFile={ide.activeFile}
+                  collab={collab}
+                  onOpenDesign={() => onOpenDesign?.()}
+                />
+              </div>
+            </div>
+          ) : null}
+
+          {mode === 'wiki' ? (
+            <div className='absolute inset-0'>
+              <WikiPanel rootPath={ide.rootPath} wiki={wiki} />
+            </div>
+          ) : null}
+
+          {mode === 'search' ? (
+            <div className='absolute inset-0'>
+              <SearchPanel rootPath={ide.rootPath} onOpenFile={openFile} />
+            </div>
+          ) : null}
+
+          {mode === 'git' ? (
+            <div className='absolute inset-0'>
+              <GitPage />
+            </div>
+          ) : null}
+
+          {mode === 'quicktest' ? (
+            <Empty className='absolute inset-0 flex-center' description={t('ide.mode.quicktest')} />
+          ) : null}
+
+          {mode === 'database' ? (
+            <div className='absolute inset-0'>
+              <DatabasePanel rootPath={ide.rootPath} />
+            </div>
+          ) : null}
+
+          {mode === 'hooks' ? (
+            <div className='absolute inset-0'>
+              <IdeHooksPanel rootPath={ide.rootPath} controller={hooksController} />
+            </div>
+          ) : null}
+
+          {specMounted ? (
+            <div className='absolute inset-0' style={{ display: mode === 'spec' ? 'block' : 'none' }}>
+              <SpecManagerPanel rootPath={ide.rootPath} />
+            </div>
+          ) : null}
+
+          {mode === 'lsp' ? (
+            <div className='absolute inset-0'>
+              <LspServersPanel rootPath={ide.rootPath} />
+            </div>
+          ) : null}
+
+          {mode === 'extensions' ? (
+            <div className='absolute inset-0'>
+              <Suspense fallback={<Spin className='flex-center size-full' />}>
+                <IdeExtensionsPanel />
+              </Suspense>
+            </div>
+          ) : null}
+
+          {mode === 'expbase' ? (
+            <div className='absolute inset-0'>
+              <ExpBasePanel rootPath={ide.rootPath} />
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      <DiffReviewPanel
+        rootPath={ide.rootPath}
+        changes={changes.changes}
+        open={diffOpen}
+        onClose={() => setDiffOpen(false)}
+        onChanged={() => void changes.refresh()}
+        onOpenFile={openFile}
+      />
+
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        files={repoFiles}
+        onOpenFile={openRelFile}
+        commands={paletteCommands}
+        initialCommandMode={paletteCommandMode}
+      />
+
+      <NavResultsPanel
+        open={navOpen}
+        loading={navLoading}
+        mode={navMode}
+        symbol={navSymbol}
+        rootPath={ide.rootPath}
+        hits={navHits}
+        onClose={() => setNavOpen(false)}
+        onOpen={openFileAt}
+      />
+    </div>
+  );
+};
+
+const CloudMountedBar: React.FC<{
+  cloud: ReturnType<typeof useCloudWorkspace>;
+  fileCount: number;
+  localRootPath: string | null;
+  onPickFolder: () => void;
+  publishing: boolean;
+  progress: CloudWorkspacePublishProgress | null;
+  onPublishLocal: (rootPath: string) => Promise<boolean>;
+}> = ({ cloud, fileCount, localRootPath, onPickFolder, publishing, progress, onPublishLocal }) => {
+  const { t } = useTranslation();
+  const session = cloud.session;
+  if (!session) return null;
+  const canPublishLocal = Boolean(localRootPath && localRootPath !== session.cachePath);
+  const publishLabel =
+    publishing && progress
+      ? t('ide.cloudWorkspace.publishProgress', {
+          uploaded: progress.uploaded,
+          total: progress.totalDiscovered,
+        })
+      : t('ide.cloudWorkspace.publishLocal');
+  const handlePublish = async (): Promise<void> => {
+    if (!localRootPath) {
+      onPickFolder();
+      return;
+    }
+    await onPublishLocal(localRootPath);
+  };
+  return (
+    <div className='shrink-0 flex items-center gap-8px px-16px py-6px border-b border-b-1 bg-fill-1'>
+      <Cloudy theme='outline' size={14} className='text-primary' />
+      <span className='text-12px font-[500] text-t-primary truncate'>
+        {t('ide.cloudWorkspace.connectedTitle', { workspace: session.workspaceId })}
+      </span>
+      <code className='text-11px text-t-tertiary truncate max-w-360px'>{session.relayBaseUrl}</code>
+      <Tag size='small' color={cloud.state?.state === 'connected' ? 'green' : 'orange'}>
+        {cloud.state?.state ?? 'idle'}
+      </Tag>
+      <Tag size='small'>{t('ide.cloudWorkspace.seqLabel', { seq: cloud.manifest?.seq ?? 0 })}</Tag>
+      <Tag size='small'>{t('ide.cloudWorkspace.filesLabel', { count: fileCount })}</Tag>
+      <Tag size='small'>
+        {t('ide.cloudWorkspace.participantsLabel', { count: cloud.state?.participants.length ?? 0 })}
+      </Tag>
+      {fileCount === 0 ? <span className='text-12px text-warning'>{t('ide.cloudWorkspace.emptyHint')}</span> : null}
+      <span className='flex-1' />
+      {fileCount === 0 || canPublishLocal ? (
+        <Button
+          size='mini'
+          type={fileCount === 0 ? 'primary' : 'secondary'}
+          loading={publishing}
+          disabled={publishing}
+          onClick={() => void handlePublish()}
+        >
+          {canPublishLocal ? publishLabel : t('ide.cloudWorkspace.pickLocalFolder')}
+        </Button>
+      ) : null}
+      <Button size='mini' icon={<Refresh theme='outline' size={12} />} onClick={() => void cloud.refreshStatus()}>
+        {t('common.refresh')}
+      </Button>
+      <Button size='mini' status='danger' onClick={() => void cloud.disconnect()}>
+        {t('ide.cloudWorkspace.disconnect')}
+      </Button>
+    </div>
+  );
+};
+
+/** Shared header: back, repo name, scan stats, open-folder + rescan. */
+const Header: React.FC<{
+  rootName: string | null;
+  statsLine: React.ReactNode;
+  rescanning?: boolean;
+  hasUnsaved?: boolean;
+  changeCount?: number;
+  onReview?: () => void;
+  onBack: () => void;
+  onPickFolder: () => void;
+  onCloseFolder?: () => void;
+  onRescan: (() => void) | null;
+  onShowActivityRail?: () => void;
+}> = ({
+  rootName,
+  statsLine,
+  rescanning,
+  hasUnsaved,
+  changeCount,
+  onReview,
+  onBack,
+  onPickFolder,
+  onCloseFolder,
+  onRescan,
+  onShowActivityRail,
+}) => {
+  const { t } = useTranslation();
+  return (
+    <header className='shrink-0 flex items-center gap-12px px-16px h-52px border-b border-b-1'>
+      <Button type='text' icon={<Left theme='outline' size={18} />} className='!text-t-secondary' onClick={onBack}>
+        {t('studio.action.back')}
+      </Button>
+      <span className='flex items-center gap-8px'>
+        <Code theme='outline' size={18} className='text-primary' />
+        <span className='text-14px font-[500] text-t-primary truncate'>{rootName ?? t('studio.ide')}</span>
+        {hasUnsaved ? (
+          <span
+            className='size-7px rd-full bg-warning'
+            title={t('ide.workspace.unsavedDot')}
+            aria-label={t('ide.workspace.unsavedDot')}
+          />
+        ) : null}
+      </span>
+      {onShowActivityRail ? (
+        <Tooltip content={t('ide.quicktest.showIdeSidebars')} position='br'>
+          <Button
+            type='text'
+            size='mini'
+            aria-label={t('ide.quicktest.showIdeSidebars')}
+            icon={<Right theme='outline' size={15} />}
+            className='!text-t-secondary'
+            onClick={onShowActivityRail}
+          />
+        </Tooltip>
+      ) : null}
+      {statsLine}
+      <div className='flex-1' />
+      {onReview && changeCount && changeCount > 0 ? (
+        <Tooltip content={t('ide.diff.reviewHint')} position='br'>
+          <Button
+            type='primary'
+            size='small'
+            status='warning'
+            icon={<FileEditingOne theme='outline' size={15} />}
+            onClick={onReview}
+          >
+            {t('ide.diff.reviewBtn', { count: changeCount })}
+          </Button>
+        </Tooltip>
+      ) : null}
+      {onRescan ? (
+        <Button
+          type='text'
+          size='small'
+          icon={<Refresh theme='outline' size={15} />}
+          loading={rescanning}
+          onClick={onRescan}
+        >
+          {t('ide.intel.rescan')}
+        </Button>
+      ) : null}
+      <Tooltip content={t('ide.workspace.openOtherFolderHint')} position='br'>
+        <Button type='outline' size='small' icon={<FolderOpen theme='outline' size={15} />} onClick={onPickFolder}>
+          {t('ide.workspace.openOtherFolder')}
+        </Button>
+      </Tooltip>
+      {onCloseFolder ? (
+        <Tooltip content={t('ide.workspace.closeFolderHint')} position='br'>
+          <Button
+            type='text'
+            size='small'
+            className='!text-t-secondary'
+            icon={<Close theme='outline' size={15} />}
+            onClick={onCloseFolder}
+          >
+            {t('ide.workspace.closeFolder')}
+          </Button>
+        </Tooltip>
+      ) : null}
+    </header>
+  );
+};
+
+/** One activity-bar button. */
+const ActivityItem: React.FC<{ icon: React.ReactNode; label: string; active: boolean; onClick: () => void }> = ({
+  icon,
+  label,
+  active,
+  onClick,
+}) => (
+  <Tooltip content={label} position='right'>
+    <button
+      type='button'
+      aria-label={label}
+      aria-pressed={active}
+      onClick={onClick}
+      className={`size-44px rd-10px flex-center cursor-pointer border-none transition-colors ${active ? 'bg-primary-light-1 text-primary' : 'bg-transparent text-t-secondary hover:bg-fill-2'}`}
+    >
+      {icon}
+    </button>
+  </Tooltip>
+);
+
+type FilesPaneProps = {
+  ide: ReturnType<typeof useIdeWorkspace>;
+  editorFs: EditorFsOverride;
+  onOpenFile: (path: string) => void;
+  adapterResolver?: EditorAdapterResolver;
+};
+
+/** Skip the expensive file tree/editor reconciliation when only the active IDE mode changed. */
+const filesPanePropsEqual = (previous: FilesPaneProps, next: FilesPaneProps): boolean =>
+  previous.ide.rootPath === next.ide.rootPath &&
+  previous.ide.tree === next.ide.tree &&
+  previous.ide.treeLoading === next.ide.treeLoading &&
+  previous.ide.activeFile === next.ide.activeFile &&
+  previous.ide.openFiles === next.ide.openFiles &&
+  previous.ide.dirtyFiles === next.ide.dirtyFiles &&
+  previous.editorFs === next.editorFs &&
+  previous.adapterResolver === next.adapterResolver &&
+  previous.ide.graph === next.ide.graph &&
+  previous.ide.loadDir === next.ide.loadDir &&
+  previous.ide.closeFile === next.ide.closeFile &&
+  previous.ide.markDirty === next.ide.markDirty &&
+  previous.ide.refreshTree === next.ide.refreshTree;
+
+/** Files mode: tree + kept-alive editors. */
+const FilesPane: React.FC<FilesPaneProps> = React.memo(({ ide, editorFs, onOpenFile, adapterResolver }) => {
+  const { t } = useTranslation();
+
+  // Context menu state: which node was right-clicked
+  const [ctxNode, setCtxNode] = useState<TreeNode | null>(null);
+  const [ctxVisible, setCtxVisible] = useState(false);
+
+  // New File dialog
+  const [newFileVisible, setNewFileVisible] = useState(false);
+  const [newFileName, setNewFileName] = useState('');
+  const [newFileLoading, setNewFileLoading] = useState(false);
+
+  // New Folder dialog
+  const [newFolderVisible, setNewFolderVisible] = useState(false);
+  const [newFolderName, setNewFolderName] = useState('');
+  const [newFolderLoading, setNewFolderLoading] = useState(false);
+
+  // Rename dialog
+  const [renameVisible, setRenameVisible] = useState(false);
+  const [renameName, setRenameName] = useState('');
+  const [renameLoading, setRenameLoading] = useState(false);
+
+  // Delete confirm
+  const [deleteTarget, setDeleteTarget] = useState<TreeNode | null>(null);
+
+  // Quick "run in terminal" context: npm scripts found near the right-clicked
+  // node + the dir they should run in. Loaded async when the menu opens.
+  const [quickScripts, setQuickScripts] = useState<string[]>([]);
+  const [quickScriptsCwd, setQuickScriptsCwd] = useState<string | null>(null);
+
+  // Related-code rail visibility (graph-backed depends-on / used-by).
+  const [relationsOpen, setRelationsOpen] = useState(true);
+  useAddEventListener('ide.relations.reveal', () => setRelationsOpen(true), []);
+
+  // On-demand LLM re-summary of the active file ("Refresh understanding").
+  const [refreshingKg, setRefreshingKg] = useState(false);
+  const handleRefreshUnderstanding = async (): Promise<void> => {
+    const root = ide.rootPath;
+    const active = ide.activeFile;
+    if (!root || !active) return;
+    setRefreshingKg(true);
+    try {
+      const rel = active.startsWith(root)
+        ? active
+            .slice(root.length)
+            .replace(/^[/\\]/, '')
+            .replace(/\\/g, '/')
+        : active;
+      const fileRes = await ideClient.readFile({ path: active, all: true, lineNumbers: false }).catch((): null => null);
+      const content = fileRes && fileRes.ok ? getReadFileText(fileRes.data) : '';
+      const res = await ideClient.kgRefreshFile(root, rel, content, { summarize: true }).catch((): null => null);
+      if (res && res.ok && res.data) {
+        emitter.emit('ide.kg.updated', { rootPath: root });
+        Message.success(t('ide.relations.refreshed'));
+      } else {
+        Message.warning(t('ide.relations.refreshFailed'));
+      }
+    } finally {
+      setRefreshingKg(false);
+    }
+  };
+
+  const newFileInputRef = useRef<RefInputType>(null);
+  const newFolderInputRef = useRef<RefInputType>(null);
+  const renameInputRef = useRef<RefInputType>(null);
+
+  /** Derive the parent directory of a node (for creating siblings). */
+  const parentDir = (node: TreeNode): string => {
+    const p = node.key;
+    // If it's a directory, create inside it; if it's a file, create alongside it.
+    if (!node.isLeaf) return p;
+    const sep = p.includes('\\') && !p.includes('/') ? '\\' : '/';
+    return p.substring(0, p.lastIndexOf(sep));
+  };
+
+  /** Relative path from rootPath for display. */
+  const relativePath = (absPath: string): string => {
+    if (!ide.rootPath) return absPath;
+    const rel = absPath.startsWith(ide.rootPath) ? absPath.slice(ide.rootPath.length) : absPath;
+    return rel.replace(/^[/\\]/, '');
+  };
+
+  const joinPath = (dir: string, name: string): string => {
+    const sep = dir.includes('\\') && !dir.includes('/') ? '\\' : '/';
+    return `${dir.replace(/[/\\]+$/, '')}${sep}${name}`;
+  };
+
+  // ── Context menu actions ──────────────────────────────────────────────────
+
+  const handleNewFile = async (): Promise<void> => {
+    if (!ctxNode || !newFileName.trim()) return;
+    setNewFileLoading(true);
+    try {
+      const dir = parentDir(ctxNode);
+      const filePath = joinPath(dir, newFileName.trim());
+      const result = await ideClient.writeFile(filePath, '');
+      if (!result.ok) {
+        Message.error('error' in result ? result.error : t('common.unknownError'));
+        return;
+      }
+      await ide.refreshTree();
+      Message.success(t('ide.contextMenu.create'));
+      setNewFileVisible(false);
+      setNewFileName('');
+    } catch (error) {
+      Message.error(error instanceof Error ? error.message : t('common.unknownError'));
+    } finally {
+      setNewFileLoading(false);
+    }
+  };
+
+  const handleNewFolder = async (): Promise<void> => {
+    if (!ctxNode || !newFolderName.trim()) return;
+    setNewFolderLoading(true);
+    try {
+      const dir = parentDir(ctxNode);
+      const folderPath = joinPath(dir, newFolderName.trim());
+      const result = await ideClient.createDir(folderPath);
+      if (!result.ok) {
+        Message.error('error' in result ? result.error : t('common.unknownError'));
+        return;
+      }
+      await ide.refreshTree();
+      Message.success(t('ide.contextMenu.create'));
+      setNewFolderVisible(false);
+      setNewFolderName('');
+    } catch (error) {
+      Message.error(error instanceof Error ? error.message : t('common.unknownError'));
+    } finally {
+      setNewFolderLoading(false);
+    }
+  };
+
+  const handleRename = async (): Promise<void> => {
+    if (!ctxNode || !renameName.trim()) return;
+    setRenameLoading(true);
+    try {
+      const oldPath = ctxNode.key;
+      const sep = oldPath.includes('\\') && !oldPath.includes('/') ? '\\' : '/';
+      const parentPath = oldPath.substring(0, oldPath.lastIndexOf(sep));
+      const newPath = joinPath(parentPath, renameName.trim());
+      const result = await ideClient.renameFile(oldPath, newPath);
+      if (!result.ok) {
+        Message.error('error' in result ? result.error : t('common.unknownError'));
+        return;
+      }
+      // If the renamed file was open, close it (path is now stale)
+      if (ide.openFiles.includes(oldPath)) ide.closeFile(oldPath);
+      await ide.refreshTree();
+      Message.success(t('ide.contextMenu.rename_action'));
+      setRenameVisible(false);
+      setRenameName('');
+    } catch (error) {
+      Message.error(error instanceof Error ? error.message : t('common.unknownError'));
+    } finally {
+      setRenameLoading(false);
+    }
+  };
+
+  const handleDelete = async (node: TreeNode): Promise<void> => {
+    try {
+      const result = await ideClient.deleteFile(node.key);
+      if (!result.ok) {
+        Message.error('error' in result ? result.error : t('common.unknownError'));
+        return;
+      }
+      if (ide.openFiles.includes(node.key)) ide.closeFile(node.key);
+      await ide.refreshTree();
+    } catch (error) {
+      Message.error(error instanceof Error ? error.message : t('common.unknownError'));
+    } finally {
+      setDeleteTarget(null);
+    }
+  };
+
+  const handleCopyPath = (node: TreeNode): void => {
+    void navigator.clipboard.writeText(node.key).then(() => {
+      Message.success(t('ide.contextMenu.copied'));
+    });
+  };
+
+  const handleCopyRelativePath = (node: TreeNode): void => {
+    void navigator.clipboard.writeText(relativePath(node.key)).then(() => {
+      Message.success(t('ide.contextMenu.copied'));
+    });
+  };
+
+  const handleRevealInExplorer = async (node: TreeNode): Promise<void> => {
+    try {
+      await ipcBridge.shell.showItemInFolder.invoke(node.key);
+    } catch (error) {
+      Message.error(error instanceof Error ? error.message : t('common.unknownError'));
+    }
+  };
+
+  // Load npm scripts from the nearest package.json (the node's dir, else the
+  // repo root) so the "Run in terminal" submenu can offer `npm run <script>`.
+  const loadQuickContext = async (node: TreeNode): Promise<void> => {
+    setQuickScripts([]);
+    setQuickScriptsCwd(null);
+    const root = ide.rootPath;
+    if (!root) return;
+    const sep = sepOf(node.key);
+    const cwd = cwdForNode(node.key, !node.isLeaf);
+    const tryRead = async (dir: string): Promise<boolean> => {
+      const res = await ideClient
+        .readFile({ path: `${dir}${sep}package.json`, all: true, lineNumbers: false })
+        .catch((): null => null);
+      if (!res || !res.ok) return false;
+      const pkgText = getReadFileText(res.data);
+      const scripts = parseScripts(pkgText);
+      if (scripts.length === 0) return false;
+      setQuickScripts(scripts);
+      setQuickScriptsCwd(dir);
+      return true;
+    };
+    if (await tryRead(cwd)) return;
+    if (cwd !== root) await tryRead(root);
+  };
+
+  // Commands offered in the "Run in terminal" submenu for the current node.
+  const quickCommands = useMemo<QuickCommand[]>(() => {
+    if (!ctxNode || !ide.rootPath) return [];
+    return buildQuickCommands({
+      path: ctxNode.key,
+      isDir: !ctxNode.isLeaf,
+      rootPath: ide.rootPath,
+      scripts: quickScripts,
+      scriptsCwd: quickScriptsCwd ?? undefined,
+    });
+  }, [ctxNode, ide.rootPath, quickScripts, quickScriptsCwd]);
+
+  const contextMenuDroplist = ctxNode ? (
+    <Menu
+      className='min-w-180px'
+      onClickMenuItem={(key) => {
+        setCtxVisible(false);
+        if (!ctxNode) return;
+        if (key === 'openTerminalHere') {
+          emitter.emit('ide.terminal.run', { command: '', cwd: cwdForNode(ctxNode.key, !ctxNode.isLeaf) });
+          return;
+        }
+        if (key.startsWith('run:')) {
+          const cmd = quickCommands.find((c) => `run:${c.id}` === key);
+          if (cmd) emitter.emit('ide.terminal.run', { command: cmd.command, cwd: cmd.cwd });
+          return;
+        }
+        switch (key) {
+          case 'newFile':
+            setNewFileName('');
+            setNewFileVisible(true);
+            break;
+          case 'newFolder':
+            setNewFolderName('');
+            setNewFolderVisible(true);
+            break;
+          case 'rename':
+            setRenameName(baseName(ctxNode.key));
+            setRenameVisible(true);
+            break;
+          case 'delete':
+            setDeleteTarget(ctxNode);
+            break;
+          case 'copyPath':
+            handleCopyPath(ctxNode);
+            break;
+          case 'copyRelativePath':
+            handleCopyRelativePath(ctxNode);
+            break;
+          case 'revealInExplorer':
+            void handleRevealInExplorer(ctxNode);
+            break;
+        }
+      }}
+    >
+      <Menu.Item key='newFile'>
+        <span className='flex items-center gap-8px'>
+          <FileAdditionOne theme='outline' size={14} />
+          {t('ide.contextMenu.newFile')}
+        </span>
+      </Menu.Item>
+      <Menu.Item key='newFolder'>
+        <span className='flex items-center gap-8px'>
+          <FolderPlus theme='outline' size={14} />
+          {t('ide.contextMenu.newFolder')}
+        </span>
+      </Menu.Item>
+      <Divider style={{ margin: '4px 0' }} />
+      <Menu.Item key='rename'>
+        <span className='flex items-center gap-8px'>
+          <Edit theme='outline' size={14} />
+          {t('ide.contextMenu.rename')}
+        </span>
+      </Menu.Item>
+      <Menu.Item key='delete'>
+        <span className='flex items-center gap-8px text-danger'>
+          <Delete theme='outline' size={14} />
+          {t('ide.contextMenu.delete')}
+        </span>
+      </Menu.Item>
+      <Divider style={{ margin: '4px 0' }} />
+      <Menu.Item key='copyPath'>
+        <span className='flex items-center gap-8px'>
+          <Copy theme='outline' size={14} />
+          {t('ide.contextMenu.copyPath')}
+        </span>
+      </Menu.Item>
+      <Menu.Item key='copyRelativePath'>
+        <span className='flex items-center gap-8px'>
+          <Copy theme='outline' size={14} />
+          {t('ide.contextMenu.copyRelativePath')}
+        </span>
+      </Menu.Item>
+      <Divider style={{ margin: '4px 0' }} />
+      <Menu.SubMenu
+        key='run'
+        title={
+          <span className='flex items-center gap-8px'>
+            <Terminal theme='outline' size={14} />
+            {t('ide.contextMenu.runInTerminal')}
+          </span>
+        }
+      >
+        <Menu.Item key='openTerminalHere'>
+          <span className='flex items-center gap-8px'>
+            <Terminal theme='outline' size={14} />
+            {t('ide.contextMenu.openTerminalHere')}
+          </span>
+        </Menu.Item>
+        <Divider style={{ margin: '4px 0' }} />
+        {quickCommands.length === 0 ? (
+          <Menu.Item key='runNoCommands' disabled>
+            <span className='text-12px text-t-tertiary'>{t('ide.contextMenu.runNoCommands')}</span>
+          </Menu.Item>
+        ) : (
+          quickCommands.map((cmd) => (
+            <Menu.Item key={`run:${cmd.id}`}>
+              <span className='flex items-center gap-8px'>
+                <Play theme='outline' size={14} />
+                <span className='font-mono text-12px truncate'>{cmd.label}</span>
+              </span>
+            </Menu.Item>
+          ))
+        )}
+      </Menu.SubMenu>
+      <Divider style={{ margin: '4px 0' }} />
+      <Menu.Item key='revealInExplorer'>
+        <span className='flex items-center gap-8px'>
+          <FolderOpen theme='outline' size={14} />
+          {t('ide.contextMenu.revealInExplorer')}
+        </span>
+      </Menu.Item>
+    </Menu>
+  ) : (
+    <span />
+  );
+
+  return (
+    <>
+      <aside className='w-260px shrink-0 min-h-0 overflow-auto border-r border-b-1 p-8px'>
+        {ide.treeLoading ? (
+          <div className='flex-center h-full'>
+            <Spin />
+          </div>
+        ) : ide.tree.length === 0 ? (
+          <div className='flex-center h-full px-12px'>
+            <Empty description={t('studio.ideMenu.empty')} />
+          </div>
+        ) : (
+          <Dropdown
+            trigger={['contextMenu']}
+            droplist={contextMenuDroplist}
+            popupVisible={ctxVisible}
+            onVisibleChange={(v) => {
+              if (!v) setCtxVisible(false);
+            }}
+          >
+            <div
+              onContextMenu={(e) => {
+                // Find the closest tree-node element and extract its data-key
+                const nodeEl = (e.target as HTMLElement).closest('[data-key]') as HTMLElement | null;
+                if (!nodeEl) return;
+                const key = nodeEl.getAttribute('data-key');
+                if (!key) return;
+                // Walk the tree to find the matching TreeNode
+                const findNode = (nodes: typeof ide.tree): (typeof ide.tree)[0] | null => {
+                  for (const n of nodes) {
+                    if (n.key === key) return n;
+                    if (n.children) {
+                      const found = findNode(n.children);
+                      if (found) return found;
+                    }
+                  }
+                  return null;
+                };
+                const found = findNode(ide.tree);
+                if (found) {
+                  setCtxNode(found);
+                  setCtxVisible(true);
+                  void loadQuickContext(found);
+                }
+              }}
+            >
+              <Tree
+                blockNode
+                treeData={ide.tree}
+                selectedKeys={ide.activeFile ? [ide.activeFile] : []}
+                loadMore={(node) => {
+                  const ref = (node as unknown as { props?: { dataRef?: TreeNode } }).props?.dataRef;
+                  if (ref && !ref.isLeaf) return ide.loadDir(ref.key);
+                  return Promise.resolve();
+                }}
+                onSelect={(keys, extra) => {
+                  const node = extra.node as unknown as { props?: { dataRef?: { isLeaf?: boolean } } };
+                  const ref = node.props?.dataRef;
+                  if (ref?.isLeaf && typeof keys[0] === 'string') onOpenFile(keys[0]);
+                }}
+              />
+            </div>
+          </Dropdown>
+        )}
+      </aside>
+
+      {/* New File Modal */}
+      <Modal
+        title={t('ide.contextMenu.newFile')}
+        visible={newFileVisible}
+        onOk={() => void handleNewFile()}
+        onCancel={() => {
+          setNewFileVisible(false);
+          setNewFileName('');
+        }}
+        okText={t('ide.contextMenu.create')}
+        cancelText={t('common.cancel')}
+        confirmLoading={newFileLoading}
+        afterOpen={() => newFileInputRef.current?.focus()}
+      >
+        <Input
+          ref={newFileInputRef}
+          placeholder={t('ide.contextMenu.fileNamePlaceholder')}
+          value={newFileName}
+          onChange={setNewFileName}
+          onPressEnter={() => void handleNewFile()}
+        />
+      </Modal>
+
+      {/* New Folder Modal */}
+      <Modal
+        title={t('ide.contextMenu.newFolder')}
+        visible={newFolderVisible}
+        onOk={() => void handleNewFolder()}
+        onCancel={() => {
+          setNewFolderVisible(false);
+          setNewFolderName('');
+        }}
+        okText={t('ide.contextMenu.create')}
+        cancelText={t('common.cancel')}
+        confirmLoading={newFolderLoading}
+        afterOpen={() => newFolderInputRef.current?.focus()}
+      >
+        <Input
+          ref={newFolderInputRef}
+          placeholder={t('ide.contextMenu.folderNamePlaceholder')}
+          value={newFolderName}
+          onChange={setNewFolderName}
+          onPressEnter={() => void handleNewFolder()}
+        />
+      </Modal>
+
+      {/* Rename Modal */}
+      <Modal
+        title={t('ide.contextMenu.rename')}
+        visible={renameVisible}
+        onOk={() => void handleRename()}
+        onCancel={() => {
+          setRenameVisible(false);
+          setRenameName('');
+        }}
+        okText={t('ide.contextMenu.rename_action')}
+        cancelText={t('common.cancel')}
+        confirmLoading={renameLoading}
+        afterOpen={() => renameInputRef.current?.focus()}
+      >
+        <Input
+          ref={renameInputRef}
+          value={renameName}
+          onChange={setRenameName}
+          onPressEnter={() => void handleRename()}
+        />
+      </Modal>
+
+      {/* Delete Popconfirm — rendered as a hidden trigger that fires programmatically */}
+      {deleteTarget ? (
+        <Popconfirm
+          title={t('ide.contextMenu.deleteConfirm')}
+          onOk={() => void handleDelete(deleteTarget)}
+          onCancel={() => setDeleteTarget(null)}
+          okText={t('ide.contextMenu.delete')}
+          cancelText={t('common.cancel')}
+          okButtonProps={{ status: 'danger' }}
+          popupVisible
+        >
+          <span style={{ display: 'none' }} />
+        </Popconfirm>
+      ) : null}
+
+      <main className='flex-1 min-w-0 min-h-0 flex flex-col'>
+        {ide.openFiles.length === 0 ? (
+          <div className='flex-center h-full'>
+            <Empty description={t('studio.ideMenu.pickFile')} />
+          </div>
+        ) : (
+          <>
+            <EditorTabs
+              openFiles={ide.openFiles}
+              activeFile={ide.activeFile}
+              dirtyFiles={ide.dirtyFiles}
+              onSelect={onOpenFile}
+              onClose={ide.closeFile}
+            />
+            <div className='flex-1 min-h-0 relative'>
+              {ide.openFiles.map((filePath) => (
+                <div
+                  key={filePath}
+                  className='absolute inset-0 p-16px'
+                  style={{ display: ide.activeFile === filePath ? 'block' : 'none' }}
+                >
+                  <Suspense fallback={<Spin className='flex-center size-full' />}>
+                    <UniversalEditor
+                      filePath={filePath}
+                      workspace={ide.rootPath ?? undefined}
+                      fsOverride={editorFs}
+                      autoSaveDelayMs={1000}
+                      adapterResolver={adapterResolver}
+                      onSaved={(savedPath) => void ide.refreshAfterSave(savedPath)}
+                      onDirtyChange={(dirty) => ide.markDirty(filePath, dirty)}
+                    />
+                  </Suspense>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </main>
+
+      {ide.openFiles.length > 0 ? (
+        relationsOpen ? (
+          <RelationsRail
+            rootPath={ide.rootPath ?? ''}
+            activeFile={ide.activeFile}
+            graph={ide.graph}
+            onOpenFile={onOpenFile}
+            onClose={() => setRelationsOpen(false)}
+            onRefresh={() => void handleRefreshUnderstanding()}
+            refreshing={refreshingKg}
+          />
+        ) : (
+          <Tooltip content={t('ide.relations.show')} position='left'>
+            <button
+              type='button'
+              aria-label={t('ide.relations.show')}
+              onClick={() => setRelationsOpen(true)}
+              className='w-28px shrink-0 flex flex-col items-center pt-12px border-l border-b-1 cursor-pointer bg-transparent text-t-secondary hover:bg-fill-2 hover:text-t-primary transition-colors'
+            >
+              <Link theme='outline' size={16} />
+            </button>
+          </Tooltip>
+        )
+      ) : null}
+    </>
+  );
+}, filesPanePropsEqual);
+
+/** Build an absolute path from a repo-relative path using the root's separator. */
+const absFromRel = (root: string, rel: string): string => {
+  const sep = root.includes('\\') && !root.includes('/') ? '\\' : '/';
+  return `${root.replace(/[/\\]+$/, '')}${sep}${rel.replace(/\//g, sep)}`;
+};
+
+/** Repo-relative, forward-slash path of an absolute file within `root`. */
+const relWithinRoot = (abs: string, root: string): string => {
+  const a = abs.replace(/\\/g, '/');
+  const r = root.replace(/\\/g, '/').replace(/\/+$/, '');
+  return a.startsWith(`${r}/`) ? a.slice(r.length + 1) : a;
+};
+
+/**
+ * Related-code rail: graph-backed "Used by" (who imports this file → what an
+ * edit here may affect) and "Depends on" (what this file imports) for the active
+ * file. Driven by the auto-refreshed import graph so it stays accurate as the
+ * single user edits. Clicking an entry opens that file.
+ */
+const RelationsRail: React.FC<{
+  rootPath: string;
+  activeFile: string | null;
+  graph: RepoGraph | null;
+  onOpenFile: (abs: string) => void;
+  onClose: () => void;
+  onRefresh: () => void;
+  refreshing: boolean;
+}> = ({ rootPath, activeFile, graph, onOpenFile, onClose, onRefresh, refreshing }) => {
+  const { t } = useTranslation();
+  const data = useMemo(() => {
+    if (!activeFile || !graph || !rootPath) return null;
+    return relationsFor(relWithinRoot(activeFile, rootPath), graph.edges);
+  }, [activeFile, graph, rootPath]);
+  const open = (rel: string): void => onOpenFile(absFromRel(rootPath, rel));
+  return (
+    <aside className='w-240px shrink-0 min-h-0 flex flex-col border-l border-b-1 bg-1'>
+      <header className='shrink-0 flex items-center justify-between h-38px px-12px border-b border-b-1'>
+        <span className='flex items-center gap-8px text-12px font-[500] text-t-primary'>
+          <Link theme='outline' size={14} className='text-primary' />
+          {t('ide.relations.title')}
+        </span>
+        <span className='flex items-center gap-2px'>
+          <Tooltip content={t('ide.relations.refresh')} position='bottom'>
+            <Button
+              type='text'
+              size='mini'
+              loading={refreshing}
+              disabled={!activeFile}
+              icon={<Refresh theme='outline' size={14} />}
+              className='!text-t-secondary'
+              onClick={onRefresh}
+              aria-label={t('ide.relations.refresh')}
+            />
+          </Tooltip>
+          <Button
+            type='text'
+            size='mini'
+            icon={<Right theme='outline' size={14} />}
+            className='!text-t-secondary'
+            onClick={onClose}
+            aria-label={t('ide.relations.hide')}
+          />
+        </span>
+      </header>
+      <div className='flex-1 min-h-0 overflow-auto p-8px'>
+        {!data ? (
+          <div className='flex-center h-full px-12px'>
+            <Empty description={t('ide.relations.pickFile')} />
+          </div>
+        ) : (
+          <>
+            <RelationSection title={t('ide.relations.usedByTitle')} items={data.usedBy} onOpen={open} />
+            <RelationSection title={t('ide.relations.dependsOnTitle')} items={data.dependsOn} onOpen={open} />
+          </>
+        )}
+      </div>
+    </aside>
+  );
+};
+
+/** One section of the relations rail (a titled, clickable list of repo files). */
+const RelationSection: React.FC<{ title: string; items: string[]; onOpen: (rel: string) => void }> = ({
+  title,
+  items,
+  onOpen,
+}) => {
+  const { t } = useTranslation();
+  return (
+    <div className='mb-12px'>
+      <p className='m-0 mb-4px px-4px text-11px font-600 text-t-tertiary uppercase tracking-wide'>
+        {title} · {items.length}
+      </p>
+      {items.length === 0 ? (
+        <p className='m-0 px-4px text-12px text-t-tertiary'>{t('ide.relations.none')}</p>
+      ) : (
+        items.map((rel) => {
+          const slash = rel.lastIndexOf('/');
+          const name = slash >= 0 ? rel.slice(slash + 1) : rel;
+          const dir = slash >= 0 ? rel.slice(0, slash) : '';
+          return (
+            <button
+              key={rel}
+              type='button'
+              title={rel}
+              onClick={() => onOpen(rel)}
+              className='w-full flex flex-col items-start px-6px py-4px rd-6px cursor-pointer border-none bg-transparent text-left hover:bg-fill-2 transition-colors'
+            >
+              <span className='text-12px text-t-primary font-mono truncate max-w-full'>{name}</span>
+              {dir ? <span className='text-10px text-t-tertiary truncate max-w-full'>{dir}</span> : null}
+            </button>
+          );
+        })
+      )}
+    </div>
+  );
+};
+
+/** The open-file tab strip: shows each kept-alive editor with a dirty marker + close. */
+const EditorTabs: React.FC<{
+  openFiles: string[];
+  activeFile: string | null;
+  dirtyFiles: Set<string>;
+  onSelect: (path: string) => void;
+  onClose: (path: string) => void;
+}> = ({ openFiles, activeFile, dirtyFiles, onSelect, onClose }) => {
+  const { t } = useTranslation();
+  return (
+    <div className='shrink-0 flex items-stretch gap-2px px-8px pt-6px overflow-x-auto border-b border-b-1'>
+      {openFiles.map((filePath) => {
+        const active = activeFile === filePath;
+        const dirty = dirtyFiles.has(filePath);
+        return (
+          <div
+            key={filePath}
+            role='tab'
+            aria-selected={active}
+            title={filePath}
+            onClick={() => onSelect(filePath)}
+            className={`group flex items-center gap-6px max-w-200px pl-12px pr-8px py-6px rd-t-8px cursor-pointer border border-b-0 transition-colors ${active ? 'bg-1 border-arco-2 text-t-primary' : 'bg-fill-1 border-transparent text-t-secondary hover:bg-fill-2'}`}
+          >
+            <span className='truncate text-12px'>{baseName(filePath)}</span>
+            {dirty ? (
+              <span className='shrink-0 size-6px rd-full bg-warning' aria-label={t('ide.workspace.unsavedDot')} />
+            ) : null}
+            <span
+              role='button'
+              aria-label={t('ide.workspace.closeTab')}
+              onClick={(e) => {
+                e.stopPropagation();
+                onClose(filePath);
+              }}
+              className='shrink-0 size-16px flex-center rd-4px text-t-tertiary hover:bg-fill-3 hover:text-t-primary'
+            >
+              <Close theme='outline' size={11} />
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+/**
+ * Compact Join-collab modal shown on the empty IDE state. Lets a peer join a
+ * host's repo by `ip:port` or tunnel URL — no local folder required. Mirrors
+ * the join form inside {@link TeamCollabBar} but lives standalone here so the
+ * pre-folder UI never has to mount the full collab bar.
+ */
+const JoinCollabModal: React.FC<{
+  visible: boolean;
+  collab: ReturnType<typeof useTeamCollab>;
+  onClose: () => void;
+}> = ({ visible, collab, onClose }) => {
+  const { t } = useTranslation();
+  const [joinUrl, setJoinUrl] = useState('');
+  const [password, setPassword] = useState('123456');
+  const [name, setName] = useState('');
+
+  useEffect(() => {
+    if (visible) {
+      setJoinUrl('');
+      setPassword('123456');
+      setName('');
+    }
+  }, [visible]);
+
+  const doJoin = async (): Promise<void> => {
+    const raw = joinUrl.trim();
+    if (!raw) return;
+    const baseUrl = /^https?:\/\//.test(raw) ? raw : `http://${raw}`;
+    const ok = await collab.join(baseUrl, password, name || t('ide.team.you'));
+    if (ok) onClose();
+  };
+
+  return (
+    <Modal
+      title={t('ide.teamCollab.joinTitle')}
+      visible={visible}
+      onCancel={onClose}
+      onOk={() => void doJoin()}
+      confirmLoading={collab.busy}
+      okText={t('ide.teamCollab.join')}
+      autoFocus={false}
+    >
+      <div className='flex flex-col gap-12px'>
+        <label className='flex flex-col gap-4px'>
+          <span className='text-12px text-t-secondary'>{t('ide.teamCollab.joinCodeLabel')}</span>
+          <Input value={joinUrl} onChange={setJoinUrl} placeholder={t('ide.teamCollab.joinCodePlaceholder')} />
+        </label>
+        <label className='flex flex-col gap-4px'>
+          <span className='text-12px text-t-secondary'>{t('ide.teamCollab.password')}</span>
+          <Input.Password value={password} onChange={setPassword} placeholder='123456' />
+        </label>
+        <label className='flex flex-col gap-4px'>
+          <span className='text-12px text-t-secondary'>{t('ide.teamCollab.yourName')}</span>
+          <Input value={name} onChange={setName} placeholder={t('ide.teamCollab.namePlaceholder')} />
+        </label>
+        {collab.error ? <span className='text-12px text-danger'>{collab.error}</span> : null}
+      </div>
+    </Modal>
+  );
+};
+
+const CloudConnectModal: React.FC<{
+  visible: boolean;
+  cloud: ReturnType<typeof useCloudWorkspace>;
+  onClose: () => void;
+}> = ({ visible, cloud, onClose }) => {
+  const { t } = useTranslation();
+  const [relayBaseUrl, setRelayBaseUrl] = useState('');
+  const [workspaceId, setWorkspaceId] = useState('');
+  const [token, setToken] = useState('');
+  const [displayName, setDisplayName] = useState('');
+
+  useEffect(() => {
+    if (visible) {
+      setRelayBaseUrl('');
+      setWorkspaceId('');
+      setToken('');
+      setDisplayName('');
+    }
+  }, [visible]);
+
+  const doConnect = async (): Promise<void> => {
+    const ok = await cloud.connect(relayBaseUrl, workspaceId, token, displayName || t('ide.team.you'));
+    if (ok) onClose();
+  };
+
+  return (
+    <Modal
+      title={t('ide.cloudWorkspace.connectTitle')}
+      visible={visible}
+      onCancel={onClose}
+      onOk={() => void doConnect()}
+      confirmLoading={cloud.busy}
+      okText={t('ide.cloudWorkspace.connect')}
+      autoFocus={false}
+    >
+      <div className='flex flex-col gap-12px'>
+        <label className='flex flex-col gap-4px'>
+          <span className='text-12px text-t-secondary'>{t('ide.cloudWorkspace.relayUrl')}</span>
+          <Input
+            value={relayBaseUrl}
+            onChange={setRelayBaseUrl}
+            placeholder={t('ide.cloudWorkspace.relayUrlPlaceholder')}
+          />
+        </label>
+        <label className='flex flex-col gap-4px'>
+          <span className='text-12px text-t-secondary'>{t('ide.cloudWorkspace.workspaceId')}</span>
+          <Input
+            value={workspaceId}
+            onChange={setWorkspaceId}
+            placeholder={t('ide.cloudWorkspace.workspaceIdPlaceholder')}
+          />
+        </label>
+        <label className='flex flex-col gap-4px'>
+          <span className='text-12px text-t-secondary'>{t('ide.cloudWorkspace.token')}</span>
+          <Input.Password value={token} onChange={setToken} placeholder={t('ide.cloudWorkspace.tokenPlaceholder')} />
+        </label>
+        <label className='flex flex-col gap-4px'>
+          <span className='text-12px text-t-secondary'>{t('ide.cloudWorkspace.displayName')}</span>
+          <Input
+            value={displayName}
+            onChange={setDisplayName}
+            placeholder={t('ide.cloudWorkspace.displayNamePlaceholder')}
+          />
+        </label>
+        {cloud.error ? <span className='text-12px text-danger'>{cloud.error}</span> : null}
+      </div>
+    </Modal>
+  );
+};
+
+export default IdeWorkspace;

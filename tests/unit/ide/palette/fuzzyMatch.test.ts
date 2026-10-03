@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { basename, fuzzyFilter, fuzzyScore } from '@/renderer/pages/studio/ide/palette/fuzzyMatch';
+import { basename, fuzzyFilter, fuzzyScore } from '@package-apps/ide/renderer/palette/fuzzyMatch';
 
 describe('fuzzyScore', () => {
   it('returns null when query is not a subsequence', () => {

@@ -19,7 +19,7 @@ const resultText = (value: unknown): string =>
   ((value as { content?: Array<{ text?: string }> }).content ?? []).map((item) => item.text ?? '').join('\n');
 
 describe('Core workspace MCP server', () => {
-  it('reads, searches, globs, writes, and edits only within its granted workspace', async () => {
+  it('keeps reads available but rejects ungovened write, edit, and command effects', async () => {
     const workspace = await mkdtemp(join(tmpdir(), 'tomny-core-workspace-'));
     const outside = await mkdtemp(join(tmpdir(), 'tomny-core-outside-'));
     try {
@@ -36,18 +36,27 @@ describe('Core workspace MCP server', () => {
         'note.txt'
       );
 
-      await client.callTool({ name: 'tomny_write', arguments: { filePath: 'created.txt', content: 'draft' } });
-      await client.callTool({
-        name: 'tomny_edit',
-        arguments: { filePath: 'created.txt', oldText: 'draft', newText: 'final' },
-      });
-      await expect(readFile(join(workspace, 'created.txt'), 'utf8')).resolves.toBe('final');
-
-      const escaped = await client.callTool({
+      const writeResult = await client.callTool({
         name: 'tomny_write',
-        arguments: { filePath: '../escape.txt', content: 'nope' },
+        arguments: { filePath: 'created.txt', content: 'draft' },
       });
-      expect(resultText(escaped)).toContain('outside the granted workspace');
+      const editResult = await client.callTool({
+        name: 'tomny_edit',
+        arguments: { filePath: 'note.txt', oldText: 'one', newText: 'final' },
+      });
+      const commandResult = await client.callTool({
+        name: 'tomny_command',
+        arguments: { command: 'echo escaped > command-created.txt' },
+      });
+      for (const result of [writeResult, editResult]) {
+        expect(resultText(result)).toContain('CORE_WORKSPACE_MUTATION_GOVERNANCE_REQUIRED');
+        expect(result).toMatchObject({ isError: true });
+      }
+      expect(resultText(commandResult)).toContain('CORE_WORKSPACE_COMMAND_GOVERNANCE_REQUIRED');
+      expect(commandResult).toMatchObject({ isError: true });
+      await expect(readFile(join(workspace, 'note.txt'), 'utf8')).resolves.toBe('one\ntwo\nthree\n');
+      await expect(readFile(join(workspace, 'created.txt'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+      await expect(readFile(join(workspace, 'command-created.txt'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
       await expect(readFile(join(outside, 'escape.txt'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
       await client.close();
     } finally {

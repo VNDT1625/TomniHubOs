@@ -15,6 +15,12 @@
     "allowImportingTsExtensions": true,
     "noEmit": true,
     "paths": {
+      "@package-apps/ide/*": ["./packages/package-apps/ide/src/*"],
+      "@package-apps/design/*": ["./packages/package-apps/design/src/*"],
+      "@package-apps/document-studio/*": ["./packages/package-apps/document-studio/src/*"],
+      "@package-apps/browser/*": ["./packages/package-apps/browser/src/*"],
+
+      "@package-apps/shared/*": ["./packages/package-apps/shared/*"],
       "@/*": ["./packages/desktop/src/*"],
       "@process/*": ["./packages/desktop/src/process/*"],
       "@renderer/*": ["./packages/desktop/src/renderer/*"],
@@ -23,6 +29,7 @@
   },
   "include": [
     "packages/desktop/src/**/*",
+    "packages/package-apps/**/*",
     "uno.config.ts",
     "packages/desktop/electron.vite.config.ts",
     "playwright.config.ts",

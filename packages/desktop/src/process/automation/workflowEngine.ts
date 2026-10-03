@@ -47,6 +47,32 @@ import type {
   WorkflowNode,
 } from './automationTypes';
 
+/** Stable denial when an external Automation operation has no Main-owned admission. */
+export const AUTOMATION_EGRESS_AUTHORITY_REQUIRED = 'AUTOMATION_EGRESS_AUTHORITY_REQUIRED';
+
+/** Minimal, non-secret evidence a Main-owned authority receives before Automation egress. */
+export type AutomationExternalEgressRequest =
+  | {
+      kind: 'workflow-node';
+      workflowId: string;
+      runId: string;
+      nodeId: string;
+      nodeKind: string;
+    }
+  | {
+      kind: 'automation-chat';
+      model: string;
+    };
+
+/**
+ * Interim containment seam for Automation external work. The eventual universal
+ * TrustBroker final-egress path must supply this authority; an absent authority
+ * is intentionally a denial rather than a compatibility fallback.
+ */
+export type AutomationEgressAuthority = Readonly<{
+  authorizeExternalEgress(request: AutomationExternalEgressRequest): Promise<void> | void;
+}>;
+
 /** Options for a single {@link IWorkflowEngine.run}. */
 export type RunOptions = {
   /** Cooperative cancellation; checked between nodes. */
@@ -89,6 +115,8 @@ export type WorkflowEngineDeps = {
   executeWithAgent?: (node: WorkflowNode, context: NodeContext, signal?: AbortSignal) => Promise<unknown>;
   /** Optional persistence adapter for resumable top-level workflow runs. */
   checkpointStore?: WorkflowCheckpointStore;
+  /** Main-owned admission required before an external node can reach an executor. */
+  egressAuthority?: AutomationEgressAuthority;
 };
 
 /** Public contract of the workflow engine. */
@@ -211,6 +239,14 @@ export const createWorkflowEngine = (deps: WorkflowEngineDeps): IWorkflowEngine 
         enforceSafeAccess(workflow, executionNode, access);
         deps.emit({ type: 'node-routed', runId, nodeId: executionNode.id, mode, access, at: now() });
         deps.emit({ type: 'node-start', runId, nodeId: executionNode.id, name: executionNode.name, at: now() });
+        try {
+          await authorizeExternalNode(deps.egressAuthority, workflow, runId, executionNode, mode);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          deps.emit({ type: 'node-finish', runId, nodeId: executionNode.id, ok: false, error: message, at: now() });
+          if (executionNode.onError?.continueOnError) return null;
+          throw error;
+        }
         const executionInput = executionNode.kind === 'action.email.send' ? structuredClone(input) : input;
         const ctx: NodeContext = { input: executionInput };
         // SMTP acknowledgement failures are ambiguous: the server may have accepted the message.
@@ -433,6 +469,49 @@ export const createWorkflowEngine = (deps: WorkflowEngineDeps): IWorkflowEngine 
 };
 
 const resolveExecutionMode = (node: WorkflowNode): NodeExecutionMode => node.execution?.mode ?? 'deterministic';
+
+/**
+ * Automation node kinds that cannot cause remote/provider/credential work by
+ * themselves. Everything else, including an unrecognised future node kind, is
+ * external by default. Control nodes are interpreted locally by this engine.
+ */
+const LOCAL_NODE_KINDS = new Set<string>([
+  'trigger.manual',
+  'trigger.schedule',
+  'trigger.webhook',
+  'action.transform',
+  'action.delay',
+  'action.log',
+  'action.set',
+  'action.code',
+  'action.filesystem',
+  'action.app.editor',
+  'action.notify',
+  'action.manager',
+  'action.subworkflow',
+]);
+
+/** Exported for focused verification and future TrustBroker migration wiring. */
+export const isExternalAutomationNode = (node: WorkflowNode, mode = resolveExecutionMode(node)): boolean =>
+  mode !== 'deterministic' || (!node.kind.startsWith('control.') && !LOCAL_NODE_KINDS.has(node.kind));
+
+const authorizeExternalNode = async (
+  authority: AutomationEgressAuthority | undefined,
+  workflow: Workflow,
+  runId: string,
+  node: WorkflowNode,
+  mode: NodeExecutionMode
+): Promise<void> => {
+  if (!isExternalAutomationNode(node, mode)) return;
+  if (!authority) throw new Error(AUTOMATION_EGRESS_AUTHORITY_REQUIRED);
+  await authority.authorizeExternalEgress({
+    kind: 'workflow-node',
+    workflowId: workflow.id,
+    runId,
+    nodeId: node.id,
+    nodeKind: node.kind,
+  });
+};
 
 const resolveAccessMode = (node: WorkflowNode): NodeAccessMode => {
   if (node.execution?.access) return node.execution.access;

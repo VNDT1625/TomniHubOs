@@ -4,40 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { filterRendererBreadcrumb, filterRendererSentryIntegrations } from './utils/ui/runtimePatches';
-
-// Sentry must be initialized first
-// Use electron-specific renderer package only inside Electron; fall back to the
-// browser SDK when running as a web server (no window.electronAPI).
-if ((window as { electronAPI?: unknown }).electronAPI) {
-  // Dynamic import avoids bundling sentry-ipc:// protocol code into the web build
-  import('@sentry/electron/renderer')
-    .then((Sentry) =>
-      Sentry.init({
-        beforeBreadcrumb: filterRendererBreadcrumb,
-
-        integrations: filterRendererSentryIntegrations,
-        beforeSend(event) {
-          if (!(window as { __backendStartupFailed?: boolean }).__backendStartupFailed) {
-            return event;
-          }
-          const haystacks: string[] = [];
-          if (event.message) haystacks.push(event.message);
-          const exceptions = event.exception?.values ?? [];
-          for (const ex of exceptions) {
-            if (ex.value) haystacks.push(ex.value);
-          }
-          if (haystacks.some((h) => /Failed to fetch|window\.__backendPort|__backendPort unset/.test(h))) {
-            return null;
-          }
-          return event;
-        },
-      })
-    )
-    .catch(() => {});
-}
-
 // Runtime patches must be imported early
+import './utils/ui/runtimePatches';
 
 // Browser adapter setup
 import '@/common/adapter/browser';
@@ -85,7 +53,6 @@ import { registerPwa } from './services/registerPwa';
 import { mutate as swrMutate } from 'swr';
 import { DETECTED_AGENTS_SWR_KEY, fetchDetectedAgents } from './utils/model/agentTypes';
 import { repairAllCronJobTimeZonesOnce } from '@renderer/pages/cron/repairCronJobTimeZone';
-import { resumeInterruptedCompanyRuns } from '@renderer/pages/company/useCompanyPipeline';
 
 // Components and utilities
 import Layout from './components/layout/Layout';
@@ -191,16 +158,6 @@ const Main = () => {
     if (!ready || status !== 'authenticated') return;
     void repairAllCronJobTimeZonesOnce();
   }, [ready, status]);
-
-  // After a renderer reload (F5), a company run that was in progress is torn
-  // down because the recursive pipeline lives in the renderer. The user never
-  // asked it to stop, so proactively re-attach to any interrupted company run
-  // and restart it from its goal — regardless of the current route. Runs once
-  // per load, after config is ready so the company bridge is reachable.
-  useEffect(() => {
-    if (!ready || status !== 'authenticated' || !configReady) return;
-    resumeInterruptedCompanyRuns();
-  }, [ready, status, configReady]);
 
   if (!ready || !configReady) {
     return null;

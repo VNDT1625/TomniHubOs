@@ -5,8 +5,8 @@
  */
 
 import { ipcBridge } from '@/common';
-import type { IDefaultBrowserStatus, IGpuStatus, IStartOnBootStatus } from '@/common/adapter/ipcBridge';
-import { configService } from '@/common/config/configService';
+import type { IGpuStatus, IStartOnBootStatus } from '@/common/adapter/ipcBridge';
+
 import TomnyScrollArea from '@/renderer/components/base/TomnyScrollArea';
 import FeedbackButton from '@/renderer/components/base/FeedbackButton';
 import LanguageSwitcher from '@/renderer/components/settings/LanguageSwitcher';
@@ -52,9 +52,6 @@ const SystemModalContent: React.FC = () => {
   const [agentIdleTimeout, setAgentIdleTimeout] = useState<number>(5);
   const [saveUploadToWorkspace, setSaveUploadToWorkspace] = useState(false);
   const [autoPreviewOfficeFiles, setAutoPreviewOfficeFiles] = useState(true);
-  const [openLinksInApp, setOpenLinksInApp] = useState(false);
-  const [defaultBrowser, setDefaultBrowser] = useState<IDefaultBrowserStatus | null>(null);
-  const [settingDefaultBrowser, setSettingDefaultBrowser] = useState(false);
 
   useEffect(() => {
     if (!isDesktop) {
@@ -78,36 +75,45 @@ const SystemModalContent: React.FC = () => {
         }
       })
       .catch(() => {});
-
-    ipcBridge.application.getDefaultBrowserStatus
-      .invoke()
-      .then((result) => {
-        if (result.success && result.data) {
-          setDefaultBrowser(result.data);
-        }
-      })
-      .catch(() => {});
   }, [isDesktop]);
 
   useEffect(() => {
-    setCloseToTray(configService.get('system.closeToTray') ?? false);
-    setNotificationEnabled(configService.get('system.notificationEnabled') ?? true);
-    setCronNotificationEnabled(configService.get('system.cronNotificationEnabled') ?? false);
-    setSaveUploadToWorkspace(configService.get('upload.saveToWorkspace') ?? false);
-    setAutoPreviewOfficeFiles(configService.get('system.autoPreviewOfficeFiles') ?? true);
-    setOpenLinksInApp(configService.get('browser.openLinksInApp') ?? false);
-    const pt = configService.get('acp.promptTimeout');
-    if (pt && pt > 0) setPromptTimeout(pt);
-    const ait = configService.get('acp.agentIdleTimeout');
-    if (ait && ait > 0) setAgentIdleTimeout(ait);
-  }, []);
+    if (!isDesktop) return;
+    Promise.all([
+      ipcBridge.systemSettings.getCloseToTray.invoke(),
+      ipcBridge.systemSettings.getNotificationEnabled.invoke(),
+      ipcBridge.systemSettings.getCronNotificationEnabled.invoke(),
+      ipcBridge.systemSettings.getSaveUploadToWorkspace.invoke(),
+      ipcBridge.systemSettings.getAutoPreviewOfficeFiles.invoke(),
+      ipcBridge.systemSettings.getPromptTimeout.invoke(),
+      ipcBridge.systemSettings.getAgentIdleTimeout.invoke(),
+    ])
+      .then(
+        ([
+          nextCloseToTray,
+          nextNotification,
+          nextCronNotification,
+          nextSaveUpload,
+          nextAutoPreview,
+          nextPrompt,
+          nextIdle,
+        ]) => {
+          setCloseToTray(nextCloseToTray);
+          setNotificationEnabled(nextNotification);
+          setCronNotificationEnabled(nextCronNotification);
+          setSaveUploadToWorkspace(nextSaveUpload);
+          setAutoPreviewOfficeFiles(nextAutoPreview);
+          setPromptTimeout(nextPrompt);
+          setAgentIdleTimeout(nextIdle);
+        }
+      )
+      .catch(() => {});
+  }, [isDesktop]);
 
   const handleCloseToTrayChange = useCallback((checked: boolean) => {
     setCloseToTray(checked);
-    configService.setLocal('system.closeToTray', checked);
     ipcBridge.systemSettings.setCloseToTray.invoke({ enabled: checked }).catch(() => {
       setCloseToTray(!checked);
-      configService.setLocal('system.closeToTray', !checked);
     });
   }, []);
 
@@ -176,17 +182,15 @@ const SystemModalContent: React.FC = () => {
 
   const handleNotificationEnabledChange = useCallback((checked: boolean) => {
     setNotificationEnabled(checked);
-    configService.set('system.notificationEnabled', checked).catch(() => {
+    ipcBridge.systemSettings.setNotificationEnabled.invoke({ enabled: checked }).catch(() => {
       setNotificationEnabled(!checked);
-      configService.setLocal('system.notificationEnabled', !checked);
     });
   }, []);
 
   const handleCronNotificationEnabledChange = useCallback((checked: boolean) => {
     setCronNotificationEnabled(checked);
-    configService.set('system.cronNotificationEnabled', checked).catch(() => {
+    ipcBridge.systemSettings.setCronNotificationEnabled.invoke({ enabled: checked }).catch(() => {
       setCronNotificationEnabled(!checked);
-      configService.setLocal('system.cronNotificationEnabled', !checked);
     });
   }, []);
 
@@ -197,7 +201,7 @@ const SystemModalContent: React.FC = () => {
   const handlePromptTimeoutBlur = useCallback(() => {
     const clamped = Math.max(30, Math.min(3600, promptTimeout || 300));
     setPromptTimeout(clamped);
-    configService.set('acp.promptTimeout', clamped).catch(() => {});
+    ipcBridge.systemSettings.setPromptTimeout.invoke({ seconds: clamped }).catch(() => {});
   }, [promptTimeout]);
 
   const handleAgentIdleTimeoutChange = useCallback((val: number | undefined) => {
@@ -207,51 +211,22 @@ const SystemModalContent: React.FC = () => {
   const handleAgentIdleTimeoutBlur = useCallback(() => {
     const clamped = Math.max(1, Math.min(60, agentIdleTimeout || 5));
     setAgentIdleTimeout(clamped);
-    configService.set('acp.agentIdleTimeout', clamped).catch(() => {});
+    ipcBridge.systemSettings.setAgentIdleTimeout.invoke({ minutes: clamped }).catch(() => {});
   }, [agentIdleTimeout]);
 
   const handleSaveUploadToWorkspaceChange = useCallback((checked: boolean) => {
     setSaveUploadToWorkspace(checked);
-    configService.set('upload.saveToWorkspace', checked).catch(() => {
+    ipcBridge.systemSettings.setSaveUploadToWorkspace.invoke({ enabled: checked }).catch(() => {
       setSaveUploadToWorkspace(!checked);
-      configService.setLocal('upload.saveToWorkspace', !checked);
     });
   }, []);
 
   const handleAutoPreviewOfficeFilesChange = useCallback((checked: boolean) => {
     setAutoPreviewOfficeFiles(checked);
-    configService.set('system.autoPreviewOfficeFiles', checked).catch(() => {
+    ipcBridge.systemSettings.setAutoPreviewOfficeFiles.invoke({ enabled: checked }).catch(() => {
       setAutoPreviewOfficeFiles(!checked);
-      configService.setLocal('system.autoPreviewOfficeFiles', !checked);
     });
   }, []);
-
-  const handleOpenLinksInAppChange = useCallback((checked: boolean) => {
-    setOpenLinksInApp(checked);
-    configService.set('browser.openLinksInApp', checked).catch(() => {
-      setOpenLinksInApp(!checked);
-      configService.setLocal('browser.openLinksInApp', !checked);
-    });
-  }, []);
-
-  const handleSetAsDefaultBrowser = useCallback(() => {
-    setSettingDefaultBrowser(true);
-    ipcBridge.application.setAsDefaultBrowser
-      .invoke()
-      .then((result) => {
-        if (result.success && result.data) {
-          setDefaultBrowser(result.data);
-        } else if (result.msg) {
-          Message.error(result.msg);
-        }
-      })
-      .catch(() => {
-        Message.error(t('settings.defaultBrowserUpdateFailed'));
-      })
-      .finally(() => {
-        setSettingDefaultBrowser(false);
-      });
-  }, [t]);
 
   // Get system directory info
   const { data: systemInfo } = useSWR('system.dir.info', () => ipcBridge.application.systemInfo.invoke());
@@ -350,38 +325,6 @@ const SystemModalContent: React.FC = () => {
       description: t('settings.autoPreviewOfficeFilesDesc'),
       component: <Switch checked={autoPreviewOfficeFiles} onChange={handleAutoPreviewOfficeFilesChange} />,
     },
-    ...(isDesktop
-      ? [
-          {
-            key: 'openLinksInApp',
-            label: t('settings.openLinksInApp'),
-            description: t('settings.openLinksInAppDesc'),
-            component: <Switch checked={openLinksInApp} onChange={handleOpenLinksInAppChange} />,
-          },
-        ]
-      : []),
-    ...(isDesktop && defaultBrowser?.supported
-      ? [
-          {
-            key: 'defaultBrowser',
-            label: t('settings.defaultBrowser'),
-            description: defaultBrowser.isDefault
-              ? t('settings.defaultBrowserActive')
-              : t('settings.defaultBrowserDesc'),
-            component: (
-              <Button
-                type='outline'
-                size='small'
-                loading={settingDefaultBrowser}
-                disabled={defaultBrowser.isDefault}
-                onClick={handleSetAsDefaultBrowser}
-              >
-                {defaultBrowser.isDefault ? t('settings.defaultBrowserIsDefault') : t('settings.defaultBrowserSet')}
-              </Button>
-            ),
-          },
-        ]
-      : []),
   ];
 
   const saveDirConfigValidate = (_values: { workDir: string }): Promise<unknown> => {

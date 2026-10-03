@@ -11,7 +11,7 @@ import {
   resolveEngine,
   shouldUseMonacoTsWorker,
   type LanguageAnalysis,
-} from '../../../packages/desktop/src/renderer/pages/editor/adapters/languageEngineRegistry';
+} from '../../../packages/package-apps/ide/src/languageEngineRegistry';
 
 const analysis: LanguageAnalysis = {
   languages: [

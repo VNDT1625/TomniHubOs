@@ -1,7 +1,7 @@
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { NativeFileGateway } from '@process/resources/nativeFileGateway';
 import { rm } from 'node:fs/promises';
 
@@ -13,6 +13,7 @@ const tempRoot = async (): Promise<string> => {
 };
 
 afterEach(async () => {
+  vi.unstubAllGlobals();
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 
@@ -73,6 +74,72 @@ describe('native file gateway', () => {
     await writeFile(source, 'a');
 
     await expect(gateway.rename(source, `nested${path.sep}b.txt`)).rejects.toThrow('single file name');
+  });
+
+  it('denies remote-image fetching by default before URL parsing or fetch', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(new NativeFileGateway().fetchRemoteImage('not a URL')).rejects.toThrow('Remote image fetch denied.');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects URL credentials and invalid authority admissions without exposing the input URL', async () => {
+    const fetchMock = vi.fn();
+    const authority = {
+      admitRemoteImageFetch: vi.fn().mockResolvedValue({ canonicalUrl: 'https://other.example/image.png' }),
+    };
+    vi.stubGlobal('fetch', fetchMock);
+    const gateway = new NativeFileGateway(authority);
+
+    await expect(gateway.fetchRemoteImage('https://user:token@images.example/a.png')).rejects.toThrow(
+      'Remote image fetch denied.'
+    );
+    await expect(gateway.fetchRemoteImage('https://images.example/a.png')).rejects.toThrow(
+      'Remote image fetch denied.'
+    );
+    expect(authority.admitRemoteImageFetch).toHaveBeenCalledTimes(1);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('redacts authority failures and does not fetch an untrusted destination', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const gateway = new NativeFileGateway({
+      admitRemoteImageFetch: vi.fn().mockRejectedValue(new Error('token=super-secret')),
+    });
+
+    await expect(gateway.fetchRemoteImage('https://images.example/a.png?token=private')).rejects.toThrow(
+      'Remote image fetch denied.'
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('redacts remote transport failures after an authority admission', async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new Error('request failed for ?token=super-secret'));
+    vi.stubGlobal('fetch', fetchMock);
+    const gateway = new NativeFileGateway({
+      admitRemoteImageFetch: async (destination) => ({ canonicalUrl: destination.canonicalUrl }),
+    });
+
+    await expect(gateway.fetchRemoteImage('https://images.example/a.png?token=private')).rejects.toThrow(
+      'Remote image fetch failed.'
+    );
+  });
+
+  it('fetches only the exact canonical destination admitted by Main authority', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(Uint8Array.from([1, 2, 3]), { headers: { 'content-type': 'image/png; charset=binary' } })
+      );
+    vi.stubGlobal('fetch', fetchMock);
+    const gateway = new NativeFileGateway({
+      admitRemoteImageFetch: async (destination) => ({ canonicalUrl: destination.canonicalUrl }),
+    });
+
+    await expect(gateway.fetchRemoteImage('https://images.example/a.png')).resolves.toBe('data:image/png;base64,AQID');
+    expect(fetchMock).toHaveBeenCalledWith('https://images.example/a.png', { redirect: 'error' });
   });
 });
 

@@ -1,6 +1,12 @@
 export { BUILTIN_SURFACE_MANIFESTS, createBuiltinSurfaceManifests } from './defaults';
 export { createSurfaceRegistry, type SurfaceRegistryOptions } from './registry';
 export {
+  createPackageSurfaceRegistrySynchronizer,
+  type PackageSurfaceRegistrySource,
+  type PackageSurfaceRegistrySyncResult,
+  type PackageSurfaceRegistrySynchronizer,
+} from './packageSurfaceRegistry';
+export {
   assertSurfaceManifest,
   SurfaceManifestValidationError,
   validateSurfaceManifest,

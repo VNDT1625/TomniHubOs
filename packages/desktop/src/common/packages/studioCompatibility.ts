@@ -36,6 +36,11 @@ export const readStudioSplitRouteRedirectBootstrap = (read: () => unknown): bool
 /** Preserve same-origin legacy query parameters while routing through the package compatibility gate. */
 export const createStudioCompatibilityRouteDestination = (search: string): string => {
   const parameters = new URLSearchParams(search);
+  if (parameters.get('mode') === 'ide') {
+    parameters.delete('mode');
+    const query = parameters.toString();
+    return query ? `/ide?${query}` : '/ide';
+  }
   parameters.set('legacySource', 'route');
   return `/store/app/${LEGACY_STUDIO_PACKAGE_ID}/${LEGACY_STUDIO_MODULE_ID}?${parameters.toString()}`;
 };
@@ -93,10 +98,18 @@ export type StudioCompatibilityEntryPoint =
   | { kind: 'route'; pathname: string; mode?: string | null }
   | { kind: 'package-module'; packageId: string; moduleId: string; mode?: string | null };
 
-export type StudioCompatibilityTarget = {
+export type StudioPackageTarget = {
+  kind: 'package';
   packageId: string;
   moduleId: string;
 };
+
+export type StudioDefaultSurfaceTarget = {
+  kind: 'default-surface';
+  pathname: '/ide';
+};
+
+export type StudioCompatibilityTarget = StudioPackageTarget | StudioDefaultSurfaceTarget;
 
 export type StudioInstallGateMetadata = {
   reason: 'target-package-not-installed';
@@ -135,24 +148,26 @@ export type StudioCompatibilityPackageState = {
 export type StudioCompatibilityNavigation =
   | { kind: 'not-legacy-entry' }
   | { kind: 'legacy-runtime'; reason: 'redirect-disabled' | 'target-unavailable' | 'target-disabled' }
-  | { kind: 'target-runtime'; target: StudioCompatibilityTarget }
-  | { kind: 'package-gate'; target: StudioCompatibilityTarget };
+  | { kind: 'default-runtime'; target: StudioDefaultSurfaceTarget }
+  | { kind: 'target-runtime'; target: StudioPackageTarget }
+  | { kind: 'package-gate'; target: StudioPackageTarget };
 
 const DOCUMENT_STUDIO_TARGET = {
+  kind: 'package',
   packageId: 'com.tomni.document-studio',
   moduleId: 'document',
-} as const satisfies StudioCompatibilityTarget;
+} as const satisfies StudioPackageTarget;
 
 const TARGETS: Readonly<Record<LegacyStudioMode, StudioCompatibilityTarget>> = {
   dashboard: DOCUMENT_STUDIO_TARGET,
   file: DOCUMENT_STUDIO_TARGET,
   editor: DOCUMENT_STUDIO_TARGET,
   peer: DOCUMENT_STUDIO_TARGET,
-  viu: { packageId: 'com.tomni.design-studio', moduleId: 'design' },
-  automation: { packageId: 'com.tomni.automation-studio', moduleId: 'automation' },
-  makeVideo: { packageId: 'com.tomni.video-studio', moduleId: 'video' },
-  music: { packageId: 'com.tomni.music-studio', moduleId: 'music' },
-  ide: { packageId: 'com.tomni.ide', moduleId: 'ide' },
+  viu: { kind: 'package', packageId: 'com.tomni.design-studio', moduleId: 'design' },
+  automation: { kind: 'package', packageId: 'com.tomni.automation-studio', moduleId: 'automation' },
+  makeVideo: { kind: 'package', packageId: 'com.tomni.video-studio', moduleId: 'video' },
+  music: { kind: 'package', packageId: 'com.tomni.music-studio', moduleId: 'music' },
+  ide: { kind: 'default-surface', pathname: '/ide' },
 };
 
 const STANDALONE_STUDIO_PACKAGE_IDS = [
@@ -200,6 +215,18 @@ export const resolveStudioCompatibility = (
   const requestedMode = source.mode?.trim() || null;
   const mode = resolveMode(requestedMode);
   const target = { ...TARGETS[mode.normalizedMode] };
+  if (target.kind === 'default-surface') {
+    return {
+      kind: 'resolved',
+      schemaVersion: STUDIO_COMPATIBILITY_VERSION,
+      source: { ...source },
+      requestedMode,
+      ...mode,
+      target,
+      availability: 'ready',
+    };
+  }
+
   const available = new Set(availablePackageIds.map((id) => id.trim()).filter(Boolean));
   if (available.has(target.packageId)) {
     return {
@@ -245,9 +272,12 @@ export const resolveStudioCompatibilityNavigation = (
 ): StudioCompatibilityNavigation => {
   const resolution = resolveStudioCompatibility(source, []);
   if (resolution.kind === 'not-legacy-entry') return { kind: 'not-legacy-entry' };
+  if (resolution.target.kind === 'default-surface') return { kind: 'default-runtime', target: resolution.target };
   if (!redirectEnabled) return { kind: 'legacy-runtime', reason: 'redirect-disabled' };
 
-  const targetPackage = packages.find((candidate) => candidate.id === resolution.target.packageId);
+  const targetPackageId = 'packageId' in resolution.target ? resolution.target.packageId : null;
+  if (!targetPackageId) return { kind: 'legacy-runtime', reason: 'target-unavailable' };
+  const targetPackage = packages.find((candidate) => candidate.id === targetPackageId);
   if (!targetPackage || !targetPackage.compatible) {
     return { kind: 'legacy-runtime', reason: 'target-unavailable' };
   }

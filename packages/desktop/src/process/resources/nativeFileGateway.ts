@@ -20,7 +20,67 @@ const MIME_BY_EXTENSION: Record<string, string> = {
 const mimeFor = (filePath: string): string =>
   MIME_BY_EXTENSION[path.extname(filePath).toLowerCase()] ?? 'application/octet-stream';
 
+const REMOTE_IMAGE_FETCH_DENIED = 'Remote image fetch denied.';
+const REMOTE_IMAGE_FETCH_FAILED = 'Remote image fetch failed.';
+
+/**
+ * Main-owned admission for a remote image destination. The gateway deliberately
+ * has no default network policy: a caller must inject a governed authority.
+ */
+export type RemoteImageFetchAuthority = Readonly<{
+  admitRemoteImageFetch(destination: RemoteImageFetchDestination): Promise<RemoteImageFetchAdmission>;
+}>;
+
+export type RemoteImageFetchDestination = Readonly<{
+  canonicalUrl: string;
+  origin: string;
+  hostname: string;
+  protocol: 'http:' | 'https:';
+}>;
+
+export type RemoteImageFetchAdmission = Readonly<{
+  canonicalUrl: string;
+}>;
+
+const canonicalRemoteImageDestination = (url: string): RemoteImageFetchDestination => {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') throw new Error('unsupported protocol');
+    if (parsed.username || parsed.password || parsed.hash) throw new Error('unsafe URL component');
+    const protocol = parsed.protocol === 'http:' ? 'http:' : 'https:';
+    return Object.freeze({
+      canonicalUrl: parsed.toString(),
+      origin: parsed.origin,
+      hostname: parsed.hostname,
+      protocol,
+    });
+  } catch {
+    throw new Error(REMOTE_IMAGE_FETCH_DENIED);
+  }
+};
+
+const isCurrentRemoteImageAdmission = (
+  requested: RemoteImageFetchDestination,
+  admission: unknown
+): admission is RemoteImageFetchAdmission => {
+  if (
+    typeof admission !== 'object' ||
+    admission === null ||
+    !('canonicalUrl' in admission) ||
+    typeof admission.canonicalUrl !== 'string'
+  ) {
+    return false;
+  }
+  try {
+    return canonicalRemoteImageDestination(admission.canonicalUrl).canonicalUrl === requested.canonicalUrl;
+  } catch {
+    return false;
+  }
+};
+
 export class NativeFileGateway {
+  constructor(private readonly imageFetchAuthority?: RemoteImageFetchAuthority) {}
+
   async getFilesByDir(input: { dir: string; root: string }): Promise<IDirOrFile[]> {
     const tree = await readDirectoryRecursive(path.resolve(input.dir), {
       root: path.resolve(input.root),
@@ -69,12 +129,27 @@ export class NativeFileGateway {
     return base64 === null ? null : `data:${mimeFor(filePath)};base64,${base64}`;
   }
   async fetchRemoteImage(url: string): Promise<string> {
-    const parsed = new URL(url);
-    if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('Only HTTP(S) image URLs are supported.');
-    const response = await fetch(parsed, { redirect: 'follow' });
-    if (!response.ok) throw new Error(`Image request failed (${response.status}).`);
-    const contentType = response.headers.get('content-type')?.split(';')[0] || 'application/octet-stream';
-    return `data:${contentType};base64,${Buffer.from(await response.arrayBuffer()).toString('base64')}`;
+    // Check injection before parsing the untrusted renderer URL. The base gateway
+    // owns local filesystem operations only; network access must be explicit.
+    if (!this.imageFetchAuthority) throw new Error(REMOTE_IMAGE_FETCH_DENIED);
+    const destination = canonicalRemoteImageDestination(url);
+    let admission: RemoteImageFetchAdmission;
+    try {
+      admission = await this.imageFetchAuthority.admitRemoteImageFetch(destination);
+    } catch {
+      throw new Error(REMOTE_IMAGE_FETCH_DENIED);
+    }
+    if (!isCurrentRemoteImageAdmission(destination, admission)) throw new Error(REMOTE_IMAGE_FETCH_DENIED);
+
+    try {
+      const response = await fetch(admission.canonicalUrl, { redirect: 'error' });
+      if (!response.ok) throw new Error('non-success response');
+      const contentType = response.headers.get('content-type')?.split(';')[0] || 'application/octet-stream';
+      return `data:${contentType};base64,${Buffer.from(await response.arrayBuffer()).toString('base64')}`;
+    } catch {
+      // Remote URLs and authority failures can contain credentials or tokens.
+      throw new Error(REMOTE_IMAGE_FETCH_FAILED);
+    }
   }
   async createTempFile(fileName: string): Promise<string> {
     const safeName = path.basename(fileName.trim() || 'attachment.tmp');

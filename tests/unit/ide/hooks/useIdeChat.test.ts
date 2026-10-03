@@ -5,7 +5,7 @@ import {
   resolveIdeChatActiveIdAfterClose,
   resolveRestoredIdeChatActiveId,
   type IdeChatTab,
-} from '@/renderer/pages/studio/ide/useIdeChat';
+} from '@package-apps/ide/renderer/hooks/useIdeChat';
 import { describe, expect, it } from 'vitest';
 
 const conversation = (workspace: string, extra: Record<string, unknown> = {}): TChatConversation =>

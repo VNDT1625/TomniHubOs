@@ -48,8 +48,9 @@ export type SurfacePermissionPolicy = {
   requireExplicitGrant: boolean;
 };
 
+/** The authoritative origin of a registered Surface policy. */
 export type SurfaceManifestSource = {
-  kind: 'builtin' | 'plugin' | 'user';
+  kind: 'builtin' | 'package' | 'plugin' | 'user';
   id?: string;
   version?: string;
 };

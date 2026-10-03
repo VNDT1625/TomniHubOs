@@ -11,7 +11,7 @@ import {
   LSP_CATALOG,
   planLspPrompts,
   type AnalyzedLanguage,
-} from '../../../../packages/desktop/src/process/ide/lang/lspCatalog';
+} from '@package-apps/ide/process/coding/lang/lspCatalog';
 
 describe('catalog lookups', () => {
   it('maps languages to servers', () => {

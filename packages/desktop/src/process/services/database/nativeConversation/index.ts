@@ -1,4 +1,9 @@
-export { registerNativeConversationBridge } from './bridge';
+export {
+  ACCOUNT_EXECUTION_REJECTED,
+  guardAccountExecution,
+  registerNativeConversationBridge,
+  type RequireAuthenticatedAccount,
+} from './bridge';
 export { NativeConversationRepository, type NativeConversationSnapshot } from './repository';
 export {
   NativeConversationService,

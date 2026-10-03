@@ -126,7 +126,7 @@ describe('MessageTips — FeedbackButton wiring', () => {
                 truncated: false,
                 files: [
                   {
-                    path: 'packages/desktop/src/process/browser/browserBridge.ts',
+                    path: 'packages/package-apps/browser/src/process/browserBridge.ts',
                     reason: 'seed',
                     layer: 'service',
                     score: 1004,
@@ -146,7 +146,7 @@ describe('MessageTips — FeedbackButton wiring', () => {
     );
 
     expect(screen.getByText('Including IDE Context')).toBeInTheDocument();
-    expect(screen.getByText('packages/desktop/src/process/browser/browserBridge.ts')).toBeInTheDocument();
+    expect(screen.getByText('packages/package-apps/browser/src/process/browserBridge.ts')).toBeInTheDocument();
     expect(screen.getByText('packages/desktop/src/process/services/contentExtract/index.ts')).toBeInTheDocument();
     expect(screen.queryByText('settings.oneClickFeedback')).not.toBeInTheDocument();
   });

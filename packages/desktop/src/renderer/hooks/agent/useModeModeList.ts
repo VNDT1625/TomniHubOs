@@ -1,94 +1,62 @@
-import { ipcBridge } from '@/common';
 import useSWR from 'swr';
 
-// Gemini 模型排序函数：Pro 优先，版本号降序
-const sortGeminiModels = (models: { label: string; value: string }[]) => {
-  return models.toSorted((a, b) => {
-    const aPro = a.value.toLowerCase().includes('pro');
-    const bPro = b.value.toLowerCase().includes('pro');
+type ModelOption = Readonly<{ label: string; value: string }>;
 
-    // Pro 模型排在前面
-    if (aPro && !bPro) return -1;
-    if (!aPro && bPro) return 1;
+export type ProviderModelList = Readonly<{ models: readonly ModelOption[] }>;
 
-    // 提取版本号进行比较
-    const extractVersion = (name: string) => {
-      const match = name.match(/(\d+\.?\d*)/);
-      return match ? parseFloat(match[1]) : 0;
+/** Stable renderer-facing failure; native error detail must not reach UI state. */
+export const PROVIDER_DISCOVERY_UNAVAILABLE = 'provider-discovery-unavailable';
+export const PROVIDER_MODEL_UNAVAILABLE = 'provider-model-unavailable';
+
+const unavailable = (): Error => new Error(PROVIDER_DISCOVERY_UNAVAILABLE);
+
+/**
+ * Fetch models for an already-saved provider. The renderer provides only its
+ * opaque provider ID; Main resolves any credential and controls network egress.
+ */
+export const fetchSavedProviderModelList = async (providerId: string): Promise<ProviderModelList> => {
+  const providerDiscovery = typeof window === 'undefined' ? undefined : window.electronAPI?.providerDiscovery;
+  if (!providerDiscovery) throw unavailable();
+
+  try {
+    const result = await providerDiscovery.fetchModels({ providerId });
+    if (!result.ok) throw unavailable();
+
+    return {
+      models: result.models.map((model) => ({ label: model, value: model })),
     };
-
-    const aVersion = extractVersion(a.value);
-    const bVersion = extractVersion(b.value);
-
-    // 版本号大的排在前面
-    if (aVersion !== bVersion) {
-      return bVersion - aVersion;
-    }
-
-    // 版本号相同时按字母顺序排序
-    return a.value.localeCompare(b.value);
-  });
+  } catch {
+    throw unavailable();
+  }
 };
 
-const useModeModeList = (
-  platform: string,
-  base_url?: string,
-  api_key?: string,
-  try_fix?: boolean,
-  bedrock_config?: {
-    auth_method: 'accessKey' | 'profile';
-    region: string;
-    access_key_id?: string;
-    secret_access_key?: string;
-    profile?: string;
+/**
+ * Health is derived only from the native saved-provider discovery result. The
+ * checked model remains renderer-local so the preload payload stays provider-ID only.
+ */
+export const checkSavedProviderModelHealth = async (
+  providerId: string,
+  model: string
+): Promise<
+  Readonly<{ healthy: boolean; code?: typeof PROVIDER_DISCOVERY_UNAVAILABLE | typeof PROVIDER_MODEL_UNAVAILABLE }>
+> => {
+  try {
+    const { models } = await fetchSavedProviderModelList(providerId);
+    return models.some(({ value }) => value === model)
+      ? { healthy: true }
+      : { healthy: false, code: PROVIDER_MODEL_UNAVAILABLE };
+  } catch {
+    return { healthy: false, code: PROVIDER_DISCOVERY_UNAVAILABLE };
   }
-) => {
-  return useSWR(
-    [platform + '/models', { platform, base_url, api_key, try_fix, bedrock_config }],
-    async ([_url, { platform, base_url, api_key, try_fix, bedrock_config }]): Promise<{
-      models: { label: string; value: string }[];
-      fix_base_url?: string;
-    }> => {
-      // Only call the backend when we have credentials it can actually use:
-      // - bedrock: bedrock_config carries the credentials (api_key not required)
-      // - everything else: api_key is mandatory per backend validator
-      const hasUsableCredentials = platform === 'bedrock' ? !!bedrock_config : !!api_key;
-      if (hasUsableCredentials) {
-        const res = await ipcBridge.mode.fetchModelList.invoke({
-          base_url,
-          api_key: api_key ?? '',
-          try_fix,
-          platform,
-          bedrock_config,
-        });
-        let modelList = res.models.map((v) => {
-          // Handle both string and object formats (Bedrock returns objects with id and name)
-          if (typeof v === 'string') {
-            return { label: v, value: v };
-          } else {
-            return { label: v.name, value: v.id };
-          }
-        });
+};
 
-        // 如果是 Gemini 平台，优化排序
-        if (platform?.includes('gemini')) {
-          modelList = sortGeminiModels(modelList);
-        }
-
-        // 如果返回了修复的 base_url，将其添加到结果中
-        if (res.fixed_base_url) {
-          return {
-            models: modelList,
-            fix_base_url: res.fixed_base_url,
-          };
-        }
-
-        return { models: modelList };
-      }
-
-      // 既没有 API key 也没有 base_url 也没有 bedrock_config 时，返回空列表
-      return { models: [] };
-    }
+/**
+ * Model discovery is intentionally unavailable while a provider is being
+ * created: it has no durable ID and no Main-owned secret yet.
+ */
+const useModeModeList = (providerId?: string) => {
+  return useSWR(providerId ? ['provider-discovery.fetch-models', providerId] : null, () =>
+    fetchSavedProviderModelList(providerId!)
   );
 };
 

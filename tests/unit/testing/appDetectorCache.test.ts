@@ -12,15 +12,25 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Isolated userData dir per run so the cache file is real but disposable.
 const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'tomny-detect-cache-'));
 vi.mock('electron', () => ({ app: { getPath: () => userData } }));
 
+const mocks = vi.hoisted(() => ({
+  providerChat: vi.fn(),
+  runAgentChatMessages: vi.fn(),
+}));
+
 const listReadyProviders = vi.fn();
 vi.mock('@process/services/tomnyProviderBridge', () => ({
   listReadyProviders: (...args: unknown[]) => listReadyProviders(...args),
+}));
+
+vi.mock('@process/services/agentChat', () => ({
+  createProviderChat: () => mocks.providerChat,
+  runAgentChatMessages: (...args: unknown[]) => mocks.runAgentChatMessages(...args),
 }));
 
 import { createAppDetector } from '@/process/testing/appDetector';
@@ -33,26 +43,28 @@ const usableProvider = {
   models: ['gpt-test'],
 };
 
-/** Stub the model reply for the next /chat/completions call. */
+/** Configure the Main-owned broker stub to return one assistant completion. */
 const stubModel = (content: string): void => {
-  vi.stubGlobal(
-    'fetch',
-    vi.fn(async () => ({ ok: true, json: async () => ({ choices: [{ message: { content } }] }), text: async () => '' }))
-  );
+  mocks.providerChat.mockResolvedValue(content);
 };
 
 let projectDir: string;
 
 beforeEach(() => {
+  mocks.providerChat.mockReset();
+  mocks.runAgentChatMessages.mockReset();
+  mocks.runAgentChatMessages.mockImplementation(
+    async (
+      providerRun: (model: string, messages: unknown[], signal?: AbortSignal) => Promise<string>,
+      model: string,
+      messages: unknown[]
+    ) => providerRun(model, messages)
+  );
   listReadyProviders.mockReset();
   listReadyProviders.mockResolvedValue([usableProvider]);
   // A minimal but recognizable project on disk.
   projectDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sample-proj-'));
   fs.writeFileSync(path.join(projectDir, 'package.json'), JSON.stringify({ name: 'demo', scripts: { dev: 'vite' } }));
-});
-
-afterEach(() => {
-  vi.unstubAllGlobals();
 });
 
 describe('appDetector cache (<name>-data.json)', () => {
@@ -62,19 +74,26 @@ describe('appDetector cache (<name>-data.json)', () => {
 
     const first = await det.detect({ projectDir });
     expect(first.url).toBe('http://localhost:5173');
+    expect(mocks.providerChat).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: 'gpt-test',
+        messages: [{ role: 'user', content: expect.stringContaining('You are a build/run expert.') }],
+      })
+    );
+    expect(mocks.runAgentChatMessages).toHaveBeenCalledWith(expect.any(Function), '', expect.any(Array), undefined, {
+      workspace: projectDir,
+      surface: 'ide',
+      permissionMode: 'read-only',
+    });
 
     // The cache file exists, named after the project folder.
     const name = path.basename(projectDir).replace(/[^a-zA-Z0-9._-]+/g, '-');
     const cachePath = path.join(userData, 'testing', `${name}-data.json`);
     expect(fs.existsSync(cachePath)).toBe(true);
 
-    // Second detect: model is NOT called again (fetch stub replaced with a throw).
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => {
-        throw new Error('model must not be called on cache hit');
-      })
-    );
+    // A cache hit must not make a second broker call.
+    mocks.providerChat.mockRejectedValue(new Error('model must not be called on cache hit'));
+
     const second = await det.detect({ projectDir });
     expect(second.url).toBe('http://localhost:5173');
     expect(second.command).toBe('npm run dev');
@@ -91,13 +110,9 @@ describe('appDetector cache (<name>-data.json)', () => {
     expect(refreshed.url).toBe('http://localhost:4000');
 
     // And the next cache hit returns the refreshed value.
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => {
-        throw new Error('should be a cache hit');
-      })
-    );
+    mocks.providerChat.mockRejectedValue(new Error('should be a cache hit'));
     const cached = await det.detect({ projectDir });
+
     expect(cached.url).toBe('http://localhost:4000');
   });
 

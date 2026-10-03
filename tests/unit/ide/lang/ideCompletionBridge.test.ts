@@ -8,12 +8,12 @@ import { describe, expect, it, vi } from 'vitest';
 
 // The bridge imports the provider chat layer (which pulls heavy Node deps); the
 // pure helpers under test don't need it, so stub it out.
-vi.mock('@/process/ide/ideProvider', () => ({
+vi.mock('@package-apps/ide/process/workspace/ideProvider', () => ({
   runIdeChat: vi.fn(),
   resolveDefaultModel: vi.fn(),
 }));
 
-import { buildCompletionMessages, stripCodeFence } from '@/process/ide/lang/ideCompletionBridge';
+import { buildCompletionMessages, stripCodeFence } from '@package-apps/ide/process/coding/lang/ideCompletionBridge';
 
 describe('stripCodeFence', () => {
   it('strips a fenced block with a language tag', () => {

@@ -5,7 +5,13 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { buildQuickCommands, cwdForNode, dirOf, parseScripts, sepOf } from '@/renderer/pages/studio/ide/quickCommands';
+import {
+  buildQuickCommands,
+  cwdForNode,
+  dirOf,
+  parseScripts,
+  sepOf,
+} from '@package-apps/ide/renderer/services/quickCommands';
 
 describe('sepOf', () => {
   it('detects windows backslash vs posix slash', () => {

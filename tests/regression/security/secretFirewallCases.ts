@@ -1,4 +1,4 @@
-﻿export type SecurityBenchmarkClass = 'secret' | 'pii' | 'safe';
+export type SecurityBenchmarkClass = 'secret' | 'pii' | 'safe';
 
 export type SecurityBenchmarkCase = {
   id: string;
@@ -94,6 +94,19 @@ const createSecretCases = (): SecurityBenchmarkCase[] =>
     return cases;
   }).flat();
 
+const createTerminalControlBypassCase = (): SecurityBenchmarkCase => {
+  const github = 'ghp_' + repeatCharacter(22, 36);
+  const terminalStyledGithub = github.slice(0, 12) + '\u001b[31m' + github.slice(12) + '\u001b[0m';
+  return {
+    id: 'secret-terminal-control-obfuscation',
+    category: 'terminal-control-obfuscation',
+    classification: 'secret',
+    input: 'Terminal output: ' + terminalStyledGithub,
+    // Verify both the transport representation and the underlying credential are absent.
+    protectedValues: [terminalStyledGithub, github],
+  };
+};
+
 const createPiiCases = (): SecurityBenchmarkCase[] =>
   Array.from({ length: 4 }, (_, index) => {
     const number = index + 1;
@@ -171,6 +184,7 @@ const createSafeCases = (): SecurityBenchmarkCase[] =>
 
 export const SECURITY_BENCHMARK_CASES: SecurityBenchmarkCase[] = [
   ...createSecretCases(),
+  createTerminalControlBypassCase(),
   ...createPiiCases(),
   ...createSafeCases(),
 ];

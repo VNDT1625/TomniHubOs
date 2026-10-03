@@ -13,6 +13,8 @@ import { EventEmitter } from 'events';
 import { requestAppActionAfterCleanup } from '@process/startup/appTermination';
 import { recordAutoUpdateQuitAndInstall, recordAutoUpdateStatus } from './diagnostics/autoUpdateDiagnostics';
 
+import { systemEgressAuthority } from './security/systemEgressAuthority';
+
 /**
  * Returns the appropriate update channel name based on the current platform and architecture.
  * Returns undefined for the default channel (Windows x64 / Linux x64).
@@ -43,14 +45,71 @@ export function getUpdateChannel(): string | undefined {
   return undefined;
 }
 
-const normalizeUpdateFeedUrl = (raw: string | undefined): string | undefined => {
+/** The release publisher configured for packaged desktop artifacts. */
+const PACKAGED_UPDATE_FEED_HOST = 'github.com';
+
+const isPrivateOrLocalUpdateHost = (hostname: string): boolean => {
+  const host = hostname
+    .toLowerCase()
+    .replace(/\.$/, '')
+    .replace(/^\[|\]$/g, '');
+  if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local')) return true;
+
+  const ipv4 = host.split('.').map((part) => Number(part));
+  if (ipv4.length !== 4 || ipv4.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) {
+    return (
+      host === '::' || host === '::1' || host.startsWith('fc') || host.startsWith('fd') || host.startsWith('fe80:')
+    );
+  }
+
+  const [first, second] = ipv4;
+  return (
+    first === 0 ||
+    first === 10 ||
+    first === 127 ||
+    (first === 169 && second === 254) ||
+    (first === 172 && second >= 16 && second <= 31) ||
+    (first === 192 && second === 168)
+  );
+};
+
+const normalizeUpdateFeedUrl = (raw: string | undefined, isPackaged: boolean): string | undefined => {
   const value = raw?.trim();
   if (!value) return undefined;
-  const parsed = new URL(value);
+
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new Error('TOMNY_UPDATE_FEED_URL is not a valid URL.');
+  }
+
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
     throw new Error('TOMNY_UPDATE_FEED_URL must start with http:// or https://.');
   }
-  return `${parsed.toString().replace(/\/+$/, '')}/`;
+  if (parsed.username || parsed.password) {
+    throw new Error('TOMNY_UPDATE_FEED_URL must not include credentials.');
+  }
+  if (!isPackaged) return `${parsed.toString().replace(/\/+$/, '')}/`;
+  if (parsed.protocol !== 'https:') {
+    throw new Error('Packaged updates require an HTTPS TOMNY_UPDATE_FEED_URL.');
+  }
+  if (isPrivateOrLocalUpdateHost(parsed.hostname)) {
+    throw new Error('Packaged updates reject private or local update feeds.');
+  }
+  if (parsed.hostname.toLowerCase() !== PACKAGED_UPDATE_FEED_HOST || parsed.port) {
+    throw new Error('Packaged updates require an approved vendor update feed.');
+  }
+  const normalized = `${parsed.toString().replace(/\/+$/, '')}/`;
+  const egress = systemEgressAuthority.authorize({
+    egressClass: 'signed-app-update',
+    destination: normalized,
+  });
+  if (egress.decision !== 'allow') {
+    throw new Error(`Packaged update egress denied: ${egress.code}.`);
+  }
+
+  return normalized;
 };
 
 export interface AutoUpdateStatus {
@@ -102,7 +161,7 @@ class AutoUpdaterService extends EventEmitter {
     }
 
     try {
-      const feedUrl = normalizeUpdateFeedUrl(process.env.TOMNY_UPDATE_FEED_URL);
+      const feedUrl = normalizeUpdateFeedUrl(process.env.TOMNY_UPDATE_FEED_URL, app.isPackaged);
       if (feedUrl) {
         autoUpdater.setFeedURL({ provider: 'generic', url: feedUrl });
         log.info(`Update feed override set to: ${feedUrl}`);

@@ -7,7 +7,7 @@ import { useThemeContext } from '@/renderer/hooks/context/ThemeContext';
 import ConversationSearchPopover from '@/renderer/pages/conversation/GroupedHistory/ConversationSearchPopover';
 import { changeLanguage } from '@/renderer/services/i18n';
 import { useSystemMetrics } from '@/renderer/pages/settings/ResourceSettings/system/useSystemMetrics';
-import { isElectronDesktop } from '@/renderer/utils/platform';
+import { isElectronDesktop, isMacOS } from '@/renderer/utils/platform';
 import type { PackageListing } from '@/common/packages';
 import { packageClient } from '@/renderer/pages/hub/packageClient';
 import { Badge, Button, Card, Modal, Popover, Tooltip } from '@arco-design/web-react';
@@ -33,6 +33,7 @@ import {
   Search,
   Shield,
   SunOne,
+  Time,
   User,
 } from '@icon-park/react';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -49,6 +50,9 @@ import {
   type HubTone,
 } from './catalog';
 import styles from './HubHome.module.css';
+import { PromptLibraryModal } from './PromptLibraryModal';
+import { useNotifications } from '@/renderer/services/notificationService';
+import { useManagerStore } from '@/renderer/pages/manager/useManagerStore';
 
 const RECENT_APPS_STORAGE_KEY = 'tomni.hub.recentApps';
 const COMPACT_SIDEBAR_MEDIA_QUERY = '(max-width: 839px)';
@@ -138,6 +142,7 @@ const HubHome: React.FC<HubHomeProps> = ({
   const { theme, setTheme } = useThemeContext();
   const { user } = useAuth();
   const [launcherScope, setLauncherScope] = useState<LauncherScope>(null);
+  const [promptLibraryVisible, setPromptLibraryVisible] = useState(false);
   const [recentAppIds, setRecentAppIds] = useState<HubAppId[]>(readRecentApps);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(
     () =>
@@ -148,6 +153,7 @@ const HubHome: React.FC<HubHomeProps> = ({
   const [installedPackages, setInstalledPackages] = useState<PackageListing[]>([]);
   const openSearchRef = useRef<(() => void) | null>(null);
   const desktopRuntime = isElectronDesktop();
+  const coreStatusKey = 'guid.hubHome.shell.coreHealthy';
   const systemMetrics = useSystemMetrics();
   const cpuPercent = clampPercent(systemMetrics.live?.cpu.overallPercent);
   const ramPercent = clampPercent(systemMetrics.live?.memory.usedPercent);
@@ -166,11 +172,30 @@ const HubHome: React.FC<HubHomeProps> = ({
       .map((part) => part[0]?.toUpperCase())
       .join('') || 'T';
 
+  // Notifications and task statistics
+  const { notifications } = useNotifications();
+  const managerStore = useManagerStore();
+
+  const tasks = useMemo(() => managerStore.data?.tasks || [], [managerStore.data?.tasks]);
+  const inProgressTasks = useMemo(() => tasks.filter((t) => t.status === 'in_progress'), [tasks]);
+  const pendingTasks = useMemo(() => tasks.filter((t) => t.status === 'todo'), [tasks]);
+  const blockedTasks = useMemo(() => tasks.filter((t) => t.priority === 'urgent' && t.status !== 'done'), [tasks]);
+
+  const totalTasks = tasks.length || 1;
+  const inProgressCount = inProgressTasks.length;
+  const pendingCount = pendingTasks.length;
+  const blockedCount = blockedTasks.length;
+
+  const inProgressPercent = tasks.length > 0 ? Math.min(100, Math.round((inProgressCount / totalTasks) * 100)) : 0;
+  const pendingPercent = tasks.length > 0 ? Math.min(100, Math.round((pendingCount / totalTasks) * 100)) : 0;
+  const blockedPercent = tasks.length > 0 ? Math.min(100, Math.round((blockedCount / totalTasks) * 100)) : 0;
+
   const featuredCategories = useMemo(() => HUB_CATEGORIES.filter((category) => category.featured), []);
   const availableHubApps = useMemo(() => {
     const installedIds = new Set(installedPackages.map((item) => item.manifest.id));
     return HUB_APPS.filter((app) => !app.packageId || installedIds.has(app.packageId));
   }, [installedPackages]);
+
   useEffect(() => {
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return undefined;
 
@@ -373,7 +398,7 @@ const HubHome: React.FC<HubHomeProps> = ({
                 className={styles.topbarButton}
                 icon={<Remind theme='outline' size={16} fill='currentColor' />}
                 aria-label={t('guid.hubHome.status.notificationsTitle')}
-                onClick={() => onNavigate('/settings/realtime')}
+                onClick={() => window.dispatchEvent(new CustomEvent('tomni-open-notifications'))}
               />
             </Badge>
           </Tooltip>
@@ -383,7 +408,7 @@ const HubHome: React.FC<HubHomeProps> = ({
               <Down theme='outline' size={12} fill='currentColor' />
             </Button>
           </Popover>
-          {desktopRuntime ? <WindowControls /> : null}
+          {desktopRuntime && !isMacOS() ? <WindowControls /> : null}
         </div>
       </header>
 
@@ -420,7 +445,7 @@ const HubHome: React.FC<HubHomeProps> = ({
               type='secondary'
               size='small'
               icon={<AllApplication theme='outline' size={13} fill='currentColor' />}
-              onClick={() => setLauncherScope('all')}
+              onClick={() => setPromptLibraryVisible(true)}
             >
               {t('guid.hubHome.shell.more')}
             </Button>
@@ -516,9 +541,7 @@ const HubHome: React.FC<HubHomeProps> = ({
                       long
                       className={styles.recentButton}
                       onClick={() =>
-                        onNavigate(
-                          `/store/app/${encodeURIComponent(item.manifest.id)}/${encodeURIComponent(module.id)}`
-                        )
+                        onNavigate(`/apps/${encodeURIComponent(item.manifest.id)}/${encodeURIComponent(module.id)}`)
                       }
                     >
                       <span className={styles.recentContent}>
@@ -584,6 +607,8 @@ const HubHome: React.FC<HubHomeProps> = ({
               <Right theme='outline' size={13} fill='currentColor' />
             </span>
           </Button>
+
+          {/* Realtime Work Status Card connected to Manager Store */}
           <Card className={styles.statusCard} bordered>
             <div className={styles.statusHeading}>
               <span>{t('guid.hubHome.status.workTitle')}</span>
@@ -592,68 +617,85 @@ const HubHome: React.FC<HubHomeProps> = ({
               </Button>
             </div>
             <div className={styles.metricList}>
-              <div>
+              <div style={{ cursor: 'pointer' }} onClick={() => onNavigate('/manager')}>
                 <span className={`${styles.statusDot} ${styles.dotSuccess}`} />
-                <span>{t('guid.hubHome.status.workInProgress', { count: 5 })}</span>
+                <span>{t('guid.hubHome.status.workInProgress', { count: inProgressCount })}</span>
                 <div className={styles.metricValue}>
                   <div className={styles.metricTrack}>
-                    <span className={styles.metricFill} />
+                    <span className={styles.metricFill} style={{ width: `${inProgressPercent}%` }} />
                   </div>
-                  <strong>65%</strong>
+                  <strong>{inProgressPercent}%</strong>
                 </div>
               </div>
-              <div>
+              <div style={{ cursor: 'pointer' }} onClick={() => onNavigate('/manager')}>
                 <span className={`${styles.statusDot} ${styles.dotWarning}`} />
-                <span>{t('guid.hubHome.status.workPending', { count: 2 })}</span>
+                <span>{t('guid.hubHome.status.workPending', { count: pendingCount })}</span>
                 <div className={styles.metricValue}>
                   <div className={styles.metricTrack}>
-                    <span className={`${styles.metricFill} ${styles.metricFillWarning}`} />
+                    <span
+                      className={`${styles.metricFill} ${styles.metricFillWarning}`}
+                      style={{ width: `${pendingPercent}%` }}
+                    />
                   </div>
-                  <strong>40%</strong>
+                  <strong>{pendingPercent}%</strong>
                 </div>
               </div>
-              <div>
+              <div style={{ cursor: 'pointer' }} onClick={() => onNavigate('/manager')}>
                 <span className={`${styles.statusDot} ${styles.dotDanger}`} />
-                <span>{t('guid.hubHome.status.workBlocked', { count: 1 })}</span>
+                <span>{t('guid.hubHome.status.workBlocked', { count: blockedCount })}</span>
                 <div className={styles.metricValue}>
                   <div className={styles.metricTrack}>
-                    <span className={`${styles.metricFill} ${styles.metricFillDanger}`} />
+                    <span
+                      className={`${styles.metricFill} ${styles.metricFillDanger}`}
+                      style={{ width: `${blockedPercent}%` }}
+                    />
                   </div>
-                  <strong>10%</strong>
+                  <strong>{blockedPercent}%</strong>
                 </div>
               </div>
             </div>
           </Card>
 
+          {/* Realtime Notifications Card connected to Notification Center */}
           <Card className={styles.statusCard} bordered>
             <div className={styles.statusHeading}>
               <span>{t('guid.hubHome.status.notificationsTitle')}</span>
-              <Button type='text' size='mini' onClick={() => onNavigate('/settings/realtime')}>
+              <Button
+                type='text'
+                size='mini'
+                onClick={() => window.dispatchEvent(new CustomEvent('tomni-open-notifications'))}
+              >
                 {t('guid.hubHome.viewAll')}
               </Button>
             </div>
             <div className={styles.notificationList}>
-              <div>
-                <Code theme='outline' size={13} fill='currentColor' />
-                <span>
-                  <strong>{t('guid.hubHome.status.notificationIdeUpdated')}</strong>
-                  <small>{t('mcp.minutesAgo', { count: 2 })}</small>
-                </span>
-              </div>
-              <div>
-                <BuildingTwo theme='outline' size={13} fill='currentColor' />
-                <span>
-                  <strong>{t('guid.hubHome.status.notificationWorkspaceActivity')}</strong>
-                  <small>{t('mcp.minutesAgo', { count: 15 })}</small>
-                </span>
-              </div>
-              <div>
-                <Shield theme='outline' size={13} fill='currentColor' />
-                <span>
-                  <strong>{t('guid.hubHome.status.notificationApprovalRequested')}</strong>
-                  <small>{t('mcp.minutesAgo', { count: 28 })}</small>
-                </span>
-              </div>
+              {notifications.slice(0, 3).map((item) => (
+                <div
+                  key={item.id}
+                  style={{ cursor: 'pointer' }}
+                  onClick={() => {
+                    if (item.actionUrl) {
+                      onNavigate(item.actionUrl);
+                    } else {
+                      window.dispatchEvent(new CustomEvent('tomni-open-notifications'));
+                    }
+                  }}
+                >
+                  {item.source === 'cron' ? (
+                    <Time theme='outline' size={13} fill='#10b981' />
+                  ) : item.source === 'agent' ? (
+                    <Robot theme='outline' size={13} fill='#a855f7' />
+                  ) : item.source === 'tom' ? (
+                    <Gift theme='outline' size={13} fill='#f59e0b' />
+                  ) : (
+                    <Shield theme='outline' size={13} fill='#38bdf8' />
+                  )}
+                  <span>
+                    <strong>{item.title}</strong>
+                    <small>{item.level}</small>
+                  </span>
+                </div>
+              ))}
             </div>
           </Card>
 
@@ -748,8 +790,8 @@ const HubHome: React.FC<HubHomeProps> = ({
           <FeedbackButton module='hub-home' className={styles.footerFeedbackButton} />
         </div>
         <div className={styles.footerStatus}>
-          <span className={`${styles.statusDot} ${styles.dotSuccess}`} />
-          <span>{t('guid.hubHome.shell.coreHealthy')}</span>
+          <span className={`${styles.statusDot} ${desktopRuntime ? styles.dotSuccess : styles.dotWarning}`} />
+          <span>{t(coreStatusKey)}</span>
         </div>
       </footer>
 
@@ -780,6 +822,16 @@ const HubHome: React.FC<HubHomeProps> = ({
           ))}
         </div>
       </Modal>
+
+      {/* Rich Prompt Templates Library Modal */}
+      <PromptLibraryModal
+        visible={promptLibraryVisible}
+        onClose={() => setPromptLibraryVisible(false)}
+        onSelectPrompt={(text) => {
+          onPromptSelect(text);
+          onFocusComposer();
+        }}
+      />
     </div>
   );
 };

@@ -35,6 +35,17 @@ files:
   - node_modules/prebuild-install/**/*
   - node_modules/node-gyp-build/**/*
   - node_modules/bindings/**/*
+  # sharp resolves this optional native binary at runtime on Windows x64. Bun stores
+  # optional packages in node_modules/.bun, so copy it to Node's normal resolver path.
+  - from: node_modules/.bun/@img+sharp-win32-x64@0.34.5/node_modules/@img/sharp-win32-x64
+    to: node_modules/@img/sharp-win32-x64
+    filter:
+      - '**/*'
+  - from: node_modules/.bun/@img+colour@1.1.0/node_modules/@img/colour
+    to: node_modules/@img/colour
+    filter:
+      - '**/*'
+
   # CLI dependencies (needed by nested jackspeak/glob)
   - node_modules/@isaacs/cliui/**/*
   - node_modules/ansi-regex/**/*
@@ -139,9 +150,7 @@ extraResources:
   # Workspace-owned Rust sidecar for durable, process, hashing, and journal services.
   - from: resources/bundled-tomny-runtime
     to: bundled-tomny-runtime
-  # MIT-licensed 9Router core, managed by Tomny as the local model gateway.
-  - from: resources/bundled-model-gateway
-    to: bundled-model-gateway
+
   - from: resources/hub
     to: hub
 win:
@@ -227,6 +236,10 @@ asarUnpack:
   - '**/node_modules/prebuild-install/**/*'
   - '**/node_modules/node-gyp-build/**/*'
   - '**/node_modules/bindings/**/*'
+  # Keep sharp and its DLLs outside ASAR so the native loader has filesystem paths.
+  - '**/node_modules/sharp/**/*'
+  - '**/node_modules/@img/sharp-win32-x64/**/*'
+  - '**/node_modules/@img/colour/**/*'
   # open library and dependencies - needed for Windows asar compatibility
   - '**/node_modules/open/**/*'
   - '**/node_modules/default-browser/**/*'

@@ -10,27 +10,35 @@ const Guid = React.lazy(() => import('@renderer/pages/guid'));
 const Manager = React.lazy(() => import('@renderer/pages/manager'));
 const ManagementPage = React.lazy(() => import('@renderer/pages/hub/ManagementPage'));
 const StorePage = React.lazy(() => import('@renderer/pages/hub/StorePage'));
+const PackageAppPage = React.lazy(() => import('@renderer/pages/hub/PackageAppPage'));
 const HistoryPage = React.lazy(() => import('@renderer/pages/hub/HistoryPage'));
 const AgentSettings = React.lazy(() => import('@renderer/pages/settings/AgentSettings'));
 const PersonalSettings = React.lazy(() => import('@renderer/pages/settings/PersonalSettings'));
+const AccountPage = React.lazy(() => import('@renderer/pages/account/AccountPage'));
 const AssistantSettings = React.lazy(() => import('@renderer/pages/settings/AssistantSettings'));
 const CapabilitiesSettings = React.lazy(() => import('@renderer/pages/settings/CapabilitiesSettings'));
 const DisplaySettings = React.lazy(() => import('@renderer/pages/settings/DisplaySettings'));
+const ProfileSettings = React.lazy(() => import('@renderer/pages/settings/ProfileSettings'));
+const BillingSettings = React.lazy(() => import('@renderer/pages/settings/BillingSettings'));
+const PipelineChatSettings = React.lazy(() => import('@renderer/pages/settings/PipelineChatSettings'));
+const AiConfigSettings = React.lazy(() => import('@renderer/pages/settings/AiConfigSettings'));
+const NotificationSettings = React.lazy(() => import('@renderer/pages/settings/NotificationSettings'));
+const PrivacySecuritySettings = React.lazy(() => import('@renderer/pages/settings/PrivacySecuritySettings'));
 const ModeSettings = React.lazy(() => import('@renderer/pages/settings/ModeSettings'));
 const SystemSettings = React.lazy(() => import('@renderer/pages/settings/SystemSettings'));
 const WebuiSettings = React.lazy(() => import('@renderer/pages/settings/WebuiSettings'));
-const PetSettings = React.lazy(() => import('@renderer/pages/settings/PetSettings'));
+
 const ResourceSettings = React.lazy(() => import('@renderer/pages/settings/ResourceSettings'));
-const CompanyHubPage = React.lazy(() => import('@renderer/pages/hub/CompanyHubPage'));
-const CompanySettings = React.lazy(() => import('@renderer/pages/company'));
-const RealtimeKnowledgeSettings = React.lazy(() => import('@renderer/pages/knowledge'));
+
 const GitSettings = React.lazy(() => import('@renderer/pages/git'));
-const NewsSettings = React.lazy(() => import('@renderer/pages/news'));
+
 const ExtensionSettingsPage = React.lazy(() => import('@renderer/pages/settings/ExtensionSettingsPage'));
 const LoginPage = React.lazy(() => import('@renderer/pages/login'));
 const ComponentsShowcase = React.lazy(() => import('@renderer/pages/TestShowcase'));
 const ScheduledTasksPage = React.lazy(() => import('@renderer/pages/cron/ScheduledTasksPage'));
 const TaskDetailPage = React.lazy(() => import('@renderer/pages/cron/ScheduledTasksPage/TaskDetailPage'));
+const Browser = React.lazy(() => import('@package-apps/browser/renderer/browser/BrowserPage'));
+const Ide = React.lazy(() => import('@package-apps/ide/renderer/IdeWorkspace'));
 const TeamIndex = React.lazy(() => import('@renderer/pages/team'));
 
 const withRouteFallback = (Component: React.LazyExoticComponent<React.ComponentType>) => (
@@ -76,20 +84,23 @@ const PanelRoute: React.FC<{ layout: React.ReactElement }> = ({ layout }) => {
           <Route path='/studio' element={<LegacyStudioRoute />} />
           <Route path='/manager' element={withRouteFallback(ManagementPage)} />
           <Route path='/manager/workspace' element={withRouteFallback(Manager)} />
+          <Route path='/apps/com.tomni.ide/ide' element={<Navigate to='/ide' replace />} />
+          <Route path='/apps/:packageId/:moduleId' element={withRouteFallback(PackageAppPage)} />
           <Route path='/store/app/:packageId/:moduleId' element={withRouteFallback(StorePage)} />
           <Route path='/store/package/:packageId' element={withRouteFallback(StorePage)} />
           <Route path='/store/*' element={withRouteFallback(StorePage)} />
           <Route path='/products' element={<Navigate to='/store' replace />} />
           <Route path='/history' element={withRouteFallback(HistoryPage)} />
           <Route path='/conversation/:id' element={withRouteFallback(Conversation)} />
-          {/* Optional app URLs open the Store; their implementation is never loaded by the base router. */}
-          <Route path='/company' element={withRouteFallback(CompanyHubPage)} />
-          <Route path='/browser' element={<Navigate to='/store' replace />} />
-          <Route path='/testing' element={<Navigate to='/store' replace />} />
-          <Route path='/monitor' element={<Navigate to='/store' replace />} />
-          <Route path='/terminal' element={<Navigate to='/store' replace />} />
-          <Route path='/knowledge' element={withRouteFallback(RealtimeKnowledgeSettings)} />
-          <Route path='/realtime' element={withRouteFallback(NewsSettings)} />
+          {/* Default surfaces are part of the base runtime; optional app URLs open the Store. */}
+          <Route path='/ide' element={withRouteFallback(Ide)} />
+          <Route path='/browser' element={withRouteFallback(Browser)} />
+          <Route path='/company' element={<Navigate to='/store/package/com.tomni.company' replace />} />
+
+          <Route path='/monitor' element={<Navigate to='/store/package/com.tomni.monitor' replace />} />
+
+          <Route path='/knowledge' element={<Navigate to='/store/package/com.tomni.knowledge' replace />} />
+
           <Route path='/git' element={withRouteFallback(GitSettings)} />
           <Route
             path='/team/:id'
@@ -97,39 +108,40 @@ const PanelRoute: React.FC<{ layout: React.ReactElement }> = ({ layout }) => {
           />
           <Route
             path='/music'
-            element={
-              MUSIC_STUDIO_ENABLED ? (
-                <Navigate to='/store/app/com.tomni.studio/studio' replace />
-              ) : (
-                <Navigate to='/guid' replace />
-              )
-            }
+            element={MUSIC_STUDIO_ENABLED ? <Navigate to='/studio' replace /> : <Navigate to='/guid' replace />}
           />
+          <Route path='/settings/profile' element={withRouteFallback(ProfileSettings)} />
+          <Route path='/settings/billing' element={withRouteFallback(BillingSettings)} />
+          <Route path='/settings/pipeline' element={withRouteFallback(PipelineChatSettings)} />
+          <Route path='/settings/aiconfig' element={withRouteFallback(AiConfigSettings)} />
+          <Route path='/settings/notification' element={withRouteFallback(NotificationSettings)} />
+          <Route path='/settings/privacy' element={withRouteFallback(PrivacySecuritySettings)} />
           <Route path='/settings/model' element={withRouteFallback(ModeSettings)} />
           <Route path='/settings/assistants' element={withRouteFallback(AssistantSettings)} />
           <Route path='/settings/agent' element={withRouteFallback(AgentSettings)} />
           <Route path='/settings/personal' element={withRouteFallback(PersonalSettings)} />
+          <Route path='/account' element={withRouteFallback(AccountPage)} />
           <Route path='/settings/capabilities' element={withRouteFallback(CapabilitiesSettings)} />
           {/* Legacy routes — redirect to the merged /settings/capabilities page */}
           <Route path='/settings/skills-hub' element={<Navigate to='/settings/capabilities?tab=skills' replace />} />
           <Route path='/settings/tools' element={<Navigate to='/settings/capabilities?tab=tools' replace />} />
           <Route path='/settings/display' element={withRouteFallback(DisplaySettings)} />
           <Route path='/settings/webui' element={withRouteFallback(WebuiSettings)} />
-          <Route path='/settings/pet' element={withRouteFallback(PetSettings)} />
+          <Route path='/settings/pet' element={<Navigate to='/store/package/com.tomni.pet' replace />} />
           <Route path='/settings/resource' element={withRouteFallback(ResourceSettings)} />
-          <Route path='/settings/company' element={withRouteFallback(CompanySettings)} />
-          <Route path='/settings/knowledge' element={withRouteFallback(RealtimeKnowledgeSettings)} />
-          <Route path='/settings/browser' element={<Navigate to='/store' replace />} />
-          <Route path='/settings/testing' element={<Navigate to='/store' replace />} />
-          <Route path='/settings/monitor' element={<Navigate to='/store' replace />} />
-          <Route path='/settings/terminal' element={<Navigate to='/store' replace />} />
+          <Route path='/settings/company' element={<Navigate to='/store/package/com.tomni.company' replace />} />
+          <Route path='/settings/knowledge' element={<Navigate to='/store/package/com.tomni.knowledge' replace />} />
+          <Route path='/settings/browser' element={<Navigate to='/browser' replace />} />
+
+          <Route path='/settings/monitor' element={<Navigate to='/store/package/com.tomni.monitor' replace />} />
+
           <Route path='/settings/git' element={withRouteFallback(GitSettings)} />
-          <Route path='/settings/realtime' element={withRouteFallback(NewsSettings)} />
-          {/* Legacy redirect for old /settings/news bookmarks */}
-          <Route path='/settings/news' element={<Navigate to='/settings/realtime' replace />} />
+
           <Route path='/settings/system' element={withRouteFallback(SystemSettings)} />
           <Route path='/settings/about' element={withRouteFallback(SystemSettings)} />
           <Route path='/settings/ext/:tabId' element={withRouteFallback(ExtensionSettingsPage)} />
+          <Route path='/settings/realtime' element={<Navigate to='/guid' replace />} />
+          <Route path='/realtime' element={<Navigate to='/scheduled' replace />} />
           <Route path='/settings' element={<Navigate to='/settings/model' replace />} />
           <Route path='/test/components' element={withRouteFallback(ComponentsShowcase)} />
           <Route path='/scheduled' element={withRouteFallback(ScheduledTasksPage)} />

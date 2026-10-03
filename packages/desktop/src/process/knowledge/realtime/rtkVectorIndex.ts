@@ -18,9 +18,9 @@
  * Process boundary: Main-process (Node.js) module. No DOM APIs.
  */
 
-import type { Embedder } from '../../ide/vectorIndex';
+import type { Embedder } from '@/common/types/provider/embedding';
 
-export type { Embedder } from '../../ide/vectorIndex';
+export type { Embedder } from '@/common/types/provider/embedding';
 
 /** Persisted schema version of the realtime-knowledge vector index. */
 export const RTK_VECTOR_INDEX_VERSION = 1;

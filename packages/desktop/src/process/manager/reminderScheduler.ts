@@ -95,11 +95,14 @@ export const createReminderScheduler = (deps: ReminderSchedulerDeps): IReminderS
 
   let handle: { clear: () => void } | undefined;
   let started = false;
+  /** Invalidate an in-flight sweep when the account-owned lifecycle stops us. */
+  let generation = 0;
   /** Guards against overlapping sweeps (a slow notify shouldn't double-run). */
   let sweeping = false;
 
   const sweep = async (): Promise<void> => {
-    if (sweeping) return;
+    if (!started || sweeping) return;
+    const sweepGeneration = generation;
     sweeping = true;
     try {
       const at = now();
@@ -108,12 +111,14 @@ export const createReminderScheduler = (deps: ReminderSchedulerDeps): IReminderS
       for (const task of data.tasks) {
         if (task.status === 'done') continue; // no reminders for completed tasks
         for (const reminder of task.reminders) {
+          if (!started || sweepGeneration !== generation) return;
           if (!isDue(reminder, at)) continue;
           try {
             await deps.notify(buildNotification(task));
           } catch (error) {
             console.error('[ReminderScheduler] notify failed:', error);
           }
+          if (!started || sweepGeneration !== generation) return;
           // Stamp firedAt so it never fires again (Property 5), even if notify threw.
           await deps.store.updateReminder(task.id, reminder.id, { firedAt: at, snoozedTo: null });
         }
@@ -129,9 +134,12 @@ export const createReminderScheduler = (deps: ReminderSchedulerDeps): IReminderS
     async start() {
       if (started) return;
       started = true;
+      const startGeneration = ++generation;
       // Ensure the store cache is populated before the first sweep (catch-up).
       await deps.store.load();
+      if (!started || generation !== startGeneration) return;
       await sweep(); // catch-up pass for reminders due while the app was closed
+      if (!started || generation !== startGeneration) return;
       handle = scheduleInterval(() => {
         void sweep();
       }, tickMs);
@@ -141,6 +149,7 @@ export const createReminderScheduler = (deps: ReminderSchedulerDeps): IReminderS
       handle?.clear();
       handle = undefined;
       started = false;
+      generation += 1;
     },
 
     async snooze(taskId, reminderId, untilMs) {

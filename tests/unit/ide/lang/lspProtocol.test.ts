@@ -13,7 +13,7 @@ import {
   isNotification,
   isResponse,
   type JsonRpcResponse,
-} from '../../../../packages/desktop/src/process/ide/lang/lspProtocol';
+} from '@package-apps/ide/process/coding/lang/lspProtocol';
 
 describe('encodeMessage', () => {
   it('frames a request with a byte-length Content-Length header', () => {

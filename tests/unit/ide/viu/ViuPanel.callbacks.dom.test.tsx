@@ -4,12 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { ConfigProvider, Message } from '@arco-design/web-react';
+import { ConfigProvider } from '@arco-design/web-react';
 import { act, cleanup, render, waitFor } from '@testing-library/react';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createPremiumStarterProject, type ViuProjectState, type ViuTransactionResult } from '@/common/viu';
-import type { ViuLocalAssetRef } from '@/renderer/pages/studio/ide/Viu/viuClient';
+import type { ViuLocalAssetRef } from '@package-apps/design/renderer/viu/viuClient';
 
 type CanvasProps = {
   labels: {
@@ -22,8 +22,6 @@ type CanvasProps = {
   project: ViuProjectState;
   localAssets: ViuLocalAssetRef[];
   onLinkAsset: () => void;
-  onPublishPreview: () => void;
-  onCopyPreviewReference: () => void;
   onProjectChange: (project: ViuProjectState, result: ViuTransactionResult) => void;
   onAgentRequest?: (request: string) => void;
 };
@@ -34,8 +32,6 @@ const mocks = vi.hoisted(() => ({
   listAssets: vi.fn(),
   grantAsset: vi.fn(),
   commitV2: vi.fn(),
-  publishPreview: vi.fn(),
-  copyText: vi.fn(),
   showOpen: vi.fn(),
   layoutContext: null as null | { siderCollapsed: boolean; setSiderCollapsed: ReturnType<typeof vi.fn> },
 }));
@@ -52,14 +48,14 @@ vi.mock('@renderer/hooks/context/LayoutContext', () => ({
   useLayoutContext: () => mocks.layoutContext,
 }));
 
-vi.mock('@/renderer/pages/studio/ide/Viu/next/ViuNextCanvas', () => ({
+vi.mock('@package-apps/design/renderer/viu/next/ViuNextCanvas', () => ({
   default: (props: unknown) => {
     mocks.canvasProps = props;
     return null;
   },
 }));
 
-vi.mock('@/renderer/pages/studio/ide/Viu/viuClient', () => ({
+vi.mock('@package-apps/design/renderer/viu/viuClient', () => ({
   viuClient: {
     inspectV2: mocks.inspectV2,
     listAssets: mocks.listAssets,
@@ -68,16 +64,7 @@ vi.mock('@/renderer/pages/studio/ide/Viu/viuClient', () => ({
   },
 }));
 
-vi.mock('@/renderer/pages/studio/ide/teamEdit/teamEditClient', () => ({
-  teamEditClient: { publishPreview: mocks.publishPreview },
-  createViuLocalTestReference: (packageId: string) => `viu-preview://team-test/${packageId}`,
-}));
-
-vi.mock('@/renderer/utils/ui/clipboard', () => ({
-  copyText: mocks.copyText,
-}));
-
-import ViuPanel from '@/renderer/pages/studio/ide/Viu';
+import ViuPanel from '@package-apps/design/renderer/viu/index';
 
 const ROOT = 'C:\\repo';
 const ASSET: ViuLocalAssetRef = {
@@ -107,7 +94,7 @@ const renderPanel = (rootPath: string | null = ROOT) => {
   const onStartAgent = vi.fn();
   const rendered = render(
     <ConfigProvider>
-      <ViuPanel rootPath={rootPath} onRequestWorkspace={vi.fn()} onStartAgent={onStartAgent} />
+      <ViuPanel rootPath={rootPath} onStartAgent={onStartAgent} />
     </ConfigProvider>
   );
   return { ...rendered, onStartAgent };
@@ -126,12 +113,7 @@ beforeEach(() => {
   mocks.listAssets.mockReset().mockResolvedValue({ ok: true, data: [] });
   mocks.grantAsset.mockReset();
   mocks.commitV2.mockReset();
-  mocks.publishPreview.mockReset().mockResolvedValue({ ok: true, data: { packageId: 'preview-package' } });
-  mocks.copyText.mockReset().mockResolvedValue(undefined);
   mocks.showOpen.mockReset().mockResolvedValue(undefined);
-  vi.spyOn(Message, 'success').mockImplementation(() => undefined as never);
-  vi.spyOn(Message, 'error').mockImplementation(() => undefined as never);
-  vi.spyOn(Message, 'info').mockImplementation(() => undefined as never);
   vi.stubGlobal('crypto', { randomUUID: () => 'callback-id' });
 });
 
@@ -205,47 +187,6 @@ describe('ViuPanel callback integration', () => {
     expect(onStartAgent).toHaveBeenCalledWith(expect.stringContaining('Do not generate application code yet'));
     expect(onStartAgent).toHaveBeenCalledWith(expect.stringContaining('Refine the pricing hierarchy'));
     expect(onStartAgent).toHaveBeenCalledWith(expect.stringContaining(JSON.stringify(`repo:${ROOT}`)));
-  });
-
-  it('reports unavailable publication and ignores copy before a reference exists', async () => {
-    renderPanel(null);
-    const canvas = await getCanvas();
-
-    act(() => canvas.onCopyPreviewReference());
-    act(() => canvas.onPublishPreview());
-
-    expect(mocks.copyText).not.toHaveBeenCalled();
-    expect(Message.info).toHaveBeenCalledWith('ide.viu.next.teamPreview.unavailable');
-    expect(mocks.publishPreview).not.toHaveBeenCalled();
-    expect(canvas.onAgentRequest).toBeUndefined();
-  });
-
-  it('rejects publication when the project has no valid start screen', async () => {
-    const project = createPremiumStarterProject('panel-empty-flow');
-    project.screenOrder = [];
-    mocks.inspectV2.mockResolvedValueOnce({ ok: true, data: project });
-    renderPanel();
-    const canvas = await getCanvas();
-
-    act(() => canvas.onPublishPreview());
-
-    await waitFor(() => expect(Message.error).toHaveBeenCalledWith('ide.viu.next.teamPreview.error'));
-    expect(mocks.publishPreview).not.toHaveBeenCalled();
-  });
-
-  it('surfaces both structured and thrown Team publication failures', async () => {
-    renderPanel();
-    let canvas = await getCanvas();
-    mocks.publishPreview.mockResolvedValueOnce({ ok: false, error: 'Team service unavailable' });
-
-    act(() => canvas.onPublishPreview());
-    await waitFor(() => expect(Message.error).toHaveBeenCalledWith('Team service unavailable'));
-
-    mocks.publishPreview.mockRejectedValueOnce(new Error('transport failed'));
-    canvas = await getCanvas();
-    act(() => canvas.onPublishPreview());
-    await waitFor(() => expect(Message.error).toHaveBeenCalledWith('ide.viu.next.teamPreview.error'));
-    expect(mocks.publishPreview).toHaveBeenCalledTimes(2);
   });
 
   it('evaluates dynamic component-library labels supplied to the canvas', async () => {

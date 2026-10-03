@@ -30,6 +30,16 @@ pub struct CompactOptions {
     pub saved_path: Option<String>,
 }
 
+fn filter_enabled(_options: &CompactOptions, name: &str) -> bool {
+    if std::env::var("MTUI_BENCHMARK_ABLATION").ok().as_deref() != Some("1") {
+        return true;
+    }
+    !std::env::var("MTUI_DISABLED_FILTERS")
+        .ok()
+        .map(|value| value.split(",").any(|filter| filter.trim() == name))
+        .unwrap_or(false)
+}
+
 const IMPORTANT_PATTERNS: &[&str] = &[
     "error",
     "failed",
@@ -144,7 +154,9 @@ fn normalized_profile(profile: Option<&str>, input: &str) -> String {
         return requested;
     }
     let lower = strip_ansi(input).to_lowercase();
-    if lower.contains("traceback (most recent call last)") {
+    if matches!(lower.chars().next(), Some('{') | Some('[')) {
+        "json".to_string()
+    } else if lower.contains("traceback (most recent call last)") {
         "python".to_string()
     } else if lower.contains("vitest") || lower.contains("test files") {
         "vitest".to_string()
@@ -218,6 +230,46 @@ fn enforce_limits(lines: &mut Vec<String>, max_lines: usize, max_chars: usize) -
     truncated
 }
 
+/// Canonicalize valid JSON without dropping fields or creating invalid JSON.
+/// Structured tool arguments stay intact; malformed or over-limit JSON is preserved.
+fn compact_json(input: &str, options: &CompactOptions) -> Option<CompactResult> {
+    let value = serde_json::from_str::<serde_json::Value>(input).ok()?;
+    let canonical = serde_json::to_string(&value).ok()?;
+    if options.max_chars > 0 && canonical.len() > options.max_chars {
+        return Some(CompactResult {
+            command: "compact".to_string(),
+            mode: "preserve".to_string(),
+            profile: "json".to_string(),
+            saved_id: options.saved_id.clone(),
+            saved_path: options.saved_path.clone(),
+            compacted: false,
+            truncated: false,
+            original_lines: input.lines().count(),
+            output_lines: input.lines().count(),
+            omitted_lines: 0,
+            repeated_noise_lines: 0,
+            important_lines: 0,
+            text: input.to_string(),
+        });
+    }
+    let original_lines = input.lines().count();
+    Some(CompactResult {
+        command: "compact".to_string(),
+        mode: "compact".to_string(),
+        profile: "json".to_string(),
+        saved_id: options.saved_id.clone(),
+        saved_path: options.saved_path.clone(),
+        compacted: canonical != input,
+        truncated: false,
+        original_lines,
+        output_lines: 1,
+        omitted_lines: original_lines.saturating_sub(1),
+        repeated_noise_lines: 0,
+        important_lines: 0,
+        text: canonical,
+    })
+}
+
 pub fn compact_text(input: &str, options: CompactOptions) -> CompactResult {
     let profile = normalized_profile(options.profile.as_deref(), input);
     let lines = input
@@ -250,6 +302,50 @@ pub fn compact_text(input: &str, options: CompactOptions) -> CompactResult {
         };
     }
 
+    // Fast-path bypass for small concise inputs (<500 chars / ~150 tokens) to avoid token inflation
+    if !input.is_empty() && input.len() < 500 && lines.len() <= 8 && profile == "generic" {
+        let mut seen = std::collections::HashSet::new();
+        let has_repetition = lines.iter().any(|l| !seen.insert(normalize_repetition_key(l)));
+        if !has_repetition {
+            return CompactResult {
+                command: "compact".to_string(),
+                mode: "fastpath".to_string(),
+                profile,
+                saved_id: options.saved_id,
+                saved_path: options.saved_path,
+                compacted: false,
+                truncated: false,
+                original_lines: lines.len(),
+                output_lines: lines.len(),
+                omitted_lines: 0,
+                repeated_noise_lines: 0,
+                important_lines: lines.iter().filter(|line| is_important(line)).count(),
+                text: input.to_string(),
+            };
+        }
+    }
+
+    if profile == "json" && filter_enabled(&options, "json-canonicalization") {
+        if let Some(result) = compact_json(input, &options) {
+            return result;
+        }
+        return CompactResult {
+            command: "compact".to_string(),
+            mode: "preserve".to_string(),
+            profile,
+            saved_id: options.saved_id,
+            saved_path: options.saved_path,
+            compacted: false,
+            truncated: false,
+            original_lines: lines.len(),
+            output_lines: lines.len(),
+            omitted_lines: 0,
+            repeated_noise_lines: 0,
+            important_lines: 0,
+            text: input.to_string(),
+        };
+    }
+
     let mut frequency = HashMap::<String, usize>::new();
     for line in &lines {
         let key = normalize_repetition_key(line);
@@ -258,37 +354,63 @@ pub fn compact_text(input: &str, options: CompactOptions) -> CompactResult {
 
     let important = lines
         .iter()
-        .filter(|line| is_important(line) || is_profile_important(line, &profile))
+        .filter(|line| {
+            (filter_enabled(&options, "important-lines") && is_important(line))
+                || (filter_enabled(&options, "profile-patterns")
+                    && is_profile_important(line, &profile))
+        })
         .cloned()
         .collect::<Vec<_>>();
     let repeated_noise_lines = lines
         .iter()
         .filter(|line| {
+            if !filter_enabled(&options, "noise-lines") {
+                return false;
+            }
             let key = normalize_repetition_key(line);
             frequency.get(&key).copied().unwrap_or(0) > 2
                 && is_noise(line)
-                && !is_profile_important(line, &profile)
+                && !(filter_enabled(&options, "profile-patterns")
+                    && is_profile_important(line, &profile))
         })
         .count();
 
     let mut output = Vec::<String>::new();
-    for line in lines.iter().take(12) {
-        if !is_noise(line) || is_important(line) || is_profile_important(line, &profile) {
+    for line in lines.iter().take(if filter_enabled(&options, "head-tail") {
+        12
+    } else {
+        lines.len()
+    }) {
+        if !filter_enabled(&options, "noise-lines")
+            || !is_noise(line)
+            || (filter_enabled(&options, "important-lines") && is_important(line))
+            || (filter_enabled(&options, "profile-patterns")
+                && is_profile_important(line, &profile))
+        {
             push_unique(&mut output, line);
         }
     }
-    if !important.is_empty() {
+    if filter_enabled(&options, "important-lines") && !important.is_empty() {
         push_unique(&mut output, "---- important lines ----");
         for line in important.iter().take(50) {
             push_unique(&mut output, line);
         }
     }
-    let tail = lines.len().saturating_sub(20);
-    if tail > 0 {
+    let tail = if filter_enabled(&options, "head-tail") {
+        lines.len().saturating_sub(20)
+    } else {
+        lines.len()
+    };
+    if filter_enabled(&options, "head-tail") && tail > 0 {
         push_unique(&mut output, "---- tail ----");
     }
     for line in lines.iter().skip(tail) {
-        if !is_noise(line) || is_important(line) || is_profile_important(line, &profile) {
+        if !filter_enabled(&options, "noise-lines")
+            || !is_noise(line)
+            || (filter_enabled(&options, "important-lines") && is_important(line))
+            || (filter_enabled(&options, "profile-patterns")
+                && is_profile_important(line, &profile))
+        {
             push_unique(&mut output, line);
         }
     }
@@ -432,6 +554,89 @@ mod tests {
 
         assert_eq!(result.profile, "python");
         assert!(result.text.contains("AssertionError"));
+    }
+
+    #[test]
+    fn canonicalizes_valid_json_without_dropping_structure() {
+        let input = "{\n  \"z\": [true, {\"message\": \"xin chao\"}],\n  \"a\": 1\n}";
+        let result = compact_text(
+            input,
+            CompactOptions {
+                all: false,
+                profile: Some("json".to_string()),
+                max_lines: 1,
+                max_chars: 2_000,
+                saved_id: None,
+                saved_path: None,
+            },
+        );
+        assert!(result.compacted);
+        assert_eq!(result.profile, "json");
+        assert_eq!(
+            result.text,
+            "{\"a\":1,\"z\":[true,{\"message\":\"xin chao\"}]}"
+        );
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&result.text).unwrap(),
+            serde_json::from_str::<serde_json::Value>(input).unwrap()
+        );
+    }
+
+    #[test]
+    fn preserves_json_when_a_hard_limit_would_break_structure() {
+        let input = "{\"long\":\"this exact structured argument must survive\"}";
+        let result = compact_text(
+            input,
+            CompactOptions {
+                all: false,
+                profile: Some("json".to_string()),
+                max_lines: 1,
+                max_chars: 8,
+                saved_id: None,
+                saved_path: None,
+            },
+        );
+        assert!(!result.compacted);
+        assert!(!result.truncated);
+        assert_eq!(result.text, input);
+    }
+
+    #[test]
+    fn preserves_malformed_explicit_json_input() {
+        let input = "{not valid json";
+        let result = compact_text(
+            input,
+            CompactOptions {
+                all: false,
+                profile: Some("json".to_string()),
+                max_lines: 1,
+                max_chars: 8,
+                saved_id: None,
+                saved_path: None,
+            },
+        );
+        assert_eq!(result.profile, "json");
+        assert!(!result.compacted);
+        assert_eq!(result.text, input);
+    }
+
+    #[test]
+    fn fast_path_bypasses_small_concise_input() {
+        let input = "Hello, world! Everything is fine.";
+        let result = compact_text(
+            input,
+            CompactOptions {
+                all: false,
+                profile: None,
+                max_lines: 10,
+                max_chars: 500,
+                saved_id: None,
+                saved_path: None,
+            },
+        );
+        assert_eq!(result.mode, "fastpath");
+        assert_eq!(result.text, input);
+        assert!(!result.compacted);
     }
 }
 pub fn compact_store_dir(project_root: &Path) -> PathBuf {

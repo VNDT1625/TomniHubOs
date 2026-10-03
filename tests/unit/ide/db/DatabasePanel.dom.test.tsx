@@ -38,9 +38,9 @@ const mockClient = vi.hoisted(() => ({
   queryScript: vi.fn(),
 }));
 
-vi.mock('@/renderer/pages/studio/ide/db/dbClient', () => ({ dbClient: mockClient }));
+vi.mock('@package-apps/ide/renderer/db/dbClient', () => ({ dbClient: mockClient }));
 
-import DatabasePanel from '@/renderer/pages/studio/ide/db/DatabasePanel';
+import DatabasePanel from '@package-apps/ide/renderer/db/DatabasePanel';
 
 const renderPanel = () =>
   render(

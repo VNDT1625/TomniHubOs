@@ -1,0 +1,106 @@
+{
+  "schemaVersion": "tomny.qlora-recipe.v1",
+  "recipeVersion": 10,
+  "id": "tomny-qwen35-08b-security-v10-a1-ta4",
+  "version": "2026-09-12.v10-a1-ta4-r2",
+  "promotionStatus": "candidate-only",
+  "purpose": "security",
+  "dataset": {
+    "datasetId": "tomny-qwen35-08b-security-v10",
+    "datasetVersion": "2026-09-12.security-v10-corrected",
+    "manifestSha256": "9d7a09a7a91e8939c49bffd4978f98991223ec47f2d2b14a9f6155ff37fc4cf3"
+  },
+  "baseModel": {
+    "modelId": "Qwen/Qwen3.5-0.8B",
+    "revision": "2fc06364715b967f1860aea9cf38778875588b17",
+    "contentSha256": "ff3a07808a9e83627e69a07131fdec45c60973f23cc5617204d173461ec65fe6"
+  },
+  "seed": 20260909,
+  "dataSeed": 20260909,
+  "hardwareProfile": {
+    "profile": "t4-single",
+    "devices": 1,
+    "gpuAllowed": false,
+    "modal": false,
+    "finiteGradientSmokePassed": true
+  },
+  "training": {
+    "maxSteps": 207,
+    "maxLength": 256,
+    "rank": 8,
+    "loraAlpha": 16,
+    "gradientAccumulationSteps": 8,
+    "learningRate": 8e-5,
+    "precision": "fp16",
+    "warmupRatio": 0.05,
+    "targetProfile": "topology-aware-last-four",
+    "lastBlockLayer": null,
+    "targetModules": ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
+    "optimizer": "paged_adamw_8bit",
+    "scheduler": "cosine",
+    "weightDecay": 0,
+    "maxGradNorm": 1,
+    "dropLast": false,
+    "packing": false,
+    "perDeviceTrainBatchSize": 1,
+    "numDevices": 1,
+    "datasetShuffle": true,
+    "epochSemantics": "max_steps controls optimizer updates; epoch estimate is diagnostic",
+    "evalSteps": 69,
+    "saveSteps": 69,
+    "loggingSteps": 10,
+    "earlyStoppingPatience": 3,
+    "earlyStoppingEnabled": false,
+    "earlyStoppingThreshold": 0.001,
+    "maxValidationRegression": 0,
+    "loraLayers": [20, 21, 22, 23],
+    "ampLossScalePolicy": {
+      "initial": 2048,
+      "maximum": 2048,
+      "growthInterval": 2147483647
+    }
+  },
+  "devGates": {
+    "schemaValidMin": 0.95,
+    "highRiskFalseAllowMax": 0,
+    "riskTypeExactMin": 0.8,
+    "reasonCodeExactMin": 0.7,
+    "actionExactMin": 0.8,
+    "stopOnFailure": true
+  },
+  "acceptanceGates": {
+    "schemaValidMin": 0.95,
+    "highRiskFalseAllowMax": 0,
+    "riskTypeExactMin": 0.8,
+    "reasonCodeExactMin": 0.75,
+    "actionExactMin": 0.8,
+    "stopOnFailure": true
+  },
+  "spendingBoundary": {
+    "maxModalTrainingJobs": 1,
+    "maxSeeds": 1,
+    "automaticSecondRun": false,
+    "acceptanceOnlyAfterDevPass": true,
+    "shadowInference": false
+  },
+  "loRAAccounting": {
+    "trainableParams": 778240,
+    "totalParams": 752593728,
+    "trainablePercent": 0.0010340771800851363,
+    "tensorCount": 44,
+    "layers": [20, 21, 22, 23],
+    "modules": ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj", "in_proj_qkv", "out_proj"]
+  },
+  "qualityLimitations": [
+    "Corpus-only scientific change versus TA4; no hyperparameter sweep.",
+    "Predetermined 3 epochs (207 optimizer steps) over 552-row corpus.",
+    "Candidate remains inactive until external planner reviews evidence."
+  ],
+  "trainingDesign": {
+    "stepsPerEpoch": 69,
+    "effectiveEpochs": 3,
+    "effectiveBatch": 8,
+    "trainRows": 552,
+    "corpusOnlyScientificChange": true
+  }
+}

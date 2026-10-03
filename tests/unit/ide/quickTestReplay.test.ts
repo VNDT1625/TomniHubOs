@@ -7,8 +7,8 @@ import {
   REPLAY_REDACTED_VALUE,
   replayScenario,
   type ReplayPageAdapter,
-} from '../../../packages/desktop/src/process/ide/quickTestReplay';
-import type { RuntimeTrace } from '../../../packages/desktop/src/process/ide/quickTestTracer';
+} from '@package-apps/ide/process/execution/quickTest/analysis/quickTestReplay';
+import type { RuntimeTrace } from '@package-apps/ide/process/execution/quickTest/runtime/quickTestTracer';
 
 const makeTrace = (events: RuntimeTrace['events']): RuntimeTrace => ({
   platform: 'web',

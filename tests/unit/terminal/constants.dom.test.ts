@@ -9,7 +9,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { findMtuiStaleConfirmation, normalizeOutput, stripAnsi } from '@renderer/pages/terminal/constants';
+import { findMtuiStaleConfirmation, normalizeOutput, stripAnsi } from '@package-apps/ide/renderer/terminal/constants';
 
 describe('stripAnsi', () => {
   it('removes CSI color sequences but keeps the text', () => {

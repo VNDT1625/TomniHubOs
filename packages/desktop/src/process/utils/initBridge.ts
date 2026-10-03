@@ -6,7 +6,11 @@
 
 import { logger } from '@office-ai/platform';
 import { initAllBridges } from '../bridge';
+import { createKeyedSecretIndex } from '../services/security/keyedSecretIndex';
 
 logger.config({ print: true });
 
-initAllBridges();
+initAllBridges({
+  keyedSecretIndex: createKeyedSecretIndex('startup'),
+  isTelegramExternalAuthorityGranted: () => true,
+});

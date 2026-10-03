@@ -1,0 +1,47 @@
+{
+  "schemaVersion": "tomny.qlora-recipe.v1",
+  "recipeVersion": 6,
+  "id": "tomny-qwen35-08b-semantic-analysis-rtx3050-finite-smoke-v6",
+  "version": "2026-09-08.v6-smoke.1",
+  "promotionStatus": "candidate-only",
+  "purpose": "semantic-analysis",
+  "dataset": {
+    "datasetId": "tomny-qwen08b-semantic-synthetic",
+    "datasetVersion": "2026-09-08.v6",
+    "manifestSha256": "90611e83a5308caef481e589818c5631fdfda7d8acd24efd090982d0038646e4"
+  },
+  "baseModel": {
+    "modelId": "Qwen/Qwen3.5-0.8B",
+    "revision": "2fc06364715b967f1860aea9cf38778875588b17",
+    "contentSha256": "ff3a07808a9e83627e69a07131fdec45c60973f23cc5617204d173461ec65fe6"
+  },
+  "seed": 20260908,
+  "hardwareProfile": {
+    "profile": "rtx-3050-4gb",
+    "gpuModel": "NVIDIA GeForce RTX 3050 Laptop GPU",
+    "maxVramGiB": 4,
+    "sequentialOnly": true,
+    "finiteGradientSmokePassed": false
+  },
+  "qualityLimitations": [
+    "Finite-gradient smoke only; never eligible for promotion.",
+    "Synthetic corpus only; independent held-out benchmark is mandatory."
+  ],
+  "training": {
+    "maxSteps": 25,
+    "maxLength": 384,
+    "rank": 8,
+    "loraAlpha": 16,
+    "gradientAccumulationSteps": 8,
+    "learningRate": 8e-5,
+    "precision": "fp16",
+    "warmupRatio": 0.05,
+    "targetProfile": "last-block",
+    "loggingSteps": 5,
+    "evalSteps": 25,
+    "saveSteps": 25,
+    "earlyStoppingPatience": 1,
+    "earlyStoppingThreshold": 0.001,
+    "maxValidationRegression": 0.0
+  }
+}

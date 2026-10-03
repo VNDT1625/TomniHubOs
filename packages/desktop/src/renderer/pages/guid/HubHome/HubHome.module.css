@@ -16,7 +16,7 @@
   min-width: 0;
   min-height: 0;
   grid-template-columns: 260px minmax(0, 1fr);
-  grid-template-rows: 68px minmax(0, 1fr) 56px;
+  grid-template-rows: minmax(0, 1fr) 56px;
   overflow: hidden;
   color: var(--hub-text);
   background:
@@ -30,6 +30,10 @@
 
 .hubShellCollapsed {
   grid-template-columns: 72px minmax(0, 1fr);
+}
+
+.topbar {
+  display: none !important;
 }
 
 .sidebar {

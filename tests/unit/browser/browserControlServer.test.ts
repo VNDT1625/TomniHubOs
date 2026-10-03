@@ -6,12 +6,12 @@ import {
   createBrowserControlServer,
   type BrowserControlDeps,
   type QuickTestControl,
-} from '@/process/resources/builtinMcp/browserControlServer';
+} from '@process/browser/browserControlServer';
 import {
   createBrowserSecretRedactionRegistry,
   createPagePerception,
   redactAgentVisibleText,
-} from '@/process/browser/pagePerception';
+} from '@process/browser/pagePerception';
 
 const makeQuickTest = (): QuickTestControl => ({
   discover: vi.fn().mockResolvedValue({ targets: ['web'] }),
@@ -462,9 +462,6 @@ describe('browserControlWiring target-bound secret fill', () => {
 
     vi.doMock('@process/browser/browserBridge', () => ({
       getBrowserServices: () => ({ viewManager }),
-    }));
-    vi.doMock('@process/terminal/terminalWiring', () => ({
-      getTerminalServices: () => ({ manager: {} }),
     }));
 
     const wiring = await import('@process/browser/browserControlWiring');

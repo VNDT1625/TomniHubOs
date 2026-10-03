@@ -1,4 +1,7 @@
-export type ContextScope = { kind: 'global' } | { kind: 'surface'; surface: string };
+export type ContextScope =
+  | { kind: 'global' }
+  | { kind: 'surface'; surface: string }
+  | { kind: 'workspace'; workspace: string };
 
 export type ContextFact = {
   key: string;
@@ -10,6 +13,24 @@ export type ContextFact = {
   scope: ContextScope;
   sensitivity: 'normal' | 'private';
   userLocked: boolean;
+};
+
+export type PersonalLearningCausalChain = {
+  /** Bounded task situation in which this observation was made. */
+  context: string;
+  /** Durable run/event/user-action reference that supports the observation. */
+  origin: string;
+  /** A reusable rule is permitted only when the user supplied a reason. */
+  reason: string | undefined;
+  reasonKnown: boolean;
+  /** User-visible action the system proposes inside the fact's stated scope. */
+  proposal: string;
+};
+
+/** User-controlled persistence state; this contains no observed content or secret material. */
+export type PersonalLearningControl = {
+  paused: boolean;
+  updatedAt: number;
 };
 
 export type DecisionPolicy = {
@@ -69,6 +90,8 @@ export type PersonalContext = {
   habits: ContextFact[];
   secretReferences: PersonalSecretReference[];
   learningRecords?: PersonalLearningRecord[];
+  /** Missing in legacy profiles means learning is active. */
+  learningControl?: PersonalLearningControl;
   updatedAt: number;
 };
 
@@ -78,7 +101,8 @@ export type PersonalLearningRecord = {
   fact: ContextFact;
   explanation: string;
   provenance: string;
-  status: 'proposed' | 'applied' | 'rejected' | 'corrected' | 'forgotten';
+  causal: PersonalLearningCausalChain;
+  status: 'proposed' | 'needs_reason' | 'applied' | 'rejected' | 'corrected' | 'forgotten';
   createdAt: number;
   confirmedAt?: number;
   outcome?: 'helpful' | 'not_helpful';
@@ -113,6 +137,8 @@ export type CoreContextComposeInput = {
   agentId: string;
   personalId: string;
   surface: string;
+  /** Main-resolved workspace identity. Workspace-scoped facts stay hidden without an exact match. */
+  workspace?: string;
   /** Host-resolved surface policy. Opaque handles fail closed when this is absent. */
   secretContextPolicy?: {
     includeOpaqueSecretHandles: boolean;

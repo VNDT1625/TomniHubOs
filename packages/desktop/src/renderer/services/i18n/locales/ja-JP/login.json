@@ -2,6 +2,7 @@
   "pageTitle": "Omni - ログイン",
   "brand": "Tomny",
   "subtitle": "おかえりなさい。アカウントにサインインしてください",
+
   "username": "ユーザー名",
   "usernamePlaceholder": "ユーザー名を入力してください",
   "password": "パスワード",
@@ -21,6 +22,26 @@
     "tooManyAttempts": "試行回数が多すぎます。後でもう一度お試しください",
     "networkError": "接続に失敗しました。後でもう一度お試しください",
     "serverError": "サーバーで問題が発生しました。しばらく待ってから再試行してください",
-    "unknown": "ログインに失敗しました。後でもう一度お試しください"
-  }
+    "unknown": "ログインに失敗しました。後でもう一度お試しください",
+    "passwordMismatch": "パスワードが一致しません",
+    "usernameLength": "ユーザー名は3文字以上必要です",
+    "passwordLength": "パスワードは6文字以上必要です",
+    "userExists": "ユーザー名は既に存在します"
+  },
+  "tabLogin": "ログイン",
+  "tabRegister": "新規登録",
+  "registerSubtitle": "新しいアカウントを作成して開始する",
+  "confirmPassword": "パスワードの確認",
+  "confirmPasswordPlaceholder": "パスワードを再入力",
+  "registerSubmit": "アカウント作成",
+  "registerSubmitting": "作成中...",
+  "registerSuccess": "登録が完了しました！リダイレクト中...",
+  "switchToRegisterPrompt": "アカウントをお持ちでないですか？",
+  "switchToRegister": "今すぐ登録",
+  "switchToLoginPrompt": "すでにアカウントをお持ちですか？",
+  "switchToLogin": "ログイン",
+
+  "emailOrUsername": "メールアドレスまたはユーザー名",
+  "emailOrUsernamePlaceholder": "メールアドレスまたはユーザー名を入力",
+  "supabaseBadge": "Supabase クラウド認証"
 }

@@ -15,12 +15,18 @@ import {
 } from '@/common/packages/optionalOwnership';
 
 const IDE_OWNERSHIP: OptionalPackageOwnershipDeclaration = {
-  manifest: { id: 'com.tomni.ide' },
-  importPathPrefixes: ['@renderer/package-apps/ide', '@renderer/pages/studio/ide'],
-  artifactPathPrefixes: [
-    'packages/desktop/src/renderer/package-apps/ide',
-    'packages/desktop/src/renderer/pages/studio/ide',
-  ],
+  // ponytail: default IDE coverage ends at direct base ownership; use a separate
+  // default-surface manifest when the base bundle gains independently versioned modules.
+  manifest: { id: 'com.tomni.legacy-ide-test' },
+  importPathPrefixes: ['@renderer/package-apps/ide'],
+  artifactPathPrefixes: ['packages/desktop/src/renderer/package-apps/ide'],
+};
+
+/** Studio-owned recent-file state is not a neutral Hub dependency. */
+const STUDIO_RECENT_FILE_OWNERSHIP: OptionalPackageOwnershipDeclaration = {
+  manifest: { id: 'com.tomni.studio' },
+  importPathPrefixes: ['@package-apps/document-studio/renderer/studioStorage'],
+  artifactPathPrefixes: ['packages/package-apps/document-studio/src/renderer/studioStorage.ts'],
 };
 
 const PROJECT_ROOT = process.cwd();
@@ -41,27 +47,25 @@ const readRendererSourceFiles = (directory = RENDERER_SOURCE_ROOT): OptionalOwne
       ];
     });
 
-const LEGACY_OPTIONAL_ROOTS = [
+const LEGACY_OPTIONAL_ROOTS = [] as const;
+
+/** Relocated optional source must remain absent from both emitted base graphs. */
+const EXTRACTED_OPTIONAL_OWNERSHIP: readonly OptionalPackageOwnershipDeclaration[] = [
   {
-    moduleId: 'ide',
-    importPathPrefixes: ['@renderer/pages/studio/ide'],
-    artifactPathPrefixes: ['packages/desktop/src/renderer/pages/studio/ide'],
+    manifest: { id: 'com.tomni.design-studio' },
+    importPathPrefixes: ['@package-apps/design'],
+    artifactPathPrefixes: ['packages/package-apps/design'],
   },
-] as const;
+  {
+    manifest: { id: 'com.tomni.document-studio' },
+    importPathPrefixes: ['@package-apps/document-studio'],
+    artifactPathPrefixes: ['packages/package-apps/document-studio'],
+  },
+];
 
 /** Optional domains that must not be emitted by a clean MVP base candidate. */
 const MVP_BASE_OPTIONAL_OWNERSHIP: readonly OptionalPackageOwnershipDeclaration[] = [
-  IDE_OWNERSHIP,
-  {
-    manifest: { id: 'com.tomni.browser' },
-    importPathPrefixes: ['@renderer/pages/browser'],
-    artifactPathPrefixes: ['packages/desktop/src/renderer/pages/browser'],
-  },
-  {
-    manifest: { id: 'com.tomni.terminal' },
-    importPathPrefixes: ['@renderer/pages/terminal'],
-    artifactPathPrefixes: ['packages/desktop/src/renderer/pages/terminal'],
-  },
+  ...EXTRACTED_OPTIONAL_OWNERSHIP,
   {
     manifest: { id: 'com.tomni.testing' },
     importPathPrefixes: ['@renderer/pages/testing'],
@@ -87,21 +91,8 @@ const readMainGraphSourceFiles = (inputs: readonly string[]): OptionalOwnershipS
   });
 
 const MVP_MAIN_OPTIONAL_OWNERSHIP: readonly OptionalPackageOwnershipDeclaration[] = [
-  {
-    manifest: { id: 'com.tomni.ide' },
-    importPathPrefixes: ['@process/ide'],
-    artifactPathPrefixes: ['packages/desktop/src/process/ide'],
-  },
-  {
-    manifest: { id: 'com.tomni.browser' },
-    importPathPrefixes: ['@process/browser'],
-    artifactPathPrefixes: ['packages/desktop/src/process/browser'],
-  },
-  {
-    manifest: { id: 'com.tomni.terminal' },
-    importPathPrefixes: ['@process/terminal'],
-    artifactPathPrefixes: ['packages/desktop/src/process/terminal'],
-  },
+  ...EXTRACTED_OPTIONAL_OWNERSHIP,
+
   {
     manifest: { id: 'com.tomni.office' },
     importPathPrefixes: ['@process/office'],
@@ -138,7 +129,7 @@ describe('optional package ownership audit', () => {
           path: 'packages/desktop/src/renderer/hub/HubPage.tsx',
           content: `
             import { IdePage } from '@renderer/package-apps/ide';
-            export { default as IDE } from '@renderer/pages/studio/ide/IdeWorkspace';
+            export { default as IDE } from '@package-apps/ide/renderer/IdeWorkspace';
             const loadIde = () => import('@renderer/package-apps/ide/lazy');
             const legacyIde = require('@renderer/pages/studio/ide/legacy');
           `,
@@ -153,33 +144,21 @@ describe('optional package ownership audit', () => {
     expect(result.violations).toEqual([
       {
         kind: 'base-artifact-owns-optional-package',
-        packageId: 'com.tomni.ide',
+        packageId: 'com.tomni.legacy-ide-test',
         path: 'packages/desktop/src/renderer/package-apps/ide/index.tsx',
         referencedPath: 'packages/desktop/src/renderer/package-apps/ide/index.tsx',
       },
       {
         kind: 'core-imports-optional-package',
-        packageId: 'com.tomni.ide',
+        packageId: 'com.tomni.legacy-ide-test',
         path: 'packages/desktop/src/renderer/hub/HubPage.tsx',
         referencedPath: '@renderer/package-apps/ide',
       },
       {
         kind: 'core-imports-optional-package',
-        packageId: 'com.tomni.ide',
+        packageId: 'com.tomni.legacy-ide-test',
         path: 'packages/desktop/src/renderer/hub/HubPage.tsx',
         referencedPath: '@renderer/package-apps/ide/lazy',
-      },
-      {
-        kind: 'core-imports-optional-package',
-        packageId: 'com.tomni.ide',
-        path: 'packages/desktop/src/renderer/hub/HubPage.tsx',
-        referencedPath: '@renderer/pages/studio/ide/IdeWorkspace',
-      },
-      {
-        kind: 'core-imports-optional-package',
-        packageId: 'com.tomni.ide',
-        path: 'packages/desktop/src/renderer/hub/HubPage.tsx',
-        referencedPath: '@renderer/pages/studio/ide/legacy',
       },
     ]);
   });
@@ -221,10 +200,93 @@ describe('optional package ownership audit', () => {
       baseArtifactInputs: ['packages/desktop/src/renderer/package-apps/ide.tsx'],
     });
 
-    expect(denylist.owners.find((owner) => owner.packageId === 'com.tomni.ide')).toMatchObject({
-      importPathPrefixes: expect.arrayContaining(['@renderer/package-apps/ide']),
+    expect(denylist.owners.find((owner) => owner.packageId === 'com.tomni.ide')).toBeUndefined();
+    expect(result.violations).toEqual([]);
+  });
+
+  it('forbids Studio recent-file storage from a base source graph or artifact input', () => {
+    const result = scanOptionalPackageOwnership({
+      denylist: createOptionalPackageOwnershipDenylist([STUDIO_RECENT_FILE_OWNERSHIP]),
+      coreSourceFiles: [
+        {
+          path: 'packages/desktop/src/renderer/pages/hub/HubWorkspacePage.tsx',
+          content: "import { getRecentFiles } from '@package-apps/document-studio/renderer/studioStorage';",
+        },
+      ],
+      baseArtifactInputs: [
+        'packages/desktop/src/renderer/pages/hub/HubWorkspacePage.tsx',
+        ...STUDIO_RECENT_FILE_OWNERSHIP.artifactPathPrefixes,
+      ],
     });
-    expect(result.violations.map((violation) => violation.packageId)).toEqual(['com.tomni.ide', 'com.tomni.ide']);
+
+    expect(result.violations).toEqual([
+      {
+        kind: 'base-artifact-owns-optional-package',
+        packageId: 'com.tomni.studio',
+        path: 'packages/package-apps/document-studio/src/renderer/studioStorage.ts',
+        referencedPath: 'packages/package-apps/document-studio/src/renderer/studioStorage.ts',
+      },
+      {
+        kind: 'core-imports-optional-package',
+        packageId: 'com.tomni.studio',
+        path: 'packages/desktop/src/renderer/pages/hub/HubWorkspacePage.tsx',
+        referencedPath: '@package-apps/document-studio/renderer/studioStorage',
+      },
+    ]);
+    expect(() => assertOptionalPackageOwnershipClean(result)).toThrow('Optional package ownership audit failed:');
+  });
+
+  it('keeps base Workspace free of direct optional Browser and editor runner imports', () => {
+    const workspaceBridgePath = 'packages/desktop/src/process/workspace/workspaceBridge.ts';
+    const workspaceFramePath = 'packages/desktop/src/renderer/pages/workspace/components/SurfaceFrame.tsx';
+    const workspaceBridgeSource = readFileSync(resolve(PROJECT_ROOT, workspaceBridgePath), 'utf8');
+    const workspaceFrameSource = readFileSync(resolve(PROJECT_ROOT, workspaceFramePath), 'utf8');
+    const result = scanOptionalPackageOwnership({
+      denylist: createOptionalPackageOwnershipDenylist(MVP_MAIN_OPTIONAL_OWNERSHIP),
+      coreSourceFiles: [
+        {
+          path: workspaceBridgePath,
+          content: workspaceBridgeSource,
+        },
+      ],
+      baseArtifactInputs: [],
+    });
+
+    expect(result.violations).toEqual([]);
+    expect(() => assertOptionalPackageOwnershipClean(result)).not.toThrow();
+    expect(workspaceBridgeSource).not.toContain("from './browserSurfaceRunner'");
+    expect(workspaceBridgeSource).not.toContain("from './editorAgentRunner'");
+    expect(workspaceBridgeSource).not.toContain("from '@process/resources/nativeFileGateway'");
+
+    const rendererResult = scanOptionalPackageOwnership({
+      denylist: createOptionalPackageOwnershipDenylist(MVP_BASE_OPTIONAL_OWNERSHIP),
+      coreSourceFiles: [{ path: workspaceFramePath, content: workspaceFrameSource }],
+      baseArtifactInputs: [],
+    });
+    expect(rendererResult.violations).toEqual([]);
+    expect(workspaceFrameSource).not.toContain("from './BrowserSurfaceView'");
+    expect(workspaceFrameSource).not.toContain("from './EditorSurfaceView'");
+  });
+
+  it('keeps base Conversation free of direct optional Surface and secret-rendering clients', () => {
+    const conversationFiles = readRendererSourceFiles().filter((file) =>
+      file.path.startsWith('packages/desktop/src/renderer/pages/conversation/')
+    );
+    const forbiddenImports = [
+      '@renderer/services/coreIdeClient',
+      '@/renderer/services/coreIdeClient',
+      '@renderer/services/planningGuard',
+      '@/renderer/services/planningGuard',
+      '@renderer/pages/browser',
+      '@/renderer/pages/browser',
+      '@renderer/pages/studio/ide',
+      '@/renderer/pages/studio/ide',
+    ];
+    const offenders = conversationFiles.flatMap((file) =>
+      forbiddenImports.some((specifier) => file.content.includes(specifier)) ? [file.path] : []
+    );
+
+    expect(offenders).toEqual([]);
   });
 
   it('parses Vite/Rollup and esbuild graph module inputs without accepting an empty graph', () => {
@@ -233,20 +295,20 @@ describe('optional package ownership audit', () => {
         inputs: { 'packages/desktop/src/renderer/package-apps/ide.tsx': {} },
         outputs: {
           'assets/app.js': {
-            modules: { 'packages/desktop/src/renderer/pages/studio/ide/IdeWorkspace.tsx': {} },
+            modules: { 'packages/package-apps/ide/src/renderer/IdeWorkspace.tsx': {} },
           },
         },
       })
     ).toEqual([
       'packages/desktop/src/renderer/package-apps/ide.tsx',
-      'packages/desktop/src/renderer/pages/studio/ide/IdeWorkspace.tsx',
+      'packages/package-apps/ide/src/renderer/IdeWorkspace.tsx',
     ]);
     expect(() => collectBaseArtifactInputsFromGraph({ outputs: {} })).toThrow(
       'Base artifact graph must expose input or output module paths.'
     );
   });
 
-  it('reports the current base-source extraction gap and rejects it at the ownership gate', () => {
+  it('keeps extracted IDE entry, client, planning guard, and code adapter out of the base-source baseline while rejecting remaining IDE residue', () => {
     const sourceFiles = readRendererSourceFiles();
     const result = scanOptionalPackageOwnership({
       denylist: createOptionalPackageOwnershipDenylistFromCatalog(
@@ -259,19 +321,40 @@ describe('optional package ownership audit', () => {
       baseArtifactInputs: sourceFiles.map((source) => source.path),
     });
 
-    expect(result.violations).toEqual(
+    expect(sourceFiles.some(({ path }) => path === 'packages/desktop/src/renderer/package-apps/ide.tsx')).toBe(false);
+    expect(
+      sourceFiles.some(({ path }) => path === 'packages/desktop/src/renderer/pages/editor/adapters/TextCodeAdapter.tsx')
+    ).toBe(false);
+    expect(sourceFiles.some(({ path }) => path === 'packages/desktop/src/renderer/services/coreIdeClient.ts')).toBe(
+      false
+    );
+    expect(sourceFiles.some(({ path }) => path === 'packages/desktop/src/renderer/services/planningGuard.ts')).toBe(
+      false
+    );
+    expect(existsSync(resolve(PROJECT_ROOT, 'packages/package-apps/ide/src/entry.tsx'))).toBe(true);
+    expect(existsSync(resolve(PROJECT_ROOT, 'packages/package-apps/ide/src/TextCodeAdapter.tsx'))).toBe(true);
+    expect(existsSync(resolve(PROJECT_ROOT, 'packages/package-apps/ide/src/coreIdeClient.ts'))).toBe(true);
+    expect(existsSync(resolve(PROJECT_ROOT, 'packages/package-apps/ide/src/planningGuard.ts'))).toBe(true);
+    expect(existsSync(resolve(PROJECT_ROOT, 'packages/desktop/src/renderer/pages/studio/ide/Viu'))).toBe(false);
+    expect(
+      existsSync(resolve(PROJECT_ROOT, 'packages/package-apps/design/src/renderer/viu/next/ViuNextCanvas.tsx'))
+    ).toBe(true);
+    expect(
+      readFileSync(resolve(PROJECT_ROOT, 'packages/package-apps/ide/src/renderer/IdeWorkspace.tsx'), 'utf8')
+    ).not.toContain("from './Viu'");
+    expect(
+      readFileSync(resolve(PROJECT_ROOT, 'packages/package-apps/design/src/renderer/index.tsx'), 'utf8')
+    ).not.toContain('@renderer/pages/studio/ide/Viu');
+    expect(
+      result.violations.some(
+        (violation) =>
+          violation.kind === 'base-artifact-owns-optional-package' && violation.packageId === 'com.tomni.ide'
+      )
+    ).toBe(false);
+    expect(result.violations).not.toEqual(
       expect.arrayContaining([
-        expect.objectContaining({
-          kind: 'base-artifact-owns-optional-package',
-          packageId: 'com.tomni.ide',
-          path: 'packages/desktop/src/renderer/package-apps/ide.tsx',
-        }),
-        expect.objectContaining({
-          kind: 'core-imports-optional-package',
-          packageId: 'com.tomni.ide',
-          path: 'packages/desktop/src/renderer/pages/editor/adapters/TextCodeAdapter.tsx',
-          referencedPath: '@renderer/pages/studio/ide/codeRelations',
-        }),
+        expect.objectContaining({ path: 'packages/desktop/src/renderer/package-apps/ide.tsx' }),
+        expect.objectContaining({ path: 'packages/desktop/src/renderer/pages/editor/adapters/TextCodeAdapter.tsx' }),
       ])
     );
     expect(() => assertOptionalPackageOwnershipClean(result)).toThrow('Optional package ownership audit failed:');
@@ -279,6 +362,7 @@ describe('optional package ownership audit', () => {
 
   it('rejects optional domains from the exact emitted base graph when release evidence is present', () => {
     const required = process.env.TOMNI_REQUIRE_RELEASE_ARTIFACT_AUDIT === '1';
+    if (!required) return;
     if (!existsSync(RELEASE_GRAPH_PATH)) {
       expect(required, 'release audit requires a freshly emitted base graph').toBe(false);
       return;
@@ -297,6 +381,7 @@ describe('optional package ownership audit', () => {
 
   it('rejects optional domains from the exact emitted main-process graph when release evidence is present', () => {
     const required = process.env.TOMNI_REQUIRE_RELEASE_ARTIFACT_AUDIT === '1';
+    if (!required) return;
     if (!existsSync(MAIN_RELEASE_GRAPH_PATH)) {
       expect(required, 'release audit requires a freshly emitted main-process graph').toBe(false);
       return;

@@ -5,8 +5,13 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createDirectCliAgentDriver, resolveDirectCliWorkspace } from '@process/services/agentChat/directCliAgent';
+import {
+  createDirectCliAgentDriver,
+  resolveDirectCliWorkspace,
+  safeSurfaceName,
+} from '@process/services/agentChat/directCliAgent';
 import type { CoreAdapter, DetectedCoreTarget } from '@process/experimentalCore/adapters';
+import { FoundationTrustRuntime } from '@process/foundation/runKernel';
 import {
   createCliAgentDriver,
   flattenMessagesToPrompt,
@@ -20,6 +25,20 @@ import {
 } from '@process/services/agentChat/cliModelId';
 
 const immediateSleep = (): Promise<void> => Promise.resolve();
+
+const createDirectCliTrustRuntime = (): FoundationTrustRuntime =>
+  new FoundationTrustRuntime({
+    actorId: () => 'account-1',
+    policy: {
+      allowedCapabilities: ['target.execute'],
+      allowedNetworkHosts: [],
+      trustedPackageIds: [],
+      allowedOrigins: ['tomny://direct-cli'],
+      requireApprovalForMutation: true,
+      capabilityGrantTtlMs: 60_000,
+      policyVersion: 'direct-cli-test-v1',
+    },
+  });
 
 afterEach(() => {
   vi.useRealTimers();
@@ -75,6 +94,17 @@ describe('flattenMessagesToPrompt', () => {
   });
 });
 
+describe('safeSurfaceName', () => {
+  it('keeps the default and constrains untrusted surface labels to one workspace segment', () => {
+    expect(safeSurfaceName()).toBe('chat');
+    expect(safeSurfaceName('  ../IDE///Preview  ')).toBe('ide-preview');
+  });
+
+  it('bounds a surface workspace segment to 64 characters', () => {
+    expect(safeSurfaceName('a'.repeat(65))).toBe('a'.repeat(64));
+  });
+});
+
 describe('createDirectCliAgentDriver', () => {
   const directTarget: DetectedCoreTarget = {
     id: 'codex',
@@ -108,6 +138,8 @@ describe('createDirectCliAgentDriver', () => {
       excludedMcpServerNames: ['tomny-agent-orchestrator'],
     } as const;
     const resolveMcpServers = vi.fn(async () => []);
+
+    const trustRuntime = createDirectCliTrustRuntime();
     const driver = createDirectCliAgentDriver(
       {
         detectTargets: vi.fn(async () => [directTarget]),
@@ -115,6 +147,8 @@ describe('createDirectCliAgentDriver', () => {
         resolveWorkspace,
         resolveMcpServers,
         createSessionId: () => 'direct-session',
+        kernel: trustRuntime.createRunKernel(),
+        trustRuntime,
       },
       context
     );
@@ -134,6 +168,26 @@ describe('createDirectCliAgentDriver', () => {
     );
     expect(resolveWorkspace).toHaveBeenCalledWith(context);
     expect(resolveMcpServers).toHaveBeenCalledWith(context, 'C:/workspace', 'codex', 'stable-agent-session');
+  });
+
+  it('rejects direct CLI execution before adapter invocation without Main trust authority', async () => {
+    const adapter: CoreAdapter = {
+      protocol: 'codex-app-server',
+      listModels: vi.fn(async () => []),
+      run: vi.fn(async () => undefined),
+      dispose: vi.fn(async () => undefined),
+    };
+    const driver = createDirectCliAgentDriver({
+      detectTargets: vi.fn(async () => [directTarget]),
+      adapters: [adapter],
+      resolveWorkspace: vi.fn(async () => 'C:/workspace'),
+      resolveMcpServers: vi.fn(async () => []),
+    });
+
+    await expect(driver.run({ agentId: 'codex', messages: [{ role: 'user', content: 'hello' }] })).rejects.toThrow(
+      'DIRECT_CLI_TRUST_RUNTIME_REQUIRED'
+    );
+    expect(adapter.run).not.toHaveBeenCalled();
   });
 
   it('rejects a relative workspace instead of resolving it against process cwd', async () => {

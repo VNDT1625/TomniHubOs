@@ -1,5 +1,3 @@
-import type { ProviderHealthCheckRequest, ProviderHealthCheckResponse } from '../provider/providerApi';
-
 export type AgentType = 'acp' | 'remote' | 'tomnyagentic' | 'openclaw-gateway' | 'nanobot';
 export type AgentSource = 'internal' | 'builtin' | 'extension' | 'custom';
 export type AgentEnvEntry = { name: string; value: string; description?: string };
@@ -48,4 +46,3 @@ export type CustomAgentRequest = {
 };
 
 export type AgentHealthResult = { available: boolean; latency?: number; error?: string };
-export type { ProviderHealthCheckRequest, ProviderHealthCheckResponse };

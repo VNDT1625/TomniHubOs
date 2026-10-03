@@ -16,10 +16,10 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// The tunnel adapter imports `@process/studio/cloudflareTunnel`, which itself
+// The tunnel adapter imports the neutral remote-gateway tunnel service, which itself
 // imports `electron` at module load. Mock the whole module so neither electron
 // nor a real binary is ever required, and so each test can script the outcome.
-vi.mock('@process/studio/cloudflareTunnel', () => ({
+vi.mock('@process/services/remoteGateway/cloudflareTunnel', () => ({
   isCloudflaredAvailable: vi.fn(),
   ensureCloudflared: vi.fn(),
   startTunnel: vi.fn(),
@@ -39,7 +39,7 @@ import {
   startTunnel,
   stopTunnel,
   type TunnelResult,
-} from '@process/studio/cloudflareTunnel';
+} from '@process/services/remoteGateway/cloudflareTunnel';
 
 const mockIsAvailable = vi.mocked(isCloudflaredAvailable);
 const mockEnsure = vi.mocked(ensureCloudflared);

@@ -33,13 +33,13 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import * as path from 'node:path';
-import type { IdeMcpService } from '@process/ide/mcp/ideServer';
+import type { IdeMcpService } from '@package-apps/ide/process/mcp/ideServer';
 import { buildOmniBootstrapResult } from './omniBootstrap';
 import { OMNI_IDE_BASE_ALLOWLIST, OMNI_IDE_DANGEROUS_TOOLS } from './omniIdeAllowlist';
 import { OMNI_IDE_SERVER_INSTRUCTIONS } from './omniGatewayProfile';
 import type { OmniGatewayTokenStore } from './omniGatewayExternalToken';
 import type { OmniGatewayState } from './omniGatewayState';
-import { loadProjectRules } from '@process/ide/rulesLoader';
+import { loadProjectRules } from '@package-apps/ide/process/workspace/rulesLoader';
 
 /** Inputs to {@link createOmniDebugBridge}. */
 export type OmniDebugBridgeDeps = {

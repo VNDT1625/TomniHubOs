@@ -33,7 +33,7 @@ vi.mock('react-i18next', () => ({
 const specAnalyze = vi.fn();
 const specStatus = vi.fn();
 const specAdvancePhase = vi.fn();
-vi.mock('@/renderer/pages/studio/ide/ideClient', () => ({
+vi.mock('@package-apps/ide/renderer/services/ideClient', () => ({
   ideClient: {
     specAnalyze: (...args: unknown[]) => specAnalyze(...args),
     specStatus: (...args: unknown[]) => specStatus(...args),
@@ -41,7 +41,7 @@ vi.mock('@/renderer/pages/studio/ide/ideClient', () => ({
   },
 }));
 
-import SpecManagerPanel from '@/renderer/pages/studio/ide/components/SpecManagerPanel';
+import SpecManagerPanel from '@package-apps/ide/renderer/components/SpecManagerPanel';
 
 const analysis: SpecAnalysis = {
   slug: 'demo',

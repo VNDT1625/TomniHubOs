@@ -9,7 +9,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { parseFileLinks } from '@/renderer/pages/terminal/components/terminalFileLinks';
+import { parseFileLinks } from '@package-apps/ide/renderer/terminal/terminalFileLinks';
 
 describe('parseFileLinks', () => {
   it('parses a posix path with line and column', () => {

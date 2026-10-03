@@ -49,6 +49,25 @@ export type OutcomeReceipt = {
   createdAt: number;
 };
 
+/**
+ * Redacted terminal receipt retained inside the Foundation journal. The owner
+ * is a one-way account digest so a recovered journal never discloses an
+ * account subject, raw goal, prompt, output, or secret.
+ */
+export type DurableOutcomeReceiptProjection = Readonly<{
+  schemaVersion: 1;
+  ownerAccountDigest: string;
+  receiptId: string;
+  runId: string;
+  parentRunId?: string;
+  taskId: string;
+  selectionReceiptId: string;
+  leaseId?: string;
+  status: Extract<OutcomeReceipt['status'], 'verified' | 'failed' | 'cancelled' | 'timed_out'>;
+  evidenceRefs: readonly string[];
+  createdAt: number;
+}>;
+
 const forbidden = /(secret|token|password|credential|api.?key|private.?key)/i;
 
 export const assertSafePayload = (payload: FoundationEvent['payload']): FoundationEvent['payload'] => {

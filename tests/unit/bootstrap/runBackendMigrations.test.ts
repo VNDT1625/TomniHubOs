@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { IMAGE_GEN_ENV_KEYS } from '@/common/config/imageGenerationMcpEnv';
 import { BUILTIN_IMAGE_GEN_NAME, type IMcpServer, type IProvider } from '@/common/config/storage';
-import { resolveImageGenerationMigrationConfig, runBackendMigrations } from '@/process/utils/runBackendMigrations';
+import { runBackendMigrations } from '@/process/utils/runBackendMigrations';
 
 const {
   batchImportServersMock,
@@ -11,6 +11,7 @@ const {
   httpRequestMock,
   listServersMock,
   testMcpConnectionMock,
+  toggleServerMock,
   updateServerMock,
 } = vi.hoisted(() => ({
   batchImportServersMock: vi.fn(),
@@ -19,6 +20,7 @@ const {
   httpRequestMock: vi.fn(),
   listServersMock: vi.fn(),
   testMcpConnectionMock: vi.fn(),
+  toggleServerMock: vi.fn(),
   updateServerMock: vi.fn(),
 }));
 
@@ -31,6 +33,7 @@ vi.mock('@/common/adapter/ipcBridge', () => ({
     listServers: { invoke: listServersMock },
     batchImportServers: { invoke: batchImportServersMock },
     updateServer: { invoke: updateServerMock },
+    toggleServer: { invoke: toggleServerMock },
     testMcpConnection: { invoke: testMcpConnectionMock },
   },
 }));
@@ -47,10 +50,6 @@ vi.mock('@/process/utils/initStorage', () => ({
 
 vi.mock('@/process/utils/migrateAssistants', () => ({
   migrateAssistantsToBackend: vi.fn().mockResolvedValue(true),
-}));
-
-vi.mock('@process/testing/registerTestingMcp', () => ({
-  ensureTestingMcpRegistered: vi.fn().mockResolvedValue(true),
 }));
 
 vi.mock('@process/browser/registerBrowserControlMcp', () => ({
@@ -141,6 +140,7 @@ beforeEach(() => {
     id,
     ...data,
   }));
+  toggleServerMock.mockImplementation(async ({ id }) => ({ ...imageServer(), id, enabled: false }));
   testMcpConnectionMock.mockResolvedValue({ success: false, error: 'Command not found: npx' });
   httpRequestMock.mockImplementation(async (method: string, path: string) => {
     if (method === 'GET' && path === '/api/settings/client') {
@@ -160,42 +160,44 @@ beforeEach(() => {
   });
 });
 
-describe('resolveImageGenerationMigrationConfig', () => {
-  it('uses backend client preference when local config file no longer has the image model', () => {
-    const backendConfig = {
-      id: 'gemini',
-      name: 'Gemini',
-      platform: 'gemini',
-      base_url: 'https://example.test',
-      api_key: 'backend-key',
-      use_model: 'gemini-image',
-    };
-
-    expect(resolveImageGenerationMigrationConfig({ 'tools.imageGenerationModel': backendConfig }, undefined)).toEqual(
-      backendConfig
-    );
-  });
-});
-
 describe('runBackendMigrations', () => {
-  it('does not sync the built-in image MCP server when bootstrap makes no effective change', async () => {
-    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+  it('disables and scrubs the legacy image MCP before any provider lookup or MCP preflight', async () => {
     listServersMock.mockResolvedValue([imageServer()]);
 
     await runBackendMigrations(configFile as never);
 
-    expect(updateServerMock).not.toHaveBeenCalled();
+    expect(httpRequestMock).not.toHaveBeenCalledWith('GET', '/api/providers');
+    expect(httpRequestMock).not.toHaveBeenCalledWith('GET', '/api/settings/client');
+    expect(configFileGetMock).not.toHaveBeenCalled();
     expect(testMcpConnectionMock).not.toHaveBeenCalled();
-    expect(infoSpy).toHaveBeenCalledWith(
-      '[Migration] image MCP bootstrap decision, server id: %s, transport changed: %s, json changed: %s, will update: %s',
-      'image-server-id',
-      'no',
-      'no',
-      'no'
-    );
+    expect(updateServerMock).toHaveBeenCalledWith({
+      id: 'image-server-id',
+      data: expect.objectContaining({ transport: expect.objectContaining({ env: {} }) }),
+    });
+    expect(toggleServerMock).toHaveBeenCalledWith({ id: 'image-server-id' });
+
+    const imageUpdate = updateServerMock.mock.calls.find(([request]) => request.id === 'image-server-id')?.[0];
+    expect(JSON.stringify(imageUpdate)).not.toContain('provider-key');
   });
 
-  it('does not sync agents when only the stored image MCP JSON representation differs', async () => {
+  it('registers a missing image MCP disabled with no provider environment', async () => {
+    listServersMock.mockResolvedValue([]);
+
+    await runBackendMigrations(configFile as never);
+
+    expect(httpRequestMock).not.toHaveBeenCalledWith('GET', '/api/providers');
+    expect(testMcpConnectionMock).not.toHaveBeenCalled();
+
+    const importedServers = batchImportServersMock.mock.calls[0]?.[0]?.servers as IMcpServer[];
+    const importedImageServer = importedServers.find((server) => server.name === BUILTIN_IMAGE_GEN_NAME);
+    expect(importedImageServer).toMatchObject({
+      enabled: false,
+      transport: { type: 'stdio', env: {} },
+    });
+    expect(JSON.stringify(importedImageServer)).not.toContain('provider-key');
+  });
+
+  it('rewrites a stale legacy image MCP JSON without re-enabling it', async () => {
     const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
     listServersMock.mockResolvedValue([
       {
@@ -211,7 +213,7 @@ describe('runBackendMigrations', () => {
     expect(infoSpy).toHaveBeenCalledWith(
       '[Migration] image MCP bootstrap decision, server id: %s, transport changed: %s, json changed: %s, will update: %s',
       'image-server-id',
-      'no',
+      'yes',
       'yes',
       'yes'
     );

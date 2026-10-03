@@ -2,6 +2,7 @@
   "pageTitle": "Omni — Вход",
   "brand": "Tomny",
   "subtitle": "Добро пожаловать! Войдите в свой аккаунт",
+
   "username": "Имя пользователя",
   "usernamePlaceholder": "Введите имя пользователя",
   "password": "Пароль",
@@ -21,6 +22,26 @@
     "tooManyAttempts": "Слишком много попыток, попробуйте позже",
     "networkError": "Ошибка подключения, попробуйте снова",
     "serverError": "Ошибка сервера, попробуйте позже",
-    "unknown": "Ошибка входа, попробуйте снова"
-  }
+    "unknown": "Ошибка входа, попробуйте снова",
+    "passwordMismatch": "Пароли не совпадают",
+    "usernameLength": "Имя пользователя должно быть не менее 3 символов",
+    "passwordLength": "Пароль должен быть не менее 6 символов",
+    "userExists": "Имя пользователя уже существует"
+  },
+  "tabLogin": "Вход",
+  "tabRegister": "Регистрация",
+  "registerSubtitle": "Создайте учетную запись, чтобы начать",
+  "confirmPassword": "Подтвердите пароль",
+  "confirmPasswordPlaceholder": "Повторите пароль",
+  "registerSubmit": "Создать аккаунт",
+  "registerSubmitting": "Создание...",
+  "registerSuccess": "Регистрация успешна! Перенаправление...",
+  "switchToRegisterPrompt": "Нет учетной записи?",
+  "switchToRegister": "Зарегистрироваться",
+  "switchToLoginPrompt": "Уже есть аккаунт?",
+  "switchToLogin": "Войти",
+
+  "emailOrUsername": "Email или Имя пользователя",
+  "emailOrUsernamePlaceholder": "Введите email или имя пользователя",
+  "supabaseBadge": "Защищено Supabase Cloud"
 }

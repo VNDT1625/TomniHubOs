@@ -528,11 +528,7 @@ export class ModelPackService {
     await this.verifyArtifactTree(destination, manifest, this.stagingDir);
   }
 
-  private async verifyArtifactTree(
-    root: string,
-    manifest: ModelPackManifest,
-    allowedParent: string
-  ): Promise<void> {
+  private async verifyArtifactTree(root: string, manifest: ModelPackManifest, allowedParent: string): Promise<void> {
     await this.assertManagedRoots();
     const allowedParentRealPath = await this.assertManagedDirectory(allowedParent);
     const rootBefore = await lstat(root);
@@ -709,7 +705,8 @@ export class ModelPackService {
     const snapshot = await this.options.registry.read();
     const invalidKeys: string[] = [];
     for (const record of Object.values(snapshot.records)) {
-      if (record.status === 'discovered' || record.status === 'downloading' || record.status === 'quarantined') continue;
+      if (record.status === 'discovered' || record.status === 'downloading' || record.status === 'quarantined')
+        continue;
       try {
         const expectedPath = path.join(this.installedDir, createHash('sha256').update(record.key).digest('hex'));
         if (record.installedPath !== expectedPath) {
@@ -738,8 +735,7 @@ export class ModelPackService {
     await this.assertManagedRoots();
     await this.assertTransactionJournalCount(true);
     const serialized = JSON.stringify(transaction);
-    const maxJournalBytes =
-      this.options.maxTransactionJournalBytes ?? DEFAULT_MAX_TRANSACTION_JOURNAL_BYTES;
+    const maxJournalBytes = this.options.maxTransactionJournalBytes ?? DEFAULT_MAX_TRANSACTION_JOURNAL_BYTES;
     if (
       !Number.isSafeInteger(maxJournalBytes) ||
       maxJournalBytes <= 0 ||
@@ -807,10 +803,8 @@ export class ModelPackService {
   }
 
   private async assertTransactionQuarantineCapacity(incomingBytes?: number): Promise<void> {
-    const maxBytes =
-      this.options.maxTransactionQuarantineBytes ?? DEFAULT_MAX_TRANSACTION_QUARANTINE_BYTES;
-    const maxEntries =
-      this.options.maxTransactionQuarantineEntries ?? DEFAULT_MAX_TRANSACTION_QUARANTINE_ENTRIES;
+    const maxBytes = this.options.maxTransactionQuarantineBytes ?? DEFAULT_MAX_TRANSACTION_QUARANTINE_BYTES;
+    const maxEntries = this.options.maxTransactionQuarantineEntries ?? DEFAULT_MAX_TRANSACTION_QUARANTINE_ENTRIES;
     const bytesToAdd = incomingBytes ?? 0;
     if (
       !Number.isSafeInteger(maxBytes) ||
@@ -852,9 +846,7 @@ export class ModelPackService {
       throw new ModelPackServiceError('filesystem-error', 'Unsafe transaction entry cannot enter quarantine.');
     }
     await this.assertTransactionQuarantineCapacity(journalStats.size);
-    const quarantineName = `${createHash('sha256')
-      .update(`${filename}\0${this.randomId()}`)
-      .digest('hex')}.invalid`;
+    const quarantineName = `${createHash('sha256').update(`${filename}\0${this.randomId()}`).digest('hex')}.invalid`;
     const quarantinePath = path.join(this.transactionQuarantineDir, quarantineName);
     if (!isInside(this.transactionQuarantineDir, quarantinePath) || (await this.pathExists(quarantinePath))) {
       throw new ModelPackServiceError('filesystem-error', 'Transaction quarantine destination is invalid.');
@@ -866,8 +858,7 @@ export class ModelPackService {
     await this.assertManagedRoots();
     await this.assertTransactionJournalCount();
     await this.assertTransactionQuarantineCapacity();
-    const maxJournalBytes =
-      this.options.maxTransactionJournalBytes ?? DEFAULT_MAX_TRANSACTION_JOURNAL_BYTES;
+    const maxJournalBytes = this.options.maxTransactionJournalBytes ?? DEFAULT_MAX_TRANSACTION_JOURNAL_BYTES;
     if (
       !Number.isSafeInteger(maxJournalBytes) ||
       maxJournalBytes <= 0 ||
@@ -884,11 +875,7 @@ export class ModelPackService {
       if (journalStats.isSymbolicLink() || !journalStats.isFile()) {
         throw new ModelPackServiceError('filesystem-error', 'Transaction directory contains an unsafe entry.');
       }
-      if (
-        !/^[0-9a-f]{64}\.json$/u.test(filename) ||
-        journalStats.size === 0 ||
-        journalStats.size > maxJournalBytes
-      ) {
+      if (!/^[0-9a-f]{64}\.json$/u.test(filename) || journalStats.size === 0 || journalStats.size > maxJournalBytes) {
         await this.quarantineTransaction(journalPath, filename);
         continue;
       }

@@ -2,6 +2,7 @@
   "pageTitle": "Omni - Sign In",
   "brand": "Tomny",
   "subtitle": "Welcome back, please sign in to your account",
+
   "username": "Username",
   "usernamePlaceholder": "Enter your username",
   "password": "Password",
@@ -21,6 +22,26 @@
     "tooManyAttempts": "Too many attempts, please try again later",
     "networkError": "Connection failed, please try again",
     "serverError": "Server error, please try again later",
-    "unknown": "Sign-in failed, please try again"
-  }
+    "unknown": "Sign-in failed, please try again",
+    "passwordMismatch": "Passwords do not match",
+    "usernameLength": "Username must be at least 3 characters",
+    "passwordLength": "Password must be at least 6 characters",
+    "userExists": "Username already exists"
+  },
+  "tabLogin": "Sign In",
+  "tabRegister": "Register",
+  "registerSubtitle": "Create a new account to get started",
+  "confirmPassword": "Confirm Password",
+  "confirmPasswordPlaceholder": "Re-enter your password",
+  "registerSubmit": "Create Account",
+  "registerSubmitting": "Creating account...",
+  "registerSuccess": "Registration successful! Redirecting...",
+  "switchToRegisterPrompt": "Don't have an account?",
+  "switchToRegister": "Sign up now",
+  "switchToLoginPrompt": "Already have an account?",
+  "switchToLogin": "Sign in",
+
+  "emailOrUsername": "Email or Username",
+  "emailOrUsernamePlaceholder": "Enter email or username",
+  "supabaseBadge": "Secured by Supabase Cloud"
 }

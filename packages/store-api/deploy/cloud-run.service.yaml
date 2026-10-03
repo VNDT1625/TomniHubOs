@@ -1,0 +1,91 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: tomni-store-api
+spec:
+  template:
+    spec:
+      serviceAccountName: ${STORE_API_SERVICE_ACCOUNT}
+      containers:
+        - image: ${STORE_API_IMAGE}
+          ports:
+            - containerPort: 8080
+          env:
+            - name: NODE_ENV
+              value: production
+            - name: PORT
+              value: '8080'
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: tomni-store-database-url
+                  key: latest
+            - name: SUPABASE_ISSUER
+              valueFrom:
+                secretKeyRef:
+                  name: tomni-supabase-issuer
+                  key: latest
+            - name: SUPABASE_AUDIENCE
+              valueFrom:
+                secretKeyRef:
+                  name: tomni-supabase-audience
+                  key: latest
+            - name: SUPABASE_JWKS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: tomni-supabase-jwks-url
+                  key: latest
+            - name: STORE_INTERNAL_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: tomni-store-internal-token
+                  key: latest
+            - name: DOWNLOAD_TICKET_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: tomni-download-ticket-secret
+                  key: latest
+            - name: PADDLE_WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: tomni-paddle-webhook-secret
+                  key: latest
+            - name: PADDLE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: tomni-paddle-api-key
+                  key: latest
+            - name: GCS_BUCKET
+              valueFrom:
+                secretKeyRef:
+                  name: tomni-gcs-authority-bucket
+                  key: latest
+
+            - name: STORE_SIGNER_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: tomni-package-signer-endpoint
+                  key: latest
+            - name: STORE_SIGNER_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: tomni-package-signer-key-id
+                  key: latest
+            - name: STORE_SIGNER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: tomni-package-signer-token
+                  key: latest
+            - name: STORE_WORKER_ENABLED
+              value: 'false'
+          startupProbe:
+            httpGet:
+              path: /health/ready
+              port: 8080
+            failureThreshold: 12
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: 8080
+            periodSeconds: 15

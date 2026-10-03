@@ -10,21 +10,24 @@ import { useConversationContextSafe } from '@/renderer/hooks/context/Conversatio
 import { useLayoutContext } from '@/renderer/hooks/context/LayoutContext';
 import { iconColors } from '@/renderer/styles/colors';
 import { Alert, Button, Input, Message, Tag, Tooltip } from '@arco-design/web-react';
-import { Copy, PreviewOpen } from '@icon-park/react';
+import { Copy, Edit } from '@icon-park/react';
 import classNames from 'classnames';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { copyText } from '@/renderer/utils/ui/clipboard';
 import CollapsibleContent from '@renderer/components/chat/CollapsibleContent';
 import FilePreview from '@renderer/components/media/FilePreview';
 import HorizontalFileList from '@renderer/components/media/HorizontalFileList';
 import MarkdownView from '@renderer/components/Markdown';
-import { stripThinkTags, hasThinkTags } from '@renderer/utils/chat/thinkTagFilter';
+import { stripThinkTags, hasThinkTags, extractThinkingAndContent } from '@renderer/utils/chat/thinkTagFilter';
+import MessageThinking from './MessageThinking';
 import { stripTokenWatermarkNotice } from '@/common/chat/chatLib';
 import { stripSkillSuggest, hasSkillSuggest } from '@renderer/utils/chat/skillSuggestParser';
-import { getSecretMarkers, renderSecretMarkers } from '@renderer/utils/chat/secretMarkers';
-import { coreIdeClient } from '@/renderer/services/coreIdeClient';
+import { formatLucBatPoem } from '@renderer/utils/chat/lucBatPoemFormatter';
+import { renderSecretMarkers } from '@renderer/utils/chat/secretMarkers';
 import { usePreviewContext } from '@/renderer/pages/conversation/Preview';
+import StepProgressVisualizer, { parseStepProgress } from './StepProgressVisualizer';
+import { useUpdateMessageList } from '../hooks';
 
 /**
  * Format a timestamp for message display.
@@ -318,7 +321,6 @@ const Build0StructuredInput: React.FC<{ request: Build0InputRequest }> = ({ requ
 };
 
 const MessageText: React.FC<{ message: IMessageText }> = ({ message }) => {
-  // Filter think tags from content before rendering
   // Filter think tags before rendering.
   const contentToRender = useMemo(() => {
     let content = message.content.content;
@@ -338,6 +340,7 @@ const MessageText: React.FC<{ message: IMessageText }> = ({ message }) => {
         .replace(/[ \t]{2,}/g, ' ')
         .replace(/\n{3,}/g, '\n\n')
         .trim();
+      content = formatLucBatPoem(content);
       return content;
     }
     return content;
@@ -346,41 +349,65 @@ const MessageText: React.FC<{ message: IMessageText }> = ({ message }) => {
   const { text, files } = parseFileMarker(contentToRender);
   const { t } = useTranslation();
   const [showCopyAlert, setShowCopyAlert] = useState(false);
-  const [locallyRevealedText, setLocallyRevealedText] = useState<string | null>(null);
-  const [unavailableSecrets, setUnavailableSecrets] = useState<Set<string>>(() => new Set());
-  const [revealingSecret, setRevealingSecret] = useState<string | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editContent, setEditContent] = useState(text);
+  const updateMessageList = useUpdateMessageList();
+
   const isUserMessage = message.position === 'right';
   const isTeammateMessage = message.position === 'left' && message.content.teammateMessage === true;
+  const isCanonicalOverride = message.content?.canonicalOverride === true;
   const shouldRenderPlainText = isUserMessage;
   const conversationContext = useConversationContextSafe();
   const layout = useLayoutContext();
   const isMobile = layout?.isMobile ?? false;
-  const secretMarkers = useMemo(() => (isUserMessage ? [] : getSecretMarkers(text)), [isUserMessage, text]);
-  const renderedText = useMemo(
-    () =>
-      locallyRevealedText ??
-      renderSecretMarkers(text, {}, unavailableSecrets, (alias) => t('ide.memory.secret.chatUnavailable', { alias })),
-    [locallyRevealedText, t, text, unavailableSecrets]
-  );
+
+  // Core chat never resolves secret markers. Only an approved Surface operation
+  // may receive an opaque handle through Main; markers stay safe to render/copy.
+  const renderedText = useMemo(() => renderSecretMarkers(text, {}, new Set(), () => ''), [text]);
   const build0Input = useMemo(
     () => (isUserMessage ? null : parseBuild0Input(renderedText)),
     [isUserMessage, renderedText]
   );
+  const stepProgress = useMemo(
+    () => (isUserMessage ? null : parseStepProgress(renderedText)),
+    [isUserMessage, renderedText]
+  );
   const displayText = build0Input?.text ?? renderedText;
   const { data, json } = useFormatContent(displayText);
-
-  useEffect(() => {
-    setLocallyRevealedText(null);
-    setUnavailableSecrets(new Set());
-  }, [text]);
 
   const resolvedFiles = useMemo(
     () => files.map((file_path) => resolveMessageFilePath(file_path, conversationContext?.workspace)),
     [conversationContext?.workspace, files]
   );
 
+  const extractedThinking = useMemo(() => {
+    const raw = message.content.content;
+    if (typeof raw === 'string' && hasThinkTags(raw)) {
+      const { thinking } = extractThinkingAndContent(raw);
+      return thinking;
+    }
+    return '';
+  }, [message.content.content]);
+
+  const thinkingMessageObj = useMemo(() => {
+    if (!extractedThinking) return null;
+    return {
+      id: `${message.id}-inline-thinking`,
+      msg_id: `${message.msg_id}-inline-thinking`,
+      type: 'thinking' as const,
+      conversation_id: message.conversation_id,
+      position: 'left' as const,
+      created_at: message.created_at,
+      status: 'finish' as const,
+      content: {
+        content: extractedThinking,
+        status: 'done' as const,
+      },
+    };
+  }, [extractedThinking, message.id, message.msg_id, message.conversation_id, message.created_at]);
+
   // Skip empty content to avoid rendering an empty DOM node.
-  if (!message.content.content || (typeof message.content.content === 'string' && !message.content.content.trim())) {
+  if (!text.trim() && !extractedThinking) {
     return null;
   }
 
@@ -399,28 +426,29 @@ const MessageText: React.FC<{ message: IMessageText }> = ({ message }) => {
       });
   };
 
-  const handleSecretReveal = async (): Promise<void> => {
-    if (!conversationContext?.workspace || revealingSecret) return;
-    if (locallyRevealedText !== null) {
-      setLocallyRevealedText(null);
-      return;
-    }
-
-    setRevealingSecret('all');
-    const response = await coreIdeClient
-      .repoSecretRenderMarkers(conversationContext.workspace, text)
-      .catch((cause): { ok: false; error: string } => ({
-        ok: false,
-        error: cause instanceof Error ? cause.message : String(cause),
-      }));
-    setRevealingSecret(null);
-    if ('error' in response) {
-      setUnavailableSecrets(new Set(secretMarkers.map(({ alias }) => alias)));
-      Message.error(response.error);
-      return;
-    }
-    setUnavailableSecrets(new Set());
-    setLocallyRevealedText(response.data.text);
+  const handleSaveCanonical = () => {
+    updateMessageList((list) =>
+      list.map((m) => {
+        if (m.id === message.id && m.type === 'text') {
+          return {
+            ...m,
+            content: {
+              ...m.content,
+              content: editContent,
+              canonicalOverride: true,
+              edited: true,
+            },
+          };
+        }
+        return m;
+      })
+    );
+    setIsEditing(false);
+    Message.success(
+      t('messages.canonicalSaved', {
+        defaultValue: 'Đã lưu làm ngữ cảnh chính cho Agent',
+      })
+    );
   };
 
   const copyButton = (
@@ -435,6 +463,21 @@ const MessageText: React.FC<{ message: IMessageText }> = ({ message }) => {
     </Tooltip>
   );
 
+  const editButton = !isUserMessage && (
+    <Tooltip content={t('messages.editCanonical', { defaultValue: 'Chỉnh sửa ngữ cảnh chính' })}>
+      <div
+        className='p-4px rd-4px cursor-pointer hover:bg-3 transition-colors opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto focus-within:opacity-100 focus-within:pointer-events-auto'
+        onClick={() => {
+          setEditContent(text);
+          setIsEditing(true);
+        }}
+        style={{ lineHeight: 0 }}
+      >
+        <Edit theme='outline' size='16' fill={iconColors.secondary} />
+      </div>
+    </Tooltip>
+  );
+
   const cronMeta = message.content.cronMeta;
   const senderName = message.content.senderName;
   const senderAgentType = message.content.senderAgentType;
@@ -444,7 +487,15 @@ const MessageText: React.FC<{ message: IMessageText }> = ({ message }) => {
   return (
     <>
       <div className={classNames('min-w-0 flex flex-col group', isUserMessage ? 'items-end' : 'items-start')}>
+        {thinkingMessageObj && <MessageThinking message={thinkingMessageObj} />}
         {cronMeta && <MessageCronBadge meta={cronMeta} />}
+        {isCanonicalOverride && (
+          <div className='flex items-center gap-4px mb-4px'>
+            <Tag color='arcoblue' size='small'>
+              ⭐ {t('messages.canonicalContextBadge', { defaultValue: 'Ngữ cảnh chính đã chỉnh sửa' })}
+            </Tag>
+          </div>
+        )}
         {isTeammateMessage && senderName && (
           <div className='flex items-center gap-6px mb-4px'>
             <TeammateMessageAvatar
@@ -470,59 +521,76 @@ const MessageText: React.FC<{ message: IMessageText }> = ({ message }) => {
             )}
           </div>
         )}
-        {secretMarkers.length > 0 && (
-          <div className='mb-6px flex flex-wrap items-center gap-6px'>
-            {secretMarkers.map(({ alias }) => (
+        {isEditing ? (
+          <div
+            className='w-full max-w-780px flex flex-col gap-8px p-10px bg-bg-2 rd-12px border border-solid border-border-2 shadow-sm'
+            data-testid='message-inplace-editor'
+          >
+            <div className='text-12px font-600 text-t-primary flex items-center gap-4px'>
+              <Edit theme='outline' size='14' />
+              {t('messages.editCanonicalTitle', { defaultValue: 'Chỉnh sửa phản hồi (Ghi đè làm ngữ cảnh chính)' })}
+            </div>
+            <Input.TextArea
+              value={editContent}
+              onChange={setEditContent}
+              autoSize={{ minRows: 4, maxRows: 16 }}
+              className='text-14px rd-8px'
+            />
+            <div className='flex items-center justify-end gap-8px'>
               <Button
-                key={alias}
-                size='mini'
-                icon={<PreviewOpen theme='outline' size={13} />}
-                loading={revealingSecret !== null}
-                disabled={!conversationContext?.workspace}
-                onClick={() => void handleSecretReveal()}
+                size='small'
+                type='secondary'
+                onClick={() => {
+                  setIsEditing(false);
+                  setEditContent(text);
+                }}
               >
-                {locallyRevealedText !== null
-                  ? t('ide.memory.secret.chatHide', { alias })
-                  : t('ide.memory.secret.chatReveal', { alias })}
+                {t('common.cancel', { defaultValue: 'Hủy' })}
               </Button>
-            ))}
+              <Button size='small' type='primary' onClick={handleSaveCanonical}>
+                {t('messages.saveCanonical', { defaultValue: 'Lưu ngữ cảnh chính' })}
+              </Button>
+            </div>
           </div>
+        ) : (
+          text.trim() && (
+            <div
+              className={classNames('min-w-0 [&>p:first-child]:mt-0px [&>p:last-child]:mb-0px md:max-w-780px', {
+                'bg-aou-2 p-6px md:p-8px': isUserMessage || cronMeta,
+                'bg-3 p-6px md:p-8px': isTeammateMessage,
+                'w-full': !(isUserMessage || cronMeta || isTeammateMessage),
+              })}
+              style={{
+                ...(isUserMessage || cronMeta
+                  ? { borderRadius: '8px 0 8px 8px', color: 'var(--text-primary)' }
+                  : isTeammateMessage
+                    ? { borderRadius: '0 8px 8px 8px' }
+                    : undefined),
+              }}
+            >
+              {/* Use CollapsibleContent for JSON content. */}
+              {shouldRenderPlainText ? (
+                <div className='whitespace-pre-wrap break-words' data-testid='message-text-content'>
+                  {text}
+                </div>
+              ) : json ? (
+                <CollapsibleContent maxHeight={200} defaultCollapsed={true}>
+                  <div data-testid='message-text-content'>
+                    <MarkdownView
+                      codeStyle={CODE_STYLE}
+                    >{`\`\`\`json\n${JSON.stringify(data, null, 2)}\n\`\`\``}</MarkdownView>
+                  </div>
+                </CollapsibleContent>
+              ) : (
+                <div data-testid='message-text-content'>
+                  <MarkdownView codeStyle={CODE_STYLE}>{data}</MarkdownView>
+                </div>
+              )}
+              {build0Input ? <Build0StructuredInput request={build0Input.request} /> : null}
+            </div>
+          )
         )}
-        <div
-          className={classNames('min-w-0 [&>p:first-child]:mt-0px [&>p:last-child]:mb-0px md:max-w-780px', {
-            'bg-aou-2 p-6px md:p-8px': isUserMessage || cronMeta,
-            'bg-3 p-6px md:p-8px': isTeammateMessage,
-            'w-full': !(isUserMessage || cronMeta || isTeammateMessage),
-          })}
-          style={{
-            ...(isUserMessage || cronMeta
-              ? { borderRadius: '8px 0 8px 8px', color: 'var(--text-primary)' }
-              : isTeammateMessage
-                ? { borderRadius: '0 8px 8px 8px' }
-                : undefined),
-          }}
-        >
-          {/* Use CollapsibleContent for JSON content. */}
-          {shouldRenderPlainText ? (
-            <div className='whitespace-pre-wrap break-words' data-testid='message-text-content'>
-              {text}
-            </div>
-          ) : json ? (
-            <CollapsibleContent maxHeight={200} defaultCollapsed={true}>
-              <div data-testid='message-text-content'>
-                <MarkdownView
-                  codeStyle={CODE_STYLE}
-                >{`\`\`\`json\n${JSON.stringify(data, null, 2)}\n\`\`\``}</MarkdownView>
-              </div>
-            </CollapsibleContent>
-          ) : (
-            <div data-testid='message-text-content'>
-              <MarkdownView codeStyle={CODE_STYLE}>{data}</MarkdownView>
-            </div>
-          )}
-          {build0Input ? <Build0StructuredInput request={build0Input.request} /> : null}
-        </div>
-        {/* Hover-revealed copy + timestamp row. Mobile has no hover affordance,
+        {/* Hover-revealed copy/edit + timestamp row. Mobile has no hover affordance,
             so we drop the row entirely; system-level long-press still copies. */}
         {!isMobile && (
           <div
@@ -531,6 +599,7 @@ const MessageText: React.FC<{ message: IMessageText }> = ({ message }) => {
             })}
           >
             {copyButton}
+            {editButton}
             {message.created_at && (
               <span className='text-12px text-t-secondary opacity-0 group-hover:opacity-100 transition-opacity select-none'>
                 {formatMessageTime(message.created_at)}

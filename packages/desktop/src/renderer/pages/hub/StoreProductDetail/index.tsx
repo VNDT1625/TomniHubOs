@@ -5,8 +5,9 @@
  */
 
 import type { PackageListing } from '@/common/packages';
+import type { PackageSurfaceAiAccessConsentDisplay } from '@/common/types/platform/electron';
 import { Alert, Button, Card, Message, Modal, Spin, Tag } from '@arco-design/web-react';
-import { ApplicationOne, CheckOne, Code, Left, Lock, Shield } from '@icon-park/react';
+import { ApplicationOne, CheckOne, Left, Lock, Shield } from '@icon-park/react';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getFirstRunnablePackageModule } from '../PackageAppHost';
@@ -31,12 +32,21 @@ const formatPackageSize = (bytes: number | undefined, locale: string): string =>
   }).format(megabytes >= 1 ? megabytes : bytes / 1024);
 };
 
+/** Formats a signed integer-minor offer for display only; commerce decisions stay in Main. */
+const formatOfferPrice = (amountMinor: number, currency: string, locale: string): string => {
+  const formatter = new Intl.NumberFormat(locale, { style: 'currency', currency });
+  const fractionDigits = formatter.resolvedOptions().maximumFractionDigits;
+  return formatter.format(amountMinor / 10 ** fractionDigits);
+};
+
 const StoreProductDetail: React.FC<StoreProductDetailProps> = ({ packageId, onBack, onOpen }) => {
   const { t, i18n } = useTranslation();
   const [listing, setListing] = useState<PackageListing>();
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+  const [surfaceAiConsents, setSurfaceAiConsents] = useState<readonly PackageSurfaceAiAccessConsentDisplay[]>([]);
+  const [surfaceAiBusyOperation, setSurfaceAiBusyOperation] = useState<string>();
   const [failedScreenshots, setFailedScreenshots] = useState<Set<string>>(() => new Set());
 
   const load = useCallback(async (): Promise<void> => {
@@ -44,7 +54,15 @@ const StoreProductDetail: React.FC<StoreProductDetailProps> = ({ packageId, onBa
     setError(undefined);
     try {
       const packages = await packageClient.list();
-      setListing(packages.find((item) => item.manifest.id === packageId));
+      const nextListing = packages.find((item) => item.manifest.id === packageId);
+      setListing(nextListing);
+      const accessApi = window.electronAPI?.packageSurfaceAiAccess;
+      if (!accessApi || nextListing?.state !== 'installed' || !nextListing.enabled) {
+        setSurfaceAiConsents([]);
+      } else {
+        const result = await accessApi.listConsents({ packageId });
+        setSurfaceAiConsents(result.ok ? result.consents : []);
+      }
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : String(loadError));
     } finally {
@@ -60,6 +78,7 @@ const StoreProductDetail: React.FC<StoreProductDetailProps> = ({ packageId, onBa
   const installed = listing?.state === 'installed';
   const hasLocalInstall = Boolean(listing?.installedVersion);
   const runnableModule = useMemo(() => (listing ? getFirstRunnablePackageModule(listing) : undefined), [listing]);
+  const requiresPayment = Boolean(listing?.offer?.active && listing.offer.price.amountMinor > 0);
 
   const installOrUpdate = async (): Promise<void> => {
     if (!listing) return;
@@ -96,6 +115,21 @@ const StoreProductDetail: React.FC<StoreProductDetailProps> = ({ packageId, onBa
     }
   };
 
+  const updateInstalledPackage = async (operation: (id: string) => Promise<PackageListing>): Promise<void> => {
+    if (!listing) return;
+    setBusy(true);
+    setError(undefined);
+    try {
+      setListing(await operation(listing.manifest.id));
+    } catch (operationError) {
+      const message = operationError instanceof Error ? operationError.message : String(operationError);
+      setError(message);
+      Message.error(message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const confirmRemoval = (): void => {
     if (!listing) return;
     Modal.confirm({
@@ -106,6 +140,105 @@ const StoreProductDetail: React.FC<StoreProductDetailProps> = ({ packageId, onBa
       okButtonProps: { status: 'danger' },
       onOk: removePackage,
     });
+  };
+
+  const requestSurfaceAiAccess = async (operationId: string): Promise<void> => {
+    const accessApi = window.electronAPI?.packageSurfaceAiAccess;
+    if (!accessApi) {
+      Message.error(t('guid.hubHome.storeDetail.aiAccessUnavailable'));
+      return;
+    }
+    setSurfaceAiBusyOperation(operationId);
+    try {
+      const result = await accessApi.requestChallenge({ packageId, operationId });
+      if (!result.ok || !('challenge' in result)) {
+        Message.error(t('guid.hubHome.storeDetail.aiAccessUnavailable'));
+        return;
+      }
+      const { challenge } = result;
+      Modal.confirm({
+        title: t('guid.hubHome.storeDetail.aiAccessConfirmTitle'),
+        content: (
+          <div className='flex flex-col gap-3' data-testid='store-product-ai-access-challenge'>
+            <p className='m-0 text-secondary'>
+              {t('guid.hubHome.storeDetail.aiAccessConfirmDescription', {
+                operation: challenge.operationId,
+                capability: challenge.capability,
+              })}
+            </p>
+            <dl className='m-0 grid grid-cols-[minmax(132px,auto)_minmax(0,1fr)] gap-x-3 gap-y-2 text-sm'>
+              <dt>{t('guid.hubHome.storeDetail.aiAccessConfirmPackage')}</dt>
+              <dd className='m-0 break-all' data-testid='store-product-ai-access-challenge-package'>
+                {`${challenge.packageId} · ${challenge.packageVersion}`}
+              </dd>
+              <dt>{t('guid.hubHome.storeDetail.aiAccessConfirmPublisher')}</dt>
+              <dd className='m-0 break-all' data-testid='store-product-ai-access-challenge-publisher'>
+                {challenge.publisherId}
+              </dd>
+              <dt>{t('guid.hubHome.storeDetail.aiAccessConfirmOperation')}</dt>
+              <dd className='m-0 break-all' data-testid='store-product-ai-access-challenge-operation'>
+                {challenge.operationId}
+              </dd>
+              <dt>{t('guid.hubHome.storeDetail.aiAccessConfirmCapability')}</dt>
+              <dd className='m-0 break-all' data-testid='store-product-ai-access-challenge-capability'>
+                {challenge.capability}
+              </dd>
+              <dt>{t('guid.hubHome.storeDetail.aiAccessConfirmSecretUse')}</dt>
+              <dd className='m-0' data-testid='store-product-ai-access-challenge-secret-use'>
+                {challenge.secretUse
+                  ? t('guid.hubHome.storeDetail.aiAccessConfirmSecretUseYes')
+                  : t('guid.hubHome.storeDetail.aiAccessConfirmSecretUseNo')}
+              </dd>
+              <dt>{t('guid.hubHome.storeDetail.aiAccessConfirmDataClasses')}</dt>
+              <dd className='m-0 break-all' data-testid='store-product-ai-access-challenge-data-classes'>
+                {challenge.dataClasses.join(', ') || t('guid.hubHome.storeDetail.aiAccessConfirmNone')}
+              </dd>
+              <dt>{t('guid.hubHome.storeDetail.aiAccessConfirmDestinations')}</dt>
+              <dd className='m-0 break-all' data-testid='store-product-ai-access-challenge-destinations'>
+                {challenge.destinationIds.join(', ') || t('guid.hubHome.storeDetail.aiAccessConfirmNone')}
+              </dd>
+              <dt>{t('guid.hubHome.storeDetail.aiAccessConfirmExpiresAt')}</dt>
+              <dd className='m-0 break-all' data-testid='store-product-ai-access-challenge-expires-at'>
+                <time dateTime={challenge.expiresAt}>{challenge.expiresAt}</time>
+              </dd>
+            </dl>
+          </div>
+        ),
+        okText: t('guid.hubHome.storeDetail.aiAccessAllow'),
+        cancelText: t('common.cancel'),
+        onOk: async () => {
+          const confirmation = await accessApi.confirmChallenge({ challengeId: challenge.challengeId, approved: true });
+          if (!confirmation.ok || !('approved' in confirmation) || !confirmation.approved) {
+            Message.error(t('guid.hubHome.storeDetail.aiAccessUnavailable'));
+            return;
+          }
+          Message.success(t('guid.hubHome.storeDetail.aiAccessGranted'));
+          await load();
+        },
+        onCancel: () => {
+          void accessApi.confirmChallenge({ challengeId: challenge.challengeId, approved: false });
+        },
+      });
+    } finally {
+      setSurfaceAiBusyOperation(undefined);
+    }
+  };
+
+  const revokeSurfaceAiAccess = async (consentId: string): Promise<void> => {
+    const accessApi = window.electronAPI?.packageSurfaceAiAccess;
+    if (!accessApi) return;
+    setSurfaceAiBusyOperation(consentId);
+    try {
+      const result = await accessApi.revokeConsent({ consentId });
+      if (!result.ok || !('revoked' in result) || !result.revoked) {
+        Message.error(t('guid.hubHome.storeDetail.aiAccessUnavailable'));
+        return;
+      }
+      Message.success(t('guid.hubHome.storeDetail.aiAccessRevoked'));
+      await load();
+    } finally {
+      setSurfaceAiBusyOperation(undefined);
+    }
   };
 
   if (loading) {
@@ -135,7 +268,7 @@ const StoreProductDetail: React.FC<StoreProductDetailProps> = ({ packageId, onBa
   }
 
   const { manifest } = listing;
-  const AppIcon = manifest.id === 'com.tomni.ide' ? Code : ApplicationOne;
+  const AppIcon = ApplicationOne;
   const signedFirstParty = listing.trust === 'signed-first-party';
   const statusKey = listing.updateAvailable
     ? 'guid.hubHome.storeDetail.updateAvailable'
@@ -183,10 +316,20 @@ const StoreProductDetail: React.FC<StoreProductDetailProps> = ({ packageId, onBa
               </Tag>
               <Tag icon={<Shield theme='outline' size={12} />}>{t('guid.hubHome.storeDetail.verified')}</Tag>
               <Tag>{manifest.bundleKind}</Tag>
+              {listing.offer?.active && (
+                <Tag data-testid='store-product-offer'>
+                  {t('guid.hubHome.storeDetail.price')}{' '}
+                  {formatOfferPrice(
+                    listing.offer.price.amountMinor,
+                    listing.offer.price.currency,
+                    i18n.resolvedLanguage || i18n.language
+                  )}
+                </Tag>
+              )}
             </div>
           </div>
           <div className={styles.heroActions}>
-            {installed && runnableModule && (
+            {installed && listing.enabled && runnableModule && (
               <Button
                 type={listing.updateAvailable ? 'secondary' : 'primary'}
                 long
@@ -197,15 +340,55 @@ const StoreProductDetail: React.FC<StoreProductDetailProps> = ({ packageId, onBa
               </Button>
             )}
             {(!installed || listing.updateAvailable) && (
+              <>
+                <Button
+                  type='primary'
+                  long
+                  loading={busy}
+                  disabled={!listing.compatible || requiresPayment}
+                  onClick={() => void installOrUpdate()}
+                  data-testid='store-product-installation'
+                >
+                  {t(listing.updateAvailable ? 'guid.hubHome.storeDetail.update' : 'guid.hubHome.storeDetail.install')}
+                </Button>
+                {requiresPayment && (
+                  <span className={styles.paymentNotice} data-testid='store-product-payment-unavailable'>
+                    {t('guid.hubHome.storeDetail.paymentUnavailable')}
+                  </span>
+                )}
+              </>
+            )}
+            {installed && !listing.enabled && (
               <Button
                 type='primary'
                 long
                 loading={busy}
-                disabled={!listing.compatible}
-                onClick={() => void installOrUpdate()}
-                data-testid='store-product-installation'
+                onClick={() => void updateInstalledPackage(packageClient.enable)}
+                data-testid='store-product-enable'
               >
-                {t(listing.updateAvailable ? 'guid.hubHome.storeDetail.update' : 'guid.hubHome.storeDetail.install')}
+                {t('guid.hubHome.storeDetail.enable')}
+              </Button>
+            )}
+            {installed && listing.enabled && (
+              <Button
+                type='secondary'
+                long
+                loading={busy}
+                onClick={() => void updateInstalledPackage(packageClient.disable)}
+                data-testid='store-product-disable'
+              >
+                {t('guid.hubHome.storeDetail.disable')}
+              </Button>
+            )}
+            {installed && listing.previousVersion && (
+              <Button
+                type='secondary'
+                long
+                disabled={busy}
+                onClick={() => void updateInstalledPackage(packageClient.rollback)}
+                data-testid='store-product-rollback'
+              >
+                {t('guid.hubHome.storeDetail.rollback')}
               </Button>
             )}
             {hasLocalInstall && (
@@ -238,6 +421,57 @@ const StoreProductDetail: React.FC<StoreProductDetailProps> = ({ packageId, onBa
           </div>
         </div>
       </Card>
+
+      {installed && listing.enabled && listing.installedManifest?.aiAccess?.operations.length ? (
+        <Card className={styles.sectionCard} bordered data-testid='store-product-ai-access'>
+          <div className={styles.sectionHeading}>
+            <div>
+              <h3>{t('guid.hubHome.storeDetail.aiAccessTitle')}</h3>
+              <p>{t('guid.hubHome.storeDetail.aiAccessDescription')}</p>
+            </div>
+            <Tag color='orange'>{t('guid.hubHome.storeDetail.aiAccessSeparateConsent')}</Tag>
+          </div>
+          <div className={styles.aiAccessList}>
+            {listing.installedManifest.aiAccess.operations.map((operation) => {
+              const consent = surfaceAiConsents.find(
+                (candidate) =>
+                  candidate.operationId === operation.id &&
+                  candidate.packageVersion === listing.installedManifest?.version
+              );
+              return (
+                <div className={styles.aiAccessOperation} key={operation.id}>
+                  <div>
+                    <strong>{operation.id}</strong>
+                    <span>{operation.capability}</span>
+                  </div>
+                  {consent ? (
+                    <Button
+                      type='secondary'
+                      status='danger'
+                      size='small'
+                      loading={surfaceAiBusyOperation === consent.consentId}
+                      onClick={() => void revokeSurfaceAiAccess(consent.consentId)}
+                      data-testid={`store-product-ai-revoke-${operation.id}`}
+                    >
+                      {t('guid.hubHome.storeDetail.aiAccessRevoke')}
+                    </Button>
+                  ) : (
+                    <Button
+                      type='primary'
+                      size='small'
+                      loading={surfaceAiBusyOperation === operation.id}
+                      onClick={() => void requestSurfaceAiAccess(operation.id)}
+                      data-testid={`store-product-ai-grant-${operation.id}`}
+                    >
+                      {t('guid.hubHome.storeDetail.aiAccessAllow')}
+                    </Button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      ) : null}
 
       {screenshots.length > 0 ? (
         <section

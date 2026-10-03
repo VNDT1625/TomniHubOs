@@ -16,7 +16,12 @@
  * Process boundary: Main-process (Node.js / Electron) module.
  */
 
-import { cancelWorkflowRun, getSharedAutomationServices, startWorkflowRun } from './automationBridge';
+import {
+  cancelWorkflowRun,
+  getSharedAutomationServices,
+  requireAutomationExecution,
+  startWorkflowRun,
+} from './automationBridge';
 import { createAutomationServer, type AutomationServerDeps } from './automationMcpServer';
 import { startAutomationMcpHost, type AutomationMcpHost } from './automationMcpHost';
 
@@ -41,4 +46,7 @@ export const getAutomationServerDeps = (): AutomationServerDeps => {
 export const buildAutomationServer = () => createAutomationServer(getAutomationServerDeps());
 
 /** Start the in-process Automation MCP host bound to the shared services. */
-export const startAutomation = (): Promise<AutomationMcpHost> => startAutomationMcpHost(getAutomationServerDeps());
+export const startAutomation = (): Promise<AutomationMcpHost> => {
+  requireAutomationExecution();
+  return startAutomationMcpHost(getAutomationServerDeps());
+};

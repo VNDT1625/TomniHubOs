@@ -9,8 +9,8 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createPremiumStarterProject, type ViuProjectState } from '@/common/viu';
-import ComponentLibrary from '@/renderer/pages/studio/ide/Viu/next/authoring/ComponentLibrary';
-import type { ViuNextLabels } from '@/renderer/pages/studio/ide/Viu/next/types';
+import ComponentLibrary from '@package-apps/design/renderer/viu/next/authoring/ComponentLibrary';
+import type { ViuNextLabels } from '@package-apps/design/renderer/viu/next/types';
 
 const labels: ViuNextLabels['componentLibrary'] = {
   title: 'Component library',

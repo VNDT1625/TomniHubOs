@@ -1,5 +1,5 @@
 import { bridge } from '@office-ai/platform';
-import { NativeOfficeWatchService, NativeWatchService, NativeZipService, type ZipEntry } from './fileOperations';
+import { NativeOfficeWatchService, NativeWatchService, type ZipEntry } from './fileOperations';
 
 export const nativeFileOperationChannels = {
   createZip: bridge.buildProvider<boolean, { path: string; request_id?: string; files: ZipEntry[] }>('native-fs.zip'),
@@ -13,13 +13,21 @@ export const nativeFileOperationChannels = {
   officeFileAdded: bridge.buildEmitter<{ file_path: string; workspace: string }>('workspaceOfficeWatch.fileAdded'),
 };
 
+/**
+ * The legacy ZIP endpoint accepts renderer-controlled output and source paths
+ * but has no actor/path capability, consent, or durable governance receipt
+ * contract. Keep its typed channel for compatibility, but fail closed before
+ * invoking the writer until that governed Main seam exists.
+ */
+const NATIVE_ZIP_GOVERNANCE_REQUIRED =
+  'Native ZIP creation is disabled until the governed Main file-operation seam is available.';
+
 export const registerNativeFileOperationBridge = (
-  zip = new NativeZipService(),
   watch = new NativeWatchService(),
   officeWatch = new NativeOfficeWatchService()
 ): void => {
-  nativeFileOperationChannels.createZip.provider((input) => zip.create(input));
-  nativeFileOperationChannels.cancelZip.provider(({ request_id }) => Promise.resolve(zip.cancel(request_id)));
+  nativeFileOperationChannels.createZip.provider(() => Promise.reject(new Error(NATIVE_ZIP_GOVERNANCE_REQUIRED)));
+  nativeFileOperationChannels.cancelZip.provider(() => Promise.resolve(false));
   nativeFileOperationChannels.watchStart.provider(({ file_path }) => {
     watch.start(file_path, (event) => nativeFileOperationChannels.fileChanged.emit(event));
     return Promise.resolve();

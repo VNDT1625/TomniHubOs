@@ -18,14 +18,14 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { AgentEvent } from '@/renderer/pages/browser/browserBridgeClient';
+import type { AgentEvent } from '@package-apps/browser/renderer/browser/browserBridgeClient';
 
 // Capture the always-on agent-event listener the store registers on first use.
 let eventListener: ((event: AgentEvent) => void) | null = null;
 const runAgent = vi.fn();
 const cancelAgent = vi.fn();
 
-vi.mock('@/renderer/pages/browser/browserBridgeClient', () => ({
+vi.mock('@package-apps/browser/renderer/browser/browserBridgeClient', () => ({
   browserClient: {
     onAgentEvent: (listener: (event: AgentEvent) => void) => {
       eventListener = listener;
@@ -38,7 +38,7 @@ vi.mock('@/renderer/pages/browser/browserBridgeClient', () => ({
   },
 }));
 
-import { agentChatStore } from '@/renderer/pages/browser/agentChatStore';
+import { agentChatStore } from '@package-apps/browser/renderer/browser/agentChatStore';
 
 /** Push an event through the captured always-on listener. */
 const emit = (event: AgentEvent): void => {

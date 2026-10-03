@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { createOmniArtifactStore } from '@/process/ide/mcp/omniArtifactStore';
+import { createOmniArtifactStore } from '@package-apps/ide/process/mcp/omniArtifactStore';
 
 const SESSION_ID = 'session-test';
 

@@ -18,6 +18,7 @@ if (app.isPackaged) {
 }
 import initStorage from './utils/initStorage';
 import './utils/initBridge';
+import { whenAccountBackgroundLifecycleReady } from './bridge';
 import { runNativeMcpBootstrap } from './resources/mcpRegistry/nativeMcpBootstrap';
 import './services/i18n'; // Initialize i18n for main process
 
@@ -27,6 +28,9 @@ export const initializeProcess = async () => {
 
   await initStorage();
   mark('initStorage');
+
+  await whenAccountBackgroundLifecycleReady();
+  mark('accountBackgroundLifecycle');
 
   const mcpBootstrap = await runNativeMcpBootstrap({ legacyBackendStarted: false });
   mark(`nativeMcpBootstrap(${mcpBootstrap.registered.length} ready, ${mcpBootstrap.failed.length} failed)`);

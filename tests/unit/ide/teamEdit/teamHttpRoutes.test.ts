@@ -7,10 +7,17 @@
 import { createServer, request, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { admitTeamPeer, clearAllSessions, publishTeamSession } from '@/process/studio/collabServer';
-import { handleTeamRequest, JoinFailureRateLimiter } from '@/process/ide/teamEdit/teamHttpRoutes';
-import { teamRemoteClient } from '@/process/ide/teamEdit/teamRemoteClient';
-import type { TeamSessionHost } from '@/process/ide/teamEdit/teamSessionHost';
+import {
+  admitTeamPeer,
+  clearAllSessions,
+  publishTeamSession,
+} from '@package-apps/shared/process/collaboration/collabServer';
+import {
+  handleTeamRequest,
+  JoinFailureRateLimiter,
+} from '@package-apps/ide/process/collaboration/teamEdit/teamHttpRoutes';
+import { teamRemoteClient } from '@package-apps/ide/process/collaboration/teamEdit/teamRemoteClient';
+import type { TeamSessionHost } from '@package-apps/ide/process/collaboration/teamEdit/teamSessionHost';
 
 const servers: Server[] = [];
 

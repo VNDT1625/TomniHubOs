@@ -7,9 +7,9 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { buildTraceContext } from '@/process/ide/traceContextBuilder';
-import type { RuntimeTrace } from '@/process/ide/quickTestTracer';
-import type { KnowledgeGraph } from '@/process/ide/understandTypes';
+import { buildTraceContext } from '@package-apps/ide/process/execution/inspection/traceContextBuilder';
+import type { RuntimeTrace } from '@package-apps/ide/process/execution/quickTest/runtime/quickTestTracer';
+import type { KnowledgeGraph } from '@package-apps/ide/process/knowledge/graph/understandTypes';
 
 const node = (id: string, layer: 'ui' | 'api' | 'service' | 'util' = 'util', summary = '') => ({
   id,

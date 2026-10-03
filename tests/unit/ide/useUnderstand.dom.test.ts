@@ -14,7 +14,11 @@
 
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { KnowledgeBuildPhase, KnowledgeGraph, UnderstandResult } from '@process/ide/understandTypes';
+import type {
+  KnowledgeBuildPhase,
+  KnowledgeGraph,
+  UnderstandResult,
+} from '@package-apps/ide/process/knowledge/graph/understandTypes';
 
 const {
   kgGetMock,
@@ -46,7 +50,7 @@ const {
   },
 }));
 
-vi.mock('@renderer/pages/studio/ide/ideClient', () => ({
+vi.mock('@package-apps/ide/renderer/services/ideClient', () => ({
   ideClient: {
     kgGet: kgGetMock,
     kgBuild: kgBuildMock,
@@ -58,12 +62,12 @@ vi.mock('@renderer/pages/studio/ide/ideClient', () => ({
   },
 }));
 
-vi.mock('@renderer/pages/studio/components/GenerationProgress', () => ({
+vi.mock('@package-apps/shared/renderer/GenerationProgress', () => ({
   recordGenDuration: recordGenDurationMock,
   getGenEstimate: (_key: string, fallback: number) => fallback,
 }));
 
-import { useUnderstand } from '@renderer/pages/studio/ide/useUnderstand';
+import { useUnderstand } from '@package-apps/ide/renderer/hooks/useUnderstand';
 
 const ROOT = '/repo';
 

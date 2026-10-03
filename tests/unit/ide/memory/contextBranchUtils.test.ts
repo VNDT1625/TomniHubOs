@@ -2,7 +2,7 @@ import type { TomnyAgenticContextBranch } from '@/common';
 import {
   areContextBranchesValid,
   estimateContextBranchTokens,
-} from '@/renderer/pages/studio/ide/memory/contextBranchUtils';
+} from '@package-apps/ide/renderer/memory/contextBranchUtils';
 import { describe, expect, it } from 'vitest';
 
 const branch = (id: string, content: string): TomnyAgenticContextBranch => ({

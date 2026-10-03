@@ -7,36 +7,22 @@
 /**
  * Built-in MCP server for image generation.
  * Runs as a standalone stdio process spawned by the MCP client.
- * Reads provider config from environment variables.
+ *
+ * This child deliberately does not execute provider image requests. A stdio MCP
+ * process cannot prove the authenticated actor, governed Run, capability grant,
+ * destination admission, opaque secret lease, final serialized-payload
+ * inspection, cancellation, or durable receipt required for remote image
+ * egress. It must remain fail-closed until a Main-owned authority owns that
+ * protocol.
  */
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { BUILTIN_IMAGE_GEN_ID, BUILTIN_IMAGE_GEN_NAME } from './constants';
-import { executeImageGeneration } from '@/common/chat/imageGenCore';
-import type { TProviderWithModel } from '@/common/config/storage';
+import { BUILTIN_IMAGE_GEN_NAME } from './constants';
 
-// Read provider config from environment variables
-function getProviderFromEnv(): TProviderWithModel | null {
-  const platform = process.env.TOMNY_IMG_PLATFORM;
-  const base_url = process.env.TOMNY_IMG_BASE_URL;
-  const api_key = process.env.TOMNY_IMG_API_KEY;
-  const model = process.env.TOMNY_IMG_MODEL;
-
-  if (!platform || !model) {
-    return null;
-  }
-
-  return {
-    id: BUILTIN_IMAGE_GEN_ID,
-    name: BUILTIN_IMAGE_GEN_NAME,
-    platform,
-    base_url: base_url || '',
-    api_key: api_key || '',
-    use_model: model,
-  };
-}
+const IMAGE_EGRESS_DISABLED_MESSAGE =
+  'Error: Built-in Image MCP is temporarily unavailable because remote image generation requires a Main-governed authority.';
 
 async function main() {
   const server = new McpServer({
@@ -70,9 +56,9 @@ Input Support:
 - Multiple HTTP/HTTPS image URLs in array format
 - Text prompts for generation or analysis
 
-Output:
-- Saves generated/processed images to workspace with timestamp naming
-- Returns image path and AI description/analysis
+Status:
+- This legacy stdio child is temporarily unavailable until Main owns the governed image egress protocol.
+- No image file, URL, prompt, provider configuration, credential, or network destination is processed by this child.
 
 IMPORTANT: When user provides multiple images, ALWAYS pass ALL images to the image_uris parameter as an array.`,
     {
@@ -94,34 +80,10 @@ IMPORTANT: When user provides multiple images, ALWAYS pass ALL images to the ima
           'Optional: Working directory for resolving relative paths and saving output images. Defaults to current working directory.'
         ),
     },
-    async ({ prompt, image_uris, workspace_dir }) => {
-      const provider = getProviderFromEnv();
-      if (!provider) {
-        return {
-          content: [
-            {
-              type: 'text' as const,
-              text: 'Error: Image generation model not configured. Please select an image generation model in Settings > Tools.',
-            },
-          ],
-          isError: true,
-        };
-      }
-
-      const proxy = process.env.TOMNY_IMG_PROXY || undefined;
-      const workspaceDir = workspace_dir || process.cwd();
-
-      const result = await executeImageGeneration({ prompt, image_uris }, provider, workspaceDir, proxy);
-
-      if (!result.success) {
-        return {
-          content: [{ type: 'text' as const, text: result.text }],
-          isError: true,
-        };
-      }
-
+    async () => {
       return {
-        content: [{ type: 'text' as const, text: result.text }],
+        content: [{ type: 'text' as const, text: IMAGE_EGRESS_DISABLED_MESSAGE }],
+        isError: true,
       };
     }
   );

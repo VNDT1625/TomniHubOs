@@ -33,7 +33,7 @@ vi.mock('@/renderer/hooks/agent/useModelProviderList', () => ({
   useModelProviderList: () => ({ providers: [], getAvailableModels: () => [], formatModelLabel: () => '' }),
 }));
 
-import StudioDashboard from '@/renderer/pages/studio/components/StudioDashboard';
+import StudioDashboard from '@package-apps/document-studio/renderer/studio/components/StudioDashboard';
 
 const store = new Map<string, string>();
 beforeEach(() => {

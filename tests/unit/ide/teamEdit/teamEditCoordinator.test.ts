@@ -14,7 +14,7 @@ import {
   createTeamEditCoordinator,
   normalizeRelPath,
   type TeamEditCoordinator,
-} from '@/process/ide/teamEdit/teamEditCoordinator';
+} from '@package-apps/ide/process/collaboration/teamEdit/teamEditCoordinator';
 
 /** Build a coordinator with a controllable clock + short TTL. */
 const makeCoordinator = (): { c: TeamEditCoordinator; tick: (ms: number) => void; at: () => number } => {

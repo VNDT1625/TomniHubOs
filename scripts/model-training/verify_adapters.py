@@ -13,10 +13,10 @@ import torch
 from safetensors import safe_open
 
 DEFAULT_ADAPTERS = [
-    ".model-adapters/qwen35-08b-security",
-    ".model-adapters/qwen35-2b-user-understanding",
-    ".model-adapters/qwen35-2b-orchestrator",
-    ".model-adapters/qwen35-2b-assistant",
+    ".model-adapters/candidates/com.tomny.core.security/0.6.0-candidate.1",
+    ".model-adapters/candidates/com.tomny.core.user-understanding/0.6.0-candidate.1",
+    ".model-adapters/candidates/com.tomny.core.semantic-analysis/0.6.0-candidate.1",
+
 ]
 PROVENANCE_SCHEMA = "tomny.training-provenance.v2"
 PREFLIGHT_SCHEMA = "tomny.training-preflight.v1"
@@ -28,8 +28,34 @@ ALLOWED_TARGET_PROFILES = frozenset(
         "full-attention",
         "small-gpu",
         "all-linear",
+        "topology-aware-last-four",
+        "shield-full-24",
     }
 )
+TARGET_PROFILE_SPECS = {
+    "shield-full-24": {
+        "layers": tuple(range(24)),
+        "targetModules": frozenset(
+            {
+                "q_proj",
+                "k_proj",
+                "v_proj",
+                "o_proj",
+                "gate_proj",
+                "up_proj",
+                "down_proj",
+            }
+        ),
+        "rank": 64,
+        "alpha": 128,
+        "useRslora": True,
+        "dropout": 0.05,
+        "bias": "none",
+        "modulesToSave": None,
+        "tensorCount": 192,
+        "elementCount": 25_559_040,
+    }
+}
 PROVENANCE_REQUIRED_FIELDS = frozenset(
     {
         "schemaVersion",
@@ -67,7 +93,9 @@ PROVENANCE_REQUIRED_FIELDS = frozenset(
         "elapsedSeconds",
     }
 )
-PROVENANCE_OPTIONAL_FIELDS = frozenset({"validationGate", "finalization"})
+PROVENANCE_OPTIONAL_FIELDS = frozenset(
+    {"validationGate", "finalization", "precision"}
+)
 PROVENANCE_ALLOWED_FIELDS = PROVENANCE_REQUIRED_FIELDS | PROVENANCE_OPTIONAL_FIELDS
 PROVENANCE_OBJECT_FIELDS = {
     "candidate": frozenset({"id", "version", "path"}),
@@ -89,31 +117,6 @@ PROVENANCE_OBJECT_FIELDS = {
     ),
     "artifacts": frozenset({"adapter_model.safetensors", "adapter_config.json"}),
 }
-LEGACY_PREFLIGHT_V1_WITHOUT_TRAINER_HASH = frozenset(
-    {
-        (
-            "com.tomny.core.assistant",
-            "0.1.0-candidate.1",
-            "2026-07-26T15:18:30.438178+00:00",
-        ),
-        (
-            "com.tomny.core.orchestrator",
-            "0.1.0-candidate.1",
-            "2026-07-26T07:48:57.871077+00:00",
-        ),
-        (
-            "com.tomny.core.security",
-            "0.1.0-candidate.1",
-            "2026-07-25T17:38:34.046708+00:00",
-        ),
-        (
-            "com.tomny.core.user-understanding",
-            "0.1.0-candidate.1",
-            "2026-07-25T19:29:34.753736+00:00",
-        ),
-    }
-)
-
 
 def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
@@ -136,7 +139,7 @@ def write_new_text_atomic(path: Path, content: str) -> None:
             handle.write(content)
             handle.flush()
             os.fsync(handle.fileno())
-        os.link(temporary, path)
+        os.replace(temporary, path)
     except FileExistsError:
         raise RuntimeError("Verification evidence output already exists") from None
     finally:
@@ -150,7 +153,7 @@ def sha256_tree(root: Path) -> str:
     if not root.is_dir():
         raise FileNotFoundError(f"Base model directory no longer exists: {root}")
     digest = hashlib.sha256()
-    files = sorted(path for path in root.rglob("*") if path.is_file())
+    files = sorted((path for path in root.rglob("*") if path.is_file()), key=lambda path: tuple(part.lower() for part in path.relative_to(root).parts))
     if not files:
         raise ValueError(f"Base model directory is empty: {root}")
     for path in files:
@@ -356,8 +359,27 @@ def verify_validation_evidence(path: Path, manifest: dict[str, Any]) -> dict[str
     eval_loss = require_finite_number(
         validation.get("eval_loss"), f"{path}: metrics.validation.eval_loss"
     )
+    best_eval_raw = metrics.get("bestEvalLoss")
+    if best_eval_raw is None:
+        gate = manifest.get("validationGate")
+        expected_gate = {
+            "enabled": False,
+            "policy": "observational-only; final epoch state is retained",
+        }
+        if gate != expected_gate:
+            raise ValueError(
+                f"{path}: disabled validation gate must be explicitly recorded"
+            )
+        return {
+            "evalLoss": eval_loss,
+            "bestEvalLoss": None,
+            "observedDelta": None,
+            "allowedMaximum": None,
+            "policy": expected_gate["policy"],
+            "evidenceSource": {"kind": "disabled"},
+        }
     best_eval_loss = require_finite_number(
-        metrics.get("bestEvalLoss"), f"{path}: metrics.bestEvalLoss"
+        best_eval_raw, f"{path}: metrics.bestEvalLoss"
     )
     gate, evidence_source = resolve_validation_gate(path, manifest, best_eval_loss)
     if not isinstance(gate, dict):
@@ -550,12 +572,54 @@ def verify_provenance_schema(path: Path, manifest: dict[str, Any]) -> None:
     target_profile = manifest.get("targetProfile")
     if target_profile not in ALLOWED_TARGET_PROFILES:
         raise ValueError(f"{path}: unsupported target profile")
+    precision = manifest.get("precision")
+    if precision is not None and precision not in {"fp16", "bf16"}:
+        raise ValueError(f"{path}: unsupported training precision")
     for name, expected_fields in PROVENANCE_OBJECT_FIELDS.items():
         value = manifest.get(name)
         if not isinstance(value, dict) or set(value) != expected_fields:
             raise ValueError(f"{path}: {name} provenance fields mismatch")
     # Schema and shape are checked above.
     # Production-specific bindings are checked below.
+
+
+def verify_target_profile_config(
+    path: Path, manifest: dict[str, Any], adapter_config: dict[str, Any]
+) -> dict[str, Any] | None:
+    """Reject a known profile unless its saved PEFT configuration is exact."""
+    profile = manifest.get("targetProfile")
+    spec = TARGET_PROFILE_SPECS.get(profile)
+    if spec is None:
+        return None
+    if set(manifest.get("targetModules", [])) != spec["targetModules"]:
+        raise ValueError(f"{path}: target modules differ from {profile}")
+    if manifest.get("rank") != spec["rank"]:
+        raise ValueError(f"{path}: LoRA rank differs from {profile}")
+    if manifest.get("loraAlpha") != spec["alpha"]:
+        raise ValueError(f"{path}: LoRA alpha differs from {profile}")
+    if manifest.get("trainableParams") != spec["elementCount"]:
+        raise ValueError(f"{path}: trainable parameter count differs from {profile}")
+    checks = {
+        "layers_to_transform": list(spec["layers"]),
+        "target_modules": spec["targetModules"],
+        "r": spec["rank"],
+        "lora_alpha": spec["alpha"],
+        "use_rslora": spec["useRslora"],
+        "bias": spec["bias"],
+        "modules_to_save": spec["modulesToSave"],
+    }
+    for field, expected in checks.items():
+        actual = adapter_config.get(field)
+        if field == "target_modules":
+            actual = set(actual) if isinstance(actual, list) else actual
+        if actual != expected:
+            raise ValueError(f"{path}: adapter config {field} differs from {profile}")
+    dropout = adapter_config.get("lora_dropout")
+    if not isinstance(dropout, (int, float)) or not math.isclose(
+        float(dropout), spec["dropout"], rel_tol=0.0, abs_tol=1e-12
+    ):
+        raise ValueError(f"{path}: adapter config dropout differs from {profile}")
+    return spec
 
 
 def verify_preflight_resume_contract(
@@ -570,23 +634,6 @@ def verify_preflight_resume_contract(
         return
     if not isinstance(actual_contract, dict):
         raise ValueError(f"{path}: preflight resume contract mismatch")
-
-    legacy_receipt_identity = (
-        expected_contract.get("candidateId"),
-        expected_contract.get("candidateVersion"),
-        receipt.get("createdAt"),
-    )
-    legacy_contract = {
-        key: value
-        for key, value in expected_contract.items()
-        if key != "trainerImplementationSha256"
-    }
-    if (
-        legacy_receipt_identity in LEGACY_PREFLIGHT_V1_WITHOUT_TRAINER_HASH
-        and "trainerImplementationSha256" not in actual_contract
-        and actual_contract == legacy_contract
-    ):
-        return
     raise ValueError(f"{path}: preflight resume contract mismatch")
 
 
@@ -635,6 +682,10 @@ def verify_production_manifest(path: Path, manifest: dict[str, Any]) -> dict[str
     recipe_target_profile = recipe_content.get("training", {}).get("targetProfile")
     if manifest.get("targetProfile") != recipe_target_profile:
         raise ValueError(f"{path}: target profile differs from immutable recipe")
+    recipe_precision = recipe_content.get("training", {}).get("precision", "fp16")
+    manifest_precision = manifest.get("precision", "fp16")
+    if manifest_precision != recipe_precision:
+        raise ValueError(f"{path}: training precision differs from immutable recipe")
     finalization = verify_safe_finalization(path, manifest, recipe_content, validation)
     dataset = verify_hash_entry(
         path,
@@ -695,6 +746,8 @@ def verify_adapter(path: Path) -> dict[str, Any]:
         raise ValueError(f"{path}: adapter was not trained with the text-only loader")
 
     verify_provenance_schema(path, manifest)
+    adapter_config = json.loads((path / "adapter_config.json").read_text(encoding="utf-8"))
+    profile_spec = verify_target_profile_config(path, manifest, adapter_config)
     production = verify_production_manifest(path, manifest)
 
     weights_path = path / "adapter_model.safetensors"
@@ -715,6 +768,10 @@ def verify_adapter(path: Path) -> dict[str, Any]:
                     break
     if non_finite:
         raise FloatingPointError(f"{path}: non-finite adapter tensors: {non_finite}")
+    if profile_spec is not None and tensor_count != profile_spec["tensorCount"]:
+        raise ValueError(f"{path}: LoRA tensor count differs from {manifest.get('targetProfile')}")
+    if profile_spec is not None and element_count != profile_spec["elementCount"]:
+        raise ValueError(f"{path}: LoRA element count differs from {manifest.get('targetProfile')}")
 
     verified_data: dict[str, Any] = {}
     for split in ("train", "validation"):

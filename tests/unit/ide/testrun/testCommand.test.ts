@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { buildTestCommand, detectRunner, nearestTestName } from '@/process/ide/testrun/testCommand';
+import { buildTestCommand, detectRunner, nearestTestName } from '@package-apps/ide/process/coding/testrun/testCommand';
 
 describe('detectRunner', () => {
   it('detects pytest from a .py file regardless of package.json', () => {

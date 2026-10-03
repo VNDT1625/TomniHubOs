@@ -35,11 +35,24 @@
 
 import { bridge } from '@office-ai/platform';
 import { randomUUID } from 'node:crypto';
+import {
+  executeFoundationHubRun,
+  getConfiguredFoundationTrustRuntime,
+  getFoundationKernel,
+  type FoundationCoreRuntime,
+} from '@process/bridge/foundationBridge';
+import type { FoundationTrustRuntime, RunKernel } from '@process/foundation/runKernel';
 import { createAutomationStore, type IAutomationStore } from './automationStore';
 import { createNodeExecutors, createProviderChat, type NodeExecutorMap } from './nodeExecutors';
-import { createWorkflowEngine, type IWorkflowEngine } from './workflowEngine';
+import {
+  AUTOMATION_EGRESS_AUTHORITY_REQUIRED,
+  createWorkflowEngine,
+  type AutomationEgressAuthority,
+  type IWorkflowEngine,
+} from './workflowEngine';
 import { createAutomationScheduler, type IAutomationScheduler } from './automationScheduler';
-import { startWebhookServer, type WebhookServer } from './webhookServer';
+import { startWebhookServer, stopWebhookServer, type WebhookServer } from './webhookServer';
+import { stopAutomationMcpHost } from './automationMcpHost';
 import { resolveCredentialFields } from './credentialBridge';
 import { runImage, runScript } from '@process/makevideo/makeVideoBridge';
 import { createMakeVideoStore } from '@process/makevideo/makeVideoStore';
@@ -146,7 +159,53 @@ export type AutomationServices = {
 export type RegisterAutomationBridgeOptions = {
   /** Override the services entirely (tests / advanced bootstrap). */
   services?: AutomationServices;
+  /**
+   * Main-owned, run-bound egress admission. It is intentionally optional only
+   * so bootstrap stays fail-closed while TrustBroker migration is incomplete.
+   */
+  egressAuthority?: AutomationEgressAuthority;
+  /** Main-owned shared RunKernel authority; omitting it fails workflow starts closed. */
+  trustRuntime?: FoundationTrustRuntime;
+  /** Test-only isolated kernel; production uses the durable Foundation kernel. */
+  kernel?: RunKernel;
 };
+
+/** Main-only authorization assertion supplied by the account session boundary. */
+export type RequireAuthenticatedAccount = () => void;
+
+/**
+ * Main-only gate shared by every Automation execution entry point. The account
+ * lifecycle owns activation and revocation; callers cannot turn it on from IPC
+ * or an MCP tool.
+ */
+export type AutomationExecutionController = Readonly<{
+  start(): void;
+  stop(): Promise<void>;
+  requireExecution(): void;
+}>;
+
+export type CreateAutomationExecutionControllerOptions = Readonly<{
+  requireAuthenticatedAccount: RequireAuthenticatedAccount;
+  closeMcpHost?: () => Promise<void>;
+}>;
+
+export type CreateAutomationBackgroundControllerOptions = Readonly<{
+  services?: AutomationServices;
+  requireAuthenticatedAccount?: RequireAuthenticatedAccount;
+  startWebhook?: (services: AutomationServices) => Promise<WebhookServer>;
+  stopWebhook?: () => Promise<void>;
+  startMcp?: () => Promise<void>;
+  executionController?: AutomationExecutionController;
+}>;
+
+/**
+ * The only lifecycle that may arm scheduled work or bind the webhook listener.
+ * Registration remains available while signed out; execution does not.
+ */
+export type AutomationBackgroundController = Readonly<{
+  start(): Promise<void>;
+  stop(): Promise<void>;
+}>;
 
 /** Lazily-built default services, shared across repeated registrations. */
 let defaultServices: AutomationServices | undefined;
@@ -154,6 +213,62 @@ let defaultServices: AutomationServices | undefined;
 /** In-flight runs (module-level): runId → controller, so both the IPC bridge and
  * the MCP server can start/cancel runs against the same shared engine. */
 const activeRuns = new Map<string, AbortController>();
+
+let executionController: AutomationExecutionController | undefined;
+let mainEgressAuthority: AutomationEgressAuthority | undefined;
+let mainTrustRuntime: FoundationTrustRuntime | undefined;
+let mainKernel: RunKernel | undefined;
+
+/** Stable Main-owned origin for all workflow execution entry points. */
+const AUTOMATION_FOUNDATION_ORIGIN = 'tomny://automation';
+const AUTOMATION_WORKFLOW_TARGET_ID = 'automation-workflow';
+const AUTOMATION_WORKSPACE_SCOPE = 'automation://local';
+
+/**
+ * Do not capture a bootstrap-time authority in the engine: a session lifecycle
+ * can attach or revoke its run-bound authority after services are constructed.
+ */
+const requireAutomationEgressAuthority: AutomationEgressAuthority = {
+  authorizeExternalEgress: async (request) => {
+    if (!mainEgressAuthority) throw new Error(AUTOMATION_EGRESS_AUTHORITY_REQUIRED);
+    await mainEgressAuthority.authorizeExternalEgress(request);
+  },
+};
+
+const abortActiveRuns = (): void => {
+  for (const controller of activeRuns.values()) controller.abort();
+  activeRuns.clear();
+};
+
+/** Build the account-lifecycle-owned gate for Automation execution. */
+export const createAutomationExecutionController = (
+  options: CreateAutomationExecutionControllerOptions
+): AutomationExecutionController => {
+  let active = false;
+  const closeMcpHost = options.closeMcpHost ?? stopAutomationMcpHost;
+
+  return {
+    start: () => {
+      options.requireAuthenticatedAccount();
+      active = true;
+    },
+    stop: async () => {
+      active = false;
+      abortActiveRuns();
+      await closeMcpHost();
+    },
+    requireExecution: () => {
+      if (!active) throw new Error('AUTOMATION_ACCOUNT_EXECUTION_INACTIVE');
+      options.requireAuthenticatedAccount();
+    },
+  };
+};
+
+/** Assert that a Main-owned, currently active account lifecycle permits execution. */
+export const requireAutomationExecution = (): void => {
+  if (!executionController) throw new Error('AUTOMATION_ACCOUNT_EXECUTION_UNCONFIGURED');
+  executionController.requireExecution();
+};
 
 /**
  * Start a workflow run against the shared engine, streaming events over the
@@ -164,15 +279,56 @@ const activeRuns = new Map<string, AbortController>();
  * @param input Optional seed value for the first node (e.g. a webhook payload).
  */
 export const startWorkflowRun = async (id: string, input?: unknown): Promise<{ runId: string }> => {
+  requireAutomationExecution();
   const { store, engine } = getAutomationServices();
   const workflow = await store.get(id);
   if (!workflow) throw new Error(`Workflow not found: ${id}`);
+  const trustRuntime = mainTrustRuntime ?? getConfiguredFoundationTrustRuntime();
+  if (trustRuntime === undefined) throw new Error('AUTOMATION_TRUST_RUNTIME_REQUIRED');
+  const actorId = trustRuntime.actorId;
   const runId = randomUUID();
   const controller = new AbortController();
+  const runtime: FoundationCoreRuntime = {
+    listTargets: async () => [
+      {
+        id: AUTOMATION_WORKFLOW_TARGET_ID,
+        kind: 'local',
+        available: true,
+      },
+    ],
+    executeToCompletion: async ({ signal }) => {
+      const result = await engine.run(workflow, { signal, runId, input });
+      if (!result.ok) throw new Error('AUTOMATION_WORKFLOW_FAILED');
+      return {
+        text: 'Automation workflow completed.',
+        evidenceRefs: [`automation-workflow:${runId}`],
+      };
+    },
+  };
+  const kernel = mainKernel ?? getFoundationKernel(trustRuntime);
+  const intent = {
+    runId,
+    rootTaskId: `automation-workflow:${runId}`,
+    surface: 'automation',
+    goal: `Run automation workflow ${workflow.id}.`,
+    constraints: [`target:${AUTOMATION_WORKFLOW_TARGET_ID}`, 'private_only'],
+    successCriteria: ['automation workflow completed'],
+    workspaceScope: AUTOMATION_WORKSPACE_SCOPE,
+    userId: actorId,
+    createdAt: Date.now(),
+    correlationId: runId,
+    policyVersion: trustRuntime.policyVersion,
+    capabilityGrant: ['target.execute'],
+  } as const;
+  await trustRuntime.assertRunStart(kernel, intent, AUTOMATION_FOUNDATION_ORIGIN);
   activeRuns.set(runId, controller);
-  void engine
-    .run(workflow, { signal: controller.signal, runId, input })
-    .catch((error) => console.error('[AutomationBridge] run failed:', error))
+  void executeFoundationHubRun(kernel, runtime, intent, AUTOMATION_FOUNDATION_ORIGIN, controller.signal, {
+    allowedTargetIds: [AUTOMATION_WORKFLOW_TARGET_ID],
+    permissionMode: 'read-only',
+    contextIdentity: { surface: 'automation', personalId: actorId },
+    trustRuntime,
+  })
+    .catch((error) => console.error('[AutomationBridge] Foundation workflow run failed:', error))
     .finally(() => activeRuns.delete(runId));
   return { runId };
 };
@@ -189,10 +345,77 @@ export const cancelWorkflowRun = (runId: string): void => {
 /** Public accessor for the shared Automation services (store + engine + scheduler). */
 export const getSharedAutomationServices = (): AutomationServices => getAutomationServices();
 
-/** Start the webhook HTTP listener bound to the shared store + run trigger. */
-export const startAutomationWebhookServer = (): Promise<WebhookServer> => {
-  const { store } = getAutomationServices();
+/**
+ * Start the webhook HTTP listener. Callers that have an account authority must
+ * supply it so a direct Main-process invocation has the same protection as the
+ * account execution lease.
+ */
+export const startAutomationWebhookServer = (
+  options: Pick<CreateAutomationBackgroundControllerOptions, 'services' | 'requireAuthenticatedAccount'> = {}
+): Promise<WebhookServer> => {
+  requireAutomationExecution();
+  options.requireAuthenticatedAccount?.();
+  const { store } = options.services ?? getAutomationServices();
   return startWebhookServer({ store, runWorkflow: (workflowId, input) => startWorkflowRun(workflowId, input) });
+};
+
+/** Create the Main-only lifecycle that owns Automation's background resources. */
+export const createAutomationBackgroundController = (
+  options: CreateAutomationBackgroundControllerOptions = {}
+): AutomationBackgroundController => {
+  const services = options.services ?? getAutomationServices();
+  const requireAuthenticatedAccount = options.requireAuthenticatedAccount;
+  const execution =
+    options.executionController ??
+    createAutomationExecutionController({
+      requireAuthenticatedAccount: () => {
+        if (!requireAuthenticatedAccount) throw new Error('AUTOMATION_ACCOUNT_EXECUTION_UNCONFIGURED');
+        requireAuthenticatedAccount();
+      },
+    });
+  executionController = execution;
+  const startWebhook =
+    options.startWebhook ??
+    ((current) => startAutomationWebhookServer({ services: current, requireAuthenticatedAccount }));
+  const stopWebhook = options.stopWebhook ?? stopWebhookServer;
+  const startMcp =
+    options.startMcp ??
+    (async () => {
+      const { ensureAutomationMcpRegistered } = await import('./registerAutomationMcp');
+      if (!(await ensureAutomationMcpRegistered())) throw new Error('AUTOMATION_MCP_HOST_START_FAILED');
+    });
+  let active = false;
+
+  const start = async (): Promise<void> => {
+    if (active) return;
+    requireAuthenticatedAccount?.();
+    execution.start();
+    try {
+      await services.scheduler.start();
+      // A sign-out can race an asynchronous scheduler start. Check again before
+      // binding the loopback listener and before marking the lease active.
+      requireAuthenticatedAccount?.();
+      await startWebhook(services);
+      requireAuthenticatedAccount?.();
+      await startMcp();
+      requireAuthenticatedAccount?.();
+      active = true;
+    } catch (error) {
+      await execution.stop().catch((): void => {});
+      services.scheduler.stop();
+      await stopWebhook().catch((): void => {});
+      throw error;
+    }
+  };
+
+  const stop = async (): Promise<void> => {
+    active = false;
+    await execution.stop();
+    services.scheduler.stop();
+    await stopWebhook();
+  };
+
+  return { start, stop };
 };
 
 /**
@@ -304,6 +527,9 @@ const getAutomationServices = (): AutomationServices => {
     emit: (event: RunEvent) => {
       automationChannels.event.emit({ event });
     },
+    // Interim containment: every external leaf stays denied until a Main-owned,
+    // run-bound authority is installed by the lifecycle bootstrap.
+    egressAuthority: requireAutomationEgressAuthority,
   });
 
   // Now that the engine exists, let `action.subworkflow` run another saved
@@ -316,14 +542,11 @@ const getAutomationServices = (): AutomationServices => {
   };
 
   // Build the scheduler but do NOT start it yet — the bridge's run handler must
-  // be registered first (registerAutomationBridge calls scheduler.start()).
+  // be registered first (the account execution lease starts it after sign-in).
   const scheduler = createAutomationScheduler({
     store,
     runWorkflow: async (workflowId) => {
-      const workflow = await store.get(workflowId);
-      if (!workflow) return;
-      const runId = randomUUID();
-      await engine.run(workflow, { runId });
+      await startWorkflowRun(workflowId);
     },
   });
 
@@ -344,21 +567,14 @@ const errorMessage = (error: unknown): string => (error instanceof Error ? error
  * @param options Injected services (defaults to the shared production services).
  */
 export function registerAutomationBridge(options: RegisterAutomationBridgeOptions = {}): void {
-  const services = options.services ?? getAutomationServices();
-  const { store, engine, scheduler } = services;
+  mainEgressAuthority = options.egressAuthority;
+  mainTrustRuntime = options.trustRuntime;
+  mainKernel = options.kernel;
+  const { store } = options.services ?? getAutomationServices();
+  if (options.services) defaultServices = options.services;
 
-  // Start the cron scheduler so `trigger.schedule` workflows fire on time.
-  // Errors are caught so a bad cron expression never prevents the bridge from
-  // registering its IPC handlers.
-  void scheduler.start().catch((error: unknown) => {
-    console.error('[AutomationBridge] scheduler start failed:', error);
-  });
-
-  // Start the webhook HTTP listener so `trigger.webhook` workflows can be fired
-  // by an external POST. Non-fatal on failure — the rest of the bridge works.
-  void startAutomationWebhookServer().catch((error: unknown) => {
-    console.error('[AutomationBridge] webhook server start failed:', error);
-  });
+  // IPC registration intentionally does not activate background execution.
+  // The account-scoped lifecycle owns scheduler and webhook start/stop.
 
   automationChannels.list.provider(async (): Promise<AutomationResult<Workflow[]>> => {
     try {
@@ -415,5 +631,11 @@ export function registerAutomationBridge(options: RegisterAutomationBridgeOption
 /** Reset the lazily-built default services (deterministic teardown for tests). */
 export function disposeAutomationBridge(): void {
   defaultServices?.scheduler.stop();
+  void stopWebhookServer();
+  void executionController?.stop();
+  executionController = undefined;
+  mainEgressAuthority = undefined;
+  mainTrustRuntime = undefined;
+  mainKernel = undefined;
   defaultServices = undefined;
 }

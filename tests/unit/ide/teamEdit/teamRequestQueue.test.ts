@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { createTeamRequestQueue } from '@/process/ide/teamEdit/teamRequestQueue';
+import { createTeamRequestQueue } from '@package-apps/ide/process/collaboration/teamEdit/teamRequestQueue';
 
 const wait = (ms = 0): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 

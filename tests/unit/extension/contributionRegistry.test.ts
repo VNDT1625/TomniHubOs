@@ -133,6 +133,20 @@ describe('versioned package contribution contract', () => {
     ).toThrow();
     expect(() => extensionManifest({ contributions: { version: 2 } })).toThrow();
   });
+
+  it('rejects a Package App that attempts to expose two user-facing Surfaces', () => {
+    const manifest = ideManifest();
+    expect(() =>
+      parsePackageManifest({
+        ...manifest,
+        modules: [...manifest.modules, module('secondary')],
+        contributions: {
+          ...manifest.contributions!,
+          apps: [manifest.contributions!.apps![0]!, { id: 'secondary', title: 'Secondary', moduleId: 'secondary' }],
+        },
+      })
+    ).toThrow(/at most 1/i);
+  });
 });
 
 describe('package contribution registry', () => {
@@ -276,6 +290,17 @@ describe('package contribution registry', () => {
     expect(result.diagnostics).toEqual([
       expect.objectContaining({ packageId: 'com.tomni.untrusted', code: 'protected-namespace' }),
     ]);
+  });
+
+  it('restores dependencies without granting a package-name priority', () => {
+    const core = installed(ideManifest());
+    const extension = installed(extensionManifest());
+    const registry = new PackageContributionRegistry();
+
+    const result = registry.restore([extension, core]);
+
+    expect(result.snapshot.packageIds).toEqual(['com.tomni.ide', 'org.example.wiki']);
+    expect(result.diagnostics).toEqual([]);
   });
 
   it('protects com.tomni package ids from store publishers', () => {

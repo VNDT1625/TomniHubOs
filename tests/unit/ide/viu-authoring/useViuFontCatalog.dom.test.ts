@@ -9,7 +9,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   createViuFontOptions,
   useViuFontCatalog,
-} from '@/renderer/pages/studio/ide/Viu/next/authoring/useViuFontCatalog';
+} from '@package-apps/design/renderer/viu/next/authoring/useViuFontCatalog';
 
 type FontWindow = Window & {
   queryLocalFonts?: () => Promise<readonly { family: string }[]>;

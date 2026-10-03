@@ -90,7 +90,27 @@ const credentials = {
   resolve: vi.fn(async () => ({ scheme: 'bearer' as const, value: 'private-bearer-token' })),
 };
 
+const allowAuthority = {
+  authorizeRemoteCoreTarget: vi.fn(async () => true),
+};
+
 describe('RemoteCoreAdapter', () => {
+  it('denies before target resolution, credential access, HTTP, or WebSocket without Main authority', async () => {
+    const resolving = { resolve: vi.fn(resolver.resolve) };
+    const resolvingCredentials = { resolve: vi.fn(credentials.resolve) };
+    const fetchImpl = vi.fn();
+    const socketFactory = vi.fn();
+    const adapter = new RemoteCoreAdapter(resolving, resolvingCredentials, { fetchImpl, socketFactory });
+
+    await expect(adapter.listModels(target)).rejects.toThrow('REMOTE_CORE_EGRESS_DENIED');
+    await expect(adapter.run(makeInput())).rejects.toThrow('REMOTE_CORE_EGRESS_DENIED');
+
+    expect(resolving.resolve).not.toHaveBeenCalled();
+    expect(resolvingCredentials.resolve).not.toHaveBeenCalled();
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(socketFactory).not.toHaveBeenCalled();
+  });
+
   it('discovers normalized models through a versioned authenticated handshake', async () => {
     const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
       expect(init?.headers).toMatchObject({ authorization: 'Bearer private-bearer-token' });
@@ -106,7 +126,7 @@ describe('RemoteCoreAdapter', () => {
       }
       return json({ error: 'unexpected' }, { status: 404 });
     });
-    const adapter = new RemoteCoreAdapter(resolver, credentials, { fetchImpl });
+    const adapter = new RemoteCoreAdapter(resolver, credentials, { fetchImpl }, allowAuthority);
 
     await expect(adapter.listModels(target)).resolves.toEqual([
       {
@@ -149,7 +169,7 @@ describe('RemoteCoreAdapter', () => {
       return socket;
     });
     const input = makeInput();
-    const adapter = new RemoteCoreAdapter(resolver, credentials, { fetchImpl, socketFactory });
+    const adapter = new RemoteCoreAdapter(resolver, credentials, { fetchImpl, socketFactory }, allowAuthority);
 
     await adapter.run(input);
 
@@ -185,7 +205,7 @@ describe('RemoteCoreAdapter', () => {
       });
       return socket;
     });
-    const adapter = new RemoteCoreAdapter(resolver, credentials, { fetchImpl, socketFactory });
+    const adapter = new RemoteCoreAdapter(resolver, credentials, { fetchImpl, socketFactory }, allowAuthority);
 
     await adapter.run(makeInput({ prompt: 'SECRET_PRIOR_PROMPT' }));
     await adapter.run(makeInput({ prompt: 'CURRENT_PROMPT_ONLY' }));
@@ -229,11 +249,16 @@ describe('RemoteCoreAdapter', () => {
       return socket;
     });
     const input = makeInput();
-    const adapter = new RemoteCoreAdapter(resolver, credentials, {
-      fetchImpl,
-      socketFactory,
-      sleep: async () => undefined,
-    });
+    const adapter = new RemoteCoreAdapter(
+      resolver,
+      credentials,
+      {
+        fetchImpl,
+        socketFactory,
+        sleep: async () => undefined,
+      },
+      allowAuthority
+    );
 
     await adapter.run(input);
 
@@ -259,13 +284,18 @@ describe('RemoteCoreAdapter', () => {
       return json({ error: 'unexpected' }, { status: 404 });
     });
     const socket = new FakeSocket();
-    const adapter = new RemoteCoreAdapter(resolver, credentials, {
-      fetchImpl,
-      socketFactory: () => {
-        queueMicrotask(() => controller.abort());
-        return socket;
+    const adapter = new RemoteCoreAdapter(
+      resolver,
+      credentials,
+      {
+        fetchImpl,
+        socketFactory: () => {
+          queueMicrotask(() => controller.abort());
+          return socket;
+        },
       },
-    });
+      allowAuthority
+    );
 
     await expect(adapter.run(makeInput({ signal: controller.signal }))).rejects.toThrow(/cancelled/u);
     await vi.waitFor(() => expect(cancelled).toBe(true));
@@ -282,12 +312,17 @@ describe('RemoteCoreAdapter', () => {
       return json({ error: 'unexpected' }, { status: 404 });
     });
     const socket = new FakeSocket();
-    const adapter = new RemoteCoreAdapter(resolver, credentials, {
-      fetchImpl,
-      socketFactory: () => socket,
-      streamIdleTimeoutMs: 1,
-      maxReconnects: 0,
-    });
+    const adapter = new RemoteCoreAdapter(
+      resolver,
+      credentials,
+      {
+        fetchImpl,
+        socketFactory: () => socket,
+        streamIdleTimeoutMs: 1,
+        maxReconnects: 0,
+      },
+      allowAuthority
+    );
 
     await expect(adapter.run(makeInput())).rejects.toThrow(/disconnected/u);
     expect(socket.closed).toBe(true);
@@ -295,7 +330,7 @@ describe('RemoteCoreAdapter', () => {
 
   it('never leaks a resolved credential when the gateway echoes it in an error', async () => {
     const fetchImpl = vi.fn(async () => json({ error: 'authorization=private-bearer-token' }, { status: 401 }));
-    const adapter = new RemoteCoreAdapter(resolver, credentials, { fetchImpl });
+    const adapter = new RemoteCoreAdapter(resolver, credentials, { fetchImpl }, allowAuthority);
 
     await expect(adapter.listModels(target)).rejects.not.toThrow(/private-bearer-token/u);
   });

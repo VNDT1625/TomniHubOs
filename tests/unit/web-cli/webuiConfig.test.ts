@@ -39,7 +39,7 @@ vi.mock('@process/tomnigateway', () => ({
   getTomniGatewayEndpoint: mocks.getGateway,
 }));
 
-vi.mock('@process/studio/cloudflareTunnel', () => ({
+vi.mock('@process/services/remoteGateway/cloudflareTunnel', () => ({
   ensureCloudflared: vi.fn(),
   startTunnel: vi.fn(),
   stopTunnel: vi.fn(),

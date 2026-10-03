@@ -10,7 +10,7 @@ import { ConfigProvider } from '@arco-design/web-react';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import ViuAuthoringToolbar from '@/renderer/pages/studio/ide/Viu/next/ViuAuthoringToolbar';
+import ViuAuthoringToolbar from '@package-apps/design/renderer/viu/next/ViuAuthoringToolbar';
 
 const labels = {
   undo: 'Undo',

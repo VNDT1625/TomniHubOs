@@ -7,7 +7,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { isReadOnlySql, normalizeCell, splitStatements } from '@/process/ide/db/dbDriver';
+import { isReadOnlySql, normalizeCell, splitStatements } from '@package-apps/ide/process/data/db/dbDriver';
 
 describe('isReadOnlySql', () => {
   it('treats SELECT / WITH / EXPLAIN / SHOW / PRAGMA as read-only', () => {

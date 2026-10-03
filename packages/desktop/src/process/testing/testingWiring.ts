@@ -5,16 +5,10 @@
  */
 
 /**
- * Wires the multi-platform testing layer for the Main process (Yêu cầu 2b, Task
- * 15.1). It assembles ONE shared {@link ITestOrchestrator} singleton that BOTH
- * integration planes drive (the "two planes" principle, `design.md`):
+ * Wires the shared multi-platform Quick Test service in the Main process.
+ * Browser and IDE call this singleton through their own bounded capabilities.
+ * There is deliberately no standalone Testing page, bridge, or MCP server.
  *
- *   - UI plane    → `testingBridge` (the Testing page submits + reads sessions).
- *   - Agent plane → the Testing MCP server (`testingServer.ts`, `test_run` etc).
- *
- * Because both planes share the same orchestrator instance, a session an agent
- * starts is the same session the user sees in the Testing page, and vice-versa
- * (single source of truth).
  *
  * ## What runs for real today
  *
@@ -72,7 +66,7 @@ import { createAndroidScriptEngine, createRealEmulatorProvisioner } from './engi
 import { createWindowsScriptEngine, createRealWindowsLauncher } from './engines/windowsEngine';
 import { listAvds, resolveEmulator } from './engines/toolResolver';
 
-/** Services the testing bridge + MCP server share. */
+/** Services shared by Browser and IDE Quick Test capabilities. */
 export type TestingServices = {
   /** The shared orchestrator both planes drive. */
   orchestrator: ITestOrchestrator;

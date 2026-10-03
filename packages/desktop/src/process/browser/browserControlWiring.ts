@@ -31,29 +31,30 @@
  * Process boundary: Main-process (Node.js / Electron) module.
  */
 
-import { app, type BrowserWindow } from 'electron';
-import { mkdir, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import type { BrowserWindow } from 'electron';
 import { NativeFileGateway } from '@process/resources/nativeFileGateway';
-import { getResourceCoordinator } from '../resource/resourceCoordinator';
+import { getResourceCoordinator } from '@process/resource/resourceCoordinator';
 import { getBrowserServices } from './browserBridge';
 import { createHumanLikeInput } from './humanLikeInput';
 import { createPagePerception, getBrowserSecretRedactionRegistry, type IPagePerception } from './pagePerception';
 import type { IMediaPipeline, MediaSource } from './mediaPipeline';
-import type { BrowserControlDeps } from '../resources/builtinMcp/browserControlServer';
+import type { BrowserControlDeps } from './browserControlServer';
 import { startBrowserControlMcpHost, type BrowserControlMcpHost } from './browserControlMcpHost';
-import { getEditorFrameStore } from '../editor/editorFrameStore';
+import { getEditorFrameStore } from '@process/editor/editorFrameStore';
 import {
   createQuickTestLifecycleService,
-  createTerminalQuickTestLauncher,
   type QuickTestLifecycleService,
-} from '../services/quick-test/lifecycle';
-import { getTerminalServices } from '../terminal/terminalWiring';
-import { getRepoSecretStore } from '../ide/memory/repoSecretStore';
-import type { SecretVault } from '../agentRuntime/secretVault';
+} from '@process/services/quick-test/lifecycle';
+
+import { getRepoSecretStore } from '@package-apps/ide/process/data/memory/repoSecretStore';
+import type { SecretVault } from '@process/agentRuntime/secretVault';
 
 type BrowserViewManager = ReturnType<typeof getBrowserServices>['viewManager'];
 let personalSecretVault: SecretVault | undefined;
+
+/** Browser-Control editor writes require a governed path capability and receipt. */
+export const BROWSER_CONTROL_EDITOR_WRITE_GOVERNANCE_REQUIRED =
+  'Browser-Control editor writing is disabled pending governed execution.';
 
 /** Bind the Core vault without changing the independent IDE Secret Context store. */
 export const configureBrowserPersonalSecretVault = (vault: SecretVault): void => {
@@ -218,14 +219,19 @@ const createStubMediaPipeline = (): IMediaPipeline => {
 let cachedDeps: BrowserControlDeps | undefined;
 let quickTestLifecycle: QuickTestLifecycleService | undefined;
 
-/** Resolve the shared agent Quick Test lifecycle bound to the browser and IDE terminal singletons. */
+/** Drop Browser-owned MCP collaborators when the package is disabled or removed. */
+export const disposeBrowserControl = (): void => {
+  cachedDeps = undefined;
+  quickTestLifecycle = undefined;
+  personalSecretVault = undefined;
+};
+
+/** Resolve Browser Quick Test through the Core lifecycle launcher. */
 export const getQuickTestLifecycle = (getWindow: () => BrowserWindow | null | undefined): QuickTestLifecycleService => {
   if (quickTestLifecycle) return quickTestLifecycle;
   const browser = getBrowserServices(getWindow).viewManager;
-  const terminal = getTerminalServices().manager;
   quickTestLifecycle = createQuickTestLifecycleService({
     viewManager: browser,
-    launcher: createTerminalQuickTestLauncher(terminal),
   });
   return quickTestLifecycle;
 };
@@ -258,22 +264,13 @@ export const getBrowserControlDeps = (getWindow: () => BrowserWindow | null | un
     coordinator,
     fillSecret: (request) => fillBrowserSecret(viewManager, request),
     fillPersonalSecret: (request) => fillBrowserPersonalSecret(viewManager, request),
-    persistScreenshot: async (_tabId, png) => {
-      const captureDir = join(app.getPath('userData'), 'browser-captures');
-      await mkdir(captureDir, { recursive: true });
-      const filePath = join(captureDir, `${Date.now()}-${crypto.randomUUID()}.png`);
-      await writeFile(filePath, png, { flag: 'wx' });
-      return filePath;
-    },
     quickTest: getQuickTestLifecycle(getWindow),
     // Editor capability (Super's Studio-editor plane): share ONE frame store
     // with the renderer bridge so a file the agent opens shows up as a frame.
     editorFrames: getEditorFrameStore(),
     editorIO: {
       read: async (filePath: string): Promise<string> => (await new NativeFileGateway().readText(filePath)) ?? '',
-      write: async (filePath: string, content: string): Promise<void> => {
-        await new NativeFileGateway().writeText(filePath, content);
-      },
+      write: async (): Promise<void> => Promise.reject(new Error(BROWSER_CONTROL_EDITOR_WRITE_GOVERNANCE_REQUIRED)),
     },
   };
   return cachedDeps;

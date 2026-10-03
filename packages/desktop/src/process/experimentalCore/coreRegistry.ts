@@ -117,7 +117,7 @@ export const CORE_ADAPTER_DEFINITIONS: CoreAdapterDefinition[] = [
     name: 'DeepSeek TUI',
     protocol: 'acp',
     candidates: ['deepseek-tui'],
-    args: ['acp'],
+    args: ['serve', '--acp'],
     detail: 'DeepSeek TUI ACP',
     runnable: true,
   },
@@ -229,12 +229,25 @@ const verifyBundledTomnyCli = async (
   return verifyTomnyArtifact(binaryPath, path.join(path.dirname(binaryPath), 'manifest.json'), sha256File);
 };
 
+type CandidateResolution = {
+  path: string | null;
+  expiresAt: number;
+};
+
+const candidateCache = new Map<string, CandidateResolution>();
+const CANDIDATE_CACHE_TTL_MS = 60_000;
+
+export const clearExecutableResolutionCache = (): void => {
+  candidateCache.clear();
+};
+
 /** Resolve the first executable without invoking tomnycore or its HTTP detector. */
 export const resolveExecutableOnPath = async (
   candidates: string[],
   sha256File: Sha256File = sha256FileWithNode
 ): Promise<string | null> => {
   const probe = process.platform === 'win32' ? 'where.exe' : 'which';
+  const now = Date.now();
   const resolved = await Promise.all(
     candidates.map(async (candidate) => {
       try {
@@ -242,19 +255,25 @@ export const resolveExecutableOnPath = async (
           await access(candidate);
           return (await verifyBundledTomnyCli(candidate, sha256File)) ? candidate : null;
         }
-        const { stdout } = await execFileAsync(probe, [candidate], { windowsHide: true, timeout: 2500 });
+        const cached = candidateCache.get(candidate);
+        if (cached && cached.expiresAt > now) {
+          return cached.path;
+        }
+        const { stdout } = await execFileAsync(probe, [candidate], { windowsHide: true, timeout: 800 });
         const paths = stdout
           .split(/\r?\n/u)
           .map((value) => value.trim())
           .filter(Boolean);
-        return (
+        const resolvedPath =
           paths.find((value) => /\.cmd$/iu.test(value)) ??
           paths.find((value) => /\.exe$/iu.test(value) && !value.includes('WindowsApps')) ??
           paths.find((value) => /\.exe$/iu.test(value)) ??
           paths.find((value) => !/\.ps1$/iu.test(value)) ??
-          null
-        );
+          null;
+        candidateCache.set(candidate, { path: resolvedPath, expiresAt: now + CANDIDATE_CACHE_TTL_MS });
+        return resolvedPath;
       } catch {
+        candidateCache.set(candidate, { path: null, expiresAt: now + CANDIDATE_CACHE_TTL_MS });
         return null;
       }
     })
@@ -273,6 +292,7 @@ export const detectCoreTargets = async (
         command: command ?? undefined,
         detected: command !== null,
         available: command !== null && definition.runnable,
+        detail: definition.detail,
       });
     })
   );

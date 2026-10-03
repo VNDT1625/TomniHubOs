@@ -10,16 +10,50 @@ import type {
 } from './contextTypes';
 
 const MAX_CONTEXT_CHARS = 12_000;
-const applicable = (fact: ContextFact, surface: string): boolean =>
-  fact.scope.kind === 'global' || fact.scope.surface === surface;
+const applicable = (fact: ContextFact, surface: string, workspace: string | undefined): boolean =>
+  fact.scope.kind === 'global' ||
+  (fact.scope.kind === 'surface' && fact.scope.surface === surface) ||
+  (fact.scope.kind === 'workspace' && workspace !== undefined && fact.scope.workspace === workspace);
+
 const priority = (fact: ContextFact): number =>
   (fact.userLocked ? 1_000 : 0) + (fact.source === 'user' ? 500 : 0) + fact.confidence * 100;
-const renderFacts = (title: string, values: ContextFact[], surface: string): string[] => {
+const sameScopedFact = (left: ContextFact, right: ContextFact): boolean =>
+  left.key === right.key &&
+  left.value === right.value &&
+  left.scope.kind === right.scope.kind &&
+  (left.scope.kind === 'global' ||
+    (left.scope.kind === 'surface' && right.scope.kind === 'surface' && left.scope.surface === right.scope.surface) ||
+    (left.scope.kind === 'workspace' &&
+      right.scope.kind === 'workspace' &&
+      left.scope.workspace === right.scope.workspace));
+/** A legacy/incomplete observation is visible for correction, never model-visible guidance. */
+const canProjectLearningFact = (
+  personal: PersonalContext,
+  collection: 'facts' | 'preferences' | 'habits',
+  fact: ContextFact
+): boolean =>
+  fact.userLocked ||
+  fact.source === 'user' ||
+  !personal.learningRecords?.some(
+    (record) =>
+      record.collection === collection &&
+      sameScopedFact(record.fact, fact) &&
+      !record.causal.reasonKnown &&
+      (record.status === 'needs_reason' || record.status === 'applied' || record.status === 'corrected')
+  );
+const renderFacts = (
+  title: string,
+  values: ContextFact[],
+  surface: string,
+  workspace: string | undefined,
+  canProject: (fact: ContextFact) => boolean = () => true
+): string[] => {
   const selected = values
     .filter(
       (item) =>
         item.sensitivity === 'normal' &&
-        applicable(item, surface) &&
+        applicable(item, surface, workspace) &&
+        canProject(item) &&
         (item.source !== 'inferred' || item.confidence >= 0.65)
     )
     .toSorted((left, right) => priority(right) - priority(left));
@@ -69,22 +103,31 @@ const renderPersonal = (
   input: Omit<CoreContextComposeInput, 'agentId' | 'personalId' | 'prompt'>
 ): string => {
   if (!personal) return '';
-  const { surface, secretContextPolicy } = input;
+  const { surface, workspace, secretContextPolicy } = input;
   const lines = [
     'Personal Context usage rules:',
     '- User-provided, user-locked, or last-confirmed facts are already-known context; do not ask the user to repeat them.',
     '- Treat observed, imported, and inferred facts as tentative guidance. Confirm them only when they materially affect the outcome, raise risk, or conflict with the current request.',
     '- The current explicit user request overrides this context whenever they conflict.',
     '- Psychology facts are self-described context, not a diagnosis. Never infer or diagnose psychological or mental-health attributes.',
-    ...renderFacts('Personal information:', personal.structuredProfile.personalInformation, surface),
-    ...renderFacts('Psychology (self-described, non-diagnostic):', personal.structuredProfile.psychology, surface),
-    ...renderFacts('Personality:', personal.structuredProfile.personality, surface),
-    ...renderFacts('Interests:', personal.structuredProfile.interests, surface),
-    ...renderFacts('Profession:', personal.structuredProfile.profession, surface),
-    ...renderFacts('Aesthetic taste:', personal.structuredProfile.aestheticTaste, surface),
-    ...renderFacts('Past context:', personal.structuredProfile.pastContext, surface),
-    ...renderFacts('Known user facts:', personal.facts, surface),
-    ...renderFacts('Preferences:', personal.preferences, surface),
+    ...renderFacts('Personal information:', personal.structuredProfile.personalInformation, surface, workspace),
+    ...renderFacts(
+      'Psychology (self-described, non-diagnostic):',
+      personal.structuredProfile.psychology,
+      surface,
+      workspace
+    ),
+    ...renderFacts('Personality:', personal.structuredProfile.personality, surface, workspace),
+    ...renderFacts('Interests:', personal.structuredProfile.interests, surface, workspace),
+    ...renderFacts('Profession:', personal.structuredProfile.profession, surface, workspace),
+    ...renderFacts('Aesthetic taste:', personal.structuredProfile.aestheticTaste, surface, workspace),
+    ...renderFacts('Past context:', personal.structuredProfile.pastContext, surface, workspace),
+    ...renderFacts('Known user facts:', personal.facts, surface, workspace, (fact) =>
+      canProjectLearningFact(personal, 'facts', fact)
+    ),
+    ...renderFacts('Preferences:', personal.preferences, surface, workspace, (fact) =>
+      canProjectLearningFact(personal, 'preferences', fact)
+    ),
     personal.communication.language ? `Preferred language: ${personal.communication.language}` : '',
     personal.communication.tone ? `Preferred tone: ${personal.communication.tone}` : '',
     personal.communication.verbosity ? `Preferred verbosity: ${personal.communication.verbosity}` : '',
@@ -92,7 +135,9 @@ const renderPersonal = (
     `Decision autonomy: ${personal.decisionPolicy.autonomy}`,
     ...personal.decisionPolicy.mayDecideCategories.map((item) => `May decide: ${item}`),
     ...personal.decisionPolicy.alwaysAskCategories.map((item) => `Always ask: ${item}`),
-    ...renderFacts('Habits:', personal.habits, surface),
+    ...renderFacts('Habits:', personal.habits, surface, workspace, (fact) =>
+      canProjectLearningFact(personal, 'habits', fact)
+    ),
   ];
   const allowedSecretCapabilities = new Set(secretContextPolicy?.allowedSecretCapabilities ?? []);
   const secretReferences = secretContextPolicy?.includeOpaqueSecretHandles

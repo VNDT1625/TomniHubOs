@@ -1,4 +1,8 @@
-import type { RuntimeTrace, TraceEvent, TracePlatform } from '../../ide/quickTestTracer';
+import type {
+  RuntimeTrace,
+  TraceEvent,
+  TracePlatform,
+} from '@package-apps/ide/process/execution/quickTest/runtime/quickTestTracer';
 
 export type NativePlatform = Exclude<TracePlatform, 'web'>;
 

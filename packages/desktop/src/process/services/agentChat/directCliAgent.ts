@@ -14,6 +14,13 @@ import {
 } from '@process/experimentalCore/adapters';
 import { detectCoreTargets } from '@process/experimentalCore/coreRegistry';
 import { createElectronSurfaceCapabilityHosts } from '@process/experimentalCore/electronSurfaceCapabilityHosts';
+import {
+  executeFoundationHubRun,
+  getConfiguredFoundationTrustRuntime,
+  getFoundationKernel,
+  type FoundationCoreRuntime,
+} from '@process/bridge/foundationBridge';
+import type { FoundationTrustRuntime, RunKernel } from '@process/foundation/runKernel';
 
 import { createElectronContextServices } from '@process/agentRuntime/electronContext';
 
@@ -49,9 +56,19 @@ export type DirectCliAgentDriverDeps = {
     sessionId: string
   ) => Promise<CoreMcpServer[]>;
   createSessionId?: () => string;
+  /** Optional isolated kernel for tests; production uses the durable Main-process kernel. */
+  kernel?: RunKernel;
+
+  /** Main-owned authenticated actor and policy authority required for every direct CLI run. */
+  trustRuntime?: FoundationTrustRuntime;
+  createRunId?: (agentId: string) => string;
 };
 
-const safeSurfaceName = (surface?: string): string => {
+/** Stable Main-owned origin for the direct CLI compatibility entry point. */
+const DIRECT_CLI_FOUNDATION_ORIGIN = 'tomny://direct-cli';
+
+/** Convert a user-controlled surface label into one safe workspace path segment. */
+export const safeSurfaceName = (surface?: string): string => {
   const normalized =
     surface
       ?.trim()
@@ -124,6 +141,11 @@ const defaultDeps = (): DirectCliAgentDriverDeps => ({
  * legacy REST conversation wrapper and never starts or calls the legacy core.
  */
 export type DirectCliAgentDriver = CliAgentDriver & { dispose: () => Promise<void> };
+type DirectCliRawRun = Parameters<CliAgentDriver['run']>[0] & {
+  directPrompt?: string;
+  workspaceOverride?: string;
+  sessionIdOverride?: string;
+};
 export const createDirectCliAgentDriver = (
   overrides: Partial<DirectCliAgentDriverDeps> = {},
   context?: DirectCliExecutionContext
@@ -139,68 +161,157 @@ export const createDirectCliAgentDriver = (
     return values;
   };
 
+  const runDirect = async ({
+    agentId,
+    modelId,
+    messages,
+    signal,
+    directPrompt,
+    workspaceOverride,
+    sessionIdOverride,
+  }: DirectCliRawRun): Promise<string> => {
+    if (signal?.aborted) throw new Error('CLI agent run cancelled.');
+    const target = (await targets()).find((candidate) => candidate.id === agentId && candidate.available);
+    if (!target) throw new Error(`CLI agent "${agentId}" is not available or has no direct Tomny Core target.`);
+    const adapter = deps.adapters.find((candidate) => candidate.protocol === target.protocol);
+    if (!adapter) throw new Error(`No direct Tomny Core adapter is registered for ${target.protocol}.`);
+    const workspace = workspaceOverride ?? (await deps.resolveWorkspace(context));
+    const sessionId =
+      sessionIdOverride ?? context?.sessionId?.trim() ?? deps.createSessionId?.() ?? crypto.randomUUID();
+    const mcpServers = await deps.resolveMcpServers(context, workspace, agentId, sessionId);
+    const surfaceId = context?.surface?.trim() || 'chat';
+    const manifest = createBuiltinSurfaceManifests().find((surface) => surface.id === surfaceId);
+    const toolCatalog: CoreToolCatalogPolicy = {
+      mode: 'surface',
+      patterns: [
+        ...new Set([
+          'tomny_session_actions',
+          ...(manifest?.capabilities ?? [])
+            .filter(
+              (capability) =>
+                capability.kind === 'mcp' &&
+                !excludedMcpServerNames(context).has(capability.serverName?.toLowerCase() ?? '')
+            )
+            .flatMap((capability) => capability.toolPatterns),
+        ]),
+      ],
+    };
+    const prompt = directPrompt ?? flattenMessagesToPrompt(messages);
+    if (!prompt.trim()) throw new Error('CLI agent prompt is empty.');
+    let answer = '';
+    const controller = new AbortController();
+    const abort = (): void => controller.abort();
+    signal?.addEventListener('abort', abort, { once: true });
+    try {
+      await adapter.run({
+        sessionId,
+        target,
+        prompt,
+        workspace,
+        modelKey: modelId,
+        permissionMode: context?.permissionMode ?? 'read-only',
+        surface: context?.surface ?? 'chat',
+        mcpServers,
+        toolCatalog,
+        signal: controller.signal,
+        emit: (event) => {
+          if (event.type !== 'delta') return;
+          answer = event.mode === 'replace' ? event.text : answer + event.text;
+        },
+        requestPermission: (request) =>
+          context?.requestPermission?.({
+            ...request,
+            agentId,
+            workspace,
+            surface: context.surface ?? 'chat',
+          }) ?? Promise.resolve(false),
+      });
+    } finally {
+      signal?.removeEventListener('abort', abort);
+    }
+    if (!answer.trim()) throw new Error(`CLI agent "${agentId}" completed without a text response.`);
+    return answer;
+  };
+
+  const foundationRuntime: FoundationCoreRuntime = {
+    listTargets: async () =>
+      (await targets()).map((target) => ({
+        id: target.id,
+        kind:
+          target.protocol === 'acp'
+            ? 'acp'
+            : target.protocol === 'loopback-openai'
+              ? 'local'
+              : target.protocol === 'tomny-remote-v1'
+                ? 'remote'
+                : 'cli',
+        available: target.available,
+        // default model intentionally omitted; caller supplies the requested model key.
+        networkHost: target.networkHost,
+      })),
+    resolveNetworkHost: async (targetId, modelKey) => {
+      const target = (await targets()).find((candidate) => candidate.id === targetId);
+      const adapter = target && deps.adapters.find((candidate) => candidate.protocol === target.protocol);
+      return (await adapter?.networkHostForModel?.(modelKey)) ?? target?.networkHost;
+    },
+    executeToCompletion: async (input) => {
+      const answer = await runDirect({
+        agentId: input.targetId,
+        modelId: input.modelKey,
+        messages: [],
+        signal: input.signal,
+        directPrompt: input.prompt,
+        workspaceOverride: input.workspace,
+        sessionIdOverride: input.sessionId,
+      });
+      return { text: answer, evidenceRefs: [`direct-cli:${input.targetId}:${input.sessionId ?? input.requestId}`] };
+    },
+  };
+
   return {
     run: async ({ agentId, modelId, messages, signal }): Promise<string> => {
       if (signal?.aborted) throw new Error('CLI agent run cancelled.');
       const target = (await targets()).find((candidate) => candidate.id === agentId && candidate.available);
       if (!target) throw new Error(`CLI agent "${agentId}" is not available or has no direct Tomny Core target.`);
-      const adapter = deps.adapters.find((candidate) => candidate.protocol === target.protocol);
-      if (!adapter) throw new Error(`No direct Tomny Core adapter is registered for ${target.protocol}.`);
       const workspace = await deps.resolveWorkspace(context);
-      const sessionId = context?.sessionId?.trim() || deps.createSessionId?.() || crypto.randomUUID();
-      const mcpServers = await deps.resolveMcpServers(context, workspace, agentId, sessionId);
-      const surfaceId = context?.surface?.trim() || 'chat';
-      const manifest = createBuiltinSurfaceManifests().find((surface) => surface.id === surfaceId);
-      const toolCatalog: CoreToolCatalogPolicy = {
-        mode: 'surface',
-        patterns: [
-          ...new Set([
-            'tomny_session_actions',
-            ...(manifest?.capabilities ?? [])
-              .filter(
-                (capability) =>
-                  capability.kind === 'mcp' &&
-                  !excludedMcpServerNames(context).has(capability.serverName?.toLowerCase() ?? '')
-              )
-              .flatMap((capability) => capability.toolPatterns),
-          ]),
-        ],
-      };
       const prompt = flattenMessagesToPrompt(messages);
       if (!prompt.trim()) throw new Error('CLI agent prompt is empty.');
-      let answer = '';
-      const controller = new AbortController();
-      const abort = (): void => controller.abort();
-      signal?.addEventListener('abort', abort, { once: true });
-      try {
-        await adapter.run({
-          sessionId,
-          target,
-          prompt,
-          workspace,
+      const sessionId = context?.sessionId?.trim() || deps.createSessionId?.() || crypto.randomUUID();
+      const requestId = deps.createRunId?.(agentId) ?? `direct-cli:${agentId}:${crypto.randomUUID()}`;
+      const trustRuntime = deps.trustRuntime ?? getConfiguredFoundationTrustRuntime();
+      if (trustRuntime === undefined) throw new Error('DIRECT_CLI_TRUST_RUNTIME_REQUIRED');
+      const userId = trustRuntime.actorId;
+      const result = await executeFoundationHubRun(
+        deps.kernel ?? getFoundationKernel(trustRuntime),
+        foundationRuntime,
+        {
+          runId: requestId,
+          rootTaskId: `direct-cli-session:${sessionId}`,
+          surface: context?.surface?.trim() || 'chat',
+          goal: prompt,
+          constraints: [`target:${agentId}`],
+          successCriteria: ['direct CLI response'],
+          workspaceScope: workspace,
+          userId,
+          createdAt: Date.now(),
+          correlationId: requestId,
+          policyVersion: trustRuntime.policyVersion,
+          capabilityGrant: ['target.execute'],
+        },
+        DIRECT_CLI_FOUNDATION_ORIGIN,
+        signal,
+        {
+          requestId,
           modelKey: modelId,
           permissionMode: context?.permissionMode ?? 'read-only',
-          surface: context?.surface ?? 'chat',
-          mcpServers,
-          toolCatalog,
-          signal: controller.signal,
-          emit: (event) => {
-            if (event.type !== 'delta') return;
-            answer = event.mode === 'replace' ? event.text : answer + event.text;
-          },
-          requestPermission: (request) =>
-            context?.requestPermission?.({
-              ...request,
-              agentId,
-              workspace,
-              surface: context.surface ?? 'chat',
-            }) ?? Promise.resolve(false),
-        });
-      } finally {
-        signal?.removeEventListener('abort', abort);
-      }
-      if (!answer.trim()) throw new Error(`CLI agent "${agentId}" completed without a text response.`);
-      return answer;
+          sessionId,
+          contextIdentity: { surface: context?.surface?.trim() || 'chat', agentId, personalId: userId },
+          trustRuntime,
+        }
+      );
+      if (result.receipt.status !== 'verified' || !result.text?.trim())
+        throw new Error(`CLI agent "${agentId}" Foundation run ${result.receipt.status}.`);
+      return result.text;
     },
     dispose: async (): Promise<void> => {
       await Promise.allSettled(deps.adapters.map((adapter) => adapter.dispose()));

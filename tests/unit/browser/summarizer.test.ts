@@ -11,7 +11,7 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import { chunkText, createSummarizer, type SummarizerChat } from '@/process/browser/research/summarizer';
+import { chunkText, createSummarizer, type SummarizerChat } from '@process/browser/research/summarizer';
 
 /** A chat stub recording every call, returning a fixed reply (or per-call replies). */
 const stubChat = (

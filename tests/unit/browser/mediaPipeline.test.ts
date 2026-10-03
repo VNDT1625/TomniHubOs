@@ -35,8 +35,8 @@ import type {
   Translator,
   Tts,
   YouTubeSummarizer,
-} from '@/process/browser/mediaPipeline';
-import { createMediaPipeline, isYouTubeSource, isYouTubeUrl } from '@/process/browser/mediaPipeline';
+} from '@process/browser/mediaPipeline';
+import { createMediaPipeline, isYouTubeSource, isYouTubeUrl } from '@process/browser/mediaPipeline';
 import type { LeaseRequest } from '@/process/resource/leaseTypes';
 
 // ---------------------------------------------------------------------------

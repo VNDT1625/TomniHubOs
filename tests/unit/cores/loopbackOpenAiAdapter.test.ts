@@ -78,6 +78,61 @@ describe('loopback OpenAI adapter', () => {
     expect(events).toContainEqual({ type: 'delta', text: 'answer' });
   });
 
+  it('keeps an ordinary local conversation on loopback when external network access is blocked', async () => {
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(
+          encoder.encode('data: {"choices":[{"delta":{"content":"Offline local answer"}}]}\n\ndata: [DONE]\n')
+        );
+        controller.close();
+      },
+    });
+    const networkBlockedFetch = vi.fn(async (url: string) => {
+      const requestUrl = new URL(url);
+      if (requestUrl.hostname !== '127.0.0.1') {
+        throw new Error(`External network access is blocked: ${requestUrl.origin}`);
+      }
+      if (requestUrl.pathname === '/v1/models') {
+        return new Response(JSON.stringify({ data: [{ id: 'qwen-local' }] }), { status: 200 });
+      }
+      if (requestUrl.pathname === '/v1/chat/completions') return new Response(stream, { status: 200 });
+      throw new Error(`Unexpected local endpoint: ${requestUrl.pathname}`);
+    });
+
+    const detected = await detectLoopbackOpenAiTarget({
+      endpoint: 'http://127.0.0.1:11434/v1',
+      fetchImpl: networkBlockedFetch,
+    });
+    expect(detected).toMatchObject({ available: true, detected: true, protocol: 'loopback-openai' });
+
+    const adapter = new LoopbackOpenAiAdapter({
+      endpoint: 'http://127.0.0.1:11434/v1',
+      fetchImpl: networkBlockedFetch,
+    });
+    const events: unknown[] = [];
+    await adapter.run({
+      sessionId: 'offline-local-conversation',
+      target: detected,
+      prompt: 'Give me a short answer while I am offline.',
+      workspace: 'C:/workspace',
+      modelKey: 'qwen-local',
+      permissionMode: 'read-only',
+      signal: new AbortController().signal,
+      emit: (event) => events.push(event),
+      requestPermission: async () => false,
+    });
+
+    expect(networkBlockedFetch.mock.calls.map(([url]) => url)).toEqual([
+      'http://127.0.0.1:11434/v1/models',
+      'http://127.0.0.1:11434/v1/chat/completions',
+    ]);
+    expect(events).toEqual([
+      { type: 'status', text: 'Running on the local loopback engine.' },
+      { type: 'delta', text: 'Offline local answer' },
+    ]);
+  });
+
   it('fails closed when a loopback engine closes a stream without a terminal marker', async () => {
     const stream = new ReadableStream<Uint8Array>({
       start(controller) {

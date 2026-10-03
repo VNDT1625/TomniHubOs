@@ -133,4 +133,27 @@ describe('reminderScheduler', () => {
     await scheduler.start();
     expect(notify).not.toHaveBeenCalled();
   });
+
+  it('does not persist a due reminder after lifecycle stop races its notification', async () => {
+    const clock = { t: 1000 };
+    const { store, notify, scheduler } = setup(clock);
+    await store.addTask({ title: 'Session-bound', reminders: [{ fireAt: 500 }] });
+    let releaseNotification: (() => void) | undefined;
+    notify.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseNotification = resolve;
+        })
+    );
+    const updateReminder = vi.spyOn(store, 'updateReminder');
+
+    const starting = scheduler.start();
+    await vi.waitFor(() => expect(notify).toHaveBeenCalledTimes(1));
+    scheduler.stop();
+    releaseNotification?.();
+    await starting;
+
+    expect(updateReminder).not.toHaveBeenCalled();
+    expect(store.getData().tasks[0]?.reminders[0]?.firedAt).toBeNull();
+  });
 });

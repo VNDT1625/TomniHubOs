@@ -12,8 +12,8 @@ import {
   createQuickTestNativeTracer,
   mapNativeLogLine,
   type NativeLogStream,
-} from '@/process/ide/quickTestNativeTracer';
-import type { TraceEvent } from '@/process/ide/quickTestTracer';
+} from '@package-apps/ide/process/execution/quickTest/runtime/quickTestNativeTracer';
+import type { TraceEvent } from '@package-apps/ide/process/execution/quickTest/runtime/quickTestTracer';
 
 /** Build a fake NativeLogStream the test can drive by emitting lines/close. */
 const makeFakeStream = () => {

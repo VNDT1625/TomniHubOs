@@ -6,7 +6,7 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import { join } from 'node:path';
-import { createIdeHookStore, workspaceKey, type HookFs } from '@/process/ide/hooks/ideHookStore';
+import { createIdeHookStore, workspaceKey, type HookFs } from '@package-apps/ide/process/coding/hooks/ideHookStore';
 
 /** An in-memory fs double matching the store's HookFs contract. */
 const makeFs = (seed: Record<string, string> = {}): { fs: HookFs; files: Map<string, string> } => {

@@ -32,7 +32,7 @@ import {
   removeRecentFile,
   setLastStudioView,
   toggleStarred,
-} from '@/renderer/pages/studio/studioStorage';
+} from '@package-apps/document-studio/renderer/studioStorage';
 
 beforeEach(() => {
   store.clear();

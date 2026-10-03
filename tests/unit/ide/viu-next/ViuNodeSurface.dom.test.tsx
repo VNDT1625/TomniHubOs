@@ -8,7 +8,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createPremiumStarterProject, createViuNode, normalizeViuImageTransform } from '@/common/viu';
-import ViuNodeSurface from '@/renderer/pages/studio/ide/Viu/next/ViuNodeSurface';
+import ViuNodeSurface from '@package-apps/design/renderer/viu/next/ViuNodeSurface';
 
 const createComponentProject = () => {
   const project = createPremiumStarterProject();

@@ -159,6 +159,47 @@ describe('Context prompt security boundaries', () => {
     expect(browserPrompt).not.toContain('VS Code');
   });
 
+  it('projects workspace facts only for the exact Main-resolved workspace', async () => {
+    const composer = createCoreContextComposer(
+      contextStore(
+        personal({
+          preferences: [
+            fact({
+              key: 'response-language',
+              value: 'Vietnamese',
+              scope: { kind: 'workspace', workspace: 'C:\\workspace\\one' },
+            }),
+          ],
+        })
+      )
+    );
+
+    const matching = await composer.composePrompt({
+      agentId: 'tomny',
+      personalId: 'default',
+      surface: 'chat',
+      workspace: 'C:\\workspace\\one',
+      prompt: 'Continue.',
+    });
+    const other = await composer.composePrompt({
+      agentId: 'tomny',
+      personalId: 'default',
+      surface: 'chat',
+      workspace: 'C:\\workspace\\two',
+      prompt: 'Continue.',
+    });
+    const unresolved = await composer.composePrompt({
+      agentId: 'tomny',
+      personalId: 'default',
+      surface: 'chat',
+      prompt: 'Continue.',
+    });
+
+    expect(matching).toContain('response-language: Vietnamese');
+    expect(other).not.toContain('response-language: Vietnamese');
+    expect(unresolved).not.toContain('response-language: Vietnamese');
+  });
+
   it('redacts credential-shaped values even when incorrectly marked as normal', async () => {
     const composer = createCoreContextComposer(
       contextStore(personal({ facts: [fact({ value: 'password=do-not-leak' })] }))
@@ -455,6 +496,27 @@ describe('Personal Context mutation coordinator', () => {
     expect(stored.structuredProfile.profession[0]?.value).toBe('Product designer');
   });
 
+  it('keeps a paused learning control when a stale renderer profile is saved', async () => {
+    let stored = personal({ learningControl: { paused: true, updatedAt: NOW } });
+    const store: Pick<ContextStore, 'getPersonal' | 'upsertPersonal'> = {
+      getPersonal: async () => structuredClone(stored),
+      upsertPersonal: async (profile) => {
+        stored = structuredClone(profile);
+      },
+    };
+    const mutations = createPersonalContextMutationCoordinator(store, { now: () => NOW + 1 });
+
+    await mutations.saveProfile(
+      personal({
+        learningControl: undefined,
+        structuredProfile: structuredProfile({ profession: [fact({ key: 'role', value: 'Product designer' })] }),
+      })
+    );
+
+    expect(stored.learningControl).toEqual({ paused: true, updatedAt: NOW });
+    expect(stored.structuredProfile.profession[0]?.value).toBe('Product designer');
+  });
+
   it('continues processing mutations after a failed profile write', async () => {
     const descriptor: SecretDescriptor = {
       handle: 'secret://github',
@@ -505,6 +567,30 @@ describe('Context learning conflict policy', () => {
 
     await expect(reloaded.getAgent('tomny')).resolves.toEqual(agent);
     await expect(reloaded.getPersonal('default')).resolves.toEqual(personal());
+  });
+
+  it('persists a user learning pause across ContextStore restart without storing content in the control state', async () => {
+    let persisted = '';
+    const missing = Object.assign(new Error('missing'), { code: 'ENOENT' });
+    const fsImpl = {
+      readFile: async () => (persisted ? persisted : Promise.reject<string>(missing)),
+      writeFile: async (_filePath: string, data: string) => {
+        persisted = data;
+      },
+      rename: async () => undefined,
+      mkdir: async () => undefined,
+    };
+    const firstStore = createContextStore('C:/profiles/context.json', fsImpl);
+    await firstStore.upsertPersonal(personal());
+    const learning = createPersonalLearningCoordinator(firstStore, { now: () => NOW });
+
+    await expect(learning.setPaused(true)).resolves.toEqual({ paused: true, updatedAt: NOW });
+    const reloadedStore = createContextStore('C:/profiles/context.json', fsImpl);
+    const reloadedLearning = createPersonalLearningCoordinator(reloadedStore, { now: () => NOW });
+
+    await expect(reloadedLearning.getControl()).resolves.toEqual({ paused: true, updatedAt: NOW });
+    expect(persisted).toContain('learningControl');
+    expect(persisted).not.toContain('reason');
   });
 
   it('migrates legacy profiles without structured categories to empty collections', async () => {
@@ -793,6 +879,13 @@ describe('Context learning conflict policy', () => {
       fact: fact({ key: 'responseLanguage', value: 'Vietnamese', source: 'inferred', confidence: 0.8 }),
       explanation: 'Observed from the user language in this session.',
       provenance: 'conversation:turn-1',
+      causal: {
+        context: 'A Vietnamese support conversation.',
+        origin: 'conversation:turn-1',
+        reason: 'The user explicitly wrote in Vietnamese.',
+        reasonKnown: true,
+        proposal: 'Answer in Vietnamese on this support surface.',
+      },
     });
 
     expect(current.preferences).toEqual([]);
@@ -807,6 +900,165 @@ describe('Context learning conflict policy', () => {
     await expect(learning.export()).resolves.toMatchObject({ id: 'default', preferences: [] });
     const exported = await learning.export();
     expect(exported).not.toHaveProperty('secretReferences');
+  });
+
+  it('pauses new learning while preserving existing user-controlled records and resumes explicitly', async () => {
+    let current = personal();
+    const store: ContextStore = {
+      getAgent: async () => undefined,
+      getPersonal: async () => structuredClone(current),
+      upsertAgent: async () => undefined,
+      upsertPersonal: async (value) => {
+        current = structuredClone(value);
+      },
+      learnPersonalFact: async () => false,
+    };
+    let nextId = 0;
+    const learning = createPersonalLearningCoordinator(store, {
+      now: () => NOW,
+      createId: () => `learning_pause_${++nextId}`,
+    });
+    const input = {
+      collection: 'preferences' as const,
+      fact: fact({ key: 'responseLanguage', value: 'Vietnamese', source: 'user', confidence: 1 }),
+      explanation: 'The user explicitly selected Vietnamese.',
+      provenance: 'user:profile-language',
+      causal: {
+        context: 'Personal communication setting.',
+        origin: 'user:profile-language',
+        reason: 'The user prefers Vietnamese.',
+        reasonKnown: true,
+        proposal: 'Use Vietnamese for this support surface.',
+      },
+    };
+    const beforePause = await learning.propose(input);
+
+    await expect(learning.setPaused(true)).resolves.toEqual({ paused: true, updatedAt: NOW });
+    await expect(learning.getControl()).resolves.toEqual({ paused: true, updatedAt: NOW });
+    await expect(learning.propose(input)).rejects.toThrow('PERSONAL_LEARNING_PAUSED');
+    await expect(learning.confirm(beforePause.id)).resolves.toBe(true);
+    expect(current.preferences).toMatchObject([{ key: 'responseLanguage', value: 'Vietnamese' }]);
+
+    await expect(learning.setPaused(false)).resolves.toEqual({ paused: false, updatedAt: NOW });
+    await expect(learning.propose(input)).resolves.toMatchObject({ id: 'learning_pause_2' });
+    expect(current.learningControl).toEqual({ paused: false, updatedAt: NOW });
+  });
+
+  it('keeps unexplained repetition as a question until a correction supplies its cause and scope', async () => {
+    let current = personal();
+    const store: ContextStore = {
+      getAgent: async () => undefined,
+      getPersonal: async () => structuredClone(current),
+      upsertAgent: async () => undefined,
+      upsertPersonal: async (value) => {
+        current = structuredClone(value);
+      },
+      learnPersonalFact: async () => false,
+    };
+    const learning = createPersonalLearningCoordinator(store, { now: () => NOW, createId: () => 'learning_job_1' });
+    const proposed = await learning.propose({
+      collection: 'preferences',
+      fact: fact({
+        key: 'resumeLocation',
+        value: 'CV/full-time.pdf',
+        source: 'observed',
+        confidence: 0.8,
+        scope: { kind: 'surface', surface: 'jobs' },
+      }),
+      explanation: 'Observed the user selecting this CV once.',
+      provenance: 'run:job-full-time',
+      causal: {
+        context: 'Applying for a full-time job.',
+        origin: 'run:job-full-time',
+        reason: undefined,
+        reasonKnown: false,
+        proposal: 'Ask which CV applies before the next job application.',
+      },
+    });
+
+    await learning.confirm(proposed.id);
+    expect(current.preferences).toEqual([]);
+    expect(current.learningRecords).toMatchObject([{ status: 'needs_reason', causal: { reasonKnown: false } }]);
+
+    await learning.correct(
+      proposed.id,
+      fact({
+        key: 'resumeLocation',
+        value: 'CV/part-time.pdf',
+        source: 'user',
+        confidence: 1,
+        scope: { kind: 'surface', surface: 'jobs' },
+      }),
+      'The user clarified which CV is appropriate for part-time roles.',
+      {
+        context: 'Applying for a part-time job.',
+        origin: 'user:learning-correction',
+        reason: 'Part-time roles require a specific CV.',
+        reasonKnown: true,
+        proposal: 'Use this CV only for part-time job applications.',
+      }
+    );
+
+    expect(current.preferences).toMatchObject([{ key: 'resumeLocation', value: 'CV/part-time.pdf' }]);
+    expect(current.learningRecords).toMatchObject([
+      { status: 'corrected', causal: { reasonKnown: true, reason: 'Part-time roles require a specific CV.' } },
+    ]);
+  });
+
+  it('quarantines legacy learning without a reason from model-visible projections until correction', async () => {
+    const legacyPreference = fact({
+      key: 'resumeLocation',
+      value: 'CV/full-time.pdf',
+      source: 'observed',
+      confidence: 0.9,
+      scope: { kind: 'surface', surface: 'jobs' },
+    });
+    const explicitPreference = fact({
+      key: 'resumeLocation',
+      value: 'CV/current-user-choice.pdf',
+      source: 'user',
+      confidence: 1,
+      scope: { kind: 'surface', surface: 'jobs' },
+    });
+    const raw = JSON.stringify({
+      version: 1,
+      agents: [],
+      people: [
+        personal({
+          preferences: [legacyPreference, explicitPreference],
+          learningRecords: [
+            {
+              id: 'legacy_resume_choice',
+              collection: 'preferences',
+              fact: legacyPreference,
+              explanation: 'A prior selection was observed.',
+              provenance: 'legacy:job-1',
+              status: 'applied',
+              createdAt: NOW,
+            },
+          ],
+        }),
+      ],
+    });
+    const fsImpl = {
+      readFile: async () => raw,
+      writeFile: async () => undefined,
+      rename: async () => undefined,
+      mkdir: async () => undefined,
+    };
+    const store = createContextStore('C:/profiles/context.json', fsImpl);
+
+    const restored = await store.getPersonal('default');
+    expect(restored?.learningRecords).toMatchObject([{ id: 'legacy_resume_choice', status: 'needs_reason' }]);
+    const prompt = await createCoreContextComposer(store).composePrompt({
+      agentId: 'tomny',
+      personalId: 'default',
+      surface: 'jobs',
+      prompt: 'Apply for a part-time job.',
+    });
+
+    expect(prompt).not.toContain('CV/full-time.pdf');
+    expect(prompt).toContain('CV/current-user-choice.pdf');
   });
 });
 

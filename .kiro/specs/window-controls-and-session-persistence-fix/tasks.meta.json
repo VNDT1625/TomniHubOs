@@ -1,0 +1,130 @@
+{
+  "pbtResults": {
+    "1. Write bug condition exploration test": {
+      "status": "passed",
+      "failingExample": "Counterexamples discovered on unfixed code across 4 test cases (7 failing assertions):\n\n1. Case A (Window Controls Availability - Requirements 1.1, 2.1):\n   - Counterexample: isElectronDesktop() returned false when window.electronAPI is defined and window.__backendPort is undefined (expected true).\n   - Counterexample: isElectronDesktop() returned false across ports [undefined, 0, null] (expected true).\n   - Error: expect(received).toBe(expected) -> Expected: true, Received: false.\n\n2. Case B (Supabase Expired Access Token Refresh - Requirements 1.2, 2.2):\n   - Counterexample: supabaseRefreshToken export is undefined in supabaseAuth.ts (expected 'function').\n   - Counterexample: refreshTokenFn is undefined when attempting to refresh stored expired session (expires_at <= Date.now()).\n   - Error: expect(received).toBe('function') -> Expected: 'function', Received: 'undefined'.\n\n3. Case C (Local Desktop Session Persistence - Requirements 1.3, 2.3):\n   - Counterexample: accountSession.restore() rejected registered local session (issuer: 'tomny://local-account') because developmentLocalDemo: true was attached by register IPC handler and developmentLocalDemoEnabled was false.\n   - Error: AccountSessionError: Development local demo sessions are disabled (code: 'ACCOUNT_SESSION_INVALID'), resulting in phase 'unauthenticated' and vault wiped.\n\n4. Case D (Remembered Credentials Auto-Navigation - Requirements 1.4, 2.4):\n   - Counterexample: LoginPage source code contains no auto-login effect on mount when rememberMe is true and status is 'unauthenticated'.\n   - Counterexample: LoginPage lacks auto-navigation to '/guid' on mount with remembered credentials, stalling on login screen until manual form submission.\n   - Error: expect(hasAutoLoginEffect).toBe(true) -> Expected: true, Received: false.",
+      "lastRunTimestamp": 1790082898186
+    },
+    "2. Write preservation property tests (BEFORE implementing fix)": {
+      "status": "passed",
+      "lastRunTimestamp": 1790084097037
+    }
+  },
+  "executionHistory": {
+    "1. Write bug condition exploration test": [
+      {
+        "executionId": "4f050bc8-bfda-4f51-9371-feeb7401bbbe",
+        "chatSessionId": "sess_f6968fb5-7b58-4c86-9326-4174a7c961f5",
+        "timestamp": 1790080100189
+      },
+      {
+        "executionId": "4f050bc8-bfda-4f51-9371-feeb7401bbbe",
+        "chatSessionId": "sess_f6968fb5-7b58-4c86-9326-4174a7c961f5",
+        "timestamp": 1790080105546
+      },
+      {
+        "executionId": "4f050bc8-bfda-4f51-9371-feeb7401bbbe",
+        "chatSessionId": "sess_f6968fb5-7b58-4c86-9326-4174a7c961f5",
+        "timestamp": 1790082917553
+      }
+    ],
+    "2. Write preservation property tests (BEFORE implementing fix)": [
+      {
+        "executionId": "4f050bc8-bfda-4f51-9371-feeb7401bbbe",
+        "chatSessionId": "sess_f6968fb5-7b58-4c86-9326-4174a7c961f5",
+        "timestamp": 1790080100272
+      },
+      {
+        "executionId": "4f050bc8-bfda-4f51-9371-feeb7401bbbe",
+        "chatSessionId": "sess_f6968fb5-7b58-4c86-9326-4174a7c961f5",
+        "timestamp": 1790082922222
+      },
+      {
+        "executionId": "4f050bc8-bfda-4f51-9371-feeb7401bbbe",
+        "chatSessionId": "sess_f6968fb5-7b58-4c86-9326-4174a7c961f5",
+        "timestamp": 1790084121890
+      }
+    ],
+    "3.1 Decouple `isElectronDesktop` from `__backendPort`": [
+      {
+        "executionId": "4f050bc8-bfda-4f51-9371-feeb7401bbbe",
+        "chatSessionId": "sess_f6968fb5-7b58-4c86-9326-4174a7c961f5",
+        "timestamp": 1790080100333
+      },
+      {
+        "executionId": "4f050bc8-bfda-4f51-9371-feeb7401bbbe",
+        "chatSessionId": "sess_f6968fb5-7b58-4c86-9326-4174a7c961f5",
+        "timestamp": 1790084127381
+      },
+      {
+        "executionId": "4f050bc8-bfda-4f51-9371-feeb7401bbbe",
+        "chatSessionId": "sess_f6968fb5-7b58-4c86-9326-4174a7c961f5",
+        "timestamp": 1790085202666
+      }
+    ],
+    "3.2 Fix `WindowControls` component and Titlebar visibility / suppression": [
+      {
+        "executionId": "4f050bc8-bfda-4f51-9371-feeb7401bbbe",
+        "chatSessionId": "sess_f6968fb5-7b58-4c86-9326-4174a7c961f5",
+        "timestamp": 1790080100390
+      },
+      {
+        "executionId": "4f050bc8-bfda-4f51-9371-feeb7401bbbe",
+        "chatSessionId": "sess_f6968fb5-7b58-4c86-9326-4174a7c961f5",
+        "timestamp": 1790085224233
+      },
+      {
+        "executionId": "4f050bc8-bfda-4f51-9371-feeb7401bbbe",
+        "chatSessionId": "sess_f6968fb5-7b58-4c86-9326-4174a7c961f5",
+        "timestamp": 1790087131338
+      }
+    ],
+    "3.3 Implement `supabaseRefreshToken` and integrate into `AuthContext.refresh()`": [
+      {
+        "executionId": "4f050bc8-bfda-4f51-9371-feeb7401bbbe",
+        "chatSessionId": "sess_f6968fb5-7b58-4c86-9326-4174a7c961f5",
+        "timestamp": 1790080100478
+      },
+      {
+        "executionId": "4f050bc8-bfda-4f51-9371-feeb7401bbbe",
+        "chatSessionId": "sess_f6968fb5-7b58-4c86-9326-4174a7c961f5",
+        "timestamp": 1790087136616
+      }
+    ],
+    "3.4 Fix local desktop session persistence across restarts": [
+      {
+        "executionId": "4f050bc8-bfda-4f51-9371-feeb7401bbbe",
+        "chatSessionId": "sess_f6968fb5-7b58-4c86-9326-4174a7c961f5",
+        "timestamp": 1790080100543
+      }
+    ],
+    "3.5 Implement Remember Me auto-authentication in login page": [
+      {
+        "executionId": "4f050bc8-bfda-4f51-9371-feeb7401bbbe",
+        "chatSessionId": "sess_f6968fb5-7b58-4c86-9326-4174a7c961f5",
+        "timestamp": 1790080100625
+      }
+    ],
+    "3.6 Verify bug condition exploration test now passes": [
+      {
+        "executionId": "4f050bc8-bfda-4f51-9371-feeb7401bbbe",
+        "chatSessionId": "sess_f6968fb5-7b58-4c86-9326-4174a7c961f5",
+        "timestamp": 1790080100694
+      }
+    ],
+    "3.7 Verify preservation tests still pass": [
+      {
+        "executionId": "4f050bc8-bfda-4f51-9371-feeb7401bbbe",
+        "chatSessionId": "sess_f6968fb5-7b58-4c86-9326-4174a7c961f5",
+        "timestamp": 1790080100756
+      }
+    ],
+    "4. Checkpoint - Ensure all tests pass": [
+      {
+        "executionId": "4f050bc8-bfda-4f51-9371-feeb7401bbbe",
+        "chatSessionId": "sess_f6968fb5-7b58-4c86-9326-4174a7c961f5",
+        "timestamp": 1790080100862
+      }
+    ]
+  }
+}

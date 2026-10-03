@@ -5,14 +5,14 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { createPromptProject } from '@/process/ide/viu/design';
+import { createPromptProject } from '@package-apps/design/process/viu/design';
 import {
   activeViuDocument,
   deterministicPromptUpgrade,
   setActiveViuDocument,
   updateViuNode,
   visualEvidenceSummary,
-} from '@/renderer/pages/studio/ide/Viu/viuState';
+} from '@package-apps/design/renderer/viu/viuState';
 
 describe('Viu editor state', () => {
   it('updates a layer immutably and preserves its source trace', () => {

@@ -12,7 +12,7 @@ import {
   parseShellIntegration,
   tokenizeShellIntegration,
   type ShellIntegrationToken,
-} from '@/renderer/pages/terminal/shellIntegrationParser';
+} from '@package-apps/ide/renderer/terminal/shellIntegrationParser';
 
 const ESC = '\u001b';
 const BEL = '\u0007';

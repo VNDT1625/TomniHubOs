@@ -11,10 +11,11 @@ import { ProcessConfig } from '@process/utils/initStorage';
 import { getZoomFactor, setZoomFactor } from '@process/utils/zoom';
 import { getCdpStatus, updateCdpConfig } from '@process/utils/configureChromium';
 import { getGpuStatus, setGpuUserOverride } from '@process/utils/gpuRecovery';
+import { systemEgressAuthority } from '@process/services/security/systemEgressAuthority';
 
 import { requestAppRestart } from '@process/startup/appTermination';
 import { initApplicationBridgeCore } from './applicationBridgeCore';
-import { getDefaultBrowserStatus, setAsDefaultBrowser } from './defaultBrowser';
+
 import type { IStartOnBootStatus } from '@/common/adapter/ipcBridge';
 import { execFile, spawn } from 'node:child_process';
 import { stat } from 'node:fs/promises';
@@ -34,6 +35,30 @@ const launchDetached = (command: string, args: string[], cwd?: string): Promise<
     });
     child.once('error', reject);
   });
+
+const EXTERNAL_HANDOFF_URL_ERROR = 'External URL is not permitted.';
+
+/**
+ * A user-visible external handoff is not application egress, but must never
+ * pass a renderer-controlled file or custom protocol to the operating system.
+ * `vscode:` remains an internal fixed handoff in `openFolderWith` below.
+ */
+export const normalizeExternalHandoffUrl = (value: unknown): string => {
+  if (typeof value !== 'string' || value.length === 0 || value.length > 2_048 || value !== value.trim()) {
+    throw new Error(EXTERNAL_HANDOFF_URL_ERROR);
+  }
+  const normalized = /^chatgpt:/iu.test(value) ? value.replace(/^chatgpt:\/\/?/iu, 'https://chatgpt.com/') : value;
+  let url: URL;
+  try {
+    url = new URL(normalized);
+  } catch {
+    throw new Error(EXTERNAL_HANDOFF_URL_ERROR);
+  }
+  if (url.username || url.password || url.hash) throw new Error(EXTERNAL_HANDOFF_URL_ERROR);
+  if (url.protocol === 'https:') return url.toString();
+  if (url.protocol === 'http:' && (url.hostname === '127.0.0.1' || url.hostname === '[::1]')) return url.toString();
+  throw new Error(EXTERNAL_HANDOFF_URL_ERROR);
+};
 
 const isStartOnBootSupported = (): boolean => {
   return app.isPackaged && (process.platform === 'darwin' || process.platform === 'win32');
@@ -135,7 +160,13 @@ export function initApplicationBridge(): void {
         )
           return [];
         const normalized = parsed.toString();
-        return [normalized.endsWith('/') ? normalized.slice(0, -1) : normalized];
+        const candidate = normalized.endsWith('/') ? normalized.slice(0, -1) : normalized;
+        return systemEgressAuthority.authorize({
+          egressClass: 'local-office-probe',
+          destination: candidate,
+        }).decision === 'allow'
+          ? [candidate]
+          : [];
       } catch {
         return [];
       }
@@ -166,16 +197,7 @@ export function initApplicationBridge(): void {
     return Promise.resolve();
   });
   ipcBridge.shell.openExternal.provider(async (url) => {
-    try {
-      await electronShell.openExternal(url);
-    } catch (error) {
-      if (/^chatgpt:/i.test(url)) {
-        const fallbackUrl = url.replace(/^chatgpt:\/\/?/i, 'https://chatgpt.com/');
-        await electronShell.openExternal(fallbackUrl);
-        return;
-      }
-      throw error;
-    }
+    await electronShell.openExternal(normalizeExternalHandoffUrl(url));
   });
   ipcBridge.shell.checkToolInstalled.provider(async ({ tool }) => {
     if (!/^[A-Za-z0-9._-]+$/u.test(tool)) return false;
@@ -324,26 +346,6 @@ export function initApplicationBridge(): void {
   ipcBridge.application.getGpuStatus.provider(async () => {
     try {
       return { success: true, data: getGpuStatus() };
-    } catch (e) {
-      return { success: false, msg: e.message || e.toString() };
-    }
-  });
-
-  ipcBridge.application.getDefaultBrowserStatus.provider(async () => {
-    try {
-      return { success: true, data: getDefaultBrowserStatus() };
-    } catch (e) {
-      return { success: false, msg: e.message || e.toString() };
-    }
-  });
-
-  ipcBridge.application.setAsDefaultBrowser.provider(async () => {
-    try {
-      const status = await setAsDefaultBrowser();
-      if (!status.supported) {
-        return { success: false, msg: 'Default browser registration is only available on Windows.', data: status };
-      }
-      return { success: true, data: status };
     } catch (e) {
       return { success: false, msg: e.message || e.toString() };
     }

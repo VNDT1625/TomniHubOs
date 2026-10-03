@@ -138,14 +138,20 @@ const BOOTSTRAP_CLI_AGENTS: BootstrapCliAgent[] = [
 
 let lastBootstrapCliAgentAttempt = 0;
 const BOOTSTRAP_CLI_AGENT_RETRY_MS = 60_000;
+let bootstrapCompleted = false;
 
 function hasBootstrapCliAgent(agents: AgentMetadata[], entry: BootstrapCliAgent): boolean {
   return agents.some(
     (agent) =>
       agent.name === entry.name ||
+      agent.name?.toLowerCase() === entry.name.toLowerCase() ||
       agent.command === entry.command ||
       agent.id === entry.command ||
-      agent.id === entry.name
+      agent.id === entry.name ||
+      (agent.id === 'deepseek' && entry.name === 'DeepSeek TUI') ||
+      (agent.id === 'antigravity' && entry.name === 'Antigravity') ||
+      agent.backend === 'deepseek' ||
+      agent.backend === 'antigravity'
   );
 }
 
@@ -161,55 +167,75 @@ function normalizeAgentDisplayNames(agents: AgentMetadata[]): AgentMetadata[] {
 }
 
 async function ensureBootstrapCliAgents(agents: AgentMetadata[]): Promise<boolean> {
-  const missing = BOOTSTRAP_CLI_AGENTS.filter((entry) => !hasBootstrapCliAgent(agents, entry));
-  if (missing.length === 0) {
+  if (bootstrapCompleted) {
     return false;
   }
+  try {
+    const missing = BOOTSTRAP_CLI_AGENTS.filter((entry) => !hasBootstrapCliAgent(agents, entry));
+    if (missing.length === 0) {
+      bootstrapCompleted = true;
+      return false;
+    }
 
-  const now = Date.now();
-  if (now - lastBootstrapCliAgentAttempt < BOOTSTRAP_CLI_AGENT_RETRY_MS) {
+    const now = Date.now();
+    if (now - lastBootstrapCliAgentAttempt < BOOTSTRAP_CLI_AGENT_RETRY_MS) {
+      return false;
+    }
+    lastBootstrapCliAgentAttempt = now;
+    bootstrapCompleted = true;
+
+    const results = await Promise.allSettled(
+      missing.map((entry) =>
+        Promise.race([
+          ipcBridge.acpConversation.createCustomAgent.invoke({
+            name: entry.name,
+            command: entry.command,
+            icon: entry.icon,
+            args: entry.args,
+            advanced: {
+              description: entry.description,
+              yolo_id: entry.yolo_id,
+            },
+          }),
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('createCustomAgent timeout')), 2000)),
+        ])
+      )
+    );
+
+    const created = results.some((result) => result.status === 'fulfilled');
+    if (created) {
+      await Promise.race([
+        ipcBridge.acpConversation.refreshCustomAgents.invoke(),
+        new Promise<void>((resolve) => setTimeout(resolve, 2000)),
+      ]).catch((): undefined => undefined);
+    }
+    return created;
+  } catch (error) {
+    console.warn('[ensureBootstrapCliAgents] bootstrap skipped:', error);
     return false;
   }
-  lastBootstrapCliAgentAttempt = now;
-
-  const results = await Promise.allSettled(
-    missing.map((entry) =>
-      ipcBridge.acpConversation.createCustomAgent.invoke({
-        name: entry.name,
-        command: entry.command,
-        icon: entry.icon,
-        args: entry.args,
-        advanced: {
-          description: entry.description,
-          yolo_id: entry.yolo_id,
-        },
-      })
-    )
-  );
-
-  const created = results.some((result) => result.status === 'fulfilled');
-  if (created) {
-    await ipcBridge.acpConversation.refreshCustomAgents.invoke().catch((): undefined => undefined);
-  }
-  return created;
 }
 
 /** Shared fetcher for DETECTED_AGENTS_SWR_KEY — single source of truth. */
 export async function fetchDetectedAgents(): Promise<AgentMetadata[]> {
   try {
-    const agents = await ipcBridge.acpConversation.getAvailableAgents.invoke();
+    const agents = await Promise.race([
+      ipcBridge.acpConversation.getAvailableAgents.invoke(),
+      new Promise<AgentMetadata[]>((resolve) =>
+        setTimeout(() => {
+          console.warn('[fetchDetectedAgents] Timed out waiting for available agents');
+          resolve([]);
+        }, 8000)
+      ),
+    ]);
     if (Array.isArray(agents)) {
       const detectedAgents = agents as AgentMetadata[];
-      if (await ensureBootstrapCliAgents(detectedAgents)) {
-        const refreshedAgents = await ipcBridge.acpConversation.getAvailableAgents.invoke();
-        return Array.isArray(refreshedAgents)
-          ? normalizeAgentDisplayNames(refreshedAgents as AgentMetadata[])
-          : normalizeAgentDisplayNames(detectedAgents);
-      }
+      // Run bootstrap in background so UI displays detected agents immediately
+      void ensureBootstrapCliAgents(detectedAgents);
       return normalizeAgentDisplayNames(detectedAgents);
     }
-  } catch {
-    // fallback to empty
+  } catch (error) {
+    console.error('[fetchDetectedAgents] Failed to fetch detected agents:', error);
   }
   return [];
 }

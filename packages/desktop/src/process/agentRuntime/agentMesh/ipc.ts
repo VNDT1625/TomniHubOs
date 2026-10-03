@@ -46,10 +46,16 @@ export type AgentMeshCanSendRequest = SessionRequest & {
   kind: AgentMessageKind;
 };
 
+export type AgentMeshBridgeOptions = {
+  /** Main-owned account authority. It is intentionally not derived from renderer input. */
+  requireAuthenticatedAccount?: () => void;
+};
+
 const safe =
-  <Req, Res>(label: string, service: AgentMeshService, handler: (request: Req) => Res | Promise<Res>) =>
+  <Req, Res>(label: string, requireAuthenticatedAccount: () => void, handler: (request: Req) => Res | Promise<Res>) =>
   async (request: Req): Promise<AgentMeshResult<Res>> => {
     try {
+      requireAuthenticatedAccount();
       return { ok: true, data: await handler(request) };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -59,59 +65,71 @@ const safe =
   };
 
 /** Register the provider-neutral AgentMesh IPC contract. Bootstrap owns the service lifecycle. */
-export const registerAgentMeshBridge = (service: AgentMeshService): void => {
+export const registerAgentMeshBridge = (
+  service: AgentMeshService,
+  { requireAuthenticatedAccount = () => undefined }: AgentMeshBridgeOptions = {}
+): void => {
   bridge.buildProvider<AgentMeshResult<string>, CreateSessionRequest>(AGENT_MESH_CHANNELS.create).provider(
-    safe('create', service, ({ sessionId }) => {
+    safe('create', requireAuthenticatedAccount, ({ sessionId }) => {
       service.create(sessionId);
       return sessionId;
     })
   );
-  bridge.buildProvider<string[], void>(AGENT_MESH_CHANNELS.sessions).provider(async () => service.discoverSessions());
+  bridge.buildProvider<string[], void>(AGENT_MESH_CHANNELS.sessions).provider(async () => {
+    requireAuthenticatedAccount();
+    return service.discoverSessions();
+  });
   bridge
     .buildProvider<AgentMeshResult<ReturnType<AgentMeshService['overview']>>, SessionRequest>(
       AGENT_MESH_CHANNELS.overview
     )
-    .provider(safe('overview', service, ({ sessionId }) => service.overview(sessionId)));
+    .provider(safe('overview', requireAuthenticatedAccount, ({ sessionId }) => service.overview(sessionId)));
   bridge
     .buildProvider<AgentMeshResult<ReturnType<AgentMeshService['snapshot']>>, SessionRequest>(
       AGENT_MESH_CHANNELS.snapshot
     )
-    .provider(safe('snapshot', service, ({ sessionId }) => service.snapshot(sessionId)));
+    .provider(safe('snapshot', requireAuthenticatedAccount, ({ sessionId }) => service.snapshot(sessionId)));
   bridge
     .buildProvider<AgentMeshResult<ReturnType<AgentMeshService['getConcurrencyPolicy']>>, void>(
       AGENT_MESH_CHANNELS.concurrencyGet
     )
-    .provider(safe('concurrency-get', service, () => service.getConcurrencyPolicy()));
+    .provider(safe('concurrency-get', requireAuthenticatedAccount, () => service.getConcurrencyPolicy()));
   bridge
     .buildProvider<
       AgentMeshResult<ReturnType<AgentMeshService['setConfiguredMaxConcurrent']>>,
       { maxConcurrent: number }
     >(AGENT_MESH_CHANNELS.concurrencySet)
     .provider(
-      safe('concurrency-set', service, ({ maxConcurrent }) => service.setConfiguredMaxConcurrent(maxConcurrent))
+      safe('concurrency-set', requireAuthenticatedAccount, ({ maxConcurrent }) =>
+        service.setConfiguredMaxConcurrent(maxConcurrent)
+      )
     );
   bridge
     .buildProvider<AgentMeshResult<ReturnType<AgentMeshService['inspect']>>, AgentMeshInspectRequest>(
       AGENT_MESH_CHANNELS.inspect
     )
-    .provider(safe('inspect', service, ({ sessionId, agentId }) => service.inspect(sessionId, agentId)));
+    .provider(
+      safe('inspect', requireAuthenticatedAccount, ({ sessionId, agentId }) => service.inspect(sessionId, agentId))
+    );
   bridge
     .buildProvider<
       AgentMeshResult<ReturnType<AgentMeshService['getWorklog']>>,
       SessionRequest & { agentId?: AgentId; limit?: number }
     >(AGENT_MESH_CHANNELS.worklog)
     .provider(
-      safe('worklog', service, ({ sessionId, agentId, limit }) => service.getWorklog(sessionId, agentId, limit))
+      safe('worklog', requireAuthenticatedAccount, ({ sessionId, agentId, limit }) =>
+        service.getWorklog(sessionId, agentId, limit)
+      )
     );
   bridge
     .buildProvider<AgentMeshResult<AgentMessage>, AgentMeshSendRequest>(AGENT_MESH_CHANNELS.send)
-    .provider(safe('send', service, ({ sessionId, ...input }) => service.send(sessionId, input)));
+    .provider(safe('send', requireAuthenticatedAccount, ({ sessionId, ...input }) => service.send(sessionId, input)));
   bridge
     .buildProvider<AgentMeshResult<AgentMessage | undefined>, AgentMeshQueueUpdateRequest>(
       AGENT_MESH_CHANNELS.queueUpdate
     )
     .provider(
-      safe('queue-update', service, ({ sessionId, actorId, targetId, messageId, patch }) =>
+      safe('queue-update', requireAuthenticatedAccount, ({ sessionId, actorId, targetId, messageId, patch }) =>
         service.updateQueue(sessionId, actorId, targetId, messageId, patch)
       )
     );
@@ -120,34 +138,41 @@ export const registerAgentMeshBridge = (service: AgentMeshService): void => {
       AGENT_MESH_CHANNELS.queueRemove
     )
     .provider(
-      safe('queue-remove', service, ({ sessionId, actorId, targetId, messageId }) =>
+      safe('queue-remove', requireAuthenticatedAccount, ({ sessionId, actorId, targetId, messageId }) =>
         service.removeQueue(sessionId, actorId, targetId, messageId)
       )
     );
   bridge
     .buildProvider<AgentMeshResult<AgentMessage[]>, AgentMeshQueueReorderRequest>(AGENT_MESH_CHANNELS.queueReorder)
     .provider(
-      safe('queue-reorder', service, ({ sessionId, actorId, targetId, messageId, beforeMessageId }) =>
-        service.reorderQueue(sessionId, actorId, targetId, messageId, beforeMessageId)
+      safe(
+        'queue-reorder',
+        requireAuthenticatedAccount,
+        ({ sessionId, actorId, targetId, messageId, beforeMessageId }) =>
+          service.reorderQueue(sessionId, actorId, targetId, messageId, beforeMessageId)
       )
     );
   bridge
     .buildProvider<AgentMeshResult<void>, AgentMeshStopRequest>(AGENT_MESH_CHANNELS.stop)
     .provider(
-      safe('stop', service, ({ sessionId, actorId, taskId, mode }) => service.stop(sessionId, actorId, taskId, mode))
+      safe('stop', requireAuthenticatedAccount, ({ sessionId, actorId, taskId, mode }) =>
+        service.stop(sessionId, actorId, taskId, mode)
+      )
     );
   bridge
     .buildProvider<AgentMeshResult<void>, SessionRequest & { agentId: AgentId }>(AGENT_MESH_CHANNELS.heartbeat)
-    .provider(safe('heartbeat', service, ({ sessionId, agentId }) => service.heartbeat(sessionId, agentId)));
+    .provider(
+      safe('heartbeat', requireAuthenticatedAccount, ({ sessionId, agentId }) => service.heartbeat(sessionId, agentId))
+    );
   bridge
     .buildProvider<AgentMeshResult<ReturnType<AgentMeshService['watchdog']>>, SessionRequest>(
       AGENT_MESH_CHANNELS.watchdog
     )
-    .provider(safe('watchdog', service, ({ sessionId }) => service.watchdog(sessionId)));
+    .provider(safe('watchdog', requireAuthenticatedAccount, ({ sessionId }) => service.watchdog(sessionId)));
   bridge
     .buildProvider<AgentMeshResult<boolean>, AgentMeshCanSendRequest>(AGENT_MESH_CHANNELS.canSend)
     .provider(
-      safe('can-send', service, ({ sessionId, fromAgentId, toAgentId, kind }) =>
+      safe('can-send', requireAuthenticatedAccount, ({ sessionId, fromAgentId, toAgentId, kind }) =>
         service.canSend(sessionId, fromAgentId, toAgentId, kind)
       )
     );

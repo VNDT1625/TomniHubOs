@@ -114,6 +114,9 @@ pub enum Commands {
         about = "ExpBase debugging memory: search/add/get/list/forget/feedback (reads .mtui/exp)"
     )]
     Exp(ExpArgs),
+
+    #[command(about = "Clean up old backups and enforce retention policies and quotas")]
+    Gc(GcArgs),
 }
 
 #[derive(Args)]
@@ -540,7 +543,7 @@ pub struct CompactArgs {
 
     #[arg(
         long,
-        help = "Compression profile: auto, generic, python, vitest, tsc, cargo, pytest"
+        help = "Compression profile: auto, generic, json, python, vitest, tsc, cargo, pytest"
     )]
     pub profile: Option<String>,
 
@@ -601,7 +604,7 @@ pub struct VerifyPythonArgs {
 
     #[arg(
         long,
-        help = "Compression profile: auto, generic, python, vitest, tsc, cargo, pytest"
+        help = "Compression profile: auto, generic, json, python, vitest, tsc, cargo, pytest"
     )]
     pub profile: Option<String>,
 
@@ -645,7 +648,7 @@ pub struct VerifyRunArgs {
 
     #[arg(
         long,
-        help = "Compression profile: auto, generic, python, vitest, tsc, cargo, pytest"
+        help = "Compression profile: auto, generic, json, python, vitest, tsc, cargo, pytest"
     )]
     pub profile: Option<String>,
 
@@ -796,6 +799,24 @@ pub struct CompassReadArgs {
 
     #[arg(long, default_value_t = 16000, help = "Maximum compressed characters")]
     pub max_chars: usize,
+
+    #[arg(long, default_value_t = 1, help = "1-based page number for stateless pagination")]
+    pub page: usize,
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct GcArgs {
+    #[arg(long, help = "Only show what would be deleted without actually deleting")]
+    pub dry_run: bool,
+
+    #[arg(long, help = "Delete backups older than N days")]
+    pub days: Option<u32>,
+
+    #[arg(long, help = "Force clean all historical backups")]
+    pub force: bool,
+
+    #[arg(long, help = "Target max storage in megabytes")]
+    pub max_mb: Option<u64>,
 }
 
 #[derive(Args)]

@@ -13,7 +13,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { buildOmniIdeServer } from '@/process/omni-gateway/omniGatewayProfile';
 import { createOmniGatewayState } from '@/process/omni-gateway/omniGatewayState';
-import type { IdeMcpService, IdeServerDeps, TeamEditAgentService } from '@/process/ide/mcp/ideServer';
+import type { IdeMcpService, IdeServerDeps, TeamEditAgentService } from '@package-apps/ide/process/mcp/ideServer';
 
 const root = process.cwd();
 const read = (rel: string): string => readFileSync(path.join(root, rel), 'utf-8');
@@ -100,8 +100,8 @@ describe('Omni MCP sidecar smoke checks', () => {
   });
 
   it('keeps the standalone sidecar free of renderer and Electron imports', () => {
-    const sidecar = read('packages/desktop/src/process/ide/mcp/omniMcpSidecar.ts');
-    const nodeWiring = read('packages/desktop/src/process/ide/mcp/omniNodeWiring.ts');
+    const sidecar = read('packages/package-apps/ide/src/process/mcp/omniMcpSidecar.ts');
+    const nodeWiring = read('packages/package-apps/ide/src/process/mcp/omniNodeWiring.ts');
     const combined = `${sidecar}\n${nodeWiring}`;
     expect(combined).not.toMatch(/from ['"]electron['"]|require\(['"]electron['"]\)/);
     expect(combined).not.toContain('/renderer/');
@@ -111,7 +111,7 @@ describe('Omni MCP sidecar smoke checks', () => {
   });
 
   it('uses the app-compatible gateway runtime for rescue external mode', () => {
-    const sidecar = read('packages/desktop/src/process/ide/mcp/omniMcpSidecar.ts');
+    const sidecar = read('packages/package-apps/ide/src/process/mcp/omniMcpSidecar.ts');
     const registrar = read('packages/desktop/src/process/omni-gateway/registerOmniGateway.ts');
 
     expect(sidecar).toContain('createOmniGatewayRuntime');
@@ -127,7 +127,7 @@ describe('Omni MCP sidecar smoke checks', () => {
   });
 
   it('reuses the app gateway credential instead of minting a rescue-only token file', () => {
-    const sidecar = read('packages/desktop/src/process/ide/mcp/omniMcpSidecar.ts');
+    const sidecar = read('packages/package-apps/ide/src/process/mcp/omniMcpSidecar.ts');
 
     expect(sidecar).toContain("OMNI_GATEWAY_CREDENTIAL_ID = 'omni-gateway-token'");
     expect(sidecar).toContain('createCredentialStore');

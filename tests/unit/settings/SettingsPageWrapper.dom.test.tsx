@@ -14,4 +14,12 @@ describe('getBuiltinSettingsNavItems', () => {
 
     expect(items.map((item) => item.id)).toEqual(BUILTIN_TAB_IDS);
   });
+
+  it('keeps optional application settings out of the base navigation', () => {
+    const ids = getBuiltinSettingsNavItems(true, (key) => key).map((item) => item.id);
+
+    expect(ids).not.toEqual(
+      expect.arrayContaining(['browser', 'company', 'knowledge', 'pet', 'testing', 'monitor', 'terminal'])
+    );
+  });
 });

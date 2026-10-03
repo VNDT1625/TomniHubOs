@@ -19,6 +19,9 @@ describe('base preload and IPC inventory', () => {
     expect(first.rendererChannels.map((channel) => channel.channel)).toContain('foundation:execute-run');
     expect(first.handlers.map((channel) => channel.channel)).toContain('foundation:execute-run');
     expect(first.handlers.map((channel) => channel.channel)).toContain('get-backend-port');
+    expect(
+      first.mainToRendererChannels.filter((channel) => channel.staticChannel).map((channel) => channel.channel)
+    ).toEqual(expect.arrayContaining(['tray:navigate-to-guid', 'pet:state-changed']));
     expect(findIpcInventoryViolations(first)).toEqual([]);
   });
 
@@ -38,6 +41,36 @@ describe('base preload and IPC inventory', () => {
     expect(inventory.preloadMethods.map((method) => method.method)).toEqual(['registered', 'missing']);
     expect(findIpcInventoryViolations(inventory)).toEqual([
       expect.objectContaining({ channel: 'fixture:missing', reason: 'unregistered-renderer-channel' }),
+    ]);
+  });
+
+  it('reports an unobserved literal Main-to-renderer IPC fixture without treating dynamic channels as missing', () => {
+    const inventory = scanIpcInventoryFromSources({
+      'packages/desktop/src/preload/fixture.ts': `
+        const loopChannels = ['fixture:loop-observed'];
+        for (const channel of loopChannels) {
+          ipcRenderer.on(channel, () => undefined);
+        }
+        const DYNAMIC_CHANNEL = runtimeChannel();
+        ipcRenderer.on(DYNAMIC_CHANNEL, () => undefined);
+        ipcRenderer.on('fixture:direct-observed', () => undefined);
+      `,
+      'packages/desktop/src/process/fixture.ts': `
+        mainWindow.webContents.send('fixture:loop-observed');
+        mainWindow.webContents.send('fixture:direct-observed');
+        mainWindow.webContents.send('fixture:missing');
+        mainWindow.webContents.send(DYNAMIC_CHANNEL);
+      `,
+    });
+
+    expect(inventory.mainToRendererChannels).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ channel: 'fixture:loop-observed', staticChannel: true }),
+        expect.objectContaining({ channel: '<dynamic:DYNAMIC_CHANNEL>', staticChannel: false }),
+      ])
+    );
+    expect(findIpcInventoryViolations(inventory)).toEqual([
+      expect.objectContaining({ channel: 'fixture:missing', reason: 'unobserved-main-to-renderer-channel' }),
     ]);
   });
 });

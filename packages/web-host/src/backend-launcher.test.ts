@@ -265,7 +265,11 @@ describe('BackendLifecycleManager.start (health timeout)', () => {
     await expectedRejection;
 
     expect(mgr.status).toBe('error');
-    expect(killSpy).toHaveBeenCalled();
+    if (process.platform === 'win32') {
+      expect(spawn).toHaveBeenCalledWith('taskkill', ['/F', '/PID', '99999', '/T'], expect.any(Object));
+    } else {
+      expect(killSpy).toHaveBeenCalled();
+    }
 
     fetchSpy.mockRestore();
     killSpy.mockRestore();
@@ -560,7 +564,11 @@ describe('BackendLifecycleManager.stop', () => {
     (child as unknown as EventEmitter).emit('exit', 0);
     await stopPromise;
 
-    expect(killSpy).toHaveBeenCalled();
+    if (process.platform === 'win32') {
+      expect(spawn).toHaveBeenCalledWith('taskkill', ['/PID', '99999', '/T'], expect.any(Object));
+    } else {
+      expect(killSpy).toHaveBeenCalled();
+    }
     expect(cleanupRegisteredAgentProcesses).toHaveBeenCalledWith('/db');
     expect(mgr.status).toBe('stopped');
 
@@ -588,8 +596,13 @@ describe('BackendLifecycleManager.stop', () => {
     await new Promise((r) => setTimeout(r, 5_200));
     await stopPromise;
 
-    expect(killSpy.mock.calls).toEqual(expect.arrayContaining([[expect.any(Number), 'SIGTERM']]));
-    expect(killSpy.mock.calls).toEqual(expect.arrayContaining([[expect.any(Number), 'SIGKILL']]));
+    if (process.platform === 'win32') {
+      expect(spawn).toHaveBeenCalledWith('taskkill', ['/PID', '99999', '/T'], expect.any(Object));
+      expect(spawn).toHaveBeenCalledWith('taskkill', ['/F', '/PID', '99999', '/T'], expect.any(Object));
+    } else {
+      expect(killSpy.mock.calls).toEqual(expect.arrayContaining([[expect.any(Number), 'SIGTERM']]));
+      expect(killSpy.mock.calls).toEqual(expect.arrayContaining([[expect.any(Number), 'SIGKILL']]));
+    }
     expect(cleanupRegisteredAgentProcesses).toHaveBeenCalledWith('/db');
 
     fetchSpy.mockRestore();

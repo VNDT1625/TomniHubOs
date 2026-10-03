@@ -50,21 +50,27 @@ const GuidModelSelector: React.FC<GuidModelSelectorProps> = ({
     return modelList.filter((p) => p.enabled !== false);
   }, [modelList]);
 
+  const autoModelLabel = t('guid.hubHome.status.automatic', { defaultValue: 'Tự động (Auto)' });
+  const isAutoGemini = !current_model || current_model.use_model === 'auto' || current_model.id === 'auto';
+
   const geminiSelectedLabel = React.useMemo(() => {
+    if (isAutoGemini) return `${autoModelLabel} (Laya Decision)`;
     if (!current_model?.use_model) return '';
     return current_model.use_model;
-  }, [current_model?.use_model]);
+  }, [current_model?.use_model, isAutoGemini, autoModelLabel]);
 
   const geminiButtonLabel = React.useMemo(() => {
+    if (isAutoGemini) return `${autoModelLabel} (Laya Decision)`;
     return getModelDisplayLabel({
       selected_value: current_model?.use_model,
       selectedLabel: geminiSelectedLabel,
       defaultModelLabel,
       fallbackLabel: defaultModelLabel,
     });
-  }, [current_model?.use_model, defaultModelLabel, geminiSelectedLabel]);
+  }, [current_model?.use_model, defaultModelLabel, geminiSelectedLabel, isAutoGemini, autoModelLabel]);
 
   const acpSelectedLabel = React.useMemo(() => {
+    if (selectedAcpModel === 'auto') return autoModelLabel;
     return (
       currentAcpCachedModelInfo?.available_models?.find((m) => m.id === selectedAcpModel)?.label ||
       currentAcpCachedModelInfo?.current_model_label ||
@@ -92,7 +98,26 @@ const GuidModelSelector: React.FC<GuidModelSelectorProps> = ({
       <Dropdown
         trigger='hover'
         droplist={
-          <Menu selectedKeys={current_model ? [current_model.id + current_model.use_model] : []}>
+          <Menu selectedKeys={current_model && !isAutoGemini ? [current_model.id + current_model.use_model] : ['auto']}>
+            <Menu.Item
+              key='auto'
+              className={isAutoGemini ? '!bg-2' : ''}
+              onClick={() => {
+                setCurrentModel({
+                  id: 'auto',
+                  name: 'Auto (Laya Decision)',
+                  use_model: 'auto',
+                  platform: 'auto',
+                } as any).catch((error) => {
+                  console.error('Failed to set auto model:', error);
+                });
+              }}
+            >
+              <div className='flex items-center gap-8px w-full font-medium'>
+                <div className='w-6px h-6px rounded-full shrink-0 bg-blue-500' />
+                <span>{autoModelLabel} (Laya Decision)</span>
+              </div>
+            </Menu.Item>
             {!enabledModelList || enabledModelList.length === 0
               ? [
                   <Menu.Item
@@ -172,6 +197,7 @@ const GuidModelSelector: React.FC<GuidModelSelectorProps> = ({
         >
           <span className='flex items-center gap-6px min-w-0'>
             <Brain theme='outline' size='14' fill={iconColors.secondary} className='shrink-0' />
+            {isAutoGemini && <div className='w-6px h-6px rounded-full shrink-0 bg-blue-500' />}
             <span>{geminiButtonLabel}</span>
             <Down theme='outline' size='12' fill={iconColors.secondary} className='shrink-0' />
           </span>
@@ -187,7 +213,17 @@ const GuidModelSelector: React.FC<GuidModelSelectorProps> = ({
         <Dropdown
           trigger='click'
           droplist={
-            <Menu selectedKeys={selectedAcpModel ? [selectedAcpModel] : []}>
+            <Menu selectedKeys={selectedAcpModel ? [selectedAcpModel] : ['auto']}>
+              <Menu.Item
+                key='auto'
+                className={!selectedAcpModel || selectedAcpModel === 'auto' ? '!bg-2' : ''}
+                onClick={() => setSelectedAcpModel('auto')}
+              >
+                <div className='flex items-center gap-8px w-full font-medium'>
+                  <div className='w-6px h-6px rounded-full shrink-0 bg-blue-500' />
+                  <span>{autoModelLabel} (Laya Decision)</span>
+                </div>
+              </Menu.Item>
               {currentAcpCachedModelInfo.available_models.map((model) => {
                 // 获取模型健康状态
                 const providerConfig = modelConfig?.find((p) => p.platform?.includes(''));
@@ -245,16 +281,53 @@ const GuidModelSelector: React.FC<GuidModelSelectorProps> = ({
     );
   }
 
-  // Fallback: no model switching
+  // Fallback: Tomny CLI / Agent selector without cached probe -> Provide Auto Selection
   return (
-    <Tooltip content={t('conversation.welcome.modelSwitchNotSupported')} position='top'>
-      <Button className={'sendbox-model-btn guid-config-btn'} shape='round' size='small' style={{ cursor: 'default' }}>
+    <Dropdown
+      trigger='click'
+      droplist={
+        <Menu selectedKeys={[selectedAcpModel || 'auto']}>
+          <Menu.Item
+            key='auto'
+            className={!selectedAcpModel || selectedAcpModel === 'auto' ? '!bg-2' : ''}
+            onClick={() => setSelectedAcpModel('auto')}
+          >
+            <div className='flex items-center gap-8px w-full font-medium'>
+              <div className='w-6px h-6px rounded-full shrink-0 bg-blue-500' />
+              <span>{autoModelLabel} (Laya Decision)</span>
+            </div>
+          </Menu.Item>
+          {enabledModelList.map((provider) => {
+            const available_models = getAvailableModels(provider);
+            if (available_models.length === 0) return null;
+            return (
+              <Menu.ItemGroup title={provider.name} key={provider.id}>
+                {available_models.map((modelName) => (
+                  <Menu.Item
+                    key={provider.id + modelName}
+                    className={selectedAcpModel === modelName ? '!bg-2' : ''}
+                    onClick={() => setSelectedAcpModel(modelName)}
+                  >
+                    <div className='flex items-center gap-8px w-full'>
+                      <div className='w-6px h-6px rounded-full shrink-0 bg-green-500' />
+                      <span>{modelName}</span>
+                    </div>
+                  </Menu.Item>
+                ))}
+              </Menu.ItemGroup>
+            );
+          })}
+        </Menu>
+      }
+    >
+      <Button className={'sendbox-model-btn guid-config-btn'} shape='round' size='small'>
         <span className='flex items-center gap-6px min-w-0'>
           <Brain theme='outline' size='14' fill={iconColors.secondary} className='shrink-0' />
-          <span>{defaultModelLabel}</span>
+          <span>{selectedAcpModel === 'auto' || !selectedAcpModel ? autoModelLabel : selectedAcpModel}</span>
+          <Down theme='outline' size='12' fill={iconColors.secondary} className='shrink-0' />
         </span>
       </Button>
-    </Tooltip>
+    </Dropdown>
   );
 };
 

@@ -99,7 +99,7 @@ export const classifyAgentFailure = (error: unknown): AgentFailureClassification
   if (
     status === 401 ||
     status === 403 ||
-    /invalid api[ _-]?key|incorrect api[ _-]?key|missing api[ _-]?key|api[ _-]?key.*required|unauthori[sz]ed|authentication failed|invalid bearer|unauthenticated|access token.*(?:invalid|expired)/u.test(
+    /no api[ _-]?key|no api key found|invalid api[ _-]?key|incorrect api[ _-]?key|missing api[ _-]?key|api[ _-]?key.*required|unauthori[sz]ed|authentication failed|invalid bearer|unauthenticated|access token.*(?:invalid|expired)/u.test(
       normalized
     )
   ) {
@@ -120,6 +120,9 @@ export const classifyAgentFailure = (error: unknown): AgentFailureClassification
       normalized
     ) ||
     /surface .+ (?:is )?unavailable|surface .* requires (?:scopes|an explicit user grant)|missing-(?:permission-scope|capability)/u.test(
+      normalized
+    ) ||
+    /unrecognized subcommand|unknown subcommand|unexpected argument|unknown option|invalid option|command not found|cannot find module|not a recognized command|did not emit ready within/u.test(
       normalized
     ) ||
     (status !== undefined && [400, 404, 405, 409, 410, 422].includes(status))
@@ -178,6 +181,7 @@ export type PersistentAgentRetryOptions<T> = {
   onStatus?: (status: AgentRetryStatus) => void;
   classify?: (error: unknown) => AgentFailureClassification;
   batchSize?: number;
+  maxAttempts?: number;
   retryDelayMs?: number;
   batchDelayMs?: number;
   sleep?: RetrySleep;
@@ -216,6 +220,9 @@ export const withPersistentAgentRetry = async <T>(options: PersistentAgentRetryO
       if (!failure.retry) throw markRetryManaged(error);
 
       totalFailures += 1;
+      if (options.maxAttempts !== undefined && totalFailures >= options.maxAttempts) {
+        throw markRetryManaged(error);
+      }
       const failedAttemptInBatch = ((totalFailures - 1) % batchSize) + 1;
       const startsNewBatch = failedAttemptInBatch === batchSize;
       const batch = Math.floor(totalFailures / batchSize) + 1;

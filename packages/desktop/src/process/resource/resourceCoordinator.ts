@@ -517,6 +517,9 @@ class ResourceCoordinatorImpl implements IResourceCoordinator {
       if (this.pending.some((pending) => pending.requestId === requestId)) {
         throw new Error(`Duplicate resource request id: ${requestId}`);
       }
+      if (!this.initialized) {
+        this.initialization ??= this.initialize();
+      }
       if (this.initialized && this.canGrant(kind, estCostMB)) {
         const lease = this.grantInternal(kind, estCostMB, requestedAt, owner, lifetime.ttlMs, lifetime.renewable);
         this.emit();

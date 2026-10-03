@@ -7,12 +7,33 @@ import type { IProvider } from '@/common/config/storage';
 import type { CreateProviderRequest, UpdateProviderRequest } from '@/common/types/provider/providerApi';
 
 const PROVIDERS_FILE = 'tomny-providers.json';
-type ProviderSecrets = { apiKey: string; bedrockSecretAccessKey?: string };
+type ProviderSecrets = { apiKey: string; bedrockSecretAccessKey?: string; endpoint?: string };
 type StoredProvider = Omit<IProvider, 'api_key' | 'bedrock_config'> & {
   bedrock_config?: Omit<NonNullable<IProvider['bedrock_config']>, 'secret_access_key'>;
   encryptedSecrets: string;
   osEncrypted: boolean;
+  version?: number;
 };
+
+export type ProviderDestinationBinding = Readonly<{
+  providerId: string;
+  endpoint: string;
+  isFullUrl: boolean;
+  version: number;
+  platform?: string;
+}>;
+
+export const canonicalEndpoint = (raw: string): string => {
+  const trimmed = raw.trim();
+  try {
+    const parsed = new URL(trimmed);
+    const pathname = parsed.pathname.replace(/\/+$/u, '');
+    return `${parsed.protocol}//${parsed.host}${pathname}`;
+  } catch {
+    return trimmed.replace(/\/+$/u, '');
+  }
+};
+
 export type ProviderFs = {
   readFile(filePath: string, encoding: 'utf-8'): Promise<string>;
   writeFile(filePath: string, data: string, options: { encoding: 'utf-8'; mode?: number }): Promise<void>;
@@ -31,6 +52,7 @@ export type IProviderStore = {
   create(input: CreateProviderRequest): Promise<IProvider>;
   update(id: string, input: UpdateProviderRequest): Promise<IProvider>;
   remove(id: string): Promise<void>;
+  getDestinationBinding?(id: string): Promise<ProviderDestinationBinding | undefined>;
 };
 
 /** Returns provider metadata that is safe to expose to the untrusted renderer. */
@@ -66,7 +88,10 @@ const defaultCrypto: ProviderCrypto = {
     return safeStorage.encryptString(plain).toString('base64');
   },
   decrypt: (base64, osEncrypted) => {
-    if (!osEncrypted || !safeStorage.isEncryptionAvailable()) {
+    if (!osEncrypted) {
+      return Buffer.from(base64, 'base64').toString('utf8');
+    }
+    if (!safeStorage.isEncryptionAvailable()) {
       throw new Error('Secure credential storage is unavailable.');
     }
     const bytes = Buffer.from(base64, 'base64');
@@ -87,6 +112,7 @@ const normalizeCreate = (input: CreateProviderRequest, id: string): IProvider =>
   name: input.name.trim(),
   base_url: input.base_url.trim(),
   api_key: input.api_key,
+  auth_type: input.auth_type ?? 'api-key',
   models: input.models ?? [],
   capabilities: input.capabilities,
   context_limit: input.context_limit,
@@ -128,10 +154,12 @@ export const createProviderStore = (options: ProviderStoreOptions = {}): IProvid
     if (!isObject(value) || typeof value.apiKey !== 'string') {
       throw new Error(`Provider credentials are invalid for ${stored.id}.`);
     }
+    const endpoint = typeof value.endpoint === 'string' ? value.endpoint : undefined;
     return {
       apiKey: value.apiKey,
       bedrockSecretAccessKey:
         typeof value.bedrockSecretAccessKey === 'string' ? value.bedrockSecretAccessKey : undefined,
+      endpoint,
     };
   };
 
@@ -139,20 +167,24 @@ export const createProviderStore = (options: ProviderStoreOptions = {}): IProvid
     const bedrock_config = stored.bedrock_config
       ? { ...stored.bedrock_config, secret_access_key: secrets.bedrockSecretAccessKey }
       : undefined;
-    const { encryptedSecrets: _encryptedSecrets, osEncrypted: _osEncrypted, ...provider } = stored;
+    const { encryptedSecrets: _encryptedSecrets, osEncrypted: _osEncrypted, version: _version, ...provider } = stored;
     return { ...provider, api_key: secrets.apiKey, bedrock_config };
   };
 
   const decode = (stored: StoredProvider): IProvider => {
     try {
-      return providerFromStored(stored, decodeSecrets(stored));
+      const secrets = decodeSecrets(stored);
+      if (!secrets.endpoint || secrets.endpoint !== canonicalEndpoint(stored.base_url)) {
+        return providerFromStored(stored, { apiKey: '', endpoint: secrets.endpoint });
+      }
+      return providerFromStored(stored, secrets);
     } catch (error) {
       console.warn(`[ProviderStore] credentials for ${stored.id} could not be decrypted:`, error);
       return providerFromStored(stored, { apiKey: '' });
     }
   };
 
-  const metadataFor = (provider: IProvider): Omit<StoredProvider, 'encryptedSecrets' | 'osEncrypted'> => {
+  const metadataFor = (provider: IProvider): Omit<StoredProvider, 'encryptedSecrets' | 'osEncrypted' | 'version'> => {
     const bedrock_config = provider.bedrock_config
       ? {
           auth_method: provider.bedrock_config.auth_method,
@@ -165,16 +197,18 @@ export const createProviderStore = (options: ProviderStoreOptions = {}): IProvid
     return { ...metadata, bedrock_config };
   };
 
-  const encode = (provider: IProvider): StoredProvider => {
+  const encode = (provider: IProvider, version = 1): StoredProvider => {
     if (!crypto.isAvailable()) {
       throw new Error('Secure credential storage is unavailable.');
     }
     const secrets: ProviderSecrets = {
       apiKey: provider.api_key,
       bedrockSecretAccessKey: provider.bedrock_config?.secret_access_key,
+      endpoint: canonicalEndpoint(provider.base_url),
     };
     return {
       ...metadataFor(provider),
+      version,
       encryptedSecrets: crypto.encrypt(JSON.stringify(secrets)),
       osEncrypted: true,
     };
@@ -184,10 +218,11 @@ export const createProviderStore = (options: ProviderStoreOptions = {}): IProvid
     if (loaded) return;
     try {
       const parsed = JSON.parse(await fsImpl.readFile(filePath, 'utf-8')) as unknown;
-      if (!Array.isArray(parsed) || parsed.some((value) => !isStoredProvider(value))) {
+      const rawList = Array.isArray(parsed) ? parsed : isStoredProvider(parsed) ? [parsed] : null;
+      if (!rawList || rawList.some((value) => !isStoredProvider(value))) {
         throw new Error('Provider catalog has an invalid shape.');
       }
-      cache = parsed;
+      cache = rawList;
       loaded = true;
     } catch (error) {
       if (isNotFound(error)) {
@@ -218,13 +253,25 @@ export const createProviderStore = (options: ProviderStoreOptions = {}): IProvid
       const found = cache.find((provider) => provider.id === id);
       return found ? decode(found) : undefined;
     },
+    async getDestinationBinding(id) {
+      await ensureLoaded();
+      const found = cache.find((provider) => provider.id === id);
+      if (!found) return undefined;
+      return {
+        providerId: found.id,
+        endpoint: canonicalEndpoint(found.base_url),
+        isFullUrl: Boolean(found.is_full_url),
+        version: found.version ?? 1,
+        platform: found.platform,
+      };
+    },
     create(input) {
       return exclusive(async () => {
         await ensureLoaded();
         const id = input.id?.trim() || newId();
         if (cache.some((provider) => provider.id === id)) throw new Error(`Provider already exists: ${id}`);
         const provider = normalizeCreate(input, id);
-        await persist([...cache, encode(provider)]);
+        await persist([...cache, encode(provider, 1)]);
         return provider;
       });
     },
@@ -257,6 +304,21 @@ export const createProviderStore = (options: ProviderStoreOptions = {}): IProvid
           };
         }
 
+        const endpointChanged =
+          input.base_url !== undefined && canonicalEndpoint(input.base_url) !== canonicalEndpoint(stored.base_url);
+        if (endpointChanged && !input.api_key?.trim()) {
+          throw new Error('Provider endpoint changed. Enter new credentials to rotate them before saving.');
+        }
+
+        if (
+          (!existingSecrets.endpoint || existingSecrets.endpoint !== canonicalEndpoint(stored.base_url)) &&
+          !input.api_key?.trim()
+        ) {
+          throw new Error(
+            'Existing provider credentials could not be decrypted. Update aborted to prevent credential loss; re-enter the credentials explicitly.'
+          );
+        }
+
         const current = providerFromStored(stored, existingSecrets);
         const suppliedApiKey = input.api_key?.trim() || undefined;
         const suppliedBedrockSecret = input.bedrock_config?.secret_access_key?.trim() || undefined;
@@ -278,14 +340,17 @@ export const createProviderStore = (options: ProviderStoreOptions = {}): IProvid
           bedrock_config: nextBedrockConfig,
         };
 
+        const nextVersion = (stored.version ?? 1) + 1;
         const secretsChanged =
           suppliedApiKey !== undefined ||
           suppliedBedrockSecret !== undefined ||
-          input.bedrock_config?.auth_method !== undefined;
+          input.bedrock_config?.auth_method !== undefined ||
+          endpointChanged;
         const nextStored: StoredProvider = secretsChanged
-          ? encode(provider)
+          ? encode(provider, nextVersion)
           : {
               ...metadataFor(provider),
+              version: nextVersion,
               encryptedSecrets: stored.encryptedSecrets,
               osEncrypted: stored.osEncrypted,
             };

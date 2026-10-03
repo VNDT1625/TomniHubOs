@@ -5,7 +5,7 @@
  */
 
 import path from 'node:path';
-import { app, BrowserWindow, ipcMain, Menu, screen } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, screen, type IpcMainEvent } from 'electron';
 import i18n from '@process/services/i18n';
 import { PetStateMachine } from './petStateMachine';
 import { PetIdleTicker } from './petIdleTicker';
@@ -84,6 +84,41 @@ let lastHitIgnoreState = true;
 // createPetWindow() so the initial value picked up from ProcessConfig at startup
 // (see src/index.ts) is honored even though createPetWindow itself is sync.
 let confirmBubbleEnabled = true;
+
+/** Only the live pet hit-window may control the always-on-top pet surface. */
+function isTrustedPetHitWindowSender(event: IpcMainEvent): boolean {
+  return Boolean(
+    petHitWindow &&
+    !petHitWindow.isDestroyed() &&
+    !event.sender.isDestroyed() &&
+    event.sender === petHitWindow.webContents &&
+    event.senderFrame === event.sender.mainFrame
+  );
+}
+
+function isPetClickPayload(value: unknown): value is { side: 'left' | 'right'; count: number } {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  const keys = Object.keys(record).toSorted();
+  return (
+    keys.length === 2 &&
+    keys[0] === 'count' &&
+    keys[1] === 'side' &&
+    (record.side === 'left' || record.side === 'right') &&
+    typeof record.count === 'number' &&
+    Number.isSafeInteger(record.count) &&
+    record.count >= 1 &&
+    record.count <= 100
+  );
+}
+
+function isPetIgnoreMouseOptions(value: unknown): value is { forward: boolean } | undefined {
+  if (value === undefined) return true;
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  const keys = Object.keys(record);
+  return keys.length === 1 && keys[0] === 'forward' && typeof record.forward === 'boolean';
+}
 
 // States that should be restored after drag ends (AI activity / notifications).
 // User-interaction states (attention/poke/happy) and idle/sleep states are NOT restored.
@@ -363,7 +398,8 @@ function loadContent(): void {
 // ---------------------------------------------------------------------------
 
 function registerIpcHandlers(): void {
-  ipcMain.on('pet:drag-start', () => {
+  ipcMain.on('pet:drag-start', (event) => {
+    if (!isTrustedPetHitWindowSender(event)) return;
     if (!petWindow || petWindow.isDestroyed() || !petHitWindow || petHitWindow.isDestroyed()) return;
 
     // Defensive: if a previous drag never reached drag-end (e.g. dropped
@@ -391,9 +427,9 @@ function registerIpcHandlers(): void {
         return;
       }
 
-      const cursor = screen.getCursorScreenPoint();
-      const newX = cursor.x - dragOffsetX;
-      const newY = cursor.y - dragOffsetY;
+      const currentCursor = screen.getCursorScreenPoint();
+      const newX = currentCursor.x - dragOffsetX;
+      const newY = currentCursor.y - dragOffsetY;
 
       petWindow.setPosition(newX, newY, false);
 
@@ -414,11 +450,13 @@ function registerIpcHandlers(): void {
     }, DRAG_WATCHDOG_MS);
   });
 
-  ipcMain.on('pet:drag-end', () => {
+  ipcMain.on('pet:drag-end', (event) => {
+    if (!isTrustedPetHitWindowSender(event)) return;
     endDrag();
   });
 
-  ipcMain.on('pet:click', (_event, data: { side: string; count: number }) => {
+  ipcMain.on('pet:click', (event, data: unknown) => {
+    if (!isTrustedPetHitWindowSender(event) || !isPetClickPayload(data)) return;
     if (!stateMachine || !idleTicker) return;
 
     idleTicker.resetIdle();
@@ -439,7 +477,8 @@ function registerIpcHandlers(): void {
     }
   });
 
-  ipcMain.on('pet:context-menu', () => {
+  ipcMain.on('pet:context-menu', (event) => {
+    if (!isTrustedPetHitWindowSender(event)) return;
     if (!petHitWindow || petHitWindow.isDestroyed()) return;
 
     const sizeKeys = { 200: 'pet.sizeSmall', 280: 'pet.sizeMedium', 360: 'pet.sizeLarge' } as const;
@@ -486,7 +525,8 @@ function registerIpcHandlers(): void {
     menu.popup({ window: petHitWindow });
   });
 
-  ipcMain.on('pet:set-ignore-mouse-events', (_event, ignore: boolean, options?: { forward: boolean }) => {
+  ipcMain.on('pet:set-ignore-mouse-events', (event, ignore: unknown, options: unknown) => {
+    if (!isTrustedPetHitWindowSender(event) || typeof ignore !== 'boolean' || !isPetIgnoreMouseOptions(options)) return;
     if (!petHitWindow || petHitWindow.isDestroyed()) return;
     petHitWindow.setIgnoreMouseEvents(ignore, options);
     lastHitIgnoreState = ignore;

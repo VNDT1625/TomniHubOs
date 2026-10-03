@@ -245,3 +245,28 @@
   background-color: #c10f1f;
   color: #fff;
 }
+
+.app-titlebar__brand-tag:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.app-titlebar__omni-search-btn:hover {
+  background: var(--color-fill-3, rgba(255, 255, 255, 0.09)) !important;
+  border-color: rgba(56, 189, 248, 0.35) !important;
+  box-shadow: 0 0 14px rgba(56, 189, 248, 0.12) !important;
+  color: #f1f5f9 !important;
+}
+
+.app-window-controls__button--restart:hover {
+  background-color: rgba(56, 189, 248, 0.15) !important;
+  color: #38bdf8 !important;
+}
+
+.app-window-controls__button--restart:hover svg {
+  transform: rotate(180deg);
+  transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.app-titlebar__no-drag {
+  -webkit-app-region: no-drag;
+}

@@ -8,8 +8,8 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { persistViuContract } from '@/process/ide/viu/contract';
-import { createPromptProject } from '@/process/ide/viu/design';
+import { persistViuContract } from '@package-apps/design/process/viu/contract';
+import { createPromptProject } from '@package-apps/design/process/viu/design';
 
 describe('Viu immutable contract persistence', () => {
   it('content-addresses a contract, strips preview bytes, and safely reuses identical content', async () => {

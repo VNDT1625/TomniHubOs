@@ -12,7 +12,20 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { gunzipSync } from 'node:zlib';
-import { collectFeedbackLogAttachment } from '@/process/feedback/logs';
+
+const mocks = vi.hoisted(() => ({
+  collectFeedbackLogAttachment: vi.fn(),
+  isTrustedDesktopRendererSender: vi.fn(() => true),
+}));
+
+vi.mock('@/common/adapter/main', () => ({
+  isTrustedDesktopRendererSender: mocks.isTrustedDesktopRendererSender,
+}));
+
+vi.mock('@/process/feedback/logs', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/process/feedback/logs')>()),
+  collectFeedbackLogAttachment: mocks.collectFeedbackLogAttachment,
+}));
 
 // Table of handlers registered via ipcMain.handle during module import.
 const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>();
@@ -46,6 +59,9 @@ vi.mock('electron', () => ({
 beforeEach(async () => {
   handlers.clear();
   currentWindow = null;
+  mocks.collectFeedbackLogAttachment.mockReset();
+  mocks.isTrustedDesktopRendererSender.mockReset();
+  mocks.isTrustedDesktopRendererSender.mockReturnValue(true);
   vi.resetModules();
   // Importing registers the ipcMain.handle callbacks into our map.
   await import('@/process/bridge/feedbackBridge');
@@ -75,6 +91,25 @@ describe('feedbackBridge — capture-screenshot', () => {
     expect(result).not.toBeNull();
     expect(result!.filename).toMatch(/^screenshot-.*\.png$/);
     expect(result!.data).toEqual(Array.from(pngBytes));
+  });
+
+  it('fails closed before collecting data or capturing a screenshot for an untrusted sender', async () => {
+    mocks.isTrustedDesktopRendererSender.mockReturnValue(false);
+    const capturePage = vi.fn(async () => ({ toPNG: () => Buffer.from([0x89, 0x50]) }));
+    currentWindow = {
+      isDestroyed: () => false,
+      webContents: { capturePage },
+    };
+
+    const screenshotHandler = handlers.get('feedback:capture-screenshot')!;
+    const logHandler = handlers.get('feedback:collect-logs')!;
+
+    await expect(screenshotHandler({ sender: {} })).resolves.toBeNull();
+    await expect(logHandler({ sender: {} })).resolves.toBeNull();
+
+    expect(mocks.isTrustedDesktopRendererSender).toHaveBeenCalledTimes(2);
+    expect(capturePage).not.toHaveBeenCalled();
+    expect(mocks.collectFeedbackLogAttachment).not.toHaveBeenCalled();
   });
 
   it('returns null when no owning BrowserWindow is resolved', async () => {
@@ -130,7 +165,7 @@ describe('feedbackBridge — capture-screenshot', () => {
 });
 
 describe('feedback logs', () => {
-  it('collects the same recent three log days used by user feedback reports', () => {
+  it('collects the same recent three log days used by user feedback reports', async () => {
     const logsDir = mkdtempSync(path.join(tmpdir(), 'tomny-feedback-logs-'));
     try {
       writeFileSync(path.join(logsDir, '2026-05-25.log'), 'today frontend\n');
@@ -140,6 +175,8 @@ describe('feedback logs', () => {
       writeFileSync(path.join(logsDir, '2026-05-22.log'), 'too old frontend\n');
       writeFileSync(path.join(logsDir, '2026-05-25.txt'), 'not a log\n');
 
+      const { collectFeedbackLogAttachment } =
+        await vi.importActual<typeof import('@/process/feedback/logs')>('@/process/feedback/logs');
       const attachment = collectFeedbackLogAttachment(logsDir);
 
       expect(attachment).not.toBeNull();

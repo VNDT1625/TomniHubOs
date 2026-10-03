@@ -8,7 +8,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { collectFiles, grepRepo } from '@/process/ide/search/ideSearchBridge';
+import { collectFiles, grepRepo } from '@package-apps/ide/process/coding/search/ideSearchBridge';
 
 const tempRoots: string[] = [];
 

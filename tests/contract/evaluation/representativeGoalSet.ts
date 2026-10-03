@@ -40,7 +40,7 @@ export type RepresentativeGoalSet = {
   schemaVersion: 1;
 };
 
-/** Loads and validates the frozen, versioned Wave 0 representative-goal set. */
+/** Loads and validates the frozen, versioned C0 representative-goal set. */
 export const loadRepresentativeGoalSet = (filePath: string): Readonly<RepresentativeGoalSet> => {
   const raw = readFileSync(filePath, 'utf8');
   return parseRepresentativeGoalSet(JSON.parse(raw) as unknown);

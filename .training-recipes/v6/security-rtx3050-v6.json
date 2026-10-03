@@ -1,0 +1,56 @@
+{
+  "schemaVersion": "tomny.qlora-recipe.v1",
+  "recipeVersion": 6,
+  "id": "tomny-qwen35-08b-security-rtx3050-v6",
+  "version": "2026-09-08.v6",
+  "promotionStatus": "candidate-only",
+  "purpose": "security",
+  "dataset": {
+    "datasetId": "tomny-qwen08b-semantic-synthetic",
+    "datasetVersion": "2026-09-08.v6",
+    "manifestSha256": "90611e83a5308caef481e589818c5631fdfda7d8acd24efd090982d0038646e4"
+  },
+  "baseModel": {
+    "modelId": "Qwen/Qwen3.5-0.8B",
+    "revision": "2fc06364715b967f1860aea9cf38778875588b17",
+    "contentSha256": "ff3a07808a9e83627e69a07131fdec45c60973f23cc5617204d173461ec65fe6"
+  },
+  "seed": 20260908,
+  "hardwareProfile": {
+    "profile": "rtx-3050-4gb",
+    "gpuModel": "NVIDIA GeForce RTX 3050 Laptop GPU",
+    "maxVramGiB": 4,
+    "sequentialOnly": true,
+    "finiteGradientSmokePassed": true,
+    "stabilitySmokeEvidence": {
+      "candidateId": "com.tomny.core.security",
+      "candidateVersion": "0.6.0-finite-smoke.2",
+      "manifestSha256": "634b78ee7e27ed77d68b170bd7753895ce15836cede1dbcc9934dd313427afa3",
+      "verificationReportSha256": "e093e9cfd537be7327a61b4898df510d9334795c8520903194680b977e40edd1",
+      "recipeSha256": "b5a7b3ee9c96cf40858284fe338b30cc594a91dbd8b6e779d8f9b37a741de2df",
+      "steps": 25,
+      "precision": "fp16"
+    }
+  },
+  "qualityLimitations": [
+    "Synthetic corpus only; independent held-out benchmark is mandatory.",
+    "One-worker QLoRA profile; no activation before contract, quality, and concurrency gates pass."
+  ],
+  "training": {
+    "maxSteps": 300,
+    "maxLength": 384,
+    "rank": 8,
+    "loraAlpha": 16,
+    "gradientAccumulationSteps": 8,
+    "learningRate": 0.00008,
+    "precision": "fp16",
+    "warmupRatio": 0.05,
+    "targetProfile": "last-block",
+    "loggingSteps": 5,
+    "evalSteps": 25,
+    "saveSteps": 25,
+    "earlyStoppingPatience": 3,
+    "earlyStoppingThreshold": 0.001,
+    "maxValidationRegression": 0.0
+  }
+}

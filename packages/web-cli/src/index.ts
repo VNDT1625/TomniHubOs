@@ -162,7 +162,19 @@ async function runStart(flags: Map<string, string | true>): Promise<void> {
   console.log(`[tomny-web] backend bin: ${backendBin}`);
   console.log(`[tomny-web] launching  : port=${port} allowRemote=${allowRemote}`);
 
-  const backendAvailable = fs.existsSync(backendBin);
+  const gatewayPort = (() => {
+    const flag = flags.get('gateway-port') ?? flags.get('backend-port');
+    if (typeof flag === 'string' && /^\d+$/.test(flag)) return Number(flag);
+    const env = process.env.TOMNI_GATEWAY_PORT ?? process.env.TOMNY_GATEWAY_PORT ?? process.env.BACKEND_PORT;
+    if (env && /^\d+$/.test(env)) return Number(env);
+    return undefined;
+  })();
+  const gatewayToken =
+    typeof flags.get('gateway-token') === 'string'
+      ? (flags.get('gateway-token') as string)
+      : (process.env.TOMNI_GATEWAY_SESSION_TOKEN ?? process.env.TOMNY_GATEWAY_SESSION_TOKEN ?? '');
+
+  const backendAvailable = fs.existsSync(backendBin) || (gatewayPort !== undefined && gatewayPort > 0);
 
   if (!backendAvailable) {
     // Graceful degradation: serve the SPA shell without spawning backend.
@@ -172,7 +184,7 @@ async function runStart(flags: Map<string, string | true>): Promise<void> {
     console.warn('⚠️  Backend binary not found — starting in FRONTEND-ONLY mode.');
     console.warn(`   Missing: ${backendBin}`);
     console.warn('   The web UI will load but API calls will fail until a backend is available.');
-    console.warn('   To enable backend: build or install Tomny Core and set TOMNY_BACKEND_BIN.');
+    console.warn('   To enable backend: build or install Tomny Core or pass --gateway-port <port>.');
     console.warn('');
 
     const handle = await startStaticServer({
@@ -198,6 +210,13 @@ async function runStart(flags: Map<string, string | true>): Promise<void> {
     console.log('');
     console.log('Press Ctrl+C to stop.');
   } else {
+    const backendConfig =
+      gatewayPort && gatewayPort > 0
+        ? gatewayToken
+          ? { kind: 'useExistingGateway' as const, port: gatewayPort, sessionToken: gatewayToken }
+          : { kind: 'useExistingBackend' as const, port: gatewayPort }
+        : { kind: 'ownBackend' as const, resolveBackend: () => backendBin };
+
     const handle = await startWebHost({
       app: {
         version,
@@ -222,10 +241,7 @@ async function runStart(flags: Map<string, string | true>): Promise<void> {
           backendPort,
           resolveArtifactUrl: (url) => resolveWebCliPackageArtifactUrl(url),
         }),
-      backend: {
-        kind: 'ownBackend',
-        resolveBackend: () => backendBin,
-      },
+      backend: backendConfig,
     });
 
     currentHandle = handle;
@@ -285,6 +301,46 @@ async function runStart(flags: Map<string, string | true>): Promise<void> {
  * DB the user normally runs against.
  */
 async function runResetPassword(flags: Map<string, string | true>): Promise<void> {
+  const gatewayPort = (() => {
+    const flag = flags.get('gateway-port') ?? flags.get('backend-port');
+    if (typeof flag === 'string' && /^\d+$/.test(flag)) return Number(flag);
+    const env = process.env.TOMNI_GATEWAY_PORT ?? process.env.TOMNY_GATEWAY_PORT ?? process.env.BACKEND_PORT;
+    if (env && /^\d+$/.test(env)) return Number(env);
+    return undefined;
+  })();
+  const gatewayToken =
+    typeof flags.get('gateway-token') === 'string'
+      ? (flags.get('gateway-token') as string)
+      : (process.env.TOMNI_GATEWAY_SESSION_TOKEN ?? process.env.TOMNY_GATEWAY_SESSION_TOKEN ?? '');
+
+  if (gatewayPort && gatewayPort > 0) {
+    console.log(`[tomny-web] resetting admin password via gateway on port ${gatewayPort}`);
+    try {
+      const res = await fetch(`http://127.0.0.1:${gatewayPort}/api/webui/reset-password`, {
+        method: 'POST',
+        headers: {
+          'x-tomny-internal': '1',
+          ...(gatewayToken ? { Authorization: `Bearer ${gatewayToken}` } : {}),
+        },
+      });
+      if (!res.ok) {
+        console.error(`[tomny-web] /api/webui/reset-password returned ${res.status}`);
+        process.exit(1);
+      }
+      const data = (await res.json()) as { data?: { new_password?: string } };
+      const newPassword = data.data?.new_password;
+      if (newPassword) {
+        console.log(`[tomny-web] new admin password: ${newPassword}`);
+      } else {
+        console.log('[tomny-web] admin password reset successfully');
+      }
+      return;
+    } catch (err) {
+      console.error('[tomny-web] failed to reset password via gateway:', err);
+      process.exit(1);
+    }
+  }
+
   const backendBin = resolveBackendBinary(flags);
   if (!fs.existsSync(backendBin)) {
     console.error(`[tomny-web] backend binary not found: ${backendBin}`);

@@ -17,7 +17,7 @@ import {
   listSpecDirectories,
   updateSpecTask,
   setActiveSpec,
-} from '@/process/ide/specLifecycleBridge';
+} from '@package-apps/ide/process/workspace/specLifecycleBridge';
 
 let rootPath = '';
 

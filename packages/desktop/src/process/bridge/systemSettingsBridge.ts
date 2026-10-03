@@ -16,7 +16,14 @@ import { ipcBridge } from '@/common';
 import { getPlatformServices } from '@/common/platform';
 import { ProcessConfig } from '@process/utils/initStorage';
 import { changeLanguage } from '@process/services/i18n';
+import {
+  setPetPackageConfirmEnabled,
+  setPetPackageDnd,
+  setPetPackageEnabled,
+  setPetPackageSize,
+} from '@process/resources/packageProcessRuntime/petPackageRuntime';
 import type { PetSize } from '@process/pet/petTypes';
+
 import { setCloseToTrayEnabled } from '@process/utils/tray';
 
 // Keep-awake power blocker state
@@ -93,6 +100,28 @@ export function initSystemSettingsBridge(): void {
     await ProcessConfig.set('system.autoPreviewOfficeFiles', enabled);
   });
 
+  ipcBridge.systemSettings.getPromptTimeout.provider(async () => {
+    return (await ProcessConfig.get('acp.promptTimeout')) ?? 300;
+  });
+
+  ipcBridge.systemSettings.setPromptTimeout.provider(async ({ seconds }) => {
+    if (!Number.isSafeInteger(seconds) || seconds < 30 || seconds > 3600) {
+      throw new Error('Invalid prompt timeout.');
+    }
+    await ProcessConfig.set('acp.promptTimeout', seconds);
+  });
+
+  ipcBridge.systemSettings.getAgentIdleTimeout.provider(async () => {
+    return (await ProcessConfig.get('acp.agentIdleTimeout')) ?? 5;
+  });
+
+  ipcBridge.systemSettings.setAgentIdleTimeout.provider(async ({ minutes }) => {
+    if (!Number.isSafeInteger(minutes) || minutes < 1 || minutes > 60) {
+      throw new Error('Invalid agent idle timeout.');
+    }
+    await ProcessConfig.set('acp.agentIdleTimeout', minutes);
+  });
+
   // 语言变更通知，同步主进程 i18n 并通知托盘重建
   // Language change notification, sync main process i18n and notify tray rebuild
   ipcBridge.systemSettings.changeLanguage.provider(async ({ language }) => {
@@ -128,17 +157,7 @@ export function initSystemSettingsBridge(): void {
   });
 
   ipcBridge.systemSettings.setPetEnabled.provider(async ({ enabled }) => {
-    const { createPetWindow, destroyPetWindow, isPetSupported } = await import('@process/pet/petManager');
-    if (enabled && !isPetSupported()) {
-      console.warn('[SystemSettings] Desktop pet is not supported in headless mode');
-      return;
-    }
-    await ProcessConfig.set('pet.enabled', enabled);
-    if (enabled) {
-      createPetWindow();
-    } else {
-      destroyPetWindow();
-    }
+    await setPetPackageEnabled(enabled);
   });
 
   ipcBridge.systemSettings.getPetSize.provider(async () => {
@@ -147,9 +166,8 @@ export function initSystemSettingsBridge(): void {
   });
 
   ipcBridge.systemSettings.setPetSize.provider(async ({ size }) => {
-    await ProcessConfig.set('pet.size', size);
-    const { resizePetWindow } = await import('@process/pet/petManager');
-    resizePetWindow(size as PetSize);
+    if (size !== 200 && size !== 280 && size !== 360) throw new Error('Invalid pet size.');
+    await setPetPackageSize(size as PetSize);
   });
 
   ipcBridge.systemSettings.getPetDnd.provider(async () => {
@@ -158,9 +176,7 @@ export function initSystemSettingsBridge(): void {
   });
 
   ipcBridge.systemSettings.setPetDnd.provider(async ({ dnd }) => {
-    await ProcessConfig.set('pet.dnd', dnd);
-    const { setPetDndMode } = await import('@process/pet/petManager');
-    setPetDndMode(dnd);
+    await setPetPackageDnd(dnd);
   });
 
   // Pet confirm-bubble toggle: when disabled, AI tool-call confirmations
@@ -171,8 +187,24 @@ export function initSystemSettingsBridge(): void {
   });
 
   ipcBridge.systemSettings.setPetConfirmEnabled.provider(async ({ enabled }) => {
-    await ProcessConfig.set('pet.confirmEnabled', enabled);
-    const { setPetConfirmEnabled } = await import('@process/pet/petManager');
-    setPetConfirmEnabled(enabled);
+    await setPetPackageConfirmEnabled(enabled);
+  });
+
+  ipcBridge.systemSettings.getClientConfig.provider(async () => {
+    return ((await ProcessConfig.toJson()) as unknown as Record<string, unknown>) ?? {};
+  });
+
+  ipcBridge.systemSettings.setClientConfig.provider(async ({ key, value }) => {
+    await ProcessConfig.set(key as never, value as never);
+  });
+
+  ipcBridge.systemSettings.removeClientConfig.provider(async ({ key }) => {
+    await ProcessConfig.remove(key as never);
+  });
+
+  ipcBridge.systemSettings.setBatchClientConfig.provider(async ({ entries }) => {
+    for (const [key, value] of Object.entries(entries)) {
+      await ProcessConfig.set(key as never, value as never);
+    }
   });
 }

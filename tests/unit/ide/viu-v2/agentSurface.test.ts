@@ -14,8 +14,8 @@ import {
   type ViuProjectState,
   type ViuTransaction,
 } from '@/common/viu';
-import { registerViuTools } from '@/process/ide/viu/agentTools';
-import { ViuV2SessionService } from '@/process/ide/viu/v2SessionService';
+import { registerViuTools } from '@package-apps/design/process/viu/agentTools';
+import { ViuV2SessionService } from '@package-apps/design/process/viu/v2SessionService';
 
 type ToolResult = {
   content: Array<{ type: 'text'; text: string }>;

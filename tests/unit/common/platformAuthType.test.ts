@@ -94,6 +94,11 @@ describe('platformAuthType', () => {
       expect(getProviderAuthType(provider)).toBe(AuthType.USE_ANTHROPIC);
     });
 
+    it('treats transport auth modes as platform protocol inference', () => {
+      expect(getProviderAuthType({ platform: 'openai', auth_type: 'api-key' })).toBe(AuthType.USE_OPENAI);
+      expect(getProviderAuthType({ platform: 'anthropic', auth_type: 'oauth' })).toBe(AuthType.USE_ANTHROPIC);
+    });
+
     it('infers auth type from platform when auth_type not specified', () => {
       expect(getProviderAuthType({ platform: 'anthropic' })).toBe(AuthType.USE_ANTHROPIC);
       expect(getProviderAuthType({ platform: 'bedrock' })).toBe(AuthType.USE_BEDROCK);

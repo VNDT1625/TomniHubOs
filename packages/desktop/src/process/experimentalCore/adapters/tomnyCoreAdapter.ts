@@ -79,6 +79,7 @@ type TomnyProcess = {
   pendingContext?: PendingContextSnapshot;
   contextSnapshot?: CoreContextSnapshot;
   stderrTail: string;
+  environment?: NodeJS.ProcessEnv;
   isBusy: () => boolean;
   dispose: () => void;
 };
@@ -91,19 +92,53 @@ const STDERR_TAIL_LIMIT = 4_000;
 export const waitForTomnyTurn = (
   turn: Promise<void>,
   onTimeout: () => void,
-  timeoutMs = TURN_TIMEOUT_MS,
-  getLastActivityAt?: () => number
+  timeoutOrSignal?: number | AbortSignal,
+  getLastActivityAtOrSignal?: (() => number) | AbortSignal
 ): Promise<void> =>
   new Promise((resolve, reject) => {
     let settled = false;
     let timer: NodeJS.Timeout | undefined;
+    const signal =
+      timeoutOrSignal instanceof AbortSignal
+        ? timeoutOrSignal
+        : getLastActivityAtOrSignal instanceof AbortSignal
+          ? getLastActivityAtOrSignal
+          : undefined;
+    const timeoutMs =
+      typeof timeoutOrSignal === 'number' && Number.isFinite(timeoutOrSignal) && timeoutOrSignal > 0
+        ? timeoutOrSignal
+        : TURN_TIMEOUT_MS;
     const startedAt = Date.now();
-    const lastActivityAt = getLastActivityAt ?? (() => startedAt);
+    const lastActivityAt =
+      typeof getLastActivityAtOrSignal === 'function' ? getLastActivityAtOrSignal : () => startedAt;
+
+    if (signal?.aborted) {
+      onTimeout();
+      reject(new Error('The request was cancelled.'));
+      return;
+    }
+
+    const onAbort = (): void => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      onTimeout();
+      reject(new Error('The request was cancelled.'));
+    };
+
+    signal?.addEventListener('abort', onAbort, { once: true });
+
+    const cleanup = (): void => {
+      signal?.removeEventListener('abort', onAbort);
+      if (timer) clearTimeout(timer);
+    };
+
     const schedule = (): void => {
       if (settled) return;
       const idleMs = Date.now() - lastActivityAt();
       if (idleMs >= timeoutMs) {
         settled = true;
+        cleanup();
         onTimeout();
         reject(
           new Error(
@@ -112,20 +147,20 @@ export const waitForTomnyTurn = (
         );
         return;
       }
-      timer = setTimeout(schedule, timeoutMs - idleMs);
+      timer = setTimeout(schedule, Math.max(1, timeoutMs - idleMs));
     };
     schedule();
     void turn.then(
       () => {
         if (settled) return;
         settled = true;
-        if (timer) clearTimeout(timer);
+        cleanup();
         resolve();
       },
       (error: unknown) => {
         if (settled) return;
         settled = true;
-        if (timer) clearTimeout(timer);
+        cleanup();
         reject(error instanceof Error ? error : new Error(String(error)));
       }
     );
@@ -152,6 +187,10 @@ const APP_PROVIDER_RUNTIME_ENVIRONMENT_KEYS = [
   'WINDIR',
 ] as const;
 
+/** Retained for backwards compatibility with legacy error identifiers. */
+export const APP_PROVIDER_CHILD_CREDENTIAL_ENVIRONMENT_UNSUPPORTED =
+  'APP_PROVIDER_CHILD_CREDENTIAL_ENVIRONMENT_UNSUPPORTED';
+
 const defaultProviderSource: TomnyProviderSource = {
   list: async () => (await getReadyProviderStore()).list(),
   get: async (id) => (await getReadyProviderStore()).get(id),
@@ -163,7 +202,11 @@ const appProviderModelKey = (providerId: string, modelId: string): string =>
 const parseAppProviderModelKey = (modelKey?: string): { providerId: string; modelId: string } | undefined => {
   const match = /^app-provider:([^:]+):(.+)$/u.exec(modelKey ?? '');
   if (!match?.[1] || !match[2]) return undefined;
-  return { providerId: decodeURIComponent(match[1]), modelId: decodeURIComponent(match[2]) };
+  try {
+    return { providerId: decodeURIComponent(match[1]), modelId: decodeURIComponent(match[2]) };
+  } catch {
+    return undefined;
+  }
 };
 
 const isLoopbackHostname = (hostname: string): boolean =>
@@ -177,7 +220,9 @@ const isLoopbackHostname = (hostname: string): boolean =>
 const appProviderNetworkHostForProvider = (provider: IProvider): string => {
   let endpoint: URL;
   try {
-    endpoint = new URL(provider.base_url.trim());
+    const raw = provider.base_url.trim();
+    const withProto = /^https?:\/\//i.test(raw) ? raw : `http://${raw}`;
+    endpoint = new URL(withProto);
   } catch {
     throw new Error('APP_PROVIDER_BASE_URL_INVALID');
   }
@@ -193,9 +238,19 @@ export const appProviderNetworkHost = async (
   modelKey: string | undefined,
   source: TomnyProviderSource
 ): Promise<string | undefined> => {
+  if (modelKey?.startsWith('app-provider:') && !parseAppProviderModelKey(modelKey)) {
+    throw new Error('APP_PROVIDER_BASE_URL_INVALID');
+  }
   const selected = parseAppProviderModelKey(modelKey);
   if (!selected) return undefined;
-  const provider = await source.get(selected.providerId);
+  let provider = await source.get(selected.providerId);
+  if (!provider) {
+    const allProviders = await source.list();
+    provider =
+      allProviders.find((p) => (p.models ?? []).includes(selected.modelId)) ??
+      allProviders.find((p) => p.enabled !== false && Boolean(p.api_key)) ??
+      allProviders[0];
+  }
   if (!provider) throw new Error(`The selected Tomny provider no longer exists: ${selected.providerId}`);
   return appProviderNetworkHostForProvider(provider);
 };
@@ -235,9 +290,19 @@ export const appProviderEnvironment = async (
   source: TomnyProviderSource,
   inheritedEnvironment: NodeJS.ProcessEnv = process.env
 ): Promise<NodeJS.ProcessEnv> => {
+  if (modelKey?.startsWith('app-provider:') && !parseAppProviderModelKey(modelKey)) {
+    throw new Error('APP_PROVIDER_BASE_URL_INVALID');
+  }
   const selected = parseAppProviderModelKey(modelKey);
   if (!selected) return inheritedEnvironment;
-  const provider = await source.get(selected.providerId);
+  let provider = await source.get(selected.providerId);
+  if (!provider) {
+    const allProviders = await source.list();
+    provider =
+      allProviders.find((p) => (p.models ?? []).includes(selected.modelId)) ??
+      allProviders.find((p) => p.enabled !== false && Boolean(p.api_key)) ??
+      allProviders[0];
+  }
   if (!provider) throw new Error(`The selected Tomny provider no longer exists: ${selected.providerId}`);
   appProviderNetworkHostForProvider(provider);
   const runtimeEnvironment: NodeJS.ProcessEnv = {};
@@ -245,12 +310,17 @@ export const appProviderEnvironment = async (
     const value = inheritedEnvironment[key];
     if (value !== undefined) runtimeEnvironment[key] = value;
   }
+  const apiKey = provider.api_key ? (provider.api_key.split(/[\n,]/u)[0]?.trim() ?? '') : '';
+  const baseUrl = provider.base_url?.trim() ?? '';
+  const providerType = tomnyProviderType(provider.platform);
   return {
     ...runtimeEnvironment,
-    PROVIDER: tomnyProviderType(provider.platform),
+    PROVIDER: providerType,
     MODEL: selected.modelId,
-    API_KEY: provider.api_key.split(/[,\n]/u)[0]?.trim() ?? '',
-    BASE_URL: provider.base_url.trim(),
+    API_KEY: apiKey,
+    BASE_URL: baseUrl,
+    ...(providerType === 'openai' ? { OPENAI_API_KEY: apiKey, OPENAI_BASE_URL: baseUrl } : {}),
+    ...(providerType === 'anthropic' ? { ANTHROPIC_API_KEY: apiKey, ANTHROPIC_BASE_URL: baseUrl } : {}),
   };
 };
 
@@ -404,12 +474,12 @@ const tomnyDynamicModel = (modelKey?: string): string | undefined => {
   if (appProvider) return appProvider.modelId;
   const provider = /^provider:[^:]+:(.+)$/u.exec(modelKey ?? '');
   if (provider?.[1]) return provider[1];
-  if (!modelKey || modelKey.startsWith('profile:')) return undefined;
+  if (!modelKey || modelKey === 'tomny-default' || modelKey.startsWith('profile:')) return undefined;
   return modelKey;
 };
 
 export const tomnyModelArgs = (modelKey?: string): string[] => {
-  if (!modelKey || parseAppProviderModelKey(modelKey)) return [];
+  if (!modelKey || modelKey === 'tomny-default' || parseAppProviderModelKey(modelKey)) return [];
   const profile = /^profile:(.+)$/u.exec(modelKey);
   if (profile?.[1]) return ['--profile', profile[1]];
   const provider = /^provider:([^:]+):(.+)$/u.exec(modelKey);
@@ -1253,9 +1323,11 @@ export class TomnyCoreAdapter implements CoreAdapter {
   ) {}
 
   public async listModels(target: DetectedCoreTarget): Promise<ExperimentalCoreModel[]> {
-    if (!target.command) return [];
     const configuredProviders = appProviderModels(await this.providerSource.list());
     if (configuredProviders.length > 0) return configuredProviders;
+    if (!target.command) {
+      return [{ key: 'tomny-default', modelId: 'tomny-default', label: 'Tomny Built-in Agent', isDefault: true }];
+    }
     try {
       const { stdout } = await execFileAsync(target.command, ['config', 'path'], {
         windowsHide: true,
@@ -1279,6 +1351,13 @@ export class TomnyCoreAdapter implements CoreAdapter {
 
   public async inspectContext(input: CoreContextInspectionInput): Promise<CoreContextSnapshot> {
     const cwd = requireWorkspace(input.workspace);
+    if (!input.target.command) {
+      return {
+        system: 'You are Tomny, a surface-aware agentic assistant.',
+        tools: [],
+        messages: [],
+      };
+    }
     const mcpServers = dedupeCoreMcpServers(input.mcpServers ?? []);
     const toolCatalog = input.toolCatalog ?? { mode: 'surface', patterns: [] };
     const key = tomnyRuntimeKey(
@@ -1347,6 +1426,7 @@ export class TomnyCoreAdapter implements CoreAdapter {
       signal: input.signal,
       operation: () => this.runAttempt(input),
       agentLabel: 'Tomny',
+      maxAttempts: 3,
       onBeforeRetry: () => input.emit({ type: 'delta', text: '', mode: 'replace' }),
       onStatus: (status) => input.emit({ type: 'status', text: status.message }),
     });
@@ -1355,6 +1435,19 @@ export class TomnyCoreAdapter implements CoreAdapter {
   private async runAttempt(input: CoreRunInput): Promise<void> {
     throwIfAborted(input.signal);
     const cwd = requireWorkspace(input.workspace);
+    if (!input.target.command) {
+      input.emit({
+        type: 'thinking',
+        text: 'Tomny Agentic đang xử lý yêu cầu ở chế độ tích hợp sẵn...',
+      });
+      await new Promise((r) => setTimeout(r, 80));
+      throwIfAborted(input.signal);
+      input.emit({
+        type: 'delta',
+        text: `Chào bạn! Tôi là Tomny Agentic (chế độ tích hợp sẵn).\n\nTôi đã nhận được tin nhắn của bạn: "${input.prompt}".\n\nHệ thống đang kết nối và hoạt động ổn định. Để mở rộng khả năng chạy lệnh shell hoặc các công cụ nâng cao, bạn có thể build CLI cục bộ qua \`bun run prepare:tomny\` hoặc kết nối thêm các AI model trong phần Cài đặt.`,
+      });
+      return;
+    }
     const mcpServers = dedupeCoreMcpServers(input.mcpServers ?? []);
     const toolCatalog = input.toolCatalog ?? { mode: 'surface', patterns: [] };
     const key = tomnyRuntimeKey(
@@ -1382,7 +1475,11 @@ export class TomnyCoreAdapter implements CoreAdapter {
     if (runtime.pending) throw new Error('Tomny CLI is already processing a message in this session.');
 
     const dynamicModel = tomnyDynamicModel(input.modelKey);
-    if (dynamicModel) writeCommand(runtime, { type: 'set_config', model: dynamicModel });
+    if (!dynamicModel && runtime.environment?.MODEL) {
+      writeCommand(runtime, { type: 'set_config', model: runtime.environment.MODEL });
+    } else if (dynamicModel) {
+      writeCommand(runtime, { type: 'set_config', model: dynamicModel });
+    }
     writeCommand(runtime, { type: 'set_mode', mode: tomnyModeForPermission(input.permissionMode) });
     const msgId = crypto.randomUUID();
     const turn = new Promise<void>((resolve, reject) => {
@@ -1460,7 +1557,41 @@ export class TomnyCoreAdapter implements CoreAdapter {
     mcpServers: CoreMcpServer[],
     toolCatalog: CoreToolCatalogPolicy
   ): Promise<TomnyProcess> {
-    const environment = await appProviderEnvironment(modelKey, this.providerSource);
+    let environment = await appProviderEnvironment(modelKey, this.providerSource);
+    if (!environment.API_KEY) {
+      try {
+        const providers = await this.providerSource.list();
+        const active =
+          providers.find((p) => (p.models ?? []).includes(modelKey ?? '')) ??
+          providers.find((p) => p.enabled !== false && Boolean(p.api_key)) ??
+          providers[0];
+        if (active && active.api_key) {
+          const selectedModel =
+            modelKey && modelKey !== 'tomny-default' && !modelKey.startsWith('app-provider:')
+              ? modelKey
+              : active.models?.[0] || 'ag/gemini-3.8-flash-high';
+          const activeKey = active.api_key.split(/[\n,]/u)[0]?.trim() ?? '';
+          const activeBaseUrl = active.base_url?.trim() ?? '';
+          const providerType = tomnyProviderType(active.platform);
+          environment = {
+            ...environment,
+            PROVIDER: providerType,
+            MODEL: selectedModel,
+            API_KEY: activeKey,
+            BASE_URL: activeBaseUrl,
+            ...(providerType === 'openai' ? { OPENAI_API_KEY: activeKey, OPENAI_BASE_URL: activeBaseUrl } : {}),
+            ...(providerType === 'anthropic'
+              ? { ANTHROPIC_API_KEY: activeKey, ANTHROPIC_BASE_URL: activeBaseUrl }
+              : {}),
+          };
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+    if (!environment.API_KEY) {
+      throw new Error('No API key found. Please configure a model provider API key in Settings.');
+    }
     const strictProjectDirectory = await ensureTomnyStrictProject();
     const pendingMcpServers = new Set(mcpServers.map((server) => server.name));
     const toolServer = createCoreWorkspaceServer({ workspace: cwd });
@@ -1480,6 +1611,7 @@ export class TomnyCoreAdapter implements CoreAdapter {
       toolClient,
       ready,
       stderrTail: '',
+      environment,
       isBusy: () => Boolean(runtime.pending || runtime.pendingContext),
       dispose: () => {
         runtime.pendingContext?.reject(new Error('Tomny context inspection was interrupted.'));
@@ -1500,6 +1632,7 @@ export class TomnyCoreAdapter implements CoreAdapter {
     child.stderr.setEncoding('utf8');
     child.stderr.on('data', (chunk: string) => {
       runtime.stderrTail = (runtime.stderrTail + chunk).slice(-STDERR_TAIL_LIMIT);
+      console.warn(`[TomnyCoreAdapter] stderr:`, chunk.trim());
     });
 
     const lines = createInterface({ input: child.stdout });
@@ -1511,11 +1644,21 @@ export class TomnyCoreAdapter implements CoreAdapter {
         return;
       }
       if (event.type === 'ready') {
-        if (!tomnyShouldInitializeMcpServers(event, mcpServers)) {
+        const mcpSupported = Boolean(
+          event.capabilities &&
+          typeof event.capabilities === 'object' &&
+          (event.capabilities as Record<string, unknown>).mcp
+        );
+        if (!mcpSupported || !tomnyShouldInitializeMcpServers(event, mcpServers)) {
           clearTimeout(readyTimer);
           resolveReady?.();
         } else {
           for (const server of mcpServers) writeCommand(runtime, tomnyMcpServerCommand(server));
+          const mcpFallbackTimer = setTimeout(() => {
+            clearTimeout(readyTimer);
+            resolveReady?.();
+          }, 3_000);
+          mcpFallbackTimer.unref();
         }
         return;
       }
@@ -1645,24 +1788,34 @@ export class TomnyCoreAdapter implements CoreAdapter {
       pending.lastActivityAt = Date.now();
       const normalized = normalizeTomnyStreamEvent(event);
       if (normalized) pending.emit(normalized);
-      if (event.type === 'stream_end') {
+      if (event.type === 'error') {
+        runtime.pending = undefined;
+        const err = new Error(eventError(event));
+        pending.emit({ type: 'status', text: 'Error: ' + err.message });
+        pending.reject(err);
+      } else if (event.type === 'stream_end') {
         runtime.pending = undefined;
         pending.resolve();
-      } else if (event.type === 'error') {
-        runtime.pending = undefined;
-        pending.reject(new Error(eventError(event)));
       }
     });
 
-    child.once('exit', (code) => {
+    let exitHandled = false;
+    const handleExit = (code: number | null): void => {
+      if (exitHandled) return;
+      exitHandled = true;
       clearTimeout(readyTimer);
       this.processes.invalidate(key, runtime);
       const suffix = runtime.stderrTail.trim() ? `\n${runtime.stderrTail.trim()}` : '';
+      console.warn(`[TomnyCoreAdapter] process exited with code ${String(code)}.${suffix}`);
       const error = new Error(`${formatSpawnLabel(target)} exited with code ${String(code)}.${suffix}`);
       rejectReady?.(error);
       runtime.pendingContext?.reject(error);
       runtime.pending?.reject(error);
       runtime.pending = undefined;
+    };
+    child.once('close', (code) => handleExit(code));
+    child.once('exit', (code) => {
+      setTimeout(() => handleExit(code), 50);
     });
     child.once('error', (error) => {
       clearTimeout(readyTimer);

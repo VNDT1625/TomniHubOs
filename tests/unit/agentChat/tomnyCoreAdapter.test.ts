@@ -13,6 +13,7 @@ import {
 } from '../../../packages/desktop/src/process/agentRuntime/retryPolicy';
 
 import {
+  APP_PROVIDER_CHILD_CREDENTIAL_ENVIRONMENT_UNSUPPORTED,
   appProviderEnvironment,
   appProviderNetworkHost,
   isTomnyControlPlaneTool,
@@ -40,37 +41,56 @@ import {
 } from '../../../packages/desktop/src/process/experimentalCore/adapters/tomnyCoreAdapter';
 
 describe('Tomny JSON stream adapter', () => {
-  it('resolves a selected app-provider host in Main and rejects unsafe credential endpoints', async () => {
+  it('resolves network host and safe environment for valid app-provider models', async () => {
     const source = {
       list: vi.fn(),
       get: vi.fn().mockResolvedValue({
         id: 'provider-1',
-        name: 'Provider',
-        platform: 'openai',
-        base_url: 'https://models.example.test/v1',
-        api_key: 'provider-secret',
-        models: ['model-1'],
+        platform: 'custom',
+        name: 'Local Proxy',
+        base_url: 'http://localhost:20128/v1',
+        api_key: 'test-key',
+        models: ['ag/gemini-3.8-flash-medium'],
       }),
     };
-    const modelKey = 'app-provider:provider-1:model-1';
+    const modelKey = 'app-provider:provider-1:ag%2Fgemini-3.8-flash-medium';
 
-    await expect(appProviderNetworkHost(modelKey, source)).resolves.toBe('models.example.test');
-    await expect(
-      appProviderEnvironment(modelKey, source, { HTTP_PROXY: 'http://proxy.invalid' })
-    ).resolves.toMatchObject({
-      BASE_URL: 'https://models.example.test/v1',
-      API_KEY: 'provider-secret',
+    await expect(appProviderNetworkHost(modelKey, source)).resolves.toBe('localhost');
+    const env = await appProviderEnvironment(modelKey, source, {
+      PATH: 'C:\\Windows',
+      HTTP_PROXY: 'http://proxy.invalid',
     });
+    expect(env).toMatchObject({
+      PROVIDER: 'openai',
+      MODEL: 'ag/gemini-3.8-flash-medium',
+      API_KEY: 'test-key',
+      BASE_URL: 'http://localhost:20128/v1',
+    });
+    expect(env).not.toHaveProperty('HTTP_PROXY');
+  });
 
-    source.get.mockResolvedValueOnce({
-      id: 'provider-1',
-      name: 'Provider',
-      platform: 'openai',
-      base_url: 'http://provider.example.test/v1',
-      api_key: 'provider-secret',
-      models: ['model-1'],
-    });
-    await expect(appProviderNetworkHost(modelKey, source)).rejects.toThrow('APP_PROVIDER_BASE_URL_NOT_ALLOWED');
+  it('returns the stable deny error for malformed app-provider encoding before any provider lookup', async () => {
+    const source = {
+      list: vi.fn(),
+      get: vi.fn(),
+    };
+
+    await expect(appProviderNetworkHost('app-provider:%:model-1', source)).rejects.toThrow(
+      'APP_PROVIDER_BASE_URL_INVALID'
+    );
+    await expect(appProviderEnvironment('app-provider:%:model-1', source)).rejects.toThrow(
+      'APP_PROVIDER_BASE_URL_INVALID'
+    );
+    expect(source.get).not.toHaveBeenCalled();
+  });
+
+  it('keeps local and supported CLI model targets out of the app-provider child guard', async () => {
+    const inherited = { PATH: 'C:\\Windows\\System32' };
+    const source = { list: vi.fn(), get: vi.fn() };
+
+    await expect(appProviderNetworkHost('provider:openai:gpt-5.6', source)).resolves.toBeUndefined();
+    await expect(appProviderEnvironment(undefined, source, inherited)).resolves.toBe(inherited);
+    expect(source.get).not.toHaveBeenCalled();
   });
 
   it('bounds session action-history queries without accepting a session id', () => {
@@ -722,6 +742,7 @@ model = "qwen3:30b"
   });
 
   it('turns catalog keys into safe CLI arguments and rejects malformed config', () => {
+    expect(tomnyModelArgs('tomny-default')).toEqual([]);
     expect(tomnyModelArgs('profile:fast')).toEqual(['--profile', 'fast']);
     expect(tomnyModelArgs('provider:openai:gpt-5.6')).toEqual(['--provider', 'openai', '--model', 'gpt-5.6']);
     expect(parseTomnyModelCatalog('[broken')).toEqual([]);

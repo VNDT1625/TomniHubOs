@@ -269,11 +269,27 @@
   overflow: hidden;
 }
 
+.packageAppBody {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .main {
   min-width: 0;
   min-height: 0;
   padding: 20px 24px 28px;
   overflow: hidden auto;
+}
+
+.packageAppMain {
+  display: flex;
+  flex-direction: column;
+  padding: 16px 20px 20px;
+  overflow: hidden;
+}
+
+.packageAppMain > * {
+  min-height: 0;
+  flex: 1;
 }
 
 .pageHeading {
@@ -423,6 +439,66 @@
   gap: 12px;
 }
 
+.surfacePlanner {
+  margin-bottom: 12px;
+  border-color: var(--hub-border) !important;
+  background: var(--hub-surface) !important;
+}
+
+.surfacePlannerHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.surfacePlannerHeader h2 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.surfacePlannerHeader p {
+  margin: 4px 0 0;
+  color: var(--hub-muted);
+}
+
+.surfacePlannerControls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 2fr) auto;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.surfacePlanSteps {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.surfacePlanStep {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--hub-border);
+  border-radius: 8px;
+  background: var(--hub-surface-subtle);
+}
+
+.surfacePlanStep span,
+.surfacePlanStep small {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--hub-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.surfacePlanStep :global(.arco-btn) {
+  margin-left: auto;
+}
+
 .packageCard {
   overflow: hidden;
   cursor: pointer;
@@ -548,6 +624,12 @@
   min-height: min(720px, calc(100vh - 218px));
   flex-direction: column;
   padding: 20px !important;
+}
+
+.packageAppMain .packageApp,
+.packageAppMain .packageApp :global(.arco-card-body) {
+  min-height: 0;
+  height: 100%;
 }
 
 .packageAppHeading {

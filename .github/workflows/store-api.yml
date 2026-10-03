@@ -1,0 +1,96 @@
+name: Store API Quality and Release Boundary
+
+on:
+  push:
+    paths:
+      - packages/store-api/**
+  pull_request:
+    paths:
+      - packages/store-api/**
+  workflow_dispatch:
+    inputs:
+      production_signing:
+        description: Run the production signing boundary (requires DigiCert secrets)
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  store-api:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Typecheck
+        working-directory: packages/store-api
+        run: bunx tsc --noEmit
+      - name: Tests
+        working-directory: packages/store-api
+        run: bun test
+      - name: Formatting
+        working-directory: packages/store-api
+        run: bunx oxfmt --check src test migrations package.json
+      - name: Migration integrity
+        working-directory: packages/store-api
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f migrations/001_store_authority.sql
+          test -f migrations/008_order_idempotency_fingerprint.sql
+          test -f migrations/013_checkout_claim.sql
+          test -f migrations/015_runtime_append_only_privileges.sql
+          test -f migrations/019_recovery_error_evidence.sql
+          test -f migrations/020_pending_payment_webhooks.sql
+          test -f migrations/021_ledger_integrity.sql
+          test -f migrations/022_publisher_owner_uniqueness.sql
+           test -f migrations/023_publisher_identity_immutable.sql
+           test -f migrations/024_append_only_privilege_hardening.sql
+          grep -R "pending_payment_webhooks" migrations/020_pending_payment_webhooks.sql
+          test -f migrations/018_outbox_runtime_privilege.sql
+          ! grep -R "GRANT ALL" migrations
+          grep -R "ifGenerationMatch=0\|ifGenerationMatch" src/gcs.ts
+          grep -R "MIGRATION_DRIFT" src/migrate.ts
+      - name: Build backend bundle
+        working-directory: packages/store-api
+        run: bun build src/index.ts --target bun --outdir dist
+      - name: Generate release digest manifest
+        working-directory: packages/store-api
+        shell: bash
+        run: |
+          set -euo pipefail
+          find dist -type f -print0 | sort -z | xargs -0 sha256sum > dist.SHA256SUMS
+          test -s dist.SHA256SUMS
+      - name: Generate dependency SBOM
+        run: bun pm ls --all > packages/store-api/sbom.txt
+      - name: Build container image
+        run: docker build --file packages/store-api/Dockerfile --tag tomni-store-api:ci packages/store-api
+
+  production-signing-boundary:
+    if: github.event_name == 'workflow_dispatch' && inputs.production_signing == true
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require DigiCert KeyLocker configuration
+        shell: pwsh
+        env:
+          DIGICERT_API_KEY: ${{ secrets.DIGICERT_API_KEY }}
+          DIGICERT_CERTIFICATE_ID: ${{ secrets.DIGICERT_CERTIFICATE_ID }}
+          KEYLOCKER_HOST: ${{ secrets.KEYLOCKER_HOST }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:DIGICERT_API_KEY) -or [string]::IsNullOrWhiteSpace($env:DIGICERT_CERTIFICATE_ID) -or [string]::IsNullOrWhiteSpace($env:KEYLOCKER_HOST)) {
+            Write-Error 'PRODUCTION_SIGNING_BLOCKED: DigiCert OV + KeyLocker secrets are required'
+          }
+      - name: Authenticode verification boundary
+        shell: pwsh
+        run: |
+          if (-not (Get-Command signtool.exe -ErrorAction SilentlyContinue)) { Write-Error 'SIGNTOOL_UNAVAILABLE' }
+          Write-Host 'Signing is intentionally fail-closed; the actual certificate operation must be provided by KeyLocker tooling.'

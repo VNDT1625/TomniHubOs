@@ -2,6 +2,7 @@
   "pageTitle": "Omni - 登录",
   "brand": "Omni",
   "subtitle": "欢迎回来，请登录您的账户",
+
   "username": "用户名",
   "usernamePlaceholder": "请输入用户名",
   "password": "密码",
@@ -21,6 +22,26 @@
     "tooManyAttempts": "登录尝试过多，请稍后再试",
     "networkError": "连接失败，请稍后重试",
     "serverError": "服务器开小差了，请稍后重试",
-    "unknown": "登录失败，请稍后再试"
-  }
+    "unknown": "登录失败，请稍后再试",
+    "passwordMismatch": "两次输入的密码不一致",
+    "usernameLength": "用户名至少需要3个字符",
+    "passwordLength": "密码至少需要6个字符",
+    "userExists": "用户名已存在"
+  },
+  "tabLogin": "登录",
+  "tabRegister": "注册",
+  "registerSubtitle": "创建新账户以开始使用",
+  "confirmPassword": "确认密码",
+  "confirmPasswordPlaceholder": "再次输入密码",
+  "registerSubmit": "创建账户",
+  "registerSubmitting": "正在创建...",
+  "registerSuccess": "注册成功！正在跳转...",
+  "switchToRegisterPrompt": "还没有账户？",
+  "switchToRegister": "立即注册",
+  "switchToLoginPrompt": "已有账户？",
+  "switchToLogin": "立即登录",
+
+  "emailOrUsername": "邮箱或用户名",
+  "emailOrUsernamePlaceholder": "输入邮箱或用户名",
+  "supabaseBadge": "Supabase 云端安全认证"
 }

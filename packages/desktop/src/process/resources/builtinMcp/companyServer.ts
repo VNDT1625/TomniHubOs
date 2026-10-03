@@ -13,8 +13,8 @@
  * read/safe tools so an agent can shape and inspect a company without driving a
  * live delegation:
  *
- * - `company_create`        — design a company role chart from a free-text
- *   description (criterion 3.11) and persist it.
+ * - `company_create`        — currently disabled until its provider execution
+ *   uses a governed Main-owned request protocol.
  * - `company_get_structure` — return the elastic role tree for a company.
  * - `company_list_roles`    — flatten that tree into a role list.
  * - `company_get_rules`     — read a company's user-defined rules (criterion 3.10).
@@ -35,10 +35,12 @@
  * {@link COMPANY_ENV_KEYS.dataDir}; both planes therefore see the *same state*
  * via that shared directory (design note: "cùng một service").
  *
- * The agent/LLM used to design a role chart is configured through the same env
- * mechanism the image-gen server uses for its provider (see
- * {@link COMPANY_ENV_KEYS}); **no model is hardcoded**. When the provider is not
- * configured, `company_create` returns a clear, non-fatal error.
+ * `company_create` is disabled until the child can use a sealed Main-owned
+ * provider-request protocol. A standalone stdio child must not receive or read
+ * BYOK credentials because it cannot prove a run-bound origin, destination,
+ * final-egress inspection, revocation, or a durable transport receipt. The
+ * local structure and rule tools remain available because they do not perform
+ * provider or network work.
  *
  * NOTE: registering this server (spawn command/args/env) into
  * `builtinMcp/constants.ts` and the bootstrap is Task 15.1; this module only
@@ -48,15 +50,10 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { ClientFactory } from '@/common/api/ClientFactory';
-import type { TProviderWithModel } from '@/common/config/storage';
 import {
   applyRulesToContext,
   createCompanyConfigStore,
-  createFromDescription,
   toStructureSpec,
-  type CompanyConfig,
-  type GenerateFn,
   type ICompanyConfigStore,
 } from '@process/company/companyConfig';
 import {
@@ -77,42 +74,22 @@ export const BUILTIN_COMPANY_ID = 'builtin-company';
 export const BUILTIN_COMPANY_NAME = 'tomny-company';
 
 /**
- * Environment variables the spawning code (Task 15.1) injects into this
- * standalone process. `dataDir` carries the companies data directory (this
- * process cannot reach Electron's `app.getPath`); the remaining keys describe
- * the agent/LLM used to design a role chart — mirroring how the image-gen
- * server receives its provider via env (`imageGenerationMcpEnv.ts`). Kept local
- * (not in `constants.ts`) because this task must not modify that file; Task 15.1
- * may relocate them there.
+ * Environment variables injected into this standalone process. Provider
+ * credential keys are deliberately absent: the child is not allowed to receive
+ * or read them until a governed Main-owned request protocol exists.
  */
 export const COMPANY_ENV_KEYS = {
   /** Directory holding the per-company `company.json` / memory tree. */
   dataDir: 'TOMNY_COMPANY_DATA_DIR',
-  /** Provider platform of the role-chart generator (e.g. `openai`, `anthropic`). */
-  platform: 'TOMNY_COMPANY_PLATFORM',
-  /** Base URL of the role-chart generator provider. */
-  baseUrl: 'TOMNY_COMPANY_BASE_URL',
-  /** API key of the role-chart generator provider. */
-  apiKey: 'TOMNY_COMPANY_API_KEY',
-  /** Model id used to design the role chart. */
-  model: 'TOMNY_COMPANY_MODEL',
-  /** Optional outbound proxy for the generator provider. */
-  proxy: 'TOMNY_COMPANY_PROXY',
 } as const;
 
 /**
- * Minimal structural view of a rotating chat client. All three concrete clients
- * (`OpenAIRotatingClient`, `GeminiRotatingClient`, `AnthropicRotatingClient`)
- * expose `createChatCompletion({ model, messages })` returning
- * `{ choices: [{ message: { content } }] }`. We project onto this shape (one
- * cast through `unknown`) to avoid the union-of-signatures call problem without
- * resorting to `any`.
+ * Stable, redacted failure returned before credential access or network I/O.
+ * The eventual replacement must bind a child request to a Main-owned run,
+ * destination, opaque secret lease, final-payload inspection, cancellation,
+ * and terminal receipt.
  */
-type MinimalChatClient = {
-  createChatCompletion(params: { model: string; messages: Array<{ role: string; content: string }> }): Promise<{
-    choices: Array<{ message: { content: string | null } }>;
-  }>;
-};
+export const COMPANY_GENERATOR_TRANSPORT_DISABLED = 'COMPANY_GENERATOR_TRANSPORT_DISABLED';
 
 /** Standard MCP text payload, optionally flagged as an error. */
 const textResult = (
@@ -125,39 +102,6 @@ const textResult = (
 
 /** Resolve the companies data directory, or `undefined` when not injected. */
 const companyDataDir = (): string | undefined => process.env[COMPANY_ENV_KEYS.dataDir] || undefined;
-
-/** Build the role-chart generator provider from env, or `null` when unconfigured. */
-const getProviderFromEnv = (): TProviderWithModel | null => {
-  const platform = process.env[COMPANY_ENV_KEYS.platform];
-  const model = process.env[COMPANY_ENV_KEYS.model];
-  if (!platform || !model) return null;
-
-  return {
-    id: BUILTIN_COMPANY_ID,
-    name: BUILTIN_COMPANY_NAME,
-    platform,
-    base_url: process.env[COMPANY_ENV_KEYS.baseUrl] || '',
-    api_key: process.env[COMPANY_ENV_KEYS.apiKey] || '',
-    use_model: model,
-  };
-};
-
-/**
- * Build a {@link GenerateFn} that asks the env-configured provider to design a
- * role chart. The provider/model come entirely from env — nothing is hardcoded.
- */
-const buildGenerate =
-  (provider: TProviderWithModel): GenerateFn =>
-  async (prompt: string): Promise<string> => {
-    const proxy = process.env[COMPANY_ENV_KEYS.proxy] || undefined;
-    const client = (await ClientFactory.createRotatingClient(provider, { proxy })) as unknown as MinimalChatClient;
-    const completion = await client.createChatCompletion({
-      model: provider.use_model,
-      messages: [{ role: 'user', content: prompt }],
-    });
-    const content = completion.choices[0]?.message?.content;
-    return typeof content === 'string' ? content : '';
-  };
 
 /**
  * A {@link TeamGateway} whose every method rejects. Live delegation (spawning
@@ -216,7 +160,8 @@ const flattenRoles = (
 /** Stringify any caught error for an MCP text payload. */
 const describeError = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
-async function main() {
+/** Create the Company MCP server without starting a transport. */
+export const createCompanyServer = (): McpServer => {
   const server = new McpServer({
     name: BUILTIN_COMPANY_NAME,
     version: '1.0.0',
@@ -225,65 +170,16 @@ async function main() {
   // --- company_create (criterion 3.11) ------------------------------------
   server.tool(
     'company_create',
-    `Design an AI agent COMPANY from a free-text description and persist it.
-
-Use this to turn a plain-text idea (e.g. "a team to build a mobile game") into a
-company role chart: a President plus divisions ("mảng", e.g. Frontend, Backend, QA),
-each with a head and a number of worker agents. The chart is saved as the company's
-configuration so it can be inspected and delegated to later.
-
-Input:
-- description: the free-text idea to design the company for (required)
-- companyId: stable id to save under (optional; defaults to "company")
-- presidentName: fallback President name if the design omits one (optional)
-
-Returns the normalised company structure spec as JSON. Requires a generator model to be
-configured; if it is not, returns a clear error.`,
+    `This operation is currently unavailable. The standalone child cannot safely
+perform BYOK provider execution until it uses a sealed Main-owned request
+protocol with authority, final-egress inspection, revocation, and a durable
+receipt. Local structure and rule tools remain available.`,
     {
       description: z.string().describe('Free-text description of the project/goal to design a company for.'),
-      companyId: z.string().optional().describe('Stable company id to persist under. Defaults to "company".'),
+      companyId: z.string().optional().describe('Stable company id to save under. Defaults to "company".'),
       presidentName: z.string().optional().describe('Fallback President name when the design omits one.'),
     },
-    async ({ description, companyId, presidentName }) => {
-      const provider = getProviderFromEnv();
-      if (!provider) {
-        return textResult(
-          'Error: company generator model not configured. Select a model in Settings so the company MCP can design role charts.',
-          true
-        );
-      }
-
-      try {
-        const spec = await createFromDescription(description, {
-          generate: buildGenerate(provider),
-          companyId,
-          presidentName,
-        });
-
-        const dataDir = companyDataDir();
-        if (dataDir) {
-          const store = openConfigStore(dataDir);
-          const existing = await store.load(spec.companyId);
-          const config: CompanyConfig = {
-            ...existing,
-            companyId: spec.companyId,
-            description,
-            presidentName: spec.presidentName ?? existing.presidentName,
-            divisions: spec.divisions,
-            directWorkerCount: spec.directWorkerCount,
-            directDivisionId: spec.directDivisionId,
-          };
-          await store.save(spec.companyId, config);
-        }
-
-        const note = dataDir
-          ? ''
-          : '\n\n(Note: company data directory was not provided, so the design was not persisted.)';
-        return textResult(`${JSON.stringify(spec, null, 2)}${note}`);
-      } catch (error) {
-        return textResult(`Error designing company: ${describeError(error)}`, true);
-      }
-    }
+    async () => textResult(`Error: ${COMPANY_GENERATOR_TRANSPORT_DISABLED}`, true)
   );
 
   // --- company_get_structure ----------------------------------------------
@@ -412,11 +308,17 @@ Returns the saved company configuration as JSON. Requires the company data direc
     }
   );
 
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-}
+  return server;
+};
 
-main().catch((error) => {
-  console.error('[CompanyMCP] Fatal error:', error);
-  process.exit(1);
-});
+export const startCompanyServer = async (): Promise<void> => {
+  const server = createCompanyServer();
+  await server.connect(new StdioServerTransport());
+};
+
+if (typeof require !== 'undefined' && require.main === module) {
+  void startCompanyServer().catch((error) => {
+    console.error('[CompanyMCP] Fatal error:', error);
+    process.exit(1);
+  });
+}

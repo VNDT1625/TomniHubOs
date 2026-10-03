@@ -9,8 +9,8 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createPremiumStarterProject } from '@/common/viu';
-import PrototypeInspector from '@/renderer/pages/studio/ide/Viu/next/authoring/PrototypeInspector';
-import type { ViuPrototypeInspectorLabels } from '@/renderer/pages/studio/ide/Viu/next/authoring/types';
+import PrototypeInspector from '@package-apps/design/renderer/viu/next/authoring/PrototypeInspector';
+import type { ViuPrototypeInspectorLabels } from '@package-apps/design/renderer/viu/next/authoring/types';
 
 const labels: ViuPrototypeInspectorLabels = {
   section: 'Prototype',

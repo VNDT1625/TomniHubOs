@@ -11,7 +11,7 @@ import { networkInterfaces } from 'os';
 import { getSystemDir, ProcessConfig } from './initStorage';
 
 import { startWebHost, type WebHostHandle, type WebHostOptions } from '@tomny/web-host';
-import { ensureCloudflared, startTunnel, stopTunnel } from '@process/studio/cloudflareTunnel';
+import { ensureCloudflared, startTunnel, stopTunnel } from '@process/services/remoteGateway/cloudflareTunnel';
 import { getTomniGatewayEndpoint } from '@process/tomnigateway';
 import { getDataPath } from './utils';
 

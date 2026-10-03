@@ -10,6 +10,7 @@ import { viteStaticCopy } from 'vite-plugin-static-copy';
 import type { Plugin, ViteDevServer } from 'vite';
 import {
   DEFAULT_PACKAGE_CATALOG_URL,
+  excludeDefaultSurfaceCatalogEntries,
   FIRST_PARTY_PACKAGE_CATALOG,
   FIRST_PARTY_PACKAGE_SIGNING_POLICIES,
   FIRST_PARTY_PACKAGE_TRUSTED_KEYS,
@@ -32,6 +33,8 @@ const rootPackageJson = JSON.parse(
   version: string;
 };
 
+const useLocalDevelopmentStoreArtifacts = process.env.TOMNI_STORE_LOCAL_ARTIFACTS === '1';
+
 // Build builtin MCP servers after main process bundle so they survive out/main/ cleanup.
 function buildMcpServersPlugin() {
   return {
@@ -44,36 +47,44 @@ function buildMcpServersPlugin() {
 
 function devPackageApiPlugin(): Plugin {
   let activePort: number | undefined;
-  const artifactPaths = new Map(
-    FIRST_PARTY_PACKAGE_CATALOG.flatMap((entry) => {
-      if (!entry.artifactUrl) return [];
+  const artifactPaths = new Map<string, string>([
+    ...excludeDefaultSurfaceCatalogEntries(FIRST_PARTY_PACKAGE_CATALOG).flatMap((entry) => {
+      if (!entry.artifactUrl) return [] as const;
       const filename = new URL(entry.artifactUrl).pathname.split('/').at(-1);
-      return filename ? [[filename, resolve('store-artifacts', filename)] as const] : [];
-    })
-  );
+      return filename ? [[filename, resolve('store-artifacts', filename)] as const] : ([] as const);
+    }),
+    ...(useLocalDevelopmentStoreArtifacts
+      ? [
+          [
+            'com.tomni.pet-1.0.0.dev.tomni-package.json',
+            resolve('store-artifacts', 'com.tomni.pet-1.0.0.dev.tomni-package.json'),
+          ] as const,
+        ]
+      : ([] as const)),
+  ]);
   const packageRoot = join(homedir(), '.tomny-web-dev', 'tomny-packages');
 
+  const remoteCatalogLoader = createRemotePackageCatalogLoader({
+    url: process.env.TOMNI_STORE_CATALOG_URL ?? DEFAULT_PACKAGE_CATALOG_URL,
+    cachePath: join(packageRoot, 'catalog-cache.json'),
+    fallbackCatalog: excludeDefaultSurfaceCatalogEntries(FIRST_PARTY_PACKAGE_CATALOG),
+    trustedKeys: FIRST_PARTY_PACKAGE_TRUSTED_KEYS,
+    signingPolicies: FIRST_PARTY_PACKAGE_SIGNING_POLICIES,
+  });
   const service = createPackageManagerService({
     rootDir: packageRoot,
     appVersion: rootPackageJson.version,
-    catalog: FIRST_PARTY_PACKAGE_CATALOG,
+    catalog: excludeDefaultSurfaceCatalogEntries(FIRST_PARTY_PACKAGE_CATALOG),
     trustedKeys: FIRST_PARTY_PACKAGE_TRUSTED_KEYS,
 
-    catalogLoader: createRemotePackageCatalogLoader({
-      url: process.env.TOMNI_STORE_CATALOG_URL ?? DEFAULT_PACKAGE_CATALOG_URL,
-      cachePath: join(packageRoot, 'catalog-cache.json'),
-      fallbackCatalog: FIRST_PARTY_PACKAGE_CATALOG,
-      trustedKeys: FIRST_PARTY_PACKAGE_TRUSTED_KEYS,
-
-      signingPolicies: FIRST_PARTY_PACKAGE_SIGNING_POLICIES,
-    }),
+    catalogLoader: async () => excludeDefaultSurfaceCatalogEntries(await remoteCatalogLoader()),
     resolveArtifactUrl: (url) => {
       const filename = new URL(url).pathname.split('/').at(-1);
-      return activePort && filename && artifactPaths.has(filename)
+      return useLocalDevelopmentStoreArtifacts && activePort && filename && artifactPaths.has(filename)
         ? `http://127.0.0.1:${activePort}/api/packages/artifacts/${encodeURIComponent(filename)}`
         : url;
     },
-    allowLocalArtifactUrls: true,
+    allowLocalArtifactUrls: useLocalDevelopmentStoreArtifacts,
   });
   const mutation = createLocalPackageMutationRuntime({
     service,
@@ -146,7 +157,16 @@ function iconParkPlugin() {
 const desktopSrcRoot = resolve('packages/desktop/src');
 const rendererRoot = resolve('packages/desktop/src/renderer');
 
+const packageAppAliases = {
+  '@package-apps/ide': resolve('packages/package-apps/ide/src'),
+  '@package-apps/design': resolve('packages/package-apps/design/src'),
+  '@package-apps/document-studio': resolve('packages/package-apps/document-studio/src'),
+  '@package-apps/browser': resolve('packages/package-apps/browser/src'),
+  '@package-apps/shared': resolve('packages/package-apps/shared'),
+};
+
 const mainAliases = {
+  ...packageAppAliases,
   '@': desktopSrcRoot,
   '@common': resolve('packages/desktop/src/common'),
   '@renderer': rendererRoot,
@@ -237,11 +257,7 @@ function rendererGraphEvidencePlugin(): Plugin {
       const moduleIds = Object.keys(modules);
       const outputEntries = Object.entries(outputs);
       const studioPathModules = moduleIds.filter((id) => id.startsWith('packages/desktop/src/renderer/pages/studio/'));
-      const sharedBaseInfrastructurePaths = new Set([
-        'packages/desktop/src/renderer/pages/studio/ide/codeRelations.ts',
-        'packages/desktop/src/renderer/pages/studio/ide/lspClient.ts',
-        'packages/desktop/src/renderer/pages/studio/studioStorage.ts',
-      ]);
+      const sharedBaseInfrastructurePaths = new Set<string>();
       const bytesForSuffix = (suffix: string): number =>
         outputEntries.reduce((sum, [fileName, output]) => sum + (fileName.endsWith(suffix) ? output.bytes : 0), 0);
       const baseline = {
@@ -254,12 +270,21 @@ function rendererGraphEvidencePlugin(): Plugin {
         otherAssetBytes: totalBytes - bytesForSuffix('.js') - bytesForSuffix('.css'),
         moduleCount: moduleIds.length,
         outputCount: outputEntries.length,
-        packageOwnerModules: moduleIds.filter((id) => id.startsWith('packages/desktop/src/renderer/package-apps/')),
-        designOwnerModules: moduleIds.filter((id) =>
-          id.startsWith('packages/desktop/src/renderer/package-apps/design/')
+        packageOwnerModules: moduleIds.filter(
+          (id) =>
+            id.startsWith('packages/desktop/src/renderer/package-apps/') || id.startsWith('packages/package-apps/')
+        ),
+        designOwnerModules: moduleIds.filter(
+          (id) =>
+            id.startsWith('packages/desktop/src/renderer/package-apps/design/') ||
+            id.startsWith('packages/package-apps/design/')
         ),
         documentOwnerModules: moduleIds.filter((id) => /package-apps\/(?:Document|document)/.test(id)),
-        viuModules: moduleIds.filter((id) => id.startsWith('packages/desktop/src/renderer/pages/studio/ide/Viu/')),
+        viuModules: moduleIds.filter(
+          (id) =>
+            id.startsWith('packages/desktop/src/renderer/package-apps/design/viu/') ||
+            id.startsWith('packages/package-apps/design/src/renderer/viu/')
+        ),
         remainingStudioModules: studioPathModules,
         sharedBaseInfrastructureModules: studioPathModules.filter((id) => sharedBaseInfrastructurePaths.has(id)),
         optionalStudioModules: studioPathModules.filter((id) => !sharedBaseInfrastructurePaths.has(id)),
@@ -434,9 +459,10 @@ export default defineConfig(({ mode }) => {
       // the output, which Electron's sandbox-mode preload cannot resolve from
       // node_modules (→ "module not found"). Bundling inlines the few hundred
       // bytes of IPC wiring we actually need.
-      plugins: [externalizeDepsPlugin({ exclude: ['@sentry/electron'] })],
+      plugins: [externalizeDepsPlugin({ exclude: ['@sentry/electron', 'zod', 'semver'] })],
       resolve: {
         alias: {
+          ...packageAppAliases,
           '@': resolve('packages/desktop/src'),
           '@common': resolve('packages/desktop/src/common'),
         },
@@ -461,6 +487,8 @@ export default defineConfig(({ mode }) => {
       // Make the root explicit so Vite emits page names relative to that directory
       // instead of leaking source-relative ../../ paths into HTML asset names.
       root: rendererRoot,
+      envDir: resolve(__dirname, '../..'),
+      envPrefix: ['VITE_', 'NEXT_PUBLIC_'],
       base: './',
       publicDir: resolve('public'),
       appType: 'mpa',
@@ -481,6 +509,7 @@ export default defineConfig(({ mode }) => {
               proxy: {
                 '/api': { target: webDevProxy, changeOrigin: true },
                 '/login': { target: webDevProxy, changeOrigin: true },
+                '/register': { target: webDevProxy, changeOrigin: true },
                 '/logout': { target: webDevProxy, changeOrigin: true },
                 '/ws': { target: webDevProxy, changeOrigin: true, ws: true },
               },
@@ -489,6 +518,7 @@ export default defineConfig(({ mode }) => {
       },
       resolve: {
         alias: {
+          ...packageAppAliases,
           '@': resolve('packages/desktop/src'),
           '@common': resolve('packages/desktop/src/common'),
           '@renderer': resolve('packages/desktop/src/renderer'),

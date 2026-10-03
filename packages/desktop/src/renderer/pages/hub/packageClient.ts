@@ -29,6 +29,7 @@ import type {
   MicrosoftStoreNativeExecutionReceipt,
   MicrosoftStoreNativeOpenPageReceipt,
   MicrosoftStoreNativeResult,
+  PackageRuntimeSurfaceIdentity,
 } from '@/common/types/platform/electron';
 import { isElectronDesktop } from '@renderer/utils/platform';
 
@@ -214,7 +215,7 @@ export const packageClient = {
     isElectronDesktop() ? mutatePackageOverDesktop('disable', id) : mutatePackageOverHttp('disable', id),
   rollback: (id: string): Promise<PackageListing> =>
     isElectronDesktop() ? mutatePackageOverDesktop('rollback', id) : mutatePackageOverHttp('rollback', id),
-  openRuntime: async (packageId: string, runtimeId: string): Promise<void> => {
+  openRuntime: async (packageId: string, runtimeId: string, surface: PackageRuntimeSurfaceIdentity): Promise<void> => {
     if (!isElectronDesktop()) {
       await request(`/api/packages/${encodeURIComponent(packageId)}/runtime/open`, {
         method: 'POST',
@@ -224,7 +225,7 @@ export const packageClient = {
     }
     const api = window.electronAPI?.packageRuntime;
     if (!api) throw new Error('PACKAGE_RUNTIME_TRACKING_UNAVAILABLE');
-    await api.open({ packageId, runtimeId });
+    await api.open({ packageId, runtimeId, ...surface });
   },
   closeRuntime: async (packageId: string, runtimeId: string): Promise<void> => {
     if (!isElectronDesktop()) {

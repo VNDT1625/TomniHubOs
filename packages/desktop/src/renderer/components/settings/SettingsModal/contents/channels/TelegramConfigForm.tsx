@@ -71,6 +71,8 @@ const TelegramConfigForm: React.FC<TelegramConfigFormProps> = ({
   const [usersLoading, setUsersLoading] = useState(false);
   const [pendingPairings, setPendingPairings] = useState<IChannelPairingRequest[]>([]);
   const [authorizedUsers, setAuthorizedUsers] = useState<IChannelUser[]>([]);
+  const [manualPairingCode, setManualPairingCode] = useState('');
+  const [manualApproving, setManualApproving] = useState(false);
 
   // Agent selection (used for Telegram conversations)
   const [availableAgents, setAvailableAgents] = useState<
@@ -320,13 +322,22 @@ const TelegramConfigForm: React.FC<TelegramConfigFormProps> = ({
 
   // Approve pairing
   const handleApprovePairing = async (code: string) => {
+    const trimmed = code?.trim();
+    if (!trimmed) {
+      Message.warning('Vui long nhap ma pairing');
+      return;
+    }
+    setManualApproving(true);
     try {
-      await channel.approvePairing.invoke({ code });
+      await channel.approvePairing.invoke({ code: trimmed });
       Message.success(t('settings.assistant.pairingApproved', 'Pairing approved'));
       await loadPendingPairings();
       await loadAuthorizedUsers();
+      setManualPairingCode('');
     } catch (error: unknown) {
       Message.error(error instanceof Error ? error.message : String(error));
+    } finally {
+      setManualApproving(false);
     }
   };
 
@@ -622,7 +633,7 @@ const TelegramConfigForm: React.FC<TelegramConfigFormProps> = ({
       )}
 
       {/* Pending Pairings - show when bot is enabled and no authorized users yet */}
-      {pluginStatus?.enabled && authorizedUsers.length === 0 && (
+      {pluginStatus?.enabled && (
         <div className='bg-fill-1 rd-12px pt-16px pr-16px pb-16px pl-0'>
           <SectionHeader
             title={t('settings.assistant.pendingPairings', 'Pending Pairing Requests')}
@@ -639,6 +650,34 @@ const TelegramConfigForm: React.FC<TelegramConfigFormProps> = ({
             }
           />
 
+          {/* Manual pairing code verification */}
+          <div className='flex items-center justify-between gap-12px mb-16px bg-fill-2 rd-8px p-12px'>
+            <div className='flex-1 text-13px text-t-secondary'>
+              {t(
+                'settings.assistant.manualPairingTip',
+                'Enter the 6-digit pairing code sent by the Telegram Bot to authorize access:'
+              )}
+            </div>
+            <div className='flex items-center gap-8px'>
+              <Input
+                placeholder='e.g. 829193'
+                value={manualPairingCode}
+                onChange={setManualPairingCode}
+                onPressEnter={() => handleApprovePairing(manualPairingCode)}
+                style={{ width: 140 }}
+                maxLength={10}
+              />
+              <Button
+                type='primary'
+                size='small'
+                loading={manualApproving}
+                disabled={!manualPairingCode.trim()}
+                onClick={() => handleApprovePairing(manualPairingCode)}
+              >
+                {t('settings.assistant.approve', 'Approve')}
+              </Button>
+            </div>
+          </div>
           {pairingLoading ? (
             <div className='flex justify-center py-24px'>
               <Spin />

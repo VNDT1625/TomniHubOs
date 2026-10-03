@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => ({
   configureHost: vi.fn(),
 }));
 
-vi.mock('@process/studio/cloudflareTunnel', () => ({
+vi.mock('@process/services/remoteGateway/cloudflareTunnel', () => ({
   startTunnel: mocks.startTunnel,
   stopTunnel: mocks.stopTunnel,
 }));
@@ -54,7 +54,7 @@ describe('Telegram remote startup', () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch');
     const { startTelegramRemoteTunnel } = await import('@/process/startup/telegramRemoteStartup');
 
-    await expect(startTelegramRemoteTunnel('vi-VN')).resolves.toEqual({
+    await expect(startTelegramRemoteTunnel('vi-VN', () => true)).resolves.toEqual({
       ok: true,
       url: 'https://remote.trycloudflare.com',
     });
@@ -73,7 +73,10 @@ describe('Telegram remote startup', () => {
   it('keeps the native gateway alive when cloudflared is unavailable', async () => {
     mocks.startTunnel.mockResolvedValue({ ok: false, reason: 'not-installed' });
     const { startTelegramRemoteTunnel } = await import('@/process/startup/telegramRemoteStartup');
-    await expect(startTelegramRemoteTunnel()).resolves.toEqual({ ok: false, reason: 'not-installed' });
+    await expect(startTelegramRemoteTunnel('en-US', () => true)).resolves.toEqual({
+      ok: false,
+      reason: 'not-installed',
+    });
     expect(mocks.startGateway).toHaveBeenCalledOnce();
   });
 });

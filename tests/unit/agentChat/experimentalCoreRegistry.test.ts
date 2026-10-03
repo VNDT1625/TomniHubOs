@@ -57,6 +57,28 @@ describe('direct core adapter registry', () => {
     expect(openclaw).toMatchObject({ available: true, detected: true, protocol: 'acp', args: ['acp'] });
   });
 
+  it('does not report a Tomny fallback when no executable is available', async () => {
+    const originalEnvironment = {
+      NODE_ENV: process.env.NODE_ENV,
+      VITEST: process.env.VITEST,
+    };
+    process.env.NODE_ENV = 'development';
+    delete process.env.VITEST;
+
+    try {
+      const resolveExecutable = vi.fn(async () => null);
+      const targets = await detectCoreTargets(resolveExecutable);
+      const tomny = targets.find((target) => target.id === 'tomny');
+
+      expect(tomny).toMatchObject({ detected: false, available: false });
+    } finally {
+      for (const [key, value] of Object.entries(originalEnvironment)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
+  });
+
   it('rejects a bundled Tomny executable whose manifest hash is missing or tampered', async () => {
     const directory = await mkdtemp(path.join(tmpdir(), 'bundled-tomny-cli-'));
     tempDirectories.push(directory);

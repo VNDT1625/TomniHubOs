@@ -1,4 +1,4 @@
-﻿/**
+/**
  * @license
  * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
@@ -16,7 +16,9 @@ declare const ownerIdBrand: unique symbol;
 export type WindowsCreatorSandboxSessionId = string & { readonly [sessionIdBrand]: 'WindowsCreatorSandboxSessionId' };
 
 /** A validated execution identifier scoped to one native sandbox session. */
-export type WindowsCreatorSandboxExecutionId = string & { readonly [executionIdBrand]: 'WindowsCreatorSandboxExecutionId' };
+export type WindowsCreatorSandboxExecutionId = string & {
+  readonly [executionIdBrand]: 'WindowsCreatorSandboxExecutionId';
+};
 
 /** A validated owner identity that prevents cross-project session control. */
 export type WindowsCreatorSandboxOwnerId = string & { readonly [ownerIdBrand]: 'WindowsCreatorSandboxOwnerId' };
@@ -102,7 +104,8 @@ type ExecutionRecord = {
 
 const requireTechnicalIdentifier = (value: string, label: string): string => {
   const normalized = value.trim();
-  if (!TECHNICAL_IDENTIFIER_PATTERN.test(normalized)) throw new Error(`${label} must be a bounded technical identifier.`);
+  if (!TECHNICAL_IDENTIFIER_PATTERN.test(normalized))
+    throw new Error(`${label} must be a bounded technical identifier.`);
   return normalized;
 };
 

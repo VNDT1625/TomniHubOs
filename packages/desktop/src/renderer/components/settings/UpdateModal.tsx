@@ -4,150 +4,85 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useEffect, useMemo, useState } from 'react';
-import { Button, Progress, Message } from '@arco-design/web-react';
-import { CheckOne, Download, FolderOpen, Refresh, CloseOne, Install } from '@icon-park/react';
+import React, { useEffect, useState } from 'react';
+import { Button, Message, Progress } from '@arco-design/web-react';
+import { CheckOne, CloseOne, Download, Install, Refresh } from '@icon-park/react';
 import { ipcBridge } from '@/common';
+import type { AutoUpdateStatus } from '@/common/update/updateTypes';
 import TomnyModal from '@/renderer/components/base/TomnyModal';
 import MarkdownView from '@/renderer/components/Markdown';
-import type { UpdateDownloadProgressEvent, UpdateReleaseInfo, AutoUpdateStatus } from '@/common/update/updateTypes';
 import { useTranslation } from 'react-i18next';
 
-type UpdateStatus = 'checking' | 'upToDate' | 'available' | 'downloading' | 'downloaded' | 'success' | 'error';
+type UpdateStatus = 'checking' | 'upToDate' | 'available' | 'downloading' | 'downloaded' | 'error';
+type NativeUpdateInfo = { version: string; releaseNotes?: string };
 
-type UpdateInfo = UpdateReleaseInfo;
+const formatSpeed = (bytesPerSecond: number) =>
+  bytesPerSecond > 1024 * 1024
+    ? `${(bytesPerSecond / (1024 * 1024)).toFixed(1)} MB/s`
+    : `${(bytesPerSecond / 1024).toFixed(1)} KB/s`;
+
+const formatSize = (bytes: number) =>
+  bytes > 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(1)} MB` : `${(bytes / 1024).toFixed(1)} KB`;
 
 const UpdateModal: React.FC = () => {
   const { t } = useTranslation();
   const [visible, setVisible] = useState(false);
   const [status, setStatus] = useState<UpdateStatus>('checking');
-  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
-  const [currentVersion, setCurrentVersion] = useState<string>('');
-  const [downloadId, setDownloadId] = useState<string | null>(null);
+  const [currentVersion, setCurrentVersion] = useState('');
+  const [updateInfo, setUpdateInfo] = useState<NativeUpdateInfo | null>(null);
   const [progress, setProgress] = useState({ percent: 0, speed: '', total: 0, transferred: 0 });
   const [errorMsg, setErrorMsg] = useState('');
-  const [downloadPath, setDownloadPath] = useState('');
-  const [releasePageUrl, setReleasePageUrl] = useState('');
-  // Whether electron-updater auto-update is available (determined automatically, not user-controllable)
-  const [autoUpdateAvailable, setAutoUpdateAvailable] = useState(false);
-  const [autoUpdateInfo, setAutoUpdateInfo] = useState<{ version: string; releaseNotes?: string } | null>(null);
 
   const resetState = () => {
     setStatus('checking');
-    setUpdateInfo(null);
     setCurrentVersion('');
-    setDownloadId(null);
+    setUpdateInfo(null);
     setProgress({ percent: 0, speed: '', total: 0, transferred: 0 });
     setErrorMsg('');
-    setDownloadPath('');
-    setReleasePageUrl('');
-    setAutoUpdateAvailable(false);
-    setAutoUpdateInfo(null);
-  };
-
-  const includePrerelease = useMemo(() => localStorage.getItem('update.includePrerelease') === 'true', [visible]);
-  const hasCompatibleManualAsset = Boolean(updateInfo?.recommendedAsset);
-
-  const openReleasePage = () => {
-    if (!releasePageUrl) return;
-    void ipcBridge.shell.openExternal.invoke(releasePageUrl).catch((error) => {
-      console.error('Failed to open release page:', error);
-    });
   };
 
   const checkForUpdates = async () => {
     setStatus('checking');
+    setErrorMsg('');
     try {
-      // electron-updater is authoritative when its check succeeds. Only use
-      // the GitHub API/manual installer flow when the native updater fails.
-      setAutoUpdateAvailable(false);
-      try {
-        const autoResult = await ipcBridge.autoUpdate.check.invoke({ includePrerelease });
-        if (autoResult?.success && autoResult.data) {
-          setCurrentVersion(autoResult.data.currentVersion);
-          if (autoResult.data.updateInfo) {
-            setAutoUpdateAvailable(true);
-            setAutoUpdateInfo({
-              version: autoResult.data.updateInfo.version,
-              releaseNotes: autoResult.data.updateInfo.releaseNotes,
-            });
-            setStatus('available');
-          } else {
-            setStatus('upToDate');
-          }
-          return;
-        }
-        if (autoResult?.msg) {
-          console.warn('Auto-update check failed, using manual mode:', autoResult.msg);
-        }
-      } catch (err) {
-        console.warn('Auto-update check error, using manual mode:', err);
+      const includePrerelease = localStorage.getItem('update.includePrerelease') === 'true';
+      const result = await ipcBridge.autoUpdate.check.invoke({ includePrerelease });
+      if (!result?.success || !result.data) {
+        throw new Error(result?.msg || t('update.checkFailed'));
       }
 
-      // Manual GitHub release check is a fallback for broken/missing native
-      // updater metadata. It must never override a successful native check.
-      const res = await ipcBridge.update.check.invoke({ includePrerelease });
-      if (!res?.success) {
-        throw new Error(res?.msg || t('update.checkFailed'));
-      }
-      setCurrentVersion(res.data?.currentVersion || '');
-
-      if (res.data?.updateAvailable && res.data.latest) {
-        setUpdateInfo(res.data.latest);
-        setReleasePageUrl(res.data.latest.htmlUrl || '');
-        if (!res.data.latest.recommendedAsset) {
-          setErrorMsg(t('update.noCompatibleAssetManual'));
-        }
+      setCurrentVersion(result.data.currentVersion);
+      if (result.data.updateInfo) {
+        setUpdateInfo({
+          version: result.data.updateInfo.version,
+          releaseNotes: result.data.updateInfo.releaseNotes,
+        });
         setStatus('available');
         return;
       }
 
-      setUpdateInfo(res.data?.latest || null);
-      setReleasePageUrl(res.data?.latest?.htmlUrl || '');
+      setUpdateInfo(null);
       setStatus('upToDate');
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.error('Update check failed:', err);
-      setErrorMsg(msg);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error('Signed update check failed:', error);
+      setErrorMsg(message);
       setStatus('error');
     }
   };
 
   const startDownload = async () => {
-    if (!updateInfo && !autoUpdateAvailable) return;
+    if (!updateInfo) return;
     setStatus('downloading');
     try {
-      if (autoUpdateAvailable) {
-        setDownloadId(null);
-        const res = await ipcBridge.autoUpdate.download.invoke();
-        if (!res?.success) {
-          throw new Error(res?.msg || t('update.downloadStartFailed'));
-        }
-        return;
+      const result = await ipcBridge.autoUpdate.download.invoke();
+      if (!result?.success) {
+        throw new Error(result?.msg || t('update.downloadStartFailed'));
       }
-
-      // Manual installer download is the fallback for environments where
-      // electron-updater cannot use the platform-specific update metadata.
-      if (updateInfo?.recommendedAsset) {
-        const asset = updateInfo.recommendedAsset;
-        const res = await ipcBridge.update.download.invoke({
-          url: asset.url,
-          fallbackUrl: asset.fallbackUrl,
-          file_name: asset.name,
-        });
-        if (!res?.success || !res.data) {
-          throw new Error(res?.msg || t('update.downloadStartFailed'));
-        }
-        setDownloadId(res.data.downloadId);
-        setDownloadPath(res.data.file_path);
-        return;
-      }
-
-      throw new Error(t('update.noCompatibleAssetManual'));
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.error('Download failed:', err);
-      setErrorMsg(msg);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error('Signed update download failed:', error);
+      setErrorMsg(message);
       setStatus('error');
     }
   };
@@ -155,25 +90,9 @@ const UpdateModal: React.FC = () => {
   const quitAndInstall = async () => {
     try {
       await ipcBridge.autoUpdate.quitAndInstall.invoke();
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.error('Install failed:', err);
-      Message.error(msg);
+    } catch (error: unknown) {
+      Message.error(error instanceof Error ? error.message : String(error));
     }
-  };
-
-  const formatSpeed = (bytesPerSecond: number) => {
-    if (bytesPerSecond > 1024 * 1024) {
-      return `${(bytesPerSecond / (1024 * 1024)).toFixed(1)} MB/s`;
-    }
-    return `${(bytesPerSecond / 1024).toFixed(1)} KB/s`;
-  };
-
-  const formatSize = (bytes: number) => {
-    if (bytes > 1024 * 1024) {
-      return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-    }
-    return `${(bytes / 1024).toFixed(1)} KB`;
   };
 
   const handleOpenUpdateModal = () => {
@@ -185,27 +104,17 @@ const UpdateModal: React.FC = () => {
   useEffect(() => {
     const removeOpenListener = ipcBridge.update.open.on(handleOpenUpdateModal);
     window.addEventListener('tomny-open-update-modal', handleOpenUpdateModal);
-
     return () => {
       removeOpenListener();
       window.removeEventListener('tomny-open-update-modal', handleOpenUpdateModal);
     };
   }, []);
 
-  // Listen for auto-update status events (e.g. from startup check)
   useEffect(() => {
-    const removeListener = ipcBridge.autoUpdate.status.on((evt: AutoUpdateStatus) => {
-      if (!evt) return;
-
-      switch (evt.status) {
-        case 'checking':
-          break;
+    const removeListener = ipcBridge.autoUpdate.status.on((event: AutoUpdateStatus) => {
+      switch (event.status) {
         case 'available':
-          setAutoUpdateAvailable(true);
-          setAutoUpdateInfo({
-            version: evt.version || '',
-            releaseNotes: evt.releaseNotes,
-          });
+          setUpdateInfo({ version: event.version || '', releaseNotes: event.releaseNotes });
           setStatus('available');
           setVisible(true);
           break;
@@ -213,12 +122,12 @@ const UpdateModal: React.FC = () => {
           setStatus('upToDate');
           break;
         case 'downloading':
-          if (evt.progress) {
+          if (event.progress) {
             setProgress({
-              percent: Math.round(evt.progress.percent),
-              speed: formatSpeed(evt.progress.bytesPerSecond),
-              total: evt.progress.total,
-              transferred: evt.progress.transferred,
+              percent: Math.round(event.progress.percent),
+              speed: formatSpeed(event.progress.bytesPerSecond),
+              total: event.progress.total,
+              transferred: event.progress.transferred,
             });
           }
           break;
@@ -226,62 +135,13 @@ const UpdateModal: React.FC = () => {
           setStatus('downloaded');
           break;
         case 'error':
+          setErrorMsg(event.error || t('update.downloadFailed'));
           setStatus('error');
-          setErrorMsg(evt.error || t('update.downloadFailed'));
           break;
       }
     });
-
-    return () => {
-      removeListener();
-    };
+    return removeListener;
   }, [t]);
-
-  useEffect(() => {
-    const removeProgressListener = ipcBridge.update.downloadProgress.on((evt: UpdateDownloadProgressEvent) => {
-      if (!evt) return;
-      if (!downloadId || evt.downloadId !== downloadId) return;
-
-      setProgress({
-        percent: Math.round(evt.percent ?? 0),
-        speed: formatSpeed(evt.bytesPerSecond ?? 0),
-        total: evt.totalBytes ?? 0,
-        transferred: evt.receivedBytes ?? 0,
-      });
-
-      if (evt.status === 'completed') {
-        setStatus('success');
-        if (evt.file_path) {
-          setDownloadPath(evt.file_path);
-        }
-      } else if (evt.status === 'error' || evt.status === 'cancelled') {
-        setStatus('error');
-        setErrorMsg(evt.error || t('update.downloadFailed'));
-      }
-    });
-
-    return () => {
-      removeProgressListener();
-    };
-  }, [downloadId, t]);
-
-  const handleClose = () => {
-    setVisible(false);
-  };
-
-  const openFile = () => {
-    if (!downloadPath) return;
-    void ipcBridge.shell.openFile.invoke(downloadPath).catch((error) => {
-      console.error('Failed to open file:', error);
-    });
-  };
-
-  const showInFolder = () => {
-    if (!downloadPath) return;
-    void ipcBridge.shell.showItemInFolder.invoke(downloadPath).catch((error) => {
-      console.error('Failed to show item in folder:', error);
-    });
-  };
 
   const renderContent = () => {
     switch (status) {
@@ -295,7 +155,6 @@ const UpdateModal: React.FC = () => {
             <div className='text-15px text-t-primary font-500'>{t('update.checking')}</div>
           </div>
         );
-
       case 'upToDate':
         return (
           <div className='flex flex-col items-center justify-center py-48px'>
@@ -308,11 +167,9 @@ const UpdateModal: React.FC = () => {
             </div>
           </div>
         );
-
       case 'available':
         return (
           <div className='flex flex-col h-full'>
-            {/* Version info header */}
             <div className='flex items-center justify-between px-24px py-16px border-b border-border-2 bg-fill-1'>
               <div className='flex items-center gap-12px'>
                 <div className='w-40px h-40px bg-[rgb(var(--primary-6))]/12 rounded-10px flex items-center justify-center'>
@@ -322,41 +179,18 @@ const UpdateModal: React.FC = () => {
                   <div className='text-15px font-600 text-t-primary'>{t('update.availableTitle')}</div>
                   <div className='text-12px text-t-tertiary mt-2px'>
                     {currentVersion} →{' '}
-                    <span className='text-[rgb(var(--primary-6))] font-500'>
-                      {updateInfo?.version || autoUpdateInfo?.version}
-                    </span>
+                    <span className='text-[rgb(var(--primary-6))] font-500'>{updateInfo?.version}</span>
                   </div>
                 </div>
               </div>
-              <div className='flex items-center gap-12px'>
-                {!hasCompatibleManualAsset && !autoUpdateAvailable && releasePageUrl ? (
-                  <Button type='primary' size='small' onClick={openReleasePage} className='!px-16px'>
-                    {t('update.goToRelease')}
-                  </Button>
-                ) : autoUpdateAvailable ? (
-                  <Button type='primary' size='small' onClick={startDownload} className='!px-16px'>
-                    {t('update.downloadAndInstall')}
-                  </Button>
-                ) : (
-                  <Button type='primary' size='small' onClick={startDownload} className='!px-16px'>
-                    {t('update.downloadButton')}
-                  </Button>
-                )}
-              </div>
+              <Button type='primary' size='small' onClick={startDownload} className='!px-16px'>
+                {t('update.downloadAndInstall')}
+              </Button>
             </div>
-
-            {!hasCompatibleManualAsset && !autoUpdateAvailable && (
-              <div className='mx-24px mt-12px px-12px py-10px text-12px rounded-8px bg-[rgb(var(--warning-6))]/10 text-[rgb(var(--warning-6))]'>
-                {t('update.noCompatibleAssetManual')}
-              </div>
-            )}
-
-            {/* Release notes content */}
             <div className='flex-1 min-h-0 overflow-y-auto px-24px py-16px custom-scrollbar'>
-              {updateInfo?.name && <div className='text-14px font-500 text-t-primary mb-12px'>{updateInfo.name}</div>}
-              {updateInfo?.body || autoUpdateInfo?.releaseNotes ? (
+              {updateInfo?.releaseNotes ? (
                 <div className='text-13px text-t-secondary leading-relaxed'>
-                  <MarkdownView allowHtml>{updateInfo?.body || autoUpdateInfo?.releaseNotes || ''}</MarkdownView>
+                  <MarkdownView allowHtml>{updateInfo.releaseNotes}</MarkdownView>
                 </div>
               ) : (
                 <div className='text-13px text-t-tertiary italic'>{t('update.noReleaseNotes')}</div>
@@ -364,7 +198,6 @@ const UpdateModal: React.FC = () => {
             </div>
           </div>
         );
-
       case 'downloading':
         return (
           <div className='flex flex-col items-center justify-center py-48px px-32px'>
@@ -389,7 +222,6 @@ const UpdateModal: React.FC = () => {
             </div>
           </div>
         );
-
       case 'downloaded':
         return (
           <div className='flex flex-col items-center justify-center py-48px px-32px'>
@@ -411,28 +243,6 @@ const UpdateModal: React.FC = () => {
             </Button>
           </div>
         );
-
-      case 'success':
-        return (
-          <div className='flex flex-col items-center justify-center py-48px px-32px'>
-            <div className='w-56px h-56px bg-[rgb(var(--success-6))]/12 rounded-full flex items-center justify-center mb-20px'>
-              <CheckOne theme='filled' size='28' fill='rgb(var(--success-6))' />
-            </div>
-            <div className='text-16px text-t-primary font-600 mb-8px'>{t('update.downloadCompleteTitle')}</div>
-            <div className='text-12px text-t-tertiary mb-24px text-center max-w-360px break-all line-clamp-2'>
-              {downloadPath}
-            </div>
-            <div className='flex gap-12px'>
-              <Button size='small' onClick={showInFolder} icon={<FolderOpen size='14' />} className='!px-16px'>
-                {t('update.showInFolder')}
-              </Button>
-              <Button type='primary' size='small' onClick={openFile} className='!px-16px'>
-                {t('update.openFile')}
-              </Button>
-            </div>
-          </div>
-        );
-
       case 'error':
         return (
           <div className='flex flex-col items-center justify-center py-48px px-32px'>
@@ -441,16 +251,9 @@ const UpdateModal: React.FC = () => {
             </div>
             <div className='text-16px text-t-primary font-600 mb-8px'>{t('update.errorTitle')}</div>
             <div className='text-13px text-t-tertiary mb-24px text-center max-w-360px'>{errorMsg}</div>
-            <div className='flex gap-12px'>
-              <Button size='small' onClick={checkForUpdates} icon={<Refresh size='14' />} className='!px-16px'>
-                {t('common.retry')}
-              </Button>
-              {releasePageUrl && (
-                <Button type='primary' size='small' onClick={openReleasePage} className='!px-16px'>
-                  {t('update.goToRelease')}
-                </Button>
-              )}
-            </div>
+            <Button size='small' onClick={checkForUpdates} icon={<Refresh size='14' />} className='!px-16px'>
+              {t('common.retry')}
+            </Button>
           </div>
         );
     }
@@ -459,18 +262,11 @@ const UpdateModal: React.FC = () => {
   return (
     <TomnyModal
       visible={visible}
-      onCancel={handleClose}
+      onCancel={() => setVisible(false)}
       size={status === 'available' ? 'medium' : 'small'}
-      header={{
-        title: t('update.modalTitle'),
-        showClose: true,
-      }}
+      header={{ title: t('update.modalTitle'), showClose: true }}
       footer={{ render: () => null }}
-      contentStyle={{
-        height: status === 'available' ? '420px' : 'auto',
-        padding: 0,
-        overflow: 'hidden',
-      }}
+      contentStyle={{ height: status === 'available' ? '420px' : 'auto', padding: 0, overflow: 'hidden' }}
     >
       <div className='flex flex-col h-full w-full'>{renderContent()}</div>
     </TomnyModal>

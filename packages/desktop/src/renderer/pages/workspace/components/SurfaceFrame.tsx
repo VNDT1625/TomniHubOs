@@ -10,10 +10,10 @@
  * narration. Several of these render side-by-side while their sub-agents run in
  * parallel.
  *
- * The frame is presentational: it renders the right body for the surface kind
- * ({@link BrowserSurfaceView} for browser, {@link EditorSurfaceView} for editor)
- * and the narration log beneath it. All Arco + UnoCSS semantic tokens; no raw
- * interactive HTML, no hardcoded colours.
+ * The frame is presentational. An installed Package App owns its own Surface UI;
+ * base Workspace only renders the lifecycle and narration shell until that
+ * package host attaches. All Arco + UnoCSS semantic tokens; no raw interactive
+ * HTML, no hardcoded colours.
  */
 
 import { Empty, Spin, Typography } from '@arco-design/web-react';
@@ -22,8 +22,6 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import type { SurfaceState } from '@process/workspace/surfaceTypes';
 import type { SurfaceLogLine } from '../useWorkspaceRun';
-import BrowserSurfaceView from './BrowserSurfaceView';
-import EditorSurfaceView from './EditorSurfaceView';
 import SurfaceStatusBadge from './SurfaceStatusBadge';
 
 /** Props for {@link SurfaceFrame}. */
@@ -32,19 +30,12 @@ export type SurfaceFrameProps = {
   surface: SurfaceState;
   /** The surface's narration log (tool steps + observations). */
   log: SurfaceLogLine[];
-  /** How many editor writes have happened (drives the editor preview reload). */
-  reloadTick: number;
 };
-
-/** Count of `write`/successful steps used to bump the editor preview. */
-const writeCount = (log: SurfaceLogLine[]): number =>
-  log.filter((line) => line.tool === 'write' && line.status === 'ok').length;
 
 /** A single live surface frame (header + body + narration). */
 const SurfaceFrame: React.FC<SurfaceFrameProps> = ({ surface, log }) => {
   const { t } = useTranslation();
   const Icon = surface.kind === 'browser' ? Compass : Components;
-  const isSettled = surface.status === 'done' || surface.status === 'error' || surface.status === 'stopped';
   const isPreparing = surface.status === 'queued' || surface.status === 'starting';
 
   return (
@@ -60,22 +51,16 @@ const SurfaceFrame: React.FC<SurfaceFrameProps> = ({ surface, log }) => {
         <SurfaceStatusBadge status={surface.status} />
       </div>
 
-      {/* Body: the scaled live view (browser overlay / editor preview) */}
+      {/* Package-owned Surface UI attaches outside the base Workspace bundle. */}
       <div className='relative flex-1 min-h-160px'>
         {isPreparing ? (
           <div className='flex-center h-full w-full'>
             <Spin tip={t('workspace.surface.preparing')} />
           </div>
-        ) : surface.kind === 'browser' ? (
-          surface.tabId ? (
-            <BrowserSurfaceView tabId={surface.tabId} active={!isSettled || surface.status === 'done'} />
-          ) : (
-            <Empty description={t('workspace.surface.noView')} />
-          )
-        ) : surface.filePath ? (
-          <EditorSurfaceView filePath={surface.filePath} reloadTick={writeCount(log)} />
         ) : (
-          <Empty description={t('workspace.surface.noFile')} />
+          <Empty
+            description={surface.kind === 'browser' ? t('workspace.surface.noView') : t('workspace.surface.noFile')}
+          />
         )}
       </div>
 

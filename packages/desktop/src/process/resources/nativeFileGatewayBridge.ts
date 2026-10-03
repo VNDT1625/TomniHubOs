@@ -2,6 +2,13 @@
 import type { IDirOrFile, IFileMetadata, IWorkspaceFlatFile } from '@/common/adapter/ipcBridge';
 import { NativeFileGateway } from './nativeFileGateway';
 
+/**
+ * Filesystem mutations need actor, path-capability, consent, resource-limit,
+ * admission, and durable execution-receipt enforcement. Until that shared
+ * executor exists, Main must reject them before the gateway can touch disk.
+ */
+export const NATIVE_FILE_MUTATION_DISABLED = 'Native filesystem mutations are disabled pending governed execution.';
+
 export const fileGatewayChannels = {
   getFilesByDir: bridge.buildProvider<IDirOrFile[], { dir: string; root: string }>('native-fs.get-files-by-dir'),
   listWorkspaceFiles: bridge.buildProvider<IWorkspaceFlatFile[], { root: string }>('native-fs.list-workspace-files'),
@@ -27,10 +34,14 @@ export const registerFileGatewayBridge = (gateway = new NativeFileGateway()): vo
   fileGatewayChannels.fetchRemoteImage.provider(({ url }) => gateway.fetchRemoteImage(url));
   fileGatewayChannels.read.provider(({ path }) => gateway.readText(path));
   fileGatewayChannels.readBuffer.provider(({ path }) => gateway.readBase64(path));
-  fileGatewayChannels.temp.provider(({ file_name }) => gateway.createTempFile(file_name));
-  fileGatewayChannels.write.provider(({ path, data }) => gateway.writeText(path, data));
+  fileGatewayChannels.temp.provider(() => rejectUngovernedMutation());
+  fileGatewayChannels.write.provider(() => rejectUngovernedMutation());
   fileGatewayChannels.metadata.provider(({ path }) => gateway.metadata(path));
-  fileGatewayChannels.copy.provider((input) => gateway.copyToWorkspace(input));
-  fileGatewayChannels.remove.provider(({ path }) => gateway.remove(path));
-  fileGatewayChannels.rename.provider(({ path, new_name }) => gateway.rename(path, new_name));
+  fileGatewayChannels.copy.provider(() => rejectUngovernedMutation());
+  fileGatewayChannels.remove.provider(() => rejectUngovernedMutation());
+  fileGatewayChannels.rename.provider(() => rejectUngovernedMutation());
+};
+
+const rejectUngovernedMutation = (): never => {
+  throw new Error(NATIVE_FILE_MUTATION_DISABLED);
 };

@@ -22,18 +22,25 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { fileWatchStartMock, fileWatchStopMock, getDefaultRootMock, listDirMock, onFileChangedMock, scanRepoMock, showOpenMock } =
-  vi.hoisted(() => ({
-    fileWatchStartMock: vi.fn(),
-    fileWatchStopMock: vi.fn(),
-    getDefaultRootMock: vi.fn(),
-    listDirMock: vi.fn(),
-    onFileChangedMock: vi.fn(),
-    scanRepoMock: vi.fn(),
-    showOpenMock: vi.fn(),
-  }));
+const {
+  fileWatchStartMock,
+  fileWatchStopMock,
+  getDefaultRootMock,
+  listDirMock,
+  onFileChangedMock,
+  scanRepoMock,
+  showOpenMock,
+} = vi.hoisted(() => ({
+  fileWatchStartMock: vi.fn(),
+  fileWatchStopMock: vi.fn(),
+  getDefaultRootMock: vi.fn(),
+  listDirMock: vi.fn(),
+  onFileChangedMock: vi.fn(),
+  scanRepoMock: vi.fn(),
+  showOpenMock: vi.fn(),
+}));
 
-vi.mock('@renderer/pages/studio/ide/ideClient', () => ({
+vi.mock('@package-apps/ide/renderer/services/ideClient', () => ({
   ideClient: {
     getDefaultRoot: getDefaultRootMock,
     listDir: listDirMock,
@@ -52,7 +59,7 @@ vi.mock('@/common', () => ({
   ipcBridge: { dialog: { showOpen: { invoke: showOpenMock } } },
 }));
 
-import { collectTreeFilePaths, useIdeWorkspace, type TreeNode } from '@renderer/pages/studio/ide/useIdeWorkspace';
+import { collectTreeFilePaths, useIdeWorkspace, type TreeNode } from '@package-apps/ide/renderer/hooks/useIdeWorkspace';
 
 const SESSION_KEY = 'studio.ide.session';
 const ROOT = '/repo';

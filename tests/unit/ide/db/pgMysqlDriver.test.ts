@@ -9,9 +9,9 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import { createPostgresDriver, type PgModule } from '@/process/ide/db/drivers/postgresDriver';
-import { createMysqlDriver, type MysqlModule } from '@/process/ide/db/drivers/mysqlDriver';
-import type { DbConnectionConfig } from '@/process/ide/db/dbTypes';
+import { createPostgresDriver, type PgModule } from '@package-apps/ide/process/data/db/drivers/postgresDriver';
+import { createMysqlDriver, type MysqlModule } from '@package-apps/ide/process/data/db/drivers/mysqlDriver';
+import type { DbConnectionConfig } from '@package-apps/ide/process/data/db/dbTypes';
 
 const pgConfig = (over: Partial<DbConnectionConfig> = {}): DbConnectionConfig => ({
   id: 'p',

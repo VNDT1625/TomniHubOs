@@ -20,7 +20,7 @@ import { Caution, Film, Music, Picture, Refresh, VideoOne } from '@icon-park/rea
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ipcBridge } from '@/common';
-import GenerationProgress, { getGenEstimate } from '../../components/GenerationProgress';
+import GenerationProgress, { getGenEstimate } from '@package-apps/shared/renderer/GenerationProgress';
 import type { Scene } from '../makeVideoClient';
 
 type SceneCardProps = {

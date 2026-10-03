@@ -23,9 +23,14 @@ import {
   type KnowledgeGraphBuilderDeps,
   resolveSummaryBatchSize,
   resolveSummaryConcurrency,
-} from '@/process/ide/knowledgeGraphBuilder';
-import { assessGraphFreshness } from '@/process/ide/graphFreshness';
-import type { KnowledgeBuildPhase, KnowledgeEdge, KnowledgeGraph, KnowledgeNode } from '@/process/ide/understandTypes';
+} from '@package-apps/ide/process/knowledge/graph/knowledgeGraphBuilder';
+import { assessGraphFreshness } from '@package-apps/ide/process/knowledge/graph/graphFreshness';
+import type {
+  KnowledgeBuildPhase,
+  KnowledgeEdge,
+  KnowledgeGraph,
+  KnowledgeNode,
+} from '@package-apps/ide/process/knowledge/graph/understandTypes';
 
 /** A fake `chat` that always returns the same canned reply. */
 const constantChat = (reply: string): KnowledgeGraphBuilderDeps['chat'] => vi.fn(async () => reply);
@@ -229,7 +234,7 @@ describe('aggregateModules', () => {
       node('packages/desktop/src/process/ide/contextBuilder.ts', 4),
       node('packages/desktop/src/process/ide/graphFreshness.ts', 2),
       node('packages/desktop/src/renderer/pages/browser/BrowserPage.tsx', 3),
-      node('packages/desktop/src/process/browser/browserBridge.ts', 3),
+      node('packages/package-apps/browser/src/process/browserBridge.ts', 3),
     ];
     const noisy = Array.from({ length: 180 }, (_value, index) =>
       node(`packages/pkg${index}/src/features/feature${index}/index.ts`)

@@ -2,7 +2,11 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { AgentMetadata, CustomAgentRequest } from '@/common/types/agent/agentMetadata';
-import { detectCoreTargets, resolveExecutableOnPath } from '@process/experimentalCore/coreRegistry';
+import {
+  clearExecutableResolutionCache,
+  detectCoreTargets,
+  resolveExecutableOnPath,
+} from '@process/experimentalCore/coreRegistry';
 
 type StoredAgentCatalog = { custom: AgentMetadata[]; enabled: Record<string, boolean> };
 export type AgentCatalogStore = {
@@ -24,7 +28,7 @@ const targetToAgent = (target: Awaited<ReturnType<typeof detectCoreTargets>>[num
   agent_type: target.id === 'tomny' ? 'tomnyagentic' : target.protocol === 'tomny-remote-v1' ? 'remote' : 'acp',
   agent_source: 'builtin',
   enabled: true,
-  available: target.available,
+  available: target.id === 'tomny' ? true : target.available,
   team_capable: target.protocol === 'acp' || target.protocol === 'tomny-json-stream',
   command: target.command ?? target.candidates[0],
   args: target.args,
@@ -33,6 +37,10 @@ export const createAgentCatalogStore = (filePath: string): AgentCatalogStore => 
   let loaded = false;
   let state: StoredAgentCatalog = { custom: [], enabled: {} };
   let writes = Promise.resolve();
+  let cachedBuiltin: AgentMetadata[] | null = null;
+  let cachedBuiltinTime = 0;
+  const BUILTIN_CACHE_TTL_MS = 30_000;
+
   const ensureLoaded = async (): Promise<void> => {
     if (loaded) return;
     try {
@@ -61,10 +69,16 @@ export const createAgentCatalogStore = (filePath: string): AgentCatalogStore => 
     enabled: state.enabled[agent.id] ?? agent.enabled,
     available: Boolean(agent.command && (await resolveExecutableOnPath([agent.command]))),
   });
-  const buildList = async (): Promise<AgentMetadata[]> => {
-    const builtin = (await detectCoreTargets())
-      .map(targetToAgent)
-      .map((agent) => ({ ...agent, enabled: state.enabled[agent.id] ?? agent.enabled }));
+  const buildList = async (forceFresh = false): Promise<AgentMetadata[]> => {
+    const now = Date.now();
+    if (forceFresh || !cachedBuiltin || now - cachedBuiltinTime > BUILTIN_CACHE_TTL_MS) {
+      cachedBuiltin = (await detectCoreTargets()).map(targetToAgent);
+      cachedBuiltinTime = now;
+    }
+    const builtin = cachedBuiltin.map((agent) => ({
+      ...agent,
+      enabled: state.enabled[agent.id] ?? agent.enabled,
+    }));
     return [...builtin, ...(await Promise.all(state.custom.map(hydrateCustom)))];
   };
   const customFrom = (input: CustomAgentRequest, id: string = randomUUID()): AgentMetadata => ({
@@ -88,11 +102,12 @@ export const createAgentCatalogStore = (filePath: string): AgentCatalogStore => 
   return {
     async list() {
       await ensureLoaded();
-      return buildList();
+      return buildList(false);
     },
     async refresh() {
       await ensureLoaded();
-      return buildList();
+      clearExecutableResolutionCache();
+      return buildList(true);
     },
     async create(input) {
       await ensureLoaded();
@@ -124,7 +139,7 @@ export const createAgentCatalogStore = (filePath: string): AgentCatalogStore => 
       await ensureLoaded();
       state.enabled[id] = enabled;
       await persist();
-      const row = (await buildList()).find((item) => item.id === id);
+      const row = (await buildList(false)).find((item) => item.id === id);
       if (!row) throw new Error('Agent not found: ' + id);
       return row;
     },

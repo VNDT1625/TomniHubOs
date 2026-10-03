@@ -15,7 +15,7 @@ import {
   type ViuProjectState,
 } from '@/common/viu';
 import type { ViuRuntimeContract } from '@/common/viu/runtime';
-import ViuPresentRuntime, { type ViuPresentLabels } from '@/renderer/pages/studio/ide/Viu/next/runtime';
+import ViuPresentRuntime, { type ViuPresentLabels } from '@package-apps/design/renderer/viu/next/runtime/index';
 
 const createComponentProject = (): ViuProjectState => {
   const project = createPremiumStarterProject();

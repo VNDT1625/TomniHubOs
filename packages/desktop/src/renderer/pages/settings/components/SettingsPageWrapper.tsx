@@ -6,25 +6,20 @@ import { isElectronDesktop, resolveExtensionAssetUrl } from '@/renderer/utils/pl
 import { type IExtensionSettingsTab } from '@/common/adapter/ipcBridge';
 import { useExtensionSettingsTabs } from '@/renderer/hooks/system/useExtensionSettingsTabs';
 import {
-  Bug,
-  Cat,
+  Brain,
   Communication,
-  Compass,
   Computer,
   Dashboard,
-  BuildingTwo,
   Earth,
-  ExperimentOne,
   Info,
   Lightning,
-  LinkCloud,
-  PersonalCollection,
+  Lock,
   Puzzle,
-  Refresh,
-  Robot,
-  Rss,
-  System,
-  Terminal,
+  Remind,
+  SettingConfig,
+  Shield,
+  User,
+  Wallet,
 } from '@icon-park/react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -44,94 +39,93 @@ type TranslateFn = (key: string, options?: { defaultValue?: string }) => string;
 
 export function getBuiltinSettingsNavItems(isDesktop: boolean, t: TranslateFn): NavItem[] {
   const builtinMap: Record<string, NavItem> = {
-    model: { id: 'model', label: t('settings.model'), icon: <LinkCloud theme='outline' size='16' />, path: 'model' },
-    assistants: {
-      id: 'assistants',
-      label: t('settings.assistants', { defaultValue: 'Assistants' }),
-      icon: <Robot theme='outline' size='16' />,
-      path: 'assistants',
+    profile: {
+      id: 'profile',
+      label: t('settings.tabProfile', { defaultValue: 'Profile' }),
+      icon: <User theme='outline' size='16' />,
+      path: 'profile',
     },
-    agent: {
-      id: 'agent',
-      label: t('settings.agents', { defaultValue: 'Agents' }),
-      icon: <Robot theme='outline' size='16' />,
-      path: 'agent',
+    billing: {
+      id: 'billing',
+      label: t('settings.tabBilling', { defaultValue: 'Billing & Usage' }),
+      icon: <Wallet theme='outline' size='16' />,
+      path: 'billing',
     },
     personal: {
       id: 'personal',
-      label: t('settings.personal'),
-      icon: <PersonalCollection theme='outline' size='16' />,
+      label: t('settings.tabPersonal', { defaultValue: 'Personal' }),
+      icon: <Lock theme='outline' size='16' />,
       path: 'personal',
+    },
+
+    model: {
+      id: 'model',
+      label: t('settings.tabAiCore', { defaultValue: 'AI Core' }),
+      icon: <Brain theme='outline' size='16' />,
+      path: 'model',
     },
     capabilities: {
       id: 'capabilities',
-      label: t('settings.capabilities', { defaultValue: 'Capabilities' }),
+      label: t('settings.tabCustomize', { defaultValue: 'Customize' }),
       icon: <Lightning theme='outline' size='16' />,
       path: 'capabilities',
     },
+    pipeline: {
+      id: 'pipeline',
+      label: t('settings.tabPipeline', { defaultValue: 'Pipeline Chat' }),
+      icon: <Shield theme='outline' size='16' />,
+      path: 'pipeline',
+    },
+    aiconfig: {
+      id: 'aiconfig',
+      label: t('settings.tabAiConfig', { defaultValue: 'AI Configuration' }),
+      icon: <SettingConfig theme='outline' size='16' />,
+      path: 'aiconfig',
+    },
+
     display: {
       id: 'display',
-      label: t('settings.display'),
+      label: t('settings.tabDisplay', { defaultValue: 'Display' }),
       icon: <Computer theme='outline' size='16' />,
       path: 'display',
     },
+    notification: {
+      id: 'notification',
+      label: t('settings.tabNotification', { defaultValue: 'Notifications' }),
+      icon: <Remind theme='outline' size='16' />,
+      path: 'notification',
+    },
     webui: {
       id: 'webui',
-      label: t('settings.webui'),
+      label: t('settings.tabRemote', { defaultValue: 'Remote' }),
       icon: isDesktop ? <Earth theme='outline' size='16' /> : <Communication theme='outline' size='16' />,
       path: 'webui',
     },
-    pet: { id: 'pet', label: t('pet.desktopPet'), icon: <Cat theme='outline' size='16' />, path: 'pet' },
     resource: {
       id: 'resource',
-      label: t('resource.navTitle'),
+      label: t('settings.tabResource', { defaultValue: 'Resource' }),
       icon: <Dashboard theme='outline' size='16' />,
       path: 'resource',
     },
-    company: {
-      id: 'company',
-      label: t('company.navTitle'),
-      icon: <BuildingTwo theme='outline' size='16' />,
-      path: 'company',
+    privacy: {
+      id: 'privacy',
+      label: t('settings.tabPrivacySecurity', { defaultValue: 'Privacy & Security' }),
+      icon: <Lock theme='outline' size='16' />,
+      path: 'privacy',
     },
-    knowledge: {
-      id: 'knowledge',
-      label: t('realtimeKnowledge.navTitle'),
-      icon: <Refresh theme='outline' size='16' />,
-      path: 'knowledge',
+    system: {
+      id: 'system',
+      label: t('settings.tabSystem', { defaultValue: 'Application' }),
+      icon: <SettingConfig theme='outline' size='16' />,
+      path: 'system',
     },
-    browser: {
-      id: 'browser',
-      label: t('browser.navTitle'),
-      icon: <Compass theme='outline' size='16' />,
-      path: 'browser',
+
+    about: {
+      id: 'about',
+      label: t('settings.tabAbout', { defaultValue: 'About' }),
+      icon: <Info theme='outline' size='16' />,
+      path: 'about',
     },
-    news: {
-      id: 'news',
-      label: t('news.navTitle'),
-      icon: <Rss theme='outline' size='16' />,
-      path: 'realtime',
-    },
-    testing: {
-      id: 'testing',
-      label: t('testing.navTitle'),
-      icon: <ExperimentOne theme='outline' size='16' />,
-      path: 'testing',
-    },
-    monitor: {
-      id: 'monitor',
-      label: t('monitor.navTitle'),
-      icon: <Bug theme='outline' size='16' />,
-      path: 'monitor',
-    },
-    terminal: {
-      id: 'terminal',
-      label: t('terminal.navTitle', { defaultValue: 'Terminal' }),
-      icon: <Terminal theme='outline' size='16' />,
-      path: 'terminal',
-    },
-    system: { id: 'system', label: t('settings.system'), icon: <System theme='outline' size='16' />, path: 'system' },
-    about: { id: 'about', label: t('settings.about'), icon: <Info theme='outline' size='16' />, path: 'about' },
   };
 
   return BUILTIN_TAB_IDS.map((id) => builtinMap[id]);
@@ -146,13 +140,11 @@ const SettingsPageWrapper: React.FC<SettingsPageWrapperProps> = ({ children, cla
   const isDesktop = isElectronDesktop();
 
   const extensionTabs = useExtensionSettingsTabs();
-
   const { resolveExtTabName } = useExtI18n();
 
   const menuItems = React.useMemo(() => {
     const builtins = getBuiltinSettingsNavItems(isDesktop, t);
 
-    // Insert extension tabs before system (unanchored default) or at anchor position
     const result = [...builtins];
     const unanchored: IExtensionSettingsTab[] = [];
     const beforeMap = new Map<string, IExtensionSettingsTab[]>();

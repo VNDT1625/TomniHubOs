@@ -11,13 +11,10 @@
  * Domain") into a concrete {@link TestScenario} the orchestrator can run — so a
  * user never has to learn the `goto`/`assertText` step grammar by hand.
  *
- * It asks the user's configured provider/model over the OpenAI-compatible
- * `/chat/completions` endpoint, mirroring `company/companyGenerator.ts` and
- * `browser/providerChat.ts`: the provider list (with a usable `api_key`) is read
- * from the native Tomny provider catalog and the request is issued directly via
- * `fetch` (not `ClientFactory`, which expects camelCase `apiKey`). The model is
- * told the exact step grammar the web script-engine understands and must reply
- * with strict JSON, which we parse defensively.
+ * It selects a configured provider/model from the native catalog, then sends the
+ * completion through the shared Main ProviderExecutionBroker. The model is told
+ * the exact step grammar the web script-engine understands and must reply with
+ * strict JSON, which we parse defensively.
  *
  * Nothing is hardcoded: when no usable model is configured it throws a clear
  * error the bridge surfaces as a friendly message (never a hang).
@@ -27,7 +24,7 @@
 
 import { listReadyProviders } from '@process/services/tomnyProviderBridge';
 import type { IProvider } from '@/common/config/storage';
-import { runAgentChatMessages } from '@process/services/agentChat';
+import { createProviderChat, runAgentChatMessages } from '@process/services/agentChat';
 import type { GenerateProgressFn, TestPlatform, TestScenario, TestStep } from './testingTypes';
 
 /** Timeout for the generation call (ms). Kept short so a stuck model fails fast. */
@@ -46,8 +43,7 @@ const isRouterBlock = (text: string): boolean => {
 const isModelEnabled = (provider: IProvider, model: string): boolean => provider.model_enabled?.[model] !== false;
 
 /** A provider that is configured enough to issue a chat call. */
-const isUsable = (p: IProvider): boolean =>
-  p.enabled !== false && Boolean(p.api_key) && Boolean(p.base_url) && Array.isArray(p.models) && p.models.length > 0;
+const isUsable = (p: IProvider): boolean => p.enabled !== false && Array.isArray(p.models) && p.models.length > 0;
 
 /** A provider + the specific model chosen to generate the scenario. */
 type SelectedModel = { provider: IProvider; model: string };
@@ -71,19 +67,6 @@ const pickProviderModel = (providers: IProvider[], preferred?: string): Selected
   }
   return null;
 };
-
-/** Resolve the OpenAI-compatible chat endpoint for a provider (honours the "Full URL" toggle). */
-const resolveChatUrl = (provider: IProvider): string => {
-  const base = provider.base_url.replace(/\/+$/, '');
-  return provider.is_full_url ? base : `${base}/chat/completions`;
-};
-
-/** First non-empty API key (the field may hold several, comma/newline-separated). */
-const firstApiKey = (apiKeys: string): string =>
-  apiKeys
-    .split(/[,\n]/)
-    .map((k) => k.trim())
-    .find((k) => k.length > 0) ?? '';
 
 /** A platform-specific note about what the steps can do today. */
 const platformNote = (platform: TestPlatform, appUrl?: string): string => {
@@ -218,6 +201,7 @@ export type IScenarioGenerator = {
  * @returns A generator turning a description into an editable scenario draft.
  */
 export const createScenarioGenerator = (): IScenarioGenerator => {
+  const brokeredProviderChat = createProviderChat();
   const generate = async ({
     description,
     platform,
@@ -240,7 +224,7 @@ export const createScenarioGenerator = (): IScenarioGenerator => {
     const prompt = buildPrompt(trimmed, platform, appUrl?.trim() || undefined);
 
     // Provider-backed completion (used unless the user picked a CLI agent).
-    const providerRun = async (selectedModel: string): Promise<string> => {
+    const providerRun = async (selectedModel: string, signal?: AbortSignal): Promise<string> => {
       const providers = (await listReadyProviders().catch(() => [] as IProvider[])) || [];
       const selected = pickProviderModel(providers, selectedModel);
       if (!selected) {
@@ -249,43 +233,19 @@ export const createScenarioGenerator = (): IScenarioGenerator => {
         );
       }
 
-      const url = resolveChatUrl(selected.provider);
-      const apiKey = firstApiKey(selected.provider.api_key);
-
       // Now that the model is resolved, tell the UI which model is "thinking".
       onProgress?.({ phase: 'thinking', message: selected.model, percent: 45 });
-
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), GENERATE_TIMEOUT_MS);
-      try {
-        const response = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-          body: JSON.stringify({
-            model: selected.model,
-            messages: [{ role: 'user', content: prompt }],
-            stream: false,
-          }),
-          signal: controller.signal,
-        });
-        if (!response.ok) {
-          const detail = await response.text().catch(() => '');
-          throw new Error(`Model request failed (HTTP ${response.status}). ${detail.slice(0, 300)}`);
-        }
-        const json = (await response.json()) as { choices?: Array<{ message?: { content?: string | null } }> };
-        const content = json.choices?.[0]?.message?.content;
-        if (typeof content !== 'string' || content.trim().length === 0) {
-          throw new Error('The model returned an empty response while designing the test.');
-        }
-        if (isRouterBlock(content)) {
-          throw new Error(
-            `The selected model ("${selected.model}") can't be called directly (it routed you to a CLI). Pick a CLI agent or a different model in the box above the AI button, then try again.`
-          );
-        }
-        return content;
-      } finally {
-        clearTimeout(timer);
+      const content = await brokeredProviderChat({
+        model: selected.model,
+        messages: [{ role: 'user', content: prompt }],
+        signal: signal ?? AbortSignal.timeout(GENERATE_TIMEOUT_MS),
+      });
+      if (isRouterBlock(content)) {
+        throw new Error(
+          `The selected model ("${selected.model}") can't be called directly (it routed you to a CLI). Pick a CLI agent or a different model in the box above the AI button, then try again.`
+        );
       }
+      return content;
     };
 
     // `cli:<agentId>` → CLI agent; any other model id → provider path above.
@@ -296,7 +256,7 @@ export const createScenarioGenerator = (): IScenarioGenerator => {
     let content: string;
     try {
       content = await runAgentChatMessages(
-        () => providerRun(model ?? ''),
+        (selectedModel, _messages, signal) => providerRun(selectedModel, signal),
         model ?? '',
         [{ role: 'user', content: prompt }],
         undefined,

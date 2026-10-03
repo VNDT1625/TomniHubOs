@@ -24,10 +24,10 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import * as path from 'node:path';
 import { z } from 'zod';
-import { createIdeServer, type IdeServerDeps } from '@process/ide/mcp/ideServer';
-import type { ToolGuard, ToolGuardResult } from '@process/ide/mcp/ideServerToolGuard';
-import { createOmniArtifactStore } from '@process/ide/mcp/omniArtifactStore';
-import { loadProjectRules } from '@process/ide/rulesLoader';
+import { createIdeServer, type IdeServerDeps } from '@package-apps/ide/process/mcp/ideServer';
+import type { ToolGuard, ToolGuardResult } from '@package-apps/ide/process/mcp/ideServerToolGuard';
+import { createOmniArtifactStore } from '@package-apps/ide/process/mcp/omniArtifactStore';
+import { loadProjectRules } from '@package-apps/ide/process/workspace/rulesLoader';
 import { buildOmniBootstrapResult } from './omniBootstrap';
 import { OMNI_IDE_BASE_ALLOWLIST, OMNI_IDE_DANGEROUS_TOOLS, type OmniIdeAllowlistEntry } from './omniIdeAllowlist';
 import type { OmniGatewayState } from './omniGatewayState';

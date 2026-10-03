@@ -10,13 +10,11 @@
  * snippets, it asks the user's configured provider/model to return a structured
  * analysis: root cause, a fix explanation, a unified diff, and a risk level.
  *
- * The provider call mirrors `company/companyGenerator.ts` exactly: the provider
- * list (with a usable `api_key`) is read from the native Tomny provider catalog
- * and the request is issued directly against the OpenAI-compatible
- * `/chat/completions` endpoint via `fetch` (not through `ClientFactory`, which
- * expects camelCase `apiKey` and throws outside the chat pipeline). Nothing is
- * hardcoded; when no usable provider exists it throws a clear error that the
- * caller surfaces (the report is still stored, only the proposal is skipped).
+ * The provider catalog selects a model, while the shared Main
+ * ProviderExecutionBroker owns credentials, destination validation, and the
+ * final network request. Nothing is hardcoded; when no usable provider exists it
+ * throws a clear error that the caller surfaces (the report is still stored, only
+ * the proposal is skipped).
  *
  * The model is told to answer with a single fenced JSON object; the parser is
  * defensive (strips fences, tolerates extra prose) and clamps the risk to a
@@ -25,6 +23,7 @@
 
 import { listReadyProviders } from '@process/services/tomnyProviderBridge';
 import type { IProvider } from '@/common/config/storage';
+import { createProviderChat } from '@process/services/agentChat';
 import type { AgentAnalysis, AnalyzerAgent } from './rootCauseAnalyzer';
 
 /** Timeout for a single analysis call (ms). One short turn. */
@@ -38,9 +37,7 @@ type SelectedModel = { provider: IProvider; model: string };
 
 /** Pick the best usable provider/model (prefers a health-checked model). */
 const pickProviderModel = (providers: IProvider[]): SelectedModel | null => {
-  const usable = providers.filter(
-    (p) => p.enabled !== false && p.api_key && p.base_url && Array.isArray(p.models) && p.models.length > 0
-  );
+  const usable = providers.filter((p) => p.enabled !== false && Array.isArray(p.models) && p.models.length > 0);
   for (const provider of usable) {
     const healthy = provider.models.find(
       (m) => isModelEnabled(provider, m) && provider.model_health?.[m]?.status === 'healthy'
@@ -53,19 +50,6 @@ const pickProviderModel = (providers: IProvider[]): SelectedModel | null => {
   }
   return null;
 };
-
-/** Resolve the OpenAI-compatible chat endpoint for a provider. */
-const resolveChatUrl = (provider: IProvider): string => {
-  const base = provider.base_url.replace(/\/+$/, '');
-  return provider.is_full_url ? base : `${base}/chat/completions`;
-};
-
-/** First non-empty API key (the field may hold several, comma/newline-separated). */
-const firstApiKey = (apiKeys: string): string =>
-  apiKeys
-    .split(/[,\n]/)
-    .map((k) => k.trim())
-    .find((k) => k.length > 0) ?? '';
 
 /** The system instruction defining the analyzer's job + strict output shape. */
 const SYSTEM_PROMPT = [
@@ -136,6 +120,7 @@ const buildUserPrompt = (input: Parameters<AnalyzerAgent['analyze']>[0]): string
  * is picked up without a restart.
  */
 export const createAnalyzerAgent = (): AnalyzerAgent => {
+  const brokeredProviderChat = createProviderChat();
   return {
     analyze: async (input) => {
       const providers = (await listReadyProviders().catch(() => [] as IProvider[])) || [];
@@ -146,37 +131,16 @@ export const createAnalyzerAgent = (): AnalyzerAgent => {
         );
       }
 
-      const url = resolveChatUrl(selected.provider);
-      const apiKey = firstApiKey(selected.provider.api_key);
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), ANALYZE_TIMEOUT_MS);
-      try {
-        const response = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-          body: JSON.stringify({
-            model: selected.model,
-            messages: [
-              { role: 'system', content: SYSTEM_PROMPT },
-              { role: 'user', content: buildUserPrompt(input) },
-            ],
-            stream: false,
-          }),
-          signal: controller.signal,
-        });
-        if (!response.ok) {
-          const detail = await response.text().catch(() => '');
-          throw new Error(`Analyzer request failed (HTTP ${response.status}). ${detail.slice(0, 300)}`);
-        }
-        const json = (await response.json()) as { choices?: Array<{ message?: { content?: string | null } }> };
-        const content = json.choices?.[0]?.message?.content;
-        if (typeof content !== 'string' || content.trim().length === 0) {
-          throw new Error('The analyzer model returned an empty response.');
-        }
-        return parseAnalysisResponse(content);
-      } finally {
-        clearTimeout(timer);
-      }
+      const signal = AbortSignal.timeout(ANALYZE_TIMEOUT_MS);
+      const content = await brokeredProviderChat({
+        model: selected.model,
+        messages: [
+          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'user', content: buildUserPrompt(input) },
+        ],
+        signal,
+      });
+      return parseAnalysisResponse(content);
     },
   };
 };

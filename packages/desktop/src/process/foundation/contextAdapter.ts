@@ -17,6 +17,7 @@ export class ContextAdapter {
           agentId: this.agentId,
           personalId: intent.userId,
           surface: intent.surface,
+          workspace: intent.workspaceScope,
           // Foundation receipt projection never exposes opaque secret handles.
           secretContextPolicy: { includeOpaqueSecretHandles: false },
         })

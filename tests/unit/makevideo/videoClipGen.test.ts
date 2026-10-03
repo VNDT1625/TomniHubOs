@@ -3,15 +3,9 @@
  * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
  * SPDX-License-Identifier: Apache-2.0
  *
- * Unit tests for process/makevideo/videoClipGen — the fal.ai image-to-video
- * queue flow (submit → poll → result → download → save). fetch + the output fs
- * are injected; a real temp PNG is used as the start frame because the data-URI
- * encoder reads the source image via Node fs directly.
- *
- * Covers:
- * - Happy path: submits with image_url, polls until COMPLETED, downloads + saves.
- * - Retries a transient submit failure (HTTP 503) then succeeds.
- * - Surfaces a FAILED render and a missing video URL.
+ * Unit tests for process/makevideo/videoClipGen. The legacy direct fal.ai
+ * transport is deliberately disabled. A future Main-only authority receives
+ * secret-free request data and owns provider transport.
  */
 
 import * as fs from 'node:fs';
@@ -19,6 +13,11 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { generateVideoClip } from '@/process/makevideo/videoClipGen';
+import type {
+  VideoClipEgressAuthority,
+  VideoClipEgressRequest,
+  VideoClipEgressResult,
+} from '@/process/makevideo/videoClipGen';
 import type { VideoClipConfigFal } from '@/process/makevideo/makeVideoTypes';
 
 let frameDir: string;
@@ -36,7 +35,7 @@ afterAll(async () => {
 
 const CONFIG: VideoClipConfigFal = {
   type: 'fal',
-  api_key: 'fal-key',
+  api_key: 'fal-key-must-not-reach-authority',
   model_id: 'fal-ai/kling-video/v2.1/standard/image-to-video',
   duration: 5,
 };
@@ -47,97 +46,156 @@ const outFs = () => {
   return {
     writes,
     mkdir: vi.fn(async () => undefined),
-    writeFile: vi.fn(async (p: string) => {
-      writes.push(p);
+    writeFile: vi.fn(async (filePath: string) => {
+      writes.push(filePath);
     }),
   };
 };
 
-const json = (body: unknown): Response => new Response(JSON.stringify(body), { status: 200 });
+const createAuthority = (result: VideoClipEgressResult = { videoBytes: new Uint8Array([9, 9, 9]) }) => {
+  const generateVideoClip = vi.fn(async (_request: VideoClipEgressRequest) => result);
+  return {
+    authority: { generateVideoClip } satisfies VideoClipEgressAuthority,
+    generateVideoClip,
+  };
+};
 
-describe('generateVideoClip — fal.ai happy path', () => {
-  it('submits, polls to COMPLETED, downloads and saves the clip', async () => {
-    const fetchImpl = vi
-      .fn()
-      .mockResolvedValueOnce(json({ request_id: 'req-1' })) // submit
-      .mockResolvedValueOnce(json({ status: 'IN_PROGRESS' })) // status #1
-      .mockResolvedValueOnce(json({ status: 'COMPLETED' })) // status #2
-      .mockResolvedValueOnce(json({ video: { url: 'https://cdn.fal/clip.mp4' } })) // result
-      .mockResolvedValueOnce(new Response(new Uint8Array([9, 9, 9]).buffer, { status: 200 })); // download
-
+describe('generateVideoClip — Main-only egress containment', () => {
+  it('fails closed before source reads, authority invocation, or artifact writes when no authority exists', async () => {
     const fsOut = outFs();
-    const out = await generateVideoClip(framePath, null, 'pan left', CONFIG, 'p1', 's1', {
+
+    await expect(
+      generateVideoClip('/does-not-exist.png', null, 'pan left', CONFIG, 'p1', 's1', {
+        fs: fsOut,
+        clipsDir: '/clips',
+      })
+    ).rejects.toThrow('MAKEVIDEO_VIDEO_CLIP_EGRESS_AUTHORITY_REQUIRED');
+
+    expect(fsOut.mkdir).not.toHaveBeenCalled();
+    expect(fsOut.writeFile).not.toHaveBeenCalled();
+  });
+
+  it('passes only secret-free request data to the authority and writes its bounded artifact', async () => {
+    const fsOut = outFs();
+    const { authority, generateVideoClip: authorityGenerate } = createAuthority({
+      videoBytes: new Uint8Array([1, 2, 3]),
+      contentType: 'video/mp4',
+    });
+
+    const outputPath = await generateVideoClip(framePath, null, 'pan left', CONFIG, 'p1', 's1', {
       fs: fsOut,
       clipsDir: '/clips',
-      fetchImpl: fetchImpl as unknown as typeof fetch,
-      pollIntervalMs: 0,
-      maxWaitMs: 10_000,
+      egressAuthority: authority,
+      timeoutMs: 10_000,
+      maxOutputBytes: 32,
     });
 
-    expect(out).toMatch(/clip-p1-s1\.mp4$/);
+    expect(outputPath).toMatch(/clip-p1-s1\.mp4$/);
     expect(fsOut.writes).toHaveLength(1);
+    expect(authorityGenerate).toHaveBeenCalledTimes(1);
 
-    // Submit body carries the data-URI image + prompt.
-    const submitBody = JSON.parse((fetchImpl.mock.calls[0][1] as RequestInit).body as string);
-    expect(submitBody.image_url).toMatch(/^data:image\/png;base64,/);
-    expect(submitBody.prompt).toBe('pan left');
-    expect(submitBody.duration).toBe(5);
-  });
-
-  it('retries a transient submit failure then succeeds', async () => {
-    const fetchImpl = vi
-      .fn()
-      .mockResolvedValueOnce(new Response('upstream', { status: 503 })) // submit fails transiently
-      .mockResolvedValueOnce(json({ request_id: 'req-2' })) // submit retry OK
-      .mockResolvedValueOnce(json({ status: 'COMPLETED' })) // status
-      .mockResolvedValueOnce(json({ video: { url: 'https://cdn.fal/clip2.mp4' } })) // result
-      .mockResolvedValueOnce(new Response(new Uint8Array([1]).buffer, { status: 200 })); // download
-
-    const out = await generateVideoClip(framePath, null, '', CONFIG, 'p1', 's2', {
-      fs: outFs(),
-      clipsDir: '/clips',
-      fetchImpl: fetchImpl as unknown as typeof fetch,
-      pollIntervalMs: 0,
-      maxWaitMs: 10_000,
+    const request = authorityGenerate.mock.calls[0]?.[0];
+    expect(request).toMatchObject({
+      modelId: CONFIG.model_id,
+      prompt: 'pan left',
+      duration: 5,
+      timeoutMs: 10_000,
+      maxOutputBytes: 32,
     });
-    expect(out).toMatch(/clip-p1-s2\.mp4$/);
-    expect(fetchImpl.mock.calls.length).toBeGreaterThanOrEqual(5);
-  });
-});
-
-describe('generateVideoClip — failures', () => {
-  it('throws when the render reports FAILED', async () => {
-    const fetchImpl = vi
-      .fn()
-      .mockResolvedValueOnce(json({ request_id: 'req-3' }))
-      .mockResolvedValueOnce(json({ status: 'FAILED', error: 'nsfw filter' }));
-
-    await expect(
-      generateVideoClip(framePath, null, '', CONFIG, 'p1', 's3', {
-        fs: outFs(),
-        clipsDir: '/c',
-        fetchImpl: fetchImpl as unknown as typeof fetch,
-        pollIntervalMs: 0,
-        maxWaitMs: 10_000,
-      })
-    ).rejects.toThrow(/nsfw filter/);
+    expect(request?.imageDataUri).toMatch(/^data:image\/png;base64,/);
+    expect(JSON.stringify(request)).not.toContain(CONFIG.api_key);
+    expect(request).not.toHaveProperty('api_key');
+    expect(request).not.toHaveProperty('providerUrl');
   });
 
-  it('throws when the result lacks a video URL', async () => {
-    const fetchImpl = vi
-      .fn()
-      .mockResolvedValueOnce(json({ request_id: 'req-4' }))
-      .mockResolvedValueOnce(json({ status: 'COMPLETED' }))
-      .mockResolvedValueOnce(json({ video: {} }));
+  it('returns a stable redacted error and leaves no artifact when the authority fails', async () => {
+    const fsOut = outFs();
+    const authority: VideoClipEgressAuthority = {
+      generateVideoClip: vi.fn(async () => {
+        throw new Error('provider replied with secret fal-key-must-not-reach-authority');
+      }),
+    };
 
     await expect(
-      generateVideoClip(framePath, null, '', CONFIG, 'p1', 's4', {
-        fs: outFs(),
-        clipsDir: '/c',
-        fetchImpl: fetchImpl as unknown as typeof fetch,
-        pollIntervalMs: 0,
-        maxWaitMs: 10_000,
+      generateVideoClip(framePath, null, 'pan left', CONFIG, 'p1', 's2', {
+        fs: fsOut,
+        clipsDir: '/clips',
+        egressAuthority: authority,
       })
-    ).rejects.toThrow(/did not contain a video URL/);
+    ).rejects.toThrow('MAKEVIDEO_VIDEO_CLIP_EGRESS_FAILED');
+
+    expect(fsOut.mkdir).not.toHaveBeenCalled();
+    expect(fsOut.writeFile).not.toHaveBeenCalled();
+  });
+
+  it('does not write an oversized authority result', async () => {
+    const fsOut = outFs();
+    const { authority } = createAuthority({ videoBytes: new Uint8Array([1, 2, 3]) });
+
+    await expect(
+      generateVideoClip(framePath, null, 'pan left', CONFIG, 'p1', 's3', {
+        fs: fsOut,
+        clipsDir: '/clips',
+        egressAuthority: authority,
+        maxOutputBytes: 2,
+      })
+    ).rejects.toThrow('MAKEVIDEO_VIDEO_CLIP_OUTPUT_TOO_LARGE');
+
+    expect(fsOut.mkdir).not.toHaveBeenCalled();
+    expect(fsOut.writeFile).not.toHaveBeenCalled();
+  });
+
+  it('cancels before any authority call or artifact write', async () => {
+    const fsOut = outFs();
+    const { authority, generateVideoClip: authorityGenerate } = createAuthority();
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      generateVideoClip(
+        framePath,
+        null,
+        'pan left',
+        CONFIG,
+        'p1',
+        's4',
+        {
+          fs: fsOut,
+          clipsDir: '/clips',
+          egressAuthority: authority,
+        },
+        controller.signal
+      )
+    ).rejects.toThrow('MAKEVIDEO_VIDEO_CLIP_ABORTED');
+
+    expect(authorityGenerate).not.toHaveBeenCalled();
+    expect(fsOut.mkdir).not.toHaveBeenCalled();
+    expect(fsOut.writeFile).not.toHaveBeenCalled();
+  });
+
+  it('aborts an authority that exceeds the bounded deadline and writes no artifact', async () => {
+    const fsOut = outFs();
+    let authoritySignal: AbortSignal | undefined;
+    const authority: VideoClipEgressAuthority = {
+      generateVideoClip: vi.fn(
+        (request: VideoClipEgressRequest) =>
+          new Promise<VideoClipEgressResult>(() => {
+            authoritySignal = request.signal;
+          })
+      ),
+    };
+
+    await expect(
+      generateVideoClip(framePath, null, 'pan left', CONFIG, 'p1', 's5', {
+        fs: fsOut,
+        clipsDir: '/clips',
+        egressAuthority: authority,
+        timeoutMs: 1,
+      })
+    ).rejects.toThrow('MAKEVIDEO_VIDEO_CLIP_TIMED_OUT');
+
+    expect(authoritySignal?.aborted).toBe(true);
+    expect(fsOut.mkdir).not.toHaveBeenCalled();
+    expect(fsOut.writeFile).not.toHaveBeenCalled();
   });
 });

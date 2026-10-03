@@ -18,9 +18,7 @@ describe('build-with-builder', () => {
       scripts: Record<string, string>;
     };
 
-    expect(packageJson.scripts['prepare:dev']).toBe(
-      'bun run prepare:tomny && bun run prepare:runtime && bun run prepare:model-gateway'
-    );
+    expect(packageJson.scripts['prepare:dev']).toBe('bun run prepare:tomny && bun run prepare:runtime');
     expect(
       ['dev', 'start', 'start:multi', 'cli'].map((name) =>
         packageJson.scripts[name]?.startsWith('bun run prepare:dev &&')

@@ -15,6 +15,14 @@ Use MTUI for every repository write and inspect its diff before handoff. Keep un
 
 Do not add duplicate guides, plans, session logs, memory notes, or subsystem READMEs. Update the owner listed in [the documentation index](../README.md).
 
+## Execution ownership
+
+Broad MVP work follows the [C0-C6 master plan](../execution/mvp-plan.md). With four total slots, the Integrator retains shared contracts and integration while three subagents receive bounded, non-overlapping acceptance atoms; one subagent advances or independently verifies the Store/package track until its gate passes. A waiting lane takes another approved ready or verification atom instead of editing shared files.
+
+Each assignment records an exact allowlist, forbidden shared files, starting revision, acceptance command, migration/rollback/kill behavior when applicable, and handoff evidence. App bootstrap, preload and IPC registration, shared schemas and migrations, generated registries, base routing, and canonical status remain Integrator-owned.
+
+Do not reproduce the checkpoint schedule in subsystem documentation. Link the master plan and report current-revision evidence for the affected checkpoint and candidate gate.
+
 ## File and module structure
 
 - A new source directory must not exceed ten direct children.

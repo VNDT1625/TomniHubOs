@@ -16,12 +16,12 @@ import {
   planWikiSections,
   renderWikiTestProfile,
   selectKeyFiles,
-} from '@/process/ide/wikiPlanner';
+} from '@package-apps/ide/process/knowledge/graph/wikiPlanner';
 
-import { runWikiBootstrap } from '@/process/ide/wiki/wikiBootstrap';
-import type { RepoGraph } from '@/process/ide/repoGraph';
-import type { KnowledgeGraph } from '@/process/ide/understandTypes';
-import type { PersistedWiki } from '@/process/ide/wiki/wikiStore';
+import { runWikiBootstrap } from '@package-apps/ide/process/knowledge/wiki/wikiBootstrap';
+import type { RepoGraph } from '@package-apps/ide/process/knowledge/graph/repoGraph';
+import type { KnowledgeGraph } from '@package-apps/ide/process/knowledge/graph/understandTypes';
+import type { PersistedWiki } from '@package-apps/ide/process/knowledge/wiki/wikiStore';
 
 /** Build a minimal RepoGraph for tests. */
 const makeGraph = (
@@ -124,7 +124,7 @@ describe('Wiki-guided test profile', () => {
     builtAt: 200,
     nodes: [
       {
-        id: 'packages/desktop/src/process/ide/traceContextBuilder.ts',
+        id: 'packages/package-apps/ide/src/process/execution/inspection/traceContextBuilder.ts',
         label: 'traceContextBuilder.ts',
         group: 'packages',
         layer: 'service',
@@ -154,7 +154,7 @@ describe('Wiki-guided test profile', () => {
     edges: [
       {
         from: 'tests/unit/ide/traceContextBuilder.test.ts',
-        to: 'packages/desktop/src/process/ide/traceContextBuilder.ts',
+        to: 'packages/package-apps/ide/src/process/execution/inspection/traceContextBuilder.ts',
       },
     ],
     tours: [],
@@ -182,7 +182,7 @@ describe('Wiki-guided test profile', () => {
         content: 'traceContextBuilder maps RuntimeTrace into a focused ContextPack for debugging.',
       },
     ],
-    keyFiles: ['packages/desktop/src/process/ide/traceContextBuilder.ts'],
+    keyFiles: ['packages/package-apps/ide/src/process/execution/inspection/traceContextBuilder.ts'],
     docReports: [],
   });
 
@@ -191,7 +191,7 @@ describe('Wiki-guided test profile', () => {
       graph: knowledgeGraph(),
       wiki: staleWiki(),
       intent: 'A network 404 is ranked into unrelated ContextPack slices',
-      targetFiles: ['packages/desktop/src/process/ide/traceContextBuilder.ts'],
+      targetFiles: ['packages/package-apps/ide/src/process/execution/inspection/traceContextBuilder.ts'],
       symbols: ['buildTraceContext'],
       graphFresh: true,
     });

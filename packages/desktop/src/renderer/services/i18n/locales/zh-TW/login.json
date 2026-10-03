@@ -2,6 +2,7 @@
   "pageTitle": "Omni - 登入",
   "brand": "Omni",
   "subtitle": "歡迎回來，請登入您的帳號",
+
   "username": "使用者名稱",
   "usernamePlaceholder": "請輸入使用者名稱",
   "password": "密碼",
@@ -21,6 +22,26 @@
     "tooManyAttempts": "登入嘗試過多，請稍後再試",
     "networkError": "連線失敗，請稍後再試",
     "serverError": "伺服器發生錯誤，請稍後再試",
-    "unknown": "登入失敗，請稍後再試"
-  }
+    "unknown": "登入失敗，請稍後再試",
+    "passwordMismatch": "兩次輸入的密碼不一致",
+    "usernameLength": "使用者名稱至少需要3個字元",
+    "passwordLength": "密碼至少需要6個字元",
+    "userExists": "使用者名稱已存在"
+  },
+  "tabLogin": "登入",
+  "tabRegister": "註冊",
+  "registerSubtitle": "建立新帳戶以開始使用",
+  "confirmPassword": "確認密碼",
+  "confirmPasswordPlaceholder": "再次輸入密碼",
+  "registerSubmit": "建立帳戶",
+  "registerSubmitting": "正在建立...",
+  "registerSuccess": "註冊成功！正在跳轉...",
+  "switchToRegisterPrompt": "還沒有帳戶？",
+  "switchToRegister": "立即註冊",
+  "switchToLoginPrompt": "已有帳戶？",
+  "switchToLogin": "立即登入",
+
+  "emailOrUsername": "電子郵件或使用者名稱",
+  "emailOrUsernamePlaceholder": "輸入電子郵件或使用者名稱",
+  "supabaseBadge": "Supabase 雲端安全認證"
 }

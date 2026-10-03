@@ -109,9 +109,10 @@ const ensureSource = ({ version, commit }) => {
   const sourceDir = process.env.TOMNY_CORE_SOURCE_DIR || path.join(cacheRoot, cacheKey);
   if (!fs.existsSync(sourceDir)) {
     fs.mkdirSync(cacheRoot, { recursive: true });
-    execFileSync('git', ['clone', '--depth', '1', '--branch', version, UPSTREAM_REPOSITORY, sourceDir], {
-      stdio: 'inherit',
-    });
+    // The release label is informational; the immutable commit is the trust anchor.
+    execFileSync('git', ['clone', '--no-checkout', UPSTREAM_REPOSITORY, sourceDir], { stdio: 'inherit' });
+    execFileSync('git', ['-C', sourceDir, 'fetch', '--depth', '1', 'origin', commit], { stdio: 'inherit' });
+    execFileSync('git', ['-C', sourceDir, 'checkout', '--detach', commit], { stdio: 'inherit' });
   } else if (!fs.existsSync(path.join(sourceDir, '.git'))) {
     throw new Error(`Tomny Core source cache is not a Git checkout: ${sourceDir}`);
   }

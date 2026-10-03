@@ -40,11 +40,11 @@ vi.mock('@/renderer/hooks/agent/useModelProviderList', () => ({
   }),
 }));
 
-vi.mock('@/renderer/pages/studio/studioChatClient', () => ({
+vi.mock('@package-apps/document-studio/renderer/studio/studioChatClient', () => ({
   studioChatClient: { chat: { invoke: (...a: unknown[]) => chat(...a) } },
 }));
 
-import CreateFileModal from '@/renderer/pages/studio/components/CreateFileModal';
+import CreateFileModal from '@package-apps/document-studio/renderer/studio/components/CreateFileModal';
 
 const store = new Map<string, string>();
 beforeEach(() => {

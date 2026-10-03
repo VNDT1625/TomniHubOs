@@ -124,7 +124,7 @@ const Layout: React.FC<{
   useConversationShortcuts({ navigate });
   const location = useLocation();
 
-  const isHubHomeRoute = ['/guid', '/manager', '/store', '/products', '/history', '/company'].some(
+  const isHubHomeRoute = ['/guid', '/manager', '/store', '/apps', '/products', '/history', '/company'].some(
     (route) => location.pathname === route || location.pathname.startsWith(`${route}/`)
   );
   const workspaceAvailable =
@@ -501,7 +501,7 @@ const Layout: React.FC<{
     >
       <NavigationHistoryProvider>
         <div className='app-shell flex flex-col size-full min-h-0'>
-          {!isHubHomeRoute && <Titlebar workspaceAvailable={workspaceAvailable} />}
+          <Titlebar workspaceAvailable={workspaceAvailable} />
           {/* 移动端左侧边栏蒙板 / Mobile left sider backdrop */}
           {!isHubHomeRoute && isMobile && !collapsed && (
             <div className='fixed inset-0 bg-black/30 z-90' onClick={() => setCollapsed(true)} aria-hidden='true' />

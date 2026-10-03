@@ -53,6 +53,38 @@ export class TomniWebAuth {
     return { needs_setup: !state.passwordHash, username: state.username };
   }
 
+  async register(username: string, password: string): Promise<TomniLoginResult> {
+    const normalized = username.trim();
+    if (normalized.length < 3 || normalized.length > 64) {
+      throw new Error('INVALID_USERNAME');
+    }
+    if (password.length < 6) {
+      throw new Error('PASSWORD_TOO_SHORT');
+    }
+    const state = await this.#state();
+    const salt = randomBytes(16).toString('base64url');
+    const hash = await this.#hashPassword(password, salt);
+    await this.#save({
+      ...state,
+      username: normalized,
+      passwordSalt: salt,
+      passwordHash: hash,
+      signingSecret: randomBytes(32).toString('base64url'),
+      updatedAt: Date.now(),
+    });
+    this.#sessions.clear();
+    const now = Date.now();
+    const expiresAt = now + SESSION_TTL_MS;
+    const nonce = randomBytes(24).toString('base64url');
+    this.#sessions.set(nonce, { userId: 'tomni-admin', username: normalized, expiresAt });
+    return {
+      ok: true,
+      token: this.#signToken(nonce, expiresAt, state.signingSecret),
+      expiresAt,
+      user: user(normalized),
+    };
+  }
+
   async login(identifier: string, username: string, password: string, remember: boolean): Promise<TomniLoginResult> {
     const now = Date.now();
     const attempt = this.#attempts.get(identifier);

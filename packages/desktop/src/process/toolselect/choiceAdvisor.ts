@@ -8,10 +8,7 @@ export type CandidateEvaluation = {
 };
 
 export class ChoiceAdvisor {
-  public evaluateCandidates(
-    candidates: readonly SelectionCandidate[],
-    minThreshold = 0.3,
-  ): SelectionDecision {
+  public evaluateCandidates(candidates: readonly SelectionCandidate[], minThreshold = 0.3): SelectionDecision {
     if (candidates.length === 0) {
       return {
         runId: 'none',

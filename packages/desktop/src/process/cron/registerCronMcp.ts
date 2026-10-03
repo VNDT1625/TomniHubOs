@@ -9,8 +9,8 @@
  * server entry pointing at its loopback URL — so an agent (Claude Code / ACP,
  * tomnyagentic, …) can connect and manage the user's scheduled tasks as tools.
  *
- * Mirrors `process/testing/registerTestingMcp.ts` and
- * `process/browser/registerBrowserControlMcp.ts`. The catalog entry is created
+ * Uses the bounded registration pattern shared by other built-in MCP hosts.
+ * The catalog entry is created
  * `enabled: false` (not auto-attached to every new chat): it is opt-in per
  * conversation through the MCP picker / the "Super" capability surface. The
  * loopback port is ephemeral (changes each boot), so this registration is

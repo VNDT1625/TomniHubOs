@@ -27,11 +27,11 @@ vi.mock('@/renderer/pages/conversation/utils/conversationCache', () => ({
   getConversationOrNull: vi.fn(),
 }));
 
-vi.mock('@/renderer/pages/studio/ide/ideClient', () => ({
+vi.mock('@package-apps/ide/renderer/services/ideClient', () => ({
   ideClient: {},
 }));
 
-vi.mock('@/renderer/pages/studio/ide/teamEdit/teamEditClient', () => ({
+vi.mock('@package-apps/ide/renderer/teamEdit/teamEditClient', () => ({
   teamEditClient: {},
 }));
 

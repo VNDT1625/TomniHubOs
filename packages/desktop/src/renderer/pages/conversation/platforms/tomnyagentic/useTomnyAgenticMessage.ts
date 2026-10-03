@@ -203,7 +203,7 @@ export const useTomnyAgenticMessage = (
       const endTime = boundaryMessage.created_at ?? Date.now();
       const duration = completeOptions?.duration ?? Math.max(0, endTime - activeThinking.startedAt);
       addOrUpdateMessage({
-        id: `${activeThinking.msgId}-thinking-done`,
+        id: activeThinking.msgId,
         type: 'thinking',
         msg_id: activeThinking.msgId,
         conversation_id: boundaryMessage.conversation_id,

@@ -1,0 +1,45 @@
+/* Self-contained Window Controls styling for Desktop runtime */
+
+.app-window-controls {
+  display: inline-flex !important;
+  align-items: center !important;
+  height: 100% !important;
+  min-height: 32px !important;
+  -webkit-app-region: no-drag !important;
+  gap: 2px !important;
+  z-index: 9999 !important;
+}
+
+.app-window-controls__button {
+  width: 38px !important;
+  height: 32px !important;
+  border: none !important;
+  background: transparent !important;
+  color: #94a3b8 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  border-radius: 6px !important;
+  transition: all 0.18s ease !important;
+  padding: 0 !important;
+}
+
+.app-window-controls__button:hover {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+  color: #f8fafc !important;
+}
+
+.app-window-controls__button:active {
+  background-color: rgba(255, 255, 255, 0.18) !important;
+}
+
+.app-window-controls__button--close:hover {
+  background-color: #e81123 !important;
+  color: #ffffff !important;
+}
+
+.app-window-controls__button--restart:hover {
+  background-color: rgba(56, 189, 248, 0.15) !important;
+  color: #38bdf8 !important;
+}

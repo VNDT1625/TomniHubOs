@@ -5,9 +5,12 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import { createTeamSessionHost, resolveWithinRepo } from '@/process/ide/teamEdit/teamSessionHost';
-import { createTeamRequestQueue } from '@/process/ide/teamEdit/teamRequestQueue';
-import type { TeamEditService } from '@/process/ide/teamEdit/teamEditService';
+import {
+  createTeamSessionHost,
+  resolveWithinRepo,
+} from '@package-apps/ide/process/collaboration/teamEdit/teamSessionHost';
+import { createTeamRequestQueue } from '@package-apps/ide/process/collaboration/teamEdit/teamRequestQueue';
+import type { TeamEditService } from '@package-apps/ide/process/collaboration/teamEdit/teamEditService';
 
 const ROOT = '/repo';
 

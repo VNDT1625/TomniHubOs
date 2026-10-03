@@ -56,7 +56,7 @@ const {
   onChangedMock: vi.fn(),
 }));
 
-vi.mock('@renderer/pages/studio/ide/teamEdit/teamEditClient', () => ({
+vi.mock('@package-apps/ide/renderer/teamEdit/teamEditClient', () => ({
   teamEditClient: {
     snapshot: snapshotMock,
     join: joinMock,
@@ -76,7 +76,7 @@ vi.mock('@renderer/pages/studio/ide/teamEdit/teamEditClient', () => ({
   USER_AGENT_ID: 'user',
 }));
 
-vi.mock('@renderer/pages/studio/ide/teamEdit/teamCollabClient', () => ({
+vi.mock('@package-apps/ide/renderer/teamEdit/teamCollabClient', () => ({
   teamCollabClient: {
     remotePreviews: remotePreviewsMock,
     remotePreview: remotePreviewMock,
@@ -85,18 +85,12 @@ vi.mock('@renderer/pages/studio/ide/teamEdit/teamCollabClient', () => ({
   },
 }));
 
-vi.mock('@renderer/pages/studio/ide/Viu/next/runtime', () => ({
-  ViuPresentRuntime: ({ project }: { project: { projectId: string } }) => (
-    <div data-testid='team-viu-preview'>{project.projectId}</div>
-  ),
-}));
-
 import { createPremiumStarterProject, createViuPreviewSnapshot, createViuTeamPreviewPackage } from '@/common/viu';
-import TeamEditPanel from '@renderer/pages/studio/ide/teamEdit/TeamEditPanel';
-import type { UseTeamCollab } from '@renderer/pages/studio/ide/teamEdit/useTeamCollab';
-import ReplicaStatusPanel from '@renderer/pages/studio/ide/teamEdit/cloud/ReplicaStatusPanel';
-import type { UseCloudWorkspace } from '@renderer/pages/studio/ide/teamEdit/cloud/useCloudWorkspace';
-import type { ReplicaConflict } from '@process/ide/teamEdit/cloud/cloudReplicaTypes';
+import TeamEditPanel from '@package-apps/ide/renderer/teamEdit/TeamEditPanel';
+import type { UseTeamCollab } from '@package-apps/ide/renderer/teamEdit/useTeamCollab';
+import ReplicaStatusPanel from '@package-apps/ide/renderer/teamEdit/cloud/ReplicaStatusPanel';
+import type { UseCloudWorkspace } from '@package-apps/ide/renderer/teamEdit/cloud/useCloudWorkspace';
+import type { ReplicaConflict } from '@package-apps/ide/process/collaboration/teamEdit/cloud/cloudReplicaTypes';
 
 const ROOT = '/repo';
 
@@ -254,15 +248,16 @@ describe('TeamEditPanel', () => {
     expect(await screen.findByText('Please review')).toBeTruthy();
   });
 
-  it('opens the same immutable Team package through the user preview consumer', async () => {
-    render(<TeamEditPanel rootPath={ROOT} activeFile={null} collab={SOLO_COLLAB} />);
+  it('opens the installed Design module without loading an immutable Team snapshot into the IDE', async () => {
+    const onOpenDesign = vi.fn();
+    render(<TeamEditPanel rootPath={ROOT} activeFile={null} collab={SOLO_COLLAB} onOpenDesign={onOpenDesign} />);
 
     fireEvent.click(await screen.findByText('ide.team.workspace.previews'));
     expect((await screen.findAllByText('Checkout prototype')).length).toBeGreaterThan(0);
     fireEvent.click(screen.getByText('ide.team.workspace.previewView.open'));
 
-    await waitFor(() => expect(getPreviewMock).toHaveBeenCalledWith(ROOT, PREVIEW_PACKAGE.packageId, 'user-preview'));
-    expect(await screen.findByTestId('team-viu-preview')).toHaveTextContent('team-preview-project');
+    expect(onOpenDesign).toHaveBeenCalledOnce();
+    expect(getPreviewMock).not.toHaveBeenCalled();
   });
 
   it('submits feedback anchored to the selected snapshot screen', async () => {
@@ -283,22 +278,17 @@ describe('TeamEditPanel', () => {
     );
   });
 
-  it('lets an authenticated peer open the host preview and submit review feedback', async () => {
-    render(<TeamEditPanel rootPath={ROOT} activeFile={null} collab={PEER_COLLAB} />);
+  it('lets an authenticated peer open Design without fetching the host snapshot into the IDE and submit review feedback', async () => {
+    const onOpenDesign = vi.fn();
+    render(<TeamEditPanel rootPath={ROOT} activeFile={null} collab={PEER_COLLAB} onOpenDesign={onOpenDesign} />);
 
     fireEvent.click(await screen.findByText('ide.team.workspace.previews'));
     expect((await screen.findAllByText('Checkout prototype')).length).toBeGreaterThan(0);
     fireEvent.click(screen.getByLabelText('ide.team.refresh'));
     await waitFor(() => expect(remotePreviewsMock).toHaveBeenCalledTimes(2));
     fireEvent.click(screen.getByText('ide.team.workspace.previewView.open'));
-    await waitFor(() =>
-      expect(remotePreviewMock).toHaveBeenCalledWith(
-        'https://team.example.test',
-        'peer-token',
-        PREVIEW_PACKAGE.packageId
-      )
-    );
-    expect(await screen.findByTestId('team-viu-preview')).toHaveTextContent('team-preview-project');
+    expect(onOpenDesign).toHaveBeenCalledOnce();
+    expect(remotePreviewMock).not.toHaveBeenCalled();
 
     fireEvent.change(screen.getByPlaceholderText('ide.team.workspace.previewView.feedbackPlaceholder'), {
       target: { value: 'Peer tested this' },

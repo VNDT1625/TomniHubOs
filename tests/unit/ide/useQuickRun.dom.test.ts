@@ -31,13 +31,13 @@ const { ideClientMock, emitterMock, terminalMock } = vi.hoisted(() => ({
   },
 }));
 
-vi.mock('@renderer/pages/studio/ide/ideClient', () => ({ ideClient: ideClientMock }));
+vi.mock('@package-apps/ide/renderer/services/ideClient', () => ({ ideClient: ideClientMock }));
 vi.mock('@renderer/utils/emitter', () => ({ emitter: emitterMock }));
-vi.mock('@renderer/pages/terminal/terminalBridgeClient', () => ({ terminalClient: terminalMock }));
+vi.mock('@package-apps/ide/renderer/terminal/terminalBridgeClient', () => ({ terminalClient: terminalMock }));
 
-import { useQuickRun } from '@/renderer/pages/studio/ide/components/useQuickRun';
-import type { RunPlan } from '@/process/ide/runTarget/runTargetPlanner';
-import type { SavedRunConfig } from '@/process/ide/runTarget/runConfigStore';
+import { useQuickRun } from '@package-apps/ide/renderer/components/useQuickRun';
+import type { RunPlan } from '@package-apps/ide/process/execution/runTarget/runTargetPlanner';
+import type { SavedRunConfig } from '@package-apps/ide/process/execution/runTarget/runConfigStore';
 
 /**
  * Tiny timing so the probe loop resolves quickly under real timers. The grace

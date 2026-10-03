@@ -67,7 +67,7 @@ const validateCompatibility = (value: unknown, path: string, issues: SurfaceMani
   });
 };
 
-/** Validate untrusted built-in, plugin or user surface JSON before registration. */
+/** Validate untrusted built-in, Package App, plugin or user surface JSON before registration. */
 export const validateSurfaceManifest = (value: unknown): SurfaceManifestValidationResult => {
   const issues: SurfaceManifestValidationIssue[] = [];
   if (!isRecord(value))
@@ -91,14 +91,14 @@ export const validateSurfaceManifest = (value: unknown): SurfaceManifestValidati
     if (!nonEmptyString(value[field])) issues.push({ path: field, code: 'required', message: `${field} is required.` });
   }
 
-  if (!isRecord(value.source) || !['builtin', 'plugin', 'user'].includes(String(value.source.kind))) {
+  if (!isRecord(value.source) || !['builtin', 'package', 'plugin', 'user'].includes(String(value.source.kind))) {
     issues.push({
       path: 'source',
       code: 'invalid-source',
       message: 'Source must identify builtin, plugin or user ownership.',
     });
-  } else if (value.source.kind === 'plugin' && !nonEmptyString(value.source.id)) {
-    issues.push({ path: 'source.id', code: 'required', message: 'Plugin manifests require a source id.' });
+  } else if ((value.source.kind === 'plugin' || value.source.kind === 'package') && !nonEmptyString(value.source.id)) {
+    issues.push({ path: 'source.id', code: 'required', message: 'Plugin and package manifests require a source id.' });
   }
   if (value.priority !== undefined && (!Number.isInteger(value.priority) || Number(value.priority) < 0)) {
     issues.push({ path: 'priority', code: 'invalid-priority', message: 'Priority must be a non-negative integer.' });

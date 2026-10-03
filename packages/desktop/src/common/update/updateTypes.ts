@@ -4,67 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-export interface GitHubReleaseAsset {
-  name: string;
-  /** Primary download URL — rewritten to CDN for faster download. */
-  url: string;
-  /** Original GitHub download URL — used as fallback when CDN fails. */
-  fallbackUrl?: string;
-  size: number;
-  contentType?: string;
-}
-
-export interface UpdateReleaseInfo {
-  tagName: string;
-  version: string;
-  name?: string;
-  body?: string;
-  htmlUrl: string;
-  publishedAt?: string;
-  prerelease: boolean;
-  draft: boolean;
-  assets: GitHubReleaseAsset[];
-  recommendedAsset?: GitHubReleaseAsset;
-}
-
-export interface UpdateCheckResult {
-  currentVersion: string;
-  updateAvailable: boolean;
-  latest?: UpdateReleaseInfo;
-}
-
-export interface UpdateCheckRequest {
-  includePrerelease?: boolean;
-  /** Defaults to VNDT1625/OmniAgent when omitted */
-  repo?: string;
-}
-
-export interface UpdateDownloadRequest {
-  url: string;
-  /** Fallback URL tried when the primary URL fails (e.g. CDN down). */
-  fallbackUrl?: string;
-  file_name?: string;
-}
-
-export interface UpdateDownloadResult {
-  downloadId: string;
-  file_path: string;
-}
-
-export type UpdateDownloadStatus = 'starting' | 'downloading' | 'completed' | 'error' | 'cancelled';
-
-export interface UpdateDownloadProgressEvent {
-  downloadId: string;
-  status: UpdateDownloadStatus;
-  receivedBytes: number;
-  totalBytes?: number;
-  percent?: number;
-  bytesPerSecond?: number;
-  file_path?: string;
-  error?: string;
-}
-
-// Auto-updater status types (electron-updater)
+// Electron-updater status types. Artifact discovery and verification stay inside
+// the signed native updater; no renderer-controlled manual download contract exists.
 export type AutoUpdateStatusType =
   | 'checking'
   | 'available'
@@ -74,18 +15,18 @@ export type AutoUpdateStatusType =
   | 'error'
   | 'cancelled';
 
-export interface AutoUpdateProgress {
+export type AutoUpdateProgress = {
   bytesPerSecond: number;
   percent: number;
   transferred: number;
   total: number;
-}
+};
 
-export interface AutoUpdateStatus {
+export type AutoUpdateStatus = {
   status: AutoUpdateStatusType;
   version?: string;
   releaseDate?: string;
   releaseNotes?: string;
   progress?: AutoUpdateProgress;
   error?: string;
-}
+};

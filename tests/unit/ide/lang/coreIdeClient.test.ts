@@ -22,7 +22,7 @@ vi.mock('@office-ai/platform', () => ({
   },
 }));
 
-import { CoreIdeBridgeTimeoutError, coreIdeClient } from '@/renderer/services/coreIdeClient';
+import { CoreIdeBridgeTimeoutError, coreIdeClient } from '../../../../packages/package-apps/ide/src/coreIdeClient';
 
 const invocation = (channel: string): ReturnType<typeof vi.fn> => {
   const provider = mocks.providers.get(channel);
@@ -45,8 +45,8 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe('base-shell IDE client', () => {
-  it('registers only the nine capabilities required outside the IDE package', () => {
+describe('IDE Package client', () => {
+  it('registers only the nine bounded capabilities used by the IDE Package', () => {
     expect([...mocks.providers.keys()].toSorted()).toEqual([
       'ide.inline-complete',
       'ide.kg-context',

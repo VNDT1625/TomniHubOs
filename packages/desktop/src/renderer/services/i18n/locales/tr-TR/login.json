@@ -2,6 +2,7 @@
   "pageTitle": "Omni - Giriş Yap",
   "brand": "Tomny",
   "subtitle": "Tekrar hoş geldiniz, lütfen hesabınıza giriş yapın",
+
   "username": "Kullanıcı Adı",
   "usernamePlaceholder": "Kullanıcı adınızı girin",
   "password": "Şifre",
@@ -21,6 +22,26 @@
     "tooManyAttempts": "Çok fazla deneme, lütfen daha sonra tekrar deneyin",
     "networkError": "Bağlantı başarısız, lütfen tekrar deneyin",
     "serverError": "Sunucu hatası, lütfen daha sonra tekrar deneyin",
-    "unknown": "Giriş başarısız, lütfen tekrar deneyin"
-  }
+    "unknown": "Giriş başarısız, lütfen tekrar deneyin",
+    "passwordMismatch": "Şifreler eşleşmiyor",
+    "usernameLength": "Kullanıcı adı en az 3 karakter olmalıdır",
+    "passwordLength": "Şifre en az 6 karakter olmalıdır",
+    "userExists": "Kullanıcı adı zaten mevcut"
+  },
+  "tabLogin": "Giriş Yap",
+  "tabRegister": "Kayıt Ol",
+  "registerSubtitle": "Başlamak için yeni bir hesap oluşturun",
+  "confirmPassword": "Şifreyi Onayla",
+  "confirmPasswordPlaceholder": "Şifrenizi tekrar girin",
+  "registerSubmit": "Hesap Oluştur",
+  "registerSubmitting": "Oluşturuluyor...",
+  "registerSuccess": "Kayıt başarılı! Yönlendiriliyorsunuz...",
+  "switchToRegisterPrompt": "Hesabınız yok mu?",
+  "switchToRegister": "Hemen kaydolun",
+  "switchToLoginPrompt": "Zaten bir hesabınız var mı?",
+  "switchToLogin": "Giriş yapın",
+
+  "emailOrUsername": "E-posta veya Kullanıcı Adı",
+  "emailOrUsernamePlaceholder": "E-posta veya kullanıcı adınızı girin",
+  "supabaseBadge": "Supabase Cloud ile Güvenli"
 }

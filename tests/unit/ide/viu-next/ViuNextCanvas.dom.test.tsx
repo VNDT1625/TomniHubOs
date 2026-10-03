@@ -9,7 +9,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createPremiumStarterProject } from '@/common/viu';
-import ViuNextCanvas, { type ViuNextLabels } from '@/renderer/pages/studio/ide/Viu/next';
+import ViuNextCanvas, { type ViuNextLabels } from '@package-apps/design/renderer/viu/next/index';
 
 const labels: ViuNextLabels = {
   productName: 'Viu Next',

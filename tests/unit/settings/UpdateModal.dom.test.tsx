@@ -5,9 +5,11 @@
  */
 
 import React from 'react';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import UpdateModal from '@/renderer/components/settings/UpdateModal';
+
+const { Icon } = vi.hoisted(() => ({ Icon: () => <span data-testid='icon' /> }));
 
 const mocks = vi.hoisted(() => ({
   ipcBridge: {
@@ -17,173 +19,69 @@ const mocks = vi.hoisted(() => ({
       quitAndInstall: { invoke: vi.fn() },
       status: { on: vi.fn(() => () => undefined) },
     },
-    update: {
-      check: { invoke: vi.fn() },
-      download: { invoke: vi.fn() },
-      downloadProgress: { on: vi.fn(() => () => undefined) },
-      open: { on: vi.fn(() => () => undefined) },
-    },
-    shell: {
-      openExternal: { invoke: vi.fn() },
-      openFile: { invoke: vi.fn() },
-      showItemInFolder: { invoke: vi.fn() },
-    },
+    update: { open: { on: vi.fn(() => () => undefined) } },
   },
 }));
 
-vi.mock('@/common', () => ({
-  ipcBridge: mocks.ipcBridge,
-}));
-
-vi.mock('react-i18next', () => ({
-  useTranslation: () => ({
-    t: (key: string) => key,
-  }),
-}));
-
+vi.mock('@/common', () => ({ ipcBridge: mocks.ipcBridge }));
+vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock('@/renderer/components/base/TomnyModal', () => ({
   default: ({ visible, children }: { visible: boolean; children: React.ReactNode }) =>
     visible ? <div data-testid='update-modal'>{children}</div> : null,
 }));
-
 vi.mock('@/renderer/components/Markdown', () => ({
   default: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
-
 vi.mock('@arco-design/web-react', () => ({
-  Button: ({
-    children,
-    onClick,
-    disabled,
-  }: {
-    children: React.ReactNode;
-    onClick?: () => void;
-    disabled?: boolean;
-  }) => (
-    <button type='button' disabled={disabled} onClick={onClick}>
-      {children}
-    </button>
+  Button: ({ children, onClick }: { children: React.ReactNode; onClick?: () => void }) => (
+    <button onClick={onClick}>{children}</button>
   ),
   Progress: ({ percent }: { percent: number }) => <div data-testid='progress'>{percent}</div>,
-  Message: {
-    error: vi.fn(),
-  },
+  Message: { error: vi.fn() },
 }));
-
 vi.mock('@icon-park/react', () => {
-  const Icon = () => <span data-testid='icon' />;
-  return {
-    CheckOne: Icon,
-    Download: Icon,
-    FolderOpen: Icon,
-    Refresh: Icon,
-    CloseOne: Icon,
-    Install: Icon,
-  };
+  return { CheckOne: Icon, CloseOne: Icon, Download: Icon, Install: Icon, Refresh: Icon };
 });
 
-const latestRelease = {
-  tagName: 'v2.1.12',
-  version: '2.1.12',
-  name: 'v2.1.12',
-  body: '',
-  htmlUrl: 'https://github.com/VNDT1625/OmniAgent/releases/tag/v2.1.12',
-  prerelease: false,
-  draft: false,
-  assets: [],
-  recommendedAsset: {
-    name: 'OmniAgentic-2.1.12-win-x64.exe',
-    url: 'https://download.example/OmniAgentic-2.1.12-win-x64.exe',
-    fallbackUrl: 'https://github.example/OmniAgentic-2.1.12-win-x64.exe',
-    size: 1,
-  },
-};
-
-const openUpdateModal = async (): Promise<void> => {
+const openUpdateModal = async () => {
   render(<UpdateModal />);
-  window.dispatchEvent(new Event('tomny-open-update-modal'));
+  await act(async () => {
+    window.dispatchEvent(new Event('tomny-open-update-modal'));
+  });
   await screen.findByTestId('update-modal');
 };
 
-describe('UpdateModal download flow', () => {
+describe('UpdateModal signed updater flow', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.ipcBridge.autoUpdate.status.on.mockReturnValue(() => undefined);
-    mocks.ipcBridge.update.downloadProgress.on.mockReturnValue(() => undefined);
     mocks.ipcBridge.update.open.on.mockReturnValue(() => undefined);
+    mocks.ipcBridge.autoUpdate.status.on.mockReturnValue(() => undefined);
     mocks.ipcBridge.autoUpdate.download.invoke.mockResolvedValue({ success: true });
-    mocks.ipcBridge.update.download.invoke.mockResolvedValue({
-      success: true,
-      data: { downloadId: 'manual-download', file_path: 'C:/Temp/Tomny.exe' },
-    });
-    mocks.ipcBridge.update.check.invoke.mockResolvedValue({
-      success: true,
-      data: {
-        currentVersion: '2.1.10',
-        updateAvailable: true,
-        latest: latestRelease,
-      },
-    });
   });
 
-  afterEach(() => {
-    cleanup();
-  });
+  afterEach(cleanup);
 
-  it('uses electron-updater download when auto-update metadata is available', async () => {
+  it('downloads only through electron-updater after a signed update is available', async () => {
     mocks.ipcBridge.autoUpdate.check.invoke.mockResolvedValue({
       success: true,
-      data: {
-        currentVersion: '2.1.10',
-        updateInfo: {
-          version: '2.1.12',
-          releaseNotes: '',
-        },
-      },
+      data: { currentVersion: '2.1.10', updateInfo: { version: '2.1.12', releaseNotes: '' } },
     });
-
     await openUpdateModal();
-
-    const downloadButton = await screen.findByText('update.downloadAndInstall');
-    fireEvent.click(downloadButton);
-
-    await waitFor(() => {
-      expect(mocks.ipcBridge.autoUpdate.download.invoke).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      fireEvent.click(await screen.findByText('update.downloadAndInstall'));
     });
-    expect(mocks.ipcBridge.update.download.invoke).not.toHaveBeenCalled();
-    expect(mocks.ipcBridge.update.check.invoke).not.toHaveBeenCalled();
+
+    await waitFor(() => expect(mocks.ipcBridge.autoUpdate.download.invoke).toHaveBeenCalledTimes(1));
+    expect(mocks.ipcBridge.update).toEqual({ open: expect.any(Object) });
   });
 
-  it('does not let a manual release check override a successful up-to-date native check', async () => {
-    mocks.ipcBridge.autoUpdate.check.invoke.mockResolvedValue({
-      success: true,
-      data: { currentVersion: '2.1.17' },
-    });
-
+  it('fails closed when native update checking fails and exposes retry only', async () => {
+    mocks.ipcBridge.autoUpdate.check.invoke.mockResolvedValue({ success: false, msg: 'signed update unavailable' });
     await openUpdateModal();
 
-    expect(await screen.findByText('update.upToDateTitle')).toBeDefined();
-    expect(mocks.ipcBridge.update.check.invoke).not.toHaveBeenCalled();
-  });
-
-  it('falls back to manual installer download when the native update check fails', async () => {
-    mocks.ipcBridge.autoUpdate.check.invoke.mockResolvedValue({
-      success: false,
-      msg: 'native metadata unavailable',
-    });
-
-    await openUpdateModal();
-
-    const downloadButton = await screen.findByText('update.downloadButton');
-    fireEvent.click(downloadButton);
-
-    await waitFor(() => {
-      expect(mocks.ipcBridge.update.download.invoke).toHaveBeenCalledWith({
-        url: latestRelease.recommendedAsset.url,
-        fallbackUrl: latestRelease.recommendedAsset.fallbackUrl,
-        file_name: latestRelease.recommendedAsset.name,
-      });
-    });
+    expect(await screen.findByText('update.errorTitle')).toBeTruthy();
+    expect(screen.getByText('common.retry')).toBeTruthy();
+    expect(screen.queryByText('update.downloadAndInstall')).toBeNull();
     expect(mocks.ipcBridge.autoUpdate.download.invoke).not.toHaveBeenCalled();
   });
 });

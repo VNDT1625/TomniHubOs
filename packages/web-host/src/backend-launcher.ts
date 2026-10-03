@@ -567,6 +567,7 @@ export class BackendLifecycleManager {
       }
       startupSettled = true;
       killBackendProcessTree(this.childProcess, 'SIGKILL');
+      process.removeListener('exit', killOnExit);
       this.childProcess = null;
       this._status = 'error';
       throw healthTimeoutError;

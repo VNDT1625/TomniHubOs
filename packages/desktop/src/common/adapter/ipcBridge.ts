@@ -14,6 +14,7 @@
 
 import type { IConfirmation } from '@/common/chat/chatLib';
 import { bridge } from '@office-ai/platform';
+import './bridgeErrorWrapper';
 import type { OpenDialogOptions } from 'electron';
 import type {
   ICssTheme,
@@ -25,6 +26,7 @@ import type {
 import { assistantChannels } from '../types/agent/assistantChannels';
 import { agentChannels } from '../types/agent/agentChannels';
 import { sessionChannels } from '../types/agent/sessionChannels';
+import type { ChatPipelineDefinition, ChatStageMetadata, PipelineSimulationResult } from '../types/pipeline';
 import type { PreviewHistoryTarget, PreviewSnapshotInfo } from '../types/office/preview';
 import type { PricingRecommendation } from '../pricing/modelPricingAdvisor';
 import type {
@@ -43,6 +45,8 @@ import type {
 } from '../packages';
 
 import { providerChannels } from '../types/provider/providerChannels';
+import { providerOAuthChannels } from '../types/provider/providerOAuthChannels';
+import { modelConsumerChannels } from '../types/provider/modelConsumerChannels';
 import type { SpeechToTextRequest, SpeechToTextResult } from '../types/provider/speech';
 import type {
   ITeamAgentRemovedEvent,
@@ -59,14 +63,7 @@ import type {
   TeamTaskInput,
   TeamWorkspaceGroupInput,
 } from '../types/team/teamTypes';
-import type {
-  AutoUpdateStatus,
-  UpdateCheckRequest,
-  UpdateCheckResult,
-  UpdateDownloadProgressEvent,
-  UpdateDownloadRequest,
-  UpdateDownloadResult,
-} from '../update/updateTypes';
+import type { AutoUpdateStatus } from '../update/updateTypes';
 import type { ApplicablePreset, ResourceBudget, ResourceMode, ResourceState } from '@process/resource/leaseTypes';
 import type { LifecycleHandleRequest, LifecycleHandleSnapshot } from '@process/resource/resourceBridge';
 import type { OmniGatewayProgressEvent } from '@process/omni-gateway/omniGatewayProgress';
@@ -75,6 +72,8 @@ import type { RemoteAccessMode } from '@/common/config/remotePublicUrl';
 import type {
   ContextFact,
   PersonalContext,
+  PersonalLearningCausalChain,
+  PersonalLearningControl,
   PersonalLearningRecord,
   SecretDescriptor,
 } from '@process/agentRuntime/contextTypes';
@@ -242,6 +241,21 @@ export const conversation = {
   resolveNativeOrchestrationProposal: bridge.buildProvider<boolean, { proposal_id: string; approved: boolean }>(
     'conversation.native.resolve-orchestration-proposal'
   ),
+  getPipelineAvailableStages: bridge.buildProvider<ChatStageMetadata[], void>(
+    'conversation.native.pipeline.available-stages'
+  ),
+  getPipelineDefinition: bridge.buildProvider<ChatPipelineDefinition, { conversation_id?: string }>(
+    'conversation.native.pipeline.get'
+  ),
+  updatePipelineDefinition: bridge.buildProvider<
+    boolean,
+    { conversation_id?: string; definition: ChatPipelineDefinition }
+  >('conversation.native.pipeline.update'),
+
+  simulatePipeline: bridge.buildProvider<
+    PipelineSimulationResult,
+    { definition: ChatPipelineDefinition; probe_query?: string; initial_context?: string }
+  >('conversation.native.pipeline.simulate'),
   getSlashCommands: httpGet<Array<{ command: string; description: string }>, { conversation_id: string }>(
     (p) => `/api/conversations/${p.conversation_id}/slash-commands`
   ),
@@ -380,20 +394,6 @@ export interface IStartOnBootStatus {
   platform: string;
 }
 
-/**
- * Default-browser registration status. `supported` is true only where Tomny
- * can register itself as an http/https handler candidate (currently Windows).
- * `isDefault` reflects whether the OS currently routes http/https to Tomny.
- */
-export interface IDefaultBrowserStatus {
-  /** Whether registering as a default-browser candidate is available on this OS. */
-  supported: boolean;
-  /** Whether the OS currently treats Tomny as the default http/https handler. */
-  isDefault: boolean;
-  /** Current OS platform (process.platform). */
-  platform: string;
-}
-
 /** Hardware acceleration / GPU recovery status — see process/utils/gpuRecovery */
 export type IGpuOverride = 'force-on' | 'force-off';
 
@@ -431,14 +431,7 @@ export const application = {
   setStartOnBoot: bridge.buildProvider<IBridgeResponse<IStartOnBootStatus>, { enabled: boolean }>(
     'app.set-start-on-boot'
   ),
-  // Default-browser registration (Windows). getDefaultBrowserStatus reports
-  // whether registration is supported and currently active; setAsDefaultBrowser
-  // registers Tomny as an http/https handler candidate and opens the OS
-  // "default apps" settings so the user can confirm the choice.
-  getDefaultBrowserStatus: bridge.buildProvider<IBridgeResponse<IDefaultBrowserStatus>, void>(
-    'app.get-default-browser-status'
-  ),
-  setAsDefaultBrowser: bridge.buildProvider<IBridgeResponse<IDefaultBrowserStatus>, void>('app.set-as-default-browser'),
+
   getGpuStatus: bridge.buildProvider<IBridgeResponse<IGpuStatus>, void>('app.get-gpu-status'),
   setGpuOverride: bridge.buildProvider<IBridgeResponse<IGpuStatus>, { override: IGpuOverride | null }>(
     'app.set-gpu-override'
@@ -455,9 +448,6 @@ export const application = {
 
 export const update = {
   open: bridge.buildEmitter<{ source?: 'menu' | 'about' }>('update.open'),
-  check: bridge.buildProvider<IBridgeResponse<UpdateCheckResult>, UpdateCheckRequest>('update.check'),
-  download: bridge.buildProvider<IBridgeResponse<UpdateDownloadResult>, UpdateDownloadRequest>('update.download'),
-  downloadProgress: bridge.buildEmitter<UpdateDownloadProgressEvent>('update.download.progress'),
 };
 
 export const autoUpdate = {
@@ -556,9 +546,8 @@ export const fs = {
     }>,
     void
   >('native-skills.list'),
-  listBuiltinAutoSkills: httpGet<Array<{ name: string; description: string; location: string }>, void>(
-    '/api/skills/builtin-auto'
-  ),
+  listBuiltinAutoSkills: stubProvider('listBuiltinAutoSkills', []),
+
   materializeSkillsForAgent: bridge.buildProvider<
     { skills: Array<{ name: string; source_path: string }> },
     { conversation_id: string; skills: string[] }
@@ -720,6 +709,11 @@ export const bedrock = {
 // ---------------------------------------------------------------------------
 
 export const mode = providerChannels;
+/** Main-owned provider OAuth controls; tokens never cross this bridge. */
+export const providerOAuth = providerOAuthChannels;
+
+/** Account-bound gateway consumer credentials; plaintext is returned only on issue. */
+export const modelConsumers = modelConsumerChannels;
 
 // ---------------------------------------------------------------------------
 // Personal Context — native Core profile plus opaque multi-variable secret sets
@@ -740,13 +734,18 @@ export type PersonalLearningProposeRequest = {
   fact: ContextFact;
   explanation: string;
   provenance: string;
+  causal: PersonalLearningCausalChain;
 };
 
 export type PersonalLearningRecordIdRequest = { recordId: string };
 
+/** Explicit user action only; Main validates the exact one-field request. */
+export type PersonalLearningControlRequest = { paused: boolean };
+
 export type PersonalLearningCorrectRequest = PersonalLearningRecordIdRequest & {
   fact: ContextFact;
   explanation: string;
+  causal: PersonalLearningCausalChain;
 };
 
 export type PersonalLearningOutcomeRequest = PersonalLearningRecordIdRequest & {
@@ -759,6 +758,9 @@ export type PersonalContextExport = Omit<PersonalContext, 'secretReferences'>;
 export const personal = {
   get: bridge.buildProvider<PersonalContext, void>('personal-context.get'),
   save: bridge.buildProvider<PersonalContext, { profile: PersonalContext }>('personal-context.save'),
+  setLearningPaused: bridge.buildProvider<PersonalLearningControl, PersonalLearningControlRequest>(
+    'personal-context.learning.set-paused'
+  ),
   proposeLearning: bridge.buildProvider<PersonalLearningRecord, PersonalLearningProposeRequest>(
     'personal-context.learning.propose'
   ),
@@ -1007,6 +1009,8 @@ export const windowControls = {
   maximize: bridge.buildProvider<void, void>('window-controls:maximize'),
   unmaximize: bridge.buildProvider<void, void>('window-controls:unmaximize'),
   close: bridge.buildProvider<void, void>('window-controls:close'),
+
+  restart: bridge.buildProvider<void, void>('window-controls:restart'),
   isMaximized: bridge.buildProvider<boolean, void>('window-controls:is-maximized'),
   maximizedChanged: bridge.buildEmitter<{ is_maximized: boolean }>('window-controls:maximized-changed'),
 };
@@ -1036,6 +1040,10 @@ export const systemSettings = {
   setAutoPreviewOfficeFiles: bridge.buildProvider<void, { enabled: boolean }>(
     'system-settings:set-auto-preview-office-files'
   ),
+  getPromptTimeout: bridge.buildProvider<number, void>('system-settings:get-prompt-timeout'),
+  setPromptTimeout: bridge.buildProvider<void, { seconds: number }>('system-settings:set-prompt-timeout'),
+  getAgentIdleTimeout: bridge.buildProvider<number, void>('system-settings:get-agent-idle-timeout'),
+  setAgentIdleTimeout: bridge.buildProvider<void, { minutes: number }>('system-settings:set-agent-idle-timeout'),
   getPetEnabled: bridge.buildProvider<boolean, void>('system-settings:get-pet-enabled'),
   setPetEnabled: bridge.buildProvider<void, { enabled: boolean }>('system-settings:set-pet-enabled'),
   getPetSize: bridge.buildProvider<number, void>('system-settings:get-pet-size'),
@@ -1044,6 +1052,12 @@ export const systemSettings = {
   setPetDnd: bridge.buildProvider<void, { dnd: boolean }>('system-settings:set-pet-dnd'),
   getPetConfirmEnabled: bridge.buildProvider<boolean, void>('system-settings:get-pet-confirm-enabled'),
   setPetConfirmEnabled: bridge.buildProvider<void, { enabled: boolean }>('system-settings:set-pet-confirm-enabled'),
+  getClientConfig: bridge.buildProvider<Record<string, unknown>, void>('system-settings:get-client-config'),
+  setClientConfig: bridge.buildProvider<void, { key: string; value: unknown }>('system-settings:set-client-config'),
+  removeClientConfig: bridge.buildProvider<void, { key: string }>('system-settings:remove-client-config'),
+  setBatchClientConfig: bridge.buildProvider<void, { entries: Record<string, unknown> }>(
+    'system-settings:set-batch-client-config'
+  ),
 };
 
 // ---------------------------------------------------------------------------
@@ -1726,7 +1740,7 @@ export const extensions = {
   getAcpAdapters: httpGet<Record<string, unknown>[], void>('/api/extensions/acp-adapters'),
 
   getSkills: httpGet<Array<{ name: string; description: string; location: string }>, void>('/api/extensions/skills'),
-  getSettingsTabs: httpGet<IExtensionSettingsTab[], void>('/api/extensions/settings-tabs'),
+  getSettingsTabs: stubProvider('getSettingsTabs', []),
   getWebuiContributions: httpGet<IExtensionWebuiContribution[], void>('/api/extensions/webui'),
   getAgentActivitySnapshot: httpGet<IExtensionAgentActivitySnapshot, void>('/api/extensions/agent-activity'),
   getExtI18nForLocale: httpPost<Record<string, unknown>, { locale: string }>('/api/extensions/i18n'),

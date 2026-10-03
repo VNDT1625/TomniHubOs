@@ -9,7 +9,7 @@
  * an `sse` server entry pointing at its loopback URL — so an agent (Claude Code
  * / ACP, tomnyagentic, …) can connect and drive the live embedded browser.
  *
- * Mirrors `process/testing/registerTestingMcp.ts`. The catalog entry is created
+ * Uses the bounded registration pattern shared by other built-in MCP hosts. The catalog entry is created
  * `enabled: false` (not auto-attached to every new chat): it is the
  * per-conversation **"Super"** toggle that opts a conversation into this server
  * (the renderer adds it to that conversation's `selected_session_mcp_servers`).
@@ -19,8 +19,8 @@
  */
 
 import { getMcpRegistry } from '@process/resources/mcpRegistry';
-import { BUILTIN_BROWSER_CONTROL_NAME } from '../resources/builtinMcp/browserControlServer';
-import { getApplicationMainWindow } from '../bridge/applicationBridge';
+import { BUILTIN_BROWSER_CONTROL_NAME } from './browserControlServer';
+import { getApplicationMainWindow } from '@process/bridge/applicationBridge';
 import { startBrowserControl } from './browserControlWiring';
 
 /** Human description shown in the MCP catalog / tools picker. */

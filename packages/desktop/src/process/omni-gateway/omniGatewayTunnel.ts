@@ -27,7 +27,7 @@ import {
   startTunnel,
   stopTunnel,
   type TunnelResult,
-} from '@process/studio/cloudflareTunnel';
+} from '@process/services/remoteGateway/cloudflareTunnel';
 import type { OmniGatewayProgressPhase } from './omniGatewayProgress';
 
 /** Key passed to the underlying tunnel map so we own exactly ONE tunnel. */

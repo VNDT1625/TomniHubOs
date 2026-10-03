@@ -7,8 +7,8 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { toCsv, toJson } from '@/process/ide/db/dbExport';
-import type { DbQueryResult } from '@/process/ide/db/dbTypes';
+import { toCsv, toJson } from '@package-apps/ide/process/data/db/dbExport';
+import type { DbQueryResult } from '@package-apps/ide/process/data/db/dbTypes';
 
 const result = (over: Partial<DbQueryResult> = {}): DbQueryResult => ({
   columns: ['id', 'name'],

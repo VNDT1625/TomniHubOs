@@ -11,8 +11,8 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createPremiumStarterProject } from '@/common/viu';
-import LayoutInspector from '@/renderer/pages/studio/ide/Viu/next/authoring/LayoutInspector';
-import type { ViuLayoutInspectorLabels } from '@/renderer/pages/studio/ide/Viu/next/authoring/types';
+import LayoutInspector from '@package-apps/design/renderer/viu/next/authoring/LayoutInspector';
+import type { ViuLayoutInspectorLabels } from '@package-apps/design/renderer/viu/next/authoring/types';
 
 const labels = new Proxy(
   {},

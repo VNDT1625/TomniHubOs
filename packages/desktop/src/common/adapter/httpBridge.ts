@@ -33,11 +33,23 @@ declare global {
  *   will still fail cleanly with ECONNREFUSED rather than masking the bug.
  */
 function getBackendPort(): number {
-  if (typeof window !== 'undefined' && (window as Window).__backendPort) {
-    return (window as Window).__backendPort as number;
+  if (typeof window !== 'undefined') {
+    const dynamicPort = (
+      window as Window & { electronAPI?: { getBackendPort?: () => number } }
+    ).electronAPI?.getBackendPort?.();
+    if (typeof dynamicPort === 'number' && dynamicPort > 0) {
+      return dynamicPort;
+    }
+    const staticPort = (window as Window).__backendPort;
+    if (typeof staticPort === 'number' && staticPort > 0) {
+      return staticPort;
+    }
   }
   const g = globalThis as typeof globalThis & { __backendPort?: number };
-  return g.__backendPort ?? 13400;
+  if (typeof g.__backendPort === 'number' && g.__backendPort > 0) {
+    return g.__backendPort;
+  }
+  throw new Error('Backend port is unavailable. The model gateway or backend has not started.');
 }
 
 /**
@@ -46,7 +58,12 @@ function getBackendPort(): number {
  * proxy / WS upgrade to the backend.
  */
 function isWebUiBrowserMode(): boolean {
-  return typeof window !== 'undefined' && typeof document !== 'undefined' && !(window as Window).__backendPort;
+  return (
+    typeof window !== 'undefined' &&
+    typeof document !== 'undefined' &&
+    !(window as Window & { electronAPI?: unknown }).electronAPI &&
+    !(window as Window).__backendPort
+  );
 }
 
 export function getBaseUrl(): string {

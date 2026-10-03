@@ -12,10 +12,13 @@ import path from 'node:path';
 import semver from 'semver';
 import {
   isPackageCompatible,
+  parseCommerceOrderLifecycle,
   parsePackageManifest,
+  parseProductOffer,
   PackageOperationError,
   resolvePackageDependencyResult,
   toPackageOperationFailure,
+  type CommerceOrderLifecycle,
   type InstalledPackageRecord,
   type PackageCatalogEntry,
   type PackageAsset,
@@ -43,10 +46,39 @@ import {
 import { JsonPackageStateStore, type PackageStateStore } from './packageStore';
 import { downloadPackageArtifact } from './packageDownloader';
 import { PackageContributionRegistry, PackageContributionRegistryError } from './contributionRegistry';
+import { retainVerifiedRemoteStoreArtifactBinding, verifiedRemoteStoreArtifactBindingFor } from './remoteCatalog';
 
 export type PackageSandboxMutationLease = {
   release: () => void;
 };
+
+/**
+ * Main-only authorization to execute one already-verified package payload file.
+ * This must never be sent through IPC or exposed to a renderer.
+ */
+export type PackageRuntimeEntryLease = Readonly<{
+  entryPath: string;
+  identity: Readonly<{
+    packageId: string;
+    packageVersion: string;
+    publisherId: string;
+    artifactIntegrity: string;
+  }>;
+  release: () => void;
+}>;
+
+/**
+ * Main-process Store admission input. It is deliberately separate from package
+ * signature, trust, permission, and sandbox evaluation.
+ */
+export type PaidPackageActivationAdmission = Readonly<{
+  lifecycle: unknown;
+}>;
+
+export type PaidPackageActivationRequirement = Readonly<{
+  accountId: string;
+  offerId: string;
+}>;
 
 export type PackageManagerServiceDeps = {
   rootDir: string;
@@ -61,9 +93,25 @@ export type PackageManagerServiceDeps = {
   readAssetFile?: (assetPath: string) => Promise<string>;
   resolveArtifactUrl?: (url: string) => string;
   allowLocalArtifactUrls?: boolean;
+  /** Optional Main-owned local artifact transport for isolated development profiles. */
+  readArtifactBytes?: (url: string) => Promise<Buffer | undefined>;
   contributionHostApiVersion?: string;
   isPackageSandboxActive?: (packageId: string) => boolean | Promise<boolean>;
   reservePackageSandboxMutation?: (packageId: string) => PackageSandboxMutationLease | undefined;
+  /** Force-invalidates all active sandbox runtimes when a signed Store revocation is reconciled. */
+  revokePackageSandbox?: (packageId: string) => void | Promise<void>;
+  /**
+   * Stops Main-owned persistent package endpoints before a payload mutation waits
+   * for their verified artifact-read leases. This is not a package callback.
+   */
+  quiescePackageRuntime?: (packageId: string) => Promise<void>;
+  /** Restores an unchanged admitted endpoint when its requested mutation fails. */
+  resumePackageRuntime?: (packageId: string) => Promise<void>;
+  /**
+   * Declares the commercial owner and offer for a paid package. Returning
+   * undefined keeps the package on the ordinary free activation path.
+   */
+  paidPackageActivationRequirement?: (entry: PackageCatalogEntry) => PaidPackageActivationRequirement | undefined;
 
   catalogLoader?: () => Promise<readonly PackageCatalogEntry[]>;
 };
@@ -75,13 +123,18 @@ export type PackageManagerService = {
   list: (filter?: PackageListFilter) => Promise<PackageListing[]>;
   search: (request: PackageSearchRequest) => Promise<PackageListing[]>;
   status: (id: string) => Promise<PackageListing>;
-  install: (id: string) => Promise<PackageListing>;
-  enable: (id: string) => Promise<PackageListing>;
+  install: (id: string, admission?: PaidPackageActivationAdmission) => Promise<PackageListing>;
+  enable: (id: string, admission?: PaidPackageActivationAdmission) => Promise<PackageListing>;
   disable: (id: string) => Promise<PackageListing>;
   rollback: (id: string) => Promise<PackageListing>;
   uninstall: (id: string) => Promise<PackageListing>;
   contributions: () => Promise<PackageContributionState>;
   readAsset: (id: string, assetPath: string) => Promise<PackageAsset>;
+  /**
+   * Main-only lease for a fixed host registry entry. Callers must never accept
+   * the path from a package manifest, renderer, or other untrusted input.
+   */
+  acquireVerifiedRuntimeEntry: (id: string, assetPath: string) => Promise<PackageRuntimeEntryLease>;
   onStateChanged: (listener: (event: PackageStateChangedEvent) => void) => () => void;
   onContributionsChanged: (listener: (event: PackageContributionChangedEvent) => void) => () => void;
 };
@@ -115,6 +168,7 @@ const PACKAGE_PUBLIC_ERROR_CODES = new Set<PackagePublicErrorCode>([
   'PACKAGE_CORE_REPAIR_REQUIRED',
   'PACKAGE_OPERATION_FAILED',
   'PACKAGE_QUARANTINED',
+  'PACKAGE_CATALOG_REVOKED',
 ]);
 
 const publicErrorCode = (
@@ -131,6 +185,88 @@ const publicErrorCode = (
 const MAX_RUNTIME_ASSET_BYTES = 50 * 1024 * 1024;
 const MAX_CONCURRENT_RUNTIME_ASSET_READS = 4;
 
+const REVIEW_FINGERPRINT = /^sha256-[a-f0-9]{64}$/;
+const REVIEWER_ID = /^[A-Za-z0-9][A-Za-z0-9._:@/-]{2,127}$/;
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const hasOnlyKeys = (value: Record<string, unknown>, keys: readonly string[]): boolean => {
+  const actualKeys = Object.keys(value);
+  return actualKeys.length === keys.length && actualKeys.every((key) => keys.includes(key));
+};
+
+/**
+ * Paid downloaded artifacts must carry the exact Store-root-signed review
+ * decision that the remote catalog parser accepted. This repeats a strict
+ * boundary check before activation because persisted/static catalog input is
+ * still untrusted at this execution seam.
+ */
+const assertTrustedPaidArtifactPublicationReview = (entry: PackageCatalogEntry): void => {
+  const review: unknown = entry.publicationReview;
+  if (
+    !isRecord(review) ||
+    review.schemaVersion !== 2 ||
+    typeof review.fingerprint !== 'string' ||
+    !REVIEW_FINGERPRINT.test(review.fingerprint) ||
+    typeof review.artifactIntegrity !== 'string' ||
+    review.artifactIntegrity !== entry.manifest.artifact?.integrity ||
+    typeof review.reviewedAt !== 'string' ||
+    !Number.isFinite(Date.parse(review.reviewedAt))
+  ) {
+    throw new Error('Paid package ' + entry.manifest.id + ' has no valid trusted Store publication review.');
+  }
+  if (
+    review.disposition === 'auto-approved' &&
+    hasOnlyKeys(review, ['schemaVersion', 'disposition', 'fingerprint', 'artifactIntegrity', 'reviewedAt'])
+  ) {
+    return;
+  }
+  if (
+    review.disposition === 'human-approved' &&
+    hasOnlyKeys(review, [
+      'schemaVersion',
+      'disposition',
+      'fingerprint',
+      'artifactIntegrity',
+      'reviewedAt',
+      'reviewerId',
+    ]) &&
+    typeof review.reviewerId === 'string' &&
+    REVIEWER_ID.test(review.reviewerId)
+  ) {
+    return;
+  }
+  throw new Error('Paid package ' + entry.manifest.id + ' has no valid trusted Store publication review.');
+};
+
+const assertEntryNotRevoked = (entry: PackageCatalogEntry): void => {
+  if (entry.revocation) throw new Error(`Package ${entry.manifest.id} has been revoked by the Store catalog.`);
+};
+
+/** A catalog revocation is bound to a signed artifact, never just a mutable package identity. */
+const isExactRevokedArtifact = (catalogManifest: PackageManifest, installedManifest: PackageManifest): boolean =>
+  catalogManifest.artifact !== undefined &&
+  installedManifest.artifact !== undefined &&
+  packageArtifactManifestsMatch(catalogManifest, installedManifest);
+
+/**
+ * Store search must only promote a locally usable package after the query has
+ * already matched it. A disabled, incompatible, or unhealthy installation is
+ * still a search result, but is not a ready local Surface.
+ */
+const isReadyInstalledSearchResult = (listing: PackageListing): boolean =>
+  listing.state === 'installed' && listing.enabled && listing.compatible && listing.lastError === undefined;
+
+const compareSearchResults = (left: PackageListing, right: PackageListing): number => {
+  const readinessDifference = Number(isReadyInstalledSearchResult(right)) - Number(isReadyInstalledSearchResult(left));
+  if (readinessDifference !== 0) return readinessDifference;
+
+  const nameDifference = left.manifest.name.localeCompare(right.manifest.name);
+  if (nameDifference !== 0) return nameDifference;
+  return left.manifest.id.localeCompare(right.manifest.id);
+};
+
 export const createPackageManagerService = (deps: PackageManagerServiceDeps): PackageManagerService => {
   if (!path.isAbsolute(deps.rootDir)) throw new Error('Package root directory must be absolute.');
   if (!semver.valid(deps.appVersion)) throw new Error(`Invalid Tomni version: ${deps.appVersion}`);
@@ -139,8 +275,22 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
   const replaceCatalog = (rawEntries: readonly PackageCatalogEntry[]): void => {
     const next = new Map<string, PackageCatalogEntry>();
     for (const rawEntry of rawEntries) {
-      const entry = { ...rawEntry, manifest: parsePackageManifest(rawEntry.manifest) };
+      const manifest = parsePackageManifest(rawEntry.manifest);
+      const offer = rawEntry.offer === undefined ? undefined : parseProductOffer(rawEntry.offer);
+      const entry = retainVerifiedRemoteStoreArtifactBinding(rawEntry, {
+        ...rawEntry,
+        manifest,
+        ...(offer ? { offer } : {}),
+      });
       if (next.has(entry.manifest.id)) throw new Error(`Duplicate package catalog id: ${entry.manifest.id}`);
+      if (
+        offer !== undefined &&
+        (offer.package.packageId !== manifest.id ||
+          offer.package.packageVersion !== manifest.version ||
+          offer.package.publisherId !== manifest.publisherId)
+      ) {
+        throw new Error(`Package ${manifest.id} has an offer for a different package identity.`);
+      }
       if (
         entry.delivery === 'downloaded-package' &&
         entry.trust !== 'signed-store' &&
@@ -150,6 +300,14 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
       }
       if (entry.installScope && entry.installScope !== 'core' && entry.installScope !== 'optional') {
         throw new Error(`Package ${entry.manifest.id} has an invalid installation scope.`);
+      }
+      if (
+        entry.revocation &&
+        (entry.revocation.schemaVersion !== 1 ||
+          !/^[A-Z][A-Z0-9_]{2,63}$/.test(entry.revocation.reasonCode) ||
+          !Number.isFinite(Date.parse(entry.revocation.revokedAt)))
+      ) {
+        throw new Error(`Package ${entry.manifest.id} has an invalid catalog revocation.`);
       }
       next.set(entry.manifest.id, entry);
     }
@@ -222,6 +380,7 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
       manifest: installed.manifest,
       delivery: installed.delivery,
       trust: installed.trust,
+      ...(installed.publicationReview ? { publicationReview: installed.publicationReview } : {}),
       installScope: installed.provenance?.scope,
     };
   };
@@ -245,6 +404,59 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
     return entry;
   };
 
+  /**
+   * Commercial admission is evaluated before an install or enable mutation and
+   * never changes the technical package admission path.
+   */
+  const assertPaidPackageActivationAdmission = (
+    entry: PackageCatalogEntry,
+    admission: PaidPackageActivationAdmission | undefined
+  ): void => {
+    const requirement = deps.paidPackageActivationRequirement?.(entry);
+    const catalogRequiresPurchase = entry.offer?.active === true && entry.offer.price.amountMinor > 0;
+    if (requirement === undefined && !catalogRequiresPurchase) return;
+    if (requirement === undefined) {
+      throw new Error(`Paid package ${entry.manifest.id} has no account-bound Store commercial authority.`);
+    }
+    if (admission === undefined) {
+      throw new Error(`Paid package ${entry.manifest.id} requires an active Store acquisition grant.`);
+    }
+
+    let lifecycle: CommerceOrderLifecycle;
+    try {
+      lifecycle = parseCommerceOrderLifecycle(admission.lifecycle);
+    } catch {
+      throw new Error(`Paid package ${entry.manifest.id} has invalid Store commercial admission.`);
+    }
+    const grant = lifecycle.activeGrant;
+    const entitlement = lifecycle.entitlement;
+    const packageMatches = (identity: typeof lifecycle.order.offer.package): boolean =>
+      identity.packageId === entry.manifest.id &&
+      identity.packageVersion === entry.manifest.version &&
+      identity.publisherId === entry.manifest.publisherId;
+    const expired = (timestamp: string | undefined): boolean =>
+      timestamp !== undefined && Date.parse(timestamp) <= now();
+
+    if (
+      lifecycle.order.state !== 'paid' ||
+      entitlement?.state !== 'active' ||
+      grant === undefined ||
+      grant.accountId !== requirement.accountId ||
+      grant.offerId !== requirement.offerId ||
+      !packageMatches(lifecycle.order.offer.package) ||
+      !packageMatches(entitlement.package) ||
+      !packageMatches(grant.package) ||
+      grant.entitlementId !== entitlement.entitlementId ||
+      expired(entitlement.expiresAt) ||
+      expired(grant.expiresAt)
+    ) {
+      throw new Error(`Paid package ${entry.manifest.id} lacks an active Store acquisition grant.`);
+    }
+    if (entry.delivery === 'downloaded-package') {
+      assertTrustedPaidArtifactPublicationReview(entry);
+    }
+  };
+
   const listingFor = (entry: PackageCatalogEntry): PackageListing => {
     const installed = stateStore.get(entry.manifest.id);
     const transient = transientStates.get(entry.manifest.id);
@@ -253,10 +465,16 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
       manifest: structuredClone(entry.manifest),
       delivery: entry.delivery,
       trust: entry.trust,
+      ...(entry.offer ? { offer: structuredClone(entry.offer) } : {}),
+      ...(entry.publicationReview ? { publicationReview: structuredClone(entry.publicationReview) } : {}),
+      ...(entry.revocation ? { revoked: true } : {}),
       state: transient ?? installed?.state ?? 'available',
       ...(installed?.version ? { installedVersion: installed.version } : {}),
       ...(installed?.manifest ? { installedManifest: structuredClone(installed.manifest) } : {}),
       ...(installed?.trust ? { installedTrust: installed.trust } : {}),
+      ...(installed?.publicationReview
+        ? { installedPublicationReview: structuredClone(installed.publicationReview) }
+        : {}),
       ...(installed?.previousVersion ? { previousVersion: installed.previousVersion } : {}),
       updateAvailable: installed?.state === 'installed' && semver.gt(entry.manifest.version, installed.version),
       compatible: isPackageCompatible(entry.manifest, deps.appVersion),
@@ -333,10 +551,14 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
       return;
     }
     const record = stateStore.get(packageId);
+    // Only downloaded packages own payload directories. A stale transaction entry
+    // must not manufacture package storage for a bundled or legacy record.
+    if (!record || record.delivery !== 'downloaded-package') {
+      await safeRemove(trashed, trashDir);
+      return;
+    }
     const target = wholePackage ? path.join(packagesDir, packageId) : path.join(packagesDir, packageId, version!);
-    const shouldRestore = wholePackage
-      ? record !== undefined
-      : record?.version === version || record?.previousVersion === version;
+    const shouldRestore = wholePackage || record.version === version || record.previousVersion === version;
     if (shouldRestore && !(await exists(target))) {
       await mkdir(path.dirname(target), { recursive: true });
       await rename(trashed, target);
@@ -445,8 +667,37 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
       await recoverTrashedPackage(trashed);
     }
 
+    // A process can terminate after moving a verified payload into `packages/`
+    // but before the durable install record is written. Nothing without a
+    // downloaded-package record owns a payload directory after restart.
+    const registeredDownloadedPackageIds = new Set(
+      stateStore
+        .list()
+        .filter((record) => record.delivery === 'downloaded-package')
+        .map((record) => record.id)
+    );
+    for (const entry of await readdir(packagesDir, { withFileTypes: true })) {
+      if (!entry.isDirectory() || !registeredDownloadedPackageIds.has(entry.name)) {
+        await safeRemove(path.join(packagesDir, entry.name), packagesDir);
+      }
+    }
+
     for (const record of stateStore.list()) {
       if (record.delivery !== 'downloaded-package') continue;
+      const ownedVersions = new Set(
+        [record.version, record.previousVersion].filter((version): version is string => version !== undefined)
+      );
+      const packageRoot = path.join(packagesDir, record.id);
+      if (await exists(packageRoot)) {
+        for (const entry of await readdir(packageRoot, { withFileTypes: true })) {
+          // Version directories are owned exclusively by this record. A crash after
+          // payload promotion but before the state commit must not leave a newer
+          // executable artifact reachable from the durable package root.
+          if (entry.isDirectory() && semver.valid(entry.name) !== null && !ownedVersions.has(entry.name)) {
+            await safeRemove(path.join(packageRoot, entry.name), packageRoot);
+          }
+        }
+      }
       const previousVersion = record.previousVersion;
       try {
         const activePayload = await reconcileOwnedPayload(record, record.version, {
@@ -514,7 +765,9 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
           previousManifest: _previousManifest,
           previousProvenance: _previousProvenance,
           previousTrust: _previousTrust,
+          previousPublicationReview: _previousPublicationReview,
           previousVersion: _previousVersion,
+          publicationReview: _publicationReview,
           ...previousRecord
         } = record;
         await stateStore.save({
@@ -524,6 +777,9 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
           manifest: previousPayload.manifest,
           trust: previousPayload.trust,
           provenance: previousPayload.provenance,
+          ...(record.previousPublicationReview
+            ? { publicationReview: structuredClone(record.previousPublicationReview) }
+            : {}),
         });
         clearReconciliationDiagnostic(record.id);
       } catch {
@@ -583,11 +839,98 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
     throw verificationError;
   };
 
+  /**
+   * Reconcile only an exact installed manifest with a signed catalog entry.
+   * A later non-revoked version remains a distinct artifact and is never
+   * accidentally quarantined by an older revocation notice.
+   */
+  const reconcileCatalogRevocations = async (): Promise<void> => {
+    let changedContributions = false;
+    for (const record of stateStore.list()) {
+      const entry = catalog.get(record.id);
+      const installedManifest = record.manifest;
+      if (!entry?.revocation || !installedManifest || !isExactRevokedArtifact(entry.manifest, installedManifest)) {
+        continue;
+      }
+
+      const hasSandboxRuntime = installedManifest.modules.some(
+        (module: PackageManifest['modules'][number]) => module.runtime === 'sandboxed-web'
+      );
+      if (hasSandboxRuntime && !deps.revokePackageSandbox) {
+        throw new Error(`Cannot apply Store revocation for ${record.id}: sandbox revocation is unavailable.`);
+      }
+      await deps.quiescePackageRuntime?.(record.id);
+      if (hasSandboxRuntime) await deps.revokePackageSandbox!(record.id);
+
+      if (record.state !== 'quarantined' || record.enabled || record.lastError !== 'PACKAGE_CATALOG_REVOKED') {
+        await stateStore.save({
+          ...record,
+          state: 'quarantined',
+          enabled: false,
+          updatedAt: now(),
+          lastError: 'PACKAGE_CATALOG_REVOKED',
+        });
+      }
+      contributionRegistry.remove(record.id);
+      clearContributionDiagnostic(record.id);
+      clearReconciliationDiagnostic(record.id);
+      changedContributions = true;
+      emit(record.id, 'quarantined', 'PACKAGE_CATALOG_REVOKED');
+    }
+    if (changedContributions) emitContributionChanged();
+  };
+
+  /**
+   * A publisher-key withdrawal removes the key from the Main-owned trusted set
+   * before this service receives the refreshed catalog.  Unlike an exact
+   * package revocation, the withdrawn catalog intentionally contains no
+   * admissible entry for that key, so detect installed signatures directly and
+   * stop any active sandbox in the same refresh mutation lane.
+   */
+  const reconcileWithdrawnSigningKeys = async (): Promise<void> => {
+    let changedContributions = false;
+    for (const record of stateStore.list()) {
+      if (record.delivery !== 'downloaded-package') continue;
+      const manifest = record.manifest;
+      const signingKeyId = manifest?.artifact?.signature.keyId;
+      if (!manifest || !signingKeyId || trustedKeys[signingKeyId] !== undefined) continue;
+
+      const hasSandboxRuntime = manifest.modules.some(
+        (module: PackageManifest['modules'][number]) => module.runtime === 'sandboxed-web'
+      );
+      if (hasSandboxRuntime && !deps.revokePackageSandbox) {
+        throw new Error(
+          `Cannot apply Store signing-key withdrawal for ${record.id}: sandbox revocation is unavailable.`
+        );
+      }
+      await deps.quiescePackageRuntime?.(record.id);
+      if (hasSandboxRuntime) await deps.revokePackageSandbox!(record.id);
+
+      if (record.state !== 'quarantined' || record.enabled || record.lastError !== 'PACKAGE_PAYLOAD_INCONSISTENT') {
+        await stateStore.save({
+          ...record,
+          state: 'quarantined',
+          enabled: false,
+          updatedAt: now(),
+          lastError: 'PACKAGE_PAYLOAD_INCONSISTENT',
+        });
+      }
+      contributionRegistry.remove(record.id);
+      clearContributionDiagnostic(record.id);
+      clearReconciliationDiagnostic(record.id);
+      changedContributions = true;
+      emit(record.id, 'quarantined', 'PACKAGE_PAYLOAD_INCONSISTENT');
+    }
+    if (changedContributions) emitContributionChanged();
+  };
+
   const initialize = async (): Promise<void> => {
     await stateStore.initialize();
     if (deps.catalogLoader) replaceCatalog(await deps.catalogLoader());
     reconciliationDiagnostics = [];
     await recoverFilesystem();
+
+    await reconcileCatalogRevocations();
 
     await restoreContributionRegistryFailClosed();
 
@@ -611,25 +954,42 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
       .filter((entry) => !filter.installedOnly || entry.state === 'installed')
       .toSorted((left, right) => left.manifest.name.localeCompare(right.manifest.name));
 
-  const refreshCatalog = async (): Promise<PackageListing[]> => {
-    if (deps.catalogLoader) replaceCatalog(await deps.catalogLoader());
-    return list();
+  const refreshCatalog = (): Promise<PackageListing[]> => {
+    // Catalog revocation shares the same mutation lane as install/enable so an
+    // admitted package cannot race a newly signed deny instruction.
+    const queued = mutationQueue
+      .catch((): undefined => undefined)
+      .then(async (): Promise<PackageListing[]> => {
+        if (deps.catalogLoader) {
+          replaceCatalog(await deps.catalogLoader());
+          await reconcileWithdrawnSigningKeys();
+          await reconcileCatalogRevocations();
+        }
+        return list();
+      });
+    mutationQueue = queued.then(
+      (): undefined => undefined,
+      (): undefined => undefined
+    );
+    return queued;
   };
 
   const search = async (request: PackageSearchRequest): Promise<PackageListing[]> => {
     const query = request.query.trim().toLocaleLowerCase();
     const entries = await list(request);
     if (!query) return entries;
-    return entries.filter(({ manifest }) =>
-      [
-        manifest.id,
-        manifest.name,
-        manifest.description,
-        manifest.publisherId,
-        ...manifest.tags,
-        ...manifest.modules.flatMap((module) => [module.id, module.title, module.surface]),
-      ].some((value) => value.toLocaleLowerCase().includes(query))
-    );
+    return entries
+      .filter(({ manifest }) =>
+        [
+          manifest.id,
+          manifest.name,
+          manifest.description,
+          manifest.publisherId,
+          ...manifest.tags,
+          ...manifest.modules.flatMap((module) => [module.id, module.title, module.surface]),
+        ].some((value) => value.toLocaleLowerCase().includes(query))
+      )
+      .toSorted(compareSearchResults);
   };
 
   const status = async (id: string): Promise<PackageListing> => listingFor(entryFor(id));
@@ -754,6 +1114,84 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
     return operation;
   };
 
+  /**
+   * Retains a reader lease while an approved Main-owned child uses the fixed
+   * runtime entry. It validates the complete installed artifact immediately
+   * before returning the path to close the check-to-execute gap.
+   */
+  const acquireVerifiedRuntimeEntry = async (id: string, assetPath: string): Promise<PackageRuntimeEntryLease> => {
+    if (!/^runtime\/[A-Za-z0-9][A-Za-z0-9_.-]{0,159}\.(?:cjs|mjs|js)$/.test(assetPath)) {
+      throw new Error('Package runtime entry path is invalid.');
+    }
+    const releaseReadLease = acquireAssetReadLease(id);
+    if (!releaseReadLease) {
+      await operations.get(id)?.promise;
+      return acquireVerifiedRuntimeEntry(id, assetPath);
+    }
+
+    let released = false;
+    const release = (): void => {
+      if (released) return;
+      released = true;
+      releaseReadLease();
+    };
+    try {
+      const entry = entryFor(id);
+      const installed = stateStore.get(id);
+      if (!installed || installed.state !== 'installed' || !installed.enabled) {
+        throw new Error(`Package ${id} is not installed and enabled.`);
+      }
+      if (entry.delivery !== 'downloaded-package' && entry.delivery !== 'bundled-package') {
+        throw new Error(`Package ${id} does not expose an executable runtime entry.`);
+      }
+
+      const packageRoot = path.join(packagesDir, id, installed.version);
+      const target = path.resolve(packageRoot, assetPath);
+      if (!isPathInside(packageRoot, target) || target === path.resolve(packageRoot)) {
+        throw new Error('Package runtime entry path is invalid.');
+      }
+      const [resolvedRoot, resolvedTarget, stat] = await Promise.all([
+        realpath(packageRoot),
+        realpath(target),
+        lstat(target),
+      ]);
+      if (!stat.isFile() || stat.isSymbolicLink() || !isPathInside(resolvedRoot, resolvedTarget)) {
+        throw new Error('Package runtime entry is not a safe regular file.');
+      }
+      if (stat.size > MAX_RUNTIME_ASSET_BYTES) throw new Error('Package runtime entry exceeds the size limit.');
+
+      const runtimeManifest = installed.manifest ?? entry.manifest;
+      const expectedArtifact = runtimeManifest.artifact;
+      if (!expectedArtifact) throw new Error(`Package ${id} does not declare runtime artifact integrity.`);
+      try {
+        verifyArtifactSignature(runtimeManifest, trustedKeys);
+        const activeIntegrity = await computeArtifactIntegrity(packageRoot);
+        if (
+          activeIntegrity.integrity !== expectedArtifact.integrity ||
+          activeIntegrity.sizeBytes !== expectedArtifact.sizeBytes
+        ) {
+          throw new Error(`Package ${id} runtime artifact integrity verification failed.`);
+        }
+      } catch (error) {
+        await rejectRuntimeVerificationFailure(installed, error);
+      }
+
+      return Object.freeze({
+        entryPath: resolvedTarget,
+        identity: Object.freeze({
+          packageId: runtimeManifest.id,
+          packageVersion: runtimeManifest.version,
+          publisherId: runtimeManifest.publisherId,
+          artifactIntegrity: expectedArtifact.integrity,
+        }),
+        release,
+      });
+    } catch (error) {
+      release();
+      throw error;
+    }
+  };
+
   const dependencyCandidateFor = (id: string): PackageDependencyResolutionCandidate | undefined => {
     const installed = stateStore.get(id);
     if (installed) {
@@ -791,15 +1229,23 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
     if (!sourceDirectory && entry.artifactUrl) {
       downloadedSource = path.join(downloadsDir, `${entry.manifest.id}-${entry.manifest.version}-${randomId()}`);
       try {
-        await downloadPackageArtifact(
-          deps.resolveArtifactUrl?.(entry.artifactUrl) ?? entry.artifactUrl,
-          downloadedSource,
-          {
-            expectedManifest: entry.manifest,
-            trustedKeys,
-            allowLocalDevelopment: deps.allowLocalArtifactUrls === true,
-          }
-        );
+        const verifiedArtifactBinding = verifiedRemoteStoreArtifactBindingFor(entry);
+        // Development rewrites are intentionally incapable of changing a
+        // signed remote artifact destination. They are retained only for an
+        // explicit local loopback artifact fixture.
+        const artifactUrl =
+          verifiedArtifactBinding === undefined && deps.allowLocalArtifactUrls === true
+            ? (deps.resolveArtifactUrl?.(entry.artifactUrl) ?? entry.artifactUrl)
+            : entry.artifactUrl;
+        await downloadPackageArtifact(artifactUrl, downloadedSource, {
+          expectedManifest: entry.manifest,
+          trustedKeys,
+          allowLocalDevelopment: deps.allowLocalArtifactUrls === true,
+          ...(verifiedArtifactBinding === undefined
+            ? {}
+            : { verifiedRemoteStoreArtifactBinding: verifiedArtifactBinding }),
+          ...(deps.readArtifactBytes === undefined ? {} : { readArtifactBytes: deps.readArtifactBytes }),
+        });
       } catch (error) {
         try {
           await safeRemove(downloadedSource, downloadsDir);
@@ -822,6 +1268,7 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
       throw new Error('Package source must be an absolute directory outside the package installation root.');
     }
 
+    let stage: string | undefined;
     try {
       const sourceManifest = await readArtifactManifest(resolvedSource);
       if (!packageArtifactManifestsMatch(entry.manifest, sourceManifest)) {
@@ -836,7 +1283,7 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
         throw new Error(`Artifact integrity verification failed for ${entry.manifest.id}.`);
       }
 
-      const stage = path.join(stagingDir, `${entry.manifest.id}-${entry.manifest.version}-${randomId()}`);
+      stage = path.join(stagingDir, `${entry.manifest.id}-${entry.manifest.version}-${randomId()}`);
       const target = path.join(packagesDir, entry.manifest.id, entry.manifest.version);
       await copyArtifactSecurely(resolvedSource, stage);
       const stagedIntegrity = await computeArtifactIntegrity(stage);
@@ -881,6 +1328,20 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
         },
         finalize: async () => undefined,
       };
+    } catch (error) {
+      if (stage !== undefined) {
+        try {
+          await safeRemove(stage, stagingDir);
+        } catch (cleanupError) {
+          const aggregateError = new AggregateError(
+            [error, cleanupError],
+            'Package staging failed and cleanup was incomplete.'
+          );
+          aggregateError.cause = error;
+          throw aggregateError;
+        }
+      }
+      throw error;
     } finally {
       if (downloadedSource) {
         await safeRemove(downloadedSource, downloadsDir).catch((error: unknown): void => {
@@ -890,8 +1351,13 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
     }
   };
 
-  const performInstall = async (id: string): Promise<PackageListing> => {
+  const performInstall = async (
+    id: string,
+    admission: PaidPackageActivationAdmission | undefined
+  ): Promise<PackageListing> => {
     const entry = entryFor(id);
+    assertEntryNotRevoked(entry);
+    assertPaidPackageActivationAdmission(entry, admission);
     const existing = stateStore.get(id);
     if (existing?.state === 'installed' && existing.version === entry.manifest.version) {
       if (!existing.provenance) {
@@ -942,6 +1408,9 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
               previousManifest: existing.manifest ? structuredClone(existing.manifest) : undefined,
               previousProvenance: existing.provenance ? structuredClone(existing.provenance) : undefined,
               previousTrust: existing.trust,
+              previousPublicationReview: existing.publicationReview
+                ? structuredClone(existing.publicationReview)
+                : undefined,
             }
           : existing?.previousVersion
             ? {
@@ -951,6 +1420,9 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
                   ? structuredClone(existing.previousProvenance)
                   : undefined,
                 previousTrust: existing.previousTrust,
+                previousPublicationReview: existing.previousPublicationReview
+                  ? structuredClone(existing.previousPublicationReview)
+                  : undefined,
               }
             : {}),
         state: 'installed',
@@ -961,6 +1433,7 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
         manifest: structuredClone(entry.manifest),
         trust: entry.trust,
         provenance: provenanceFor(entry),
+        ...(entry.publicationReview ? { publicationReview: structuredClone(entry.publicationReview) } : {}),
       };
       let artifactTransaction = noArtifactTransaction();
       let durableStateCommitted = false;
@@ -1057,8 +1530,13 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
     return lease;
   };
 
-  const performEnable = async (id: string): Promise<PackageListing> => {
+  const performEnable = async (
+    id: string,
+    admission: PaidPackageActivationAdmission | undefined
+  ): Promise<PackageListing> => {
     const entry = entryFor(id);
+    assertEntryNotRevoked(entry);
+    assertPaidPackageActivationAdmission(entry, admission);
     const installed = stateStore.get(id);
     if (!installed || installed.state !== 'installed') throw new Error(`Package ${id} is not installed.`);
     if (installed.enabled) return listingFor(entry);
@@ -1070,7 +1548,31 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
       throw new Error(`Package ${id} is not compatible with this Tomni version.`);
     const dependencies = resolvePackageDependencyResult(manifest, dependencyCandidateFor, 'activation');
     if (dependencies.ok === false) throw new PackageOperationError(dependencies.error);
-    const next: InstalledPackageRecord = { ...installed, enabled: true, updatedAt: now(), lastError: undefined };
+    let verifiedPayload: Awaited<ReturnType<typeof reconcileOwnedPayload>> | undefined;
+    if (installed.delivery === 'downloaded-package') {
+      try {
+        verifiedPayload = await reconcileOwnedPayload(installed, installed.version, {
+          manifest: installed.manifest,
+          provenance: installed.provenance,
+          trust: installed.trust,
+        });
+      } catch (error) {
+        await rejectRuntimeVerificationFailure(installed, error);
+      }
+    }
+    const next: InstalledPackageRecord = {
+      ...installed,
+      ...(verifiedPayload
+        ? {
+            manifest: verifiedPayload.manifest,
+            trust: verifiedPayload.trust,
+            provenance: verifiedPayload.provenance,
+          }
+        : {}),
+      enabled: true,
+      updatedAt: now(),
+      lastError: undefined,
+    };
     contributionRegistry.validate(next);
     await stateStore.save(next);
     contributionRegistry.register(next);
@@ -1111,6 +1613,7 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
 
   const performRollback = async (id: string): Promise<PackageListing> => {
     const entry = entryFor(id);
+    assertEntryNotRevoked(entry);
     const installed = stateStore.get(id);
     if (!installed || installed.state !== 'installed') throw new Error(`Package ${id} is not installed.`);
     if (!installed.previousVersion) throw new Error(`Package ${id} has no rollback version.`);
@@ -1121,16 +1624,23 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
         provenance: installed.previousProvenance,
         trust: installed.previousTrust,
       });
+      const { publicationReview: _currentPublicationReview, ...installedWithoutCurrentPublicationReview } = installed;
       const next: InstalledPackageRecord = {
-        ...installed,
+        ...installedWithoutCurrentPublicationReview,
         version: installed.previousVersion,
         previousVersion: installed.version,
         previousManifest: installed.manifest ? structuredClone(installed.manifest) : undefined,
         previousProvenance: installed.provenance ? structuredClone(installed.provenance) : undefined,
         previousTrust: installed.trust,
+        previousPublicationReview: installed.publicationReview
+          ? structuredClone(installed.publicationReview)
+          : undefined,
         manifest: previous.manifest,
         trust: previous.trust,
         provenance: previous.provenance,
+        ...(installed.previousPublicationReview
+          ? { publicationReview: structuredClone(installed.previousPublicationReview) }
+          : {}),
         updatedAt: now(),
         lastError: undefined,
       };
@@ -1252,7 +1762,7 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
         return listingFor(entry);
       } catch (error) {
         const restoreArtifact = async (): Promise<void> => {
-          for (const { activePath, trashedPath } of [...trashedPayloads].reverse()) {
+          for (const { activePath, trashedPath } of trashedPayloads.toReversed()) {
             if ((await exists(trashedPath)) && !(await exists(activePath))) {
               await mkdir(path.dirname(activePath), { recursive: true });
               await rename(trashedPath, activePath);
@@ -1320,8 +1830,14 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
     const queued = mutationQueue
       .catch((): undefined => undefined)
       .then(async (): Promise<PackageListing> => {
+        if (kind !== 'enabling') await deps.quiescePackageRuntime?.(id);
         await waitForAssetReadLeases(id);
-        return operation();
+        try {
+          return await operation();
+        } catch (error) {
+          if (kind !== 'enabling') await deps.resumePackageRuntime?.(id);
+          throw error;
+        }
       });
     mutationQueue = queued.then(
       (): undefined => undefined,
@@ -1339,13 +1855,14 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
     list,
     search,
     status,
-    install: (id) => runOperation(id, 'installing', () => performInstall(id)),
-    enable: (id) => runOperation(id, 'enabling', () => performEnable(id)),
+    install: (id, admission) => runOperation(id, 'installing', () => performInstall(id, admission)),
+    enable: (id, admission) => runOperation(id, 'enabling', () => performEnable(id, admission)),
     disable: (id) => runOperation(id, 'disabling', () => performDisable(id)),
     rollback: (id) => runOperation(id, 'rolling-back', () => performRollback(id)),
     uninstall: (id) => runOperation(id, 'uninstalling', () => performUninstall(id)),
     contributions: async () => contributionState(),
     readAsset,
+    acquireVerifiedRuntimeEntry,
     onStateChanged: (listener) => {
       listeners.add(listener);
       return () => listeners.delete(listener);

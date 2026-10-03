@@ -95,6 +95,7 @@ const translations: Record<string, string> = {
   'guid.hubHome.shell.support': 'Support',
   'guid.hubHome.shell.feedback': 'Feedback',
   'guid.hubHome.shell.coreHealthy': 'Tomny Core is healthy',
+
   'guid.hubHome.status.workTitle': 'Work',
   'guid.hubHome.status.notificationsTitle': 'Notifications',
   'guid.hubHome.status.modelsTitle': 'Models',
@@ -148,6 +149,7 @@ vi.mock('@renderer/hooks/context/ThemeContext', () => ({
   }),
 }));
 
+vi.mock('@/renderer/utils/platform', () => ({ isElectronDesktop: () => false }));
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (key: string, options?: { category?: string }) => {
@@ -210,13 +212,20 @@ describe('HubHome', () => {
     const notesButton = await screen.findByRole('button', { name: /NotesLocal notes/ });
     fireEvent.click(notesButton);
 
-    await waitFor(() => expect(onNavigate).toHaveBeenCalledWith('/store/app/com.tomni.notes/notes'));
+    await waitFor(() => expect(onNavigate).toHaveBeenCalledWith('/apps/com.tomni.notes/notes'));
   });
 
   it('renders the supplied composer surface', () => {
     renderHome();
 
     expect(screen.getByTestId('hub-composer')).toBeInTheDocument();
+  });
+
+  it('labels the Core as healthy', () => {
+    renderHome();
+
+    expect(screen.getByText('Tomny Core is healthy')).toBeInTheDocument();
+    expect(screen.queryByText('Tomny Core: Demo mode')).not.toBeInTheDocument();
   });
 
   it('collapses and restores the sidebar from the brand control', () => {

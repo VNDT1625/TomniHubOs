@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { IMAGE_GEN_ENV_KEYS, resolveImageGenerationMcpEnv } from '@/common/config/imageGenerationMcpEnv';
+import {
+  IMAGE_GEN_ENV_KEYS,
+  removeImageGenerationEnvKeys,
+  resolveImageGenerationMcpEnv,
+} from '@/common/config/imageGenerationMcpEnv';
 import type { IProvider } from '@/common/config/storage';
 
 const geminiProvider: IProvider = {
@@ -63,5 +67,18 @@ describe('resolveImageGenerationMcpEnv', () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.reason).toBe('model-not-found');
+  });
+
+  it('removes every legacy image credential field while preserving unrelated child configuration', () => {
+    expect(
+      removeImageGenerationEnvKeys({
+        [IMAGE_GEN_ENV_KEYS.providerId]: 'provider-1',
+        [IMAGE_GEN_ENV_KEYS.platform]: 'gemini',
+        [IMAGE_GEN_ENV_KEYS.baseUrl]: 'https://generativelanguage.googleapis.com',
+        [IMAGE_GEN_ENV_KEYS.apiKey]: 'provider-key',
+        [IMAGE_GEN_ENV_KEYS.model]: 'gemini-image',
+        NODE_OPTIONS: '--no-warnings',
+      })
+    ).toEqual({ NODE_OPTIONS: '--no-warnings' });
   });
 });

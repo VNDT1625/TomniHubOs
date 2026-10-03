@@ -19,14 +19,15 @@ bun run start
 
 ## Choosing scope
 
-Prefer changes that advance one of the two MVP cores:
+Prefer acceptance-sized work that advances the active C0-C6 checkpoint in one of three parallel MVP tracks:
 
 - a governed Hub Agent OS run from request to receipt;
-- trust and user intelligence with explicit user control.
+- Trust and User Intelligence with causal, explicit user control;
+- the Store/package ecosystem, including a clean base and independently installable capabilities.
 
-Local/cloud adapters and package extraction are supporting platform work when they unlock those cores. Optional applications must be changed in their package boundary, not expanded inside the base.
+Managed AI and managed cloud are independently gated usage capabilities. They must not block safe local, BYOK, supported CLI, MCP, user-owned cloud, or Store work. Optional applications must change within their package boundary, not expand inside the base.
 
-For broad tasks, split work according to the [multi-agent master plan](docs/execution/mvp-plan.md). Shared contracts, IPC registration, bootstrap wiring, and database migrations have one owner at a time.
+For broad tasks, follow the [multi-agent master plan](docs/execution/mvp-plan.md). With four total slots, the Integrator owns shared contracts and final integration while three subagents receive exact non-overlapping allowlists; at least one subagent advances or verifies Store/package work until that gate passes. Bootstrap, preload/IPC registration, shared schemas and migrations, generated registries, and canonical status have one Integrator owner at a time.
 
 ## Making changes
 
@@ -63,6 +64,8 @@ node scripts/check-i18n.js
 
 Use contract and integration tests for security, IPC, adapters, packages, persistence, or the run lifecycle. Follow [docs/engineering/testing-and-release.md](docs/engineering/testing-and-release.md) for release evidence.
 
+Evidence reports name the C0-C6 checkpoint, track, current revision, commands and exit codes, passing/total acceptance atoms, blockers, and feature-switch state. Report Core plus Store readiness separately from Full managed-usage readiness; an average percentage cannot hide the least-complete critical track.
+
 ## Commits and pull requests
 
 Commit messages use English Conventional Commits:
@@ -77,10 +80,11 @@ Keep refactors separate from behavioral changes when practical. Do not include A
 
 A pull request must explain:
 
-- user or platform outcome;
-- affected trust and process boundaries;
-- tests and evidence;
-- migration or rollback implications;
+- user or platform outcome and owning canonical document;
+- C0-C6 checkpoint, track, and whether it affects the Core plus Store or Full managed-usage gate;
+- affected trust, process, package, commerce, and billing boundaries;
+- tests, commands, exit codes, and current-revision evidence;
+- migration, rollback, kill-switch, and recovery implications;
 - known gaps, using the canonical status labels.
 
 Use just push instead of direct git push. The command runs the project gates before pushing.

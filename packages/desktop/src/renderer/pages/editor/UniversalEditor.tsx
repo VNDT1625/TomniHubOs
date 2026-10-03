@@ -26,10 +26,15 @@ import { Button, Result, Spin } from '@arco-design/web-react';
 import { Components } from '@icon-park/react';
 import React, { Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
-import { componentForKind, rawTextFallback, type EditorAdapterProps } from './adapterRegistry';
+import {
+  componentForKind,
+  rawTextFallback,
+  type EditorAdapterProps,
+  type EditorAdapterResolver,
+} from './adapterRegistry';
 import { useUniversalEditor, type UseUniversalEditorResult } from './hooks/useUniversalEditor';
 import { type EditorContentMode, type UseEditorFileResult } from './hooks/useEditorFile';
-export type { AdapterComponent, EditorAdapterProps } from './adapterRegistry';
+export type { AdapterComponent, EditorAdapterProps, EditorAdapterResolver } from './adapterRegistry';
 export { registerEditorAdapter, ADAPTER_CONTENT_MODE } from './adapterRegistry';
 export type { EditorFsOverride } from './hooks/useEditorFile';
 
@@ -63,6 +68,11 @@ export type UniversalEditorProps = {
   autoSaveDelayMs?: number;
   /** Called only after a manual or automatic save succeeds. */
   onSaved?: (filePath: string) => void;
+  /**
+   * Optional package-owned adapter resolver. It is scoped to this editor
+   * mount; Core registrations remain the fallback and are never mutated.
+   */
+  adapterResolver?: EditorAdapterResolver;
 };
 
 /** Build the uniform {@link EditorAdapterProps} from the hook result. */
@@ -104,6 +114,7 @@ export const UniversalEditor: React.FC<UniversalEditorProps> = ({
   onDirtyChange,
   autoSaveDelayMs,
   onSaved,
+  adapterResolver,
 }) => {
   const { t } = useTranslation();
   // Reuse a shared controller when provided; otherwise own the file state here.
@@ -111,7 +122,7 @@ export const UniversalEditor: React.FC<UniversalEditorProps> = ({
   // the local instance is simply ignored.
   const own = useUniversalEditor({ filePath, mime, workspace, fsOverride });
   const { kind, mode, readOnly, file } = controller ?? own;
-  const Adapter = componentForKind(kind);
+  const Adapter = adapterResolver?.componentForKind(kind) ?? componentForKind(kind);
   const saveFile = file.save;
 
   const save = React.useCallback(

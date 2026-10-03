@@ -128,3 +128,26 @@ export const normalizeExportFileName = (input: string): string => {
 export const resolveExportBaseDirectory = (workspace?: string, desktopPath?: string): string => {
   return workspace?.trim() || desktopPath?.trim() || '';
 };
+
+export const buildConversationExportJson = (conversation: TChatConversation, messages: TMessage[]): string => {
+  return JSON.stringify(
+    {
+      conversation: {
+        id: conversation.id,
+        name: conversation.name,
+        type: conversation.type,
+        created_at: conversation.created_at,
+      },
+      exported_at: new Date().toISOString(),
+      messages: messages.map((m) => ({
+        id: m.id,
+        role: getMessageRoleKey(m),
+        type: m.type,
+        created_at: m.created_at,
+        content: readMessageContent(m),
+      })),
+    },
+    null,
+    2
+  );
+};

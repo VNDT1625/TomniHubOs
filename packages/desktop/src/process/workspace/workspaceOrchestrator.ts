@@ -61,8 +61,12 @@ export type RunWorkspaceRequest = {
 
 /** Injected dependencies for {@link createWorkspaceOrchestrator}. */
 export type WorkspaceOrchestratorDeps = {
-  /** A runner per surface kind. */
-  runners: Record<SurfaceKind, ISurfaceRunner>;
+  /**
+   * Runners registered by enabled Surface packages. A missing runner is a
+   * deliberate unavailable placement, not a reason for base Workspace to load
+   * an optional application implementation.
+   */
+  runners: Partial<Record<SurfaceKind, ISurfaceRunner>>;
   /** Resource gate. Defaults to the shared application coordinator. */
   coordinator?: IResourceCoordinator;
   /** Unique surface-id generator. Defaults to `crypto.randomUUID`. */
@@ -121,6 +125,14 @@ export const createWorkspaceOrchestrator = (deps: WorkspaceOrchestratorDeps): IW
 
     if (controller.signal.aborted) {
       setStatus('stopped');
+      return;
+    }
+
+    if (!runner) {
+      const message = `Surface kind "${spec.kind}" is unavailable. Install and enable its Package App first.`;
+      state.error = message;
+      setStatus('error');
+      onEvent({ type: 'surface-error', id: state.id, message });
       return;
     }
 

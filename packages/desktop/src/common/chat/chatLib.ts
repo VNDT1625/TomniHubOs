@@ -123,6 +123,8 @@ export type IMessageText = IMessage<
     senderAgentType?: string;
     /** Sender teammate's conversation id — lets the renderer resolve preset avatars via their conversation extras. */
     senderConversationId?: string;
+    canonicalOverride?: boolean;
+    edited?: boolean;
   }
 >;
 
@@ -738,7 +740,7 @@ export const transformMessage = (message: IResponseMessage): TMessage | undefine
         status: 'thinking' | 'done';
       };
       return {
-        id: uuid(),
+        id: message.msg_id || uuid(),
         type: 'thinking',
         msg_id: message.msg_id,
         position: 'left',

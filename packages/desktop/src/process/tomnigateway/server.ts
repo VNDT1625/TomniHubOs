@@ -11,6 +11,7 @@ import path from 'node:path';
 import { WebSocket, WebSocketServer } from 'ws';
 import { assertValidGatewayAuth, authorizeWebSocketProtocols, isHttpAuthorized, isOriginAllowed } from './auth';
 import { handleMcpRoute } from './mcpRoutes';
+import { handleModelRoute } from './modelRoutes';
 import {
   TOMNI_GATEWAY_PROTOCOL,
   type TomniGatewayCollectionName,
@@ -180,11 +181,17 @@ const eventEnvelope = (event: TomniGatewayEvent): string =>
     data: event.data,
   });
 
+const isLoopbackHost = (host: string): boolean => host === '127.0.0.1' || host === 'localhost' || host === '::1';
+
 export const startTomniGateway = async (options: TomniGatewayOptions): Promise<TomniGatewayServer> => {
   assertValidGatewayAuth(options.auth);
   const maxBufferBytes = options.maxWebSocketBufferBytes ?? 1_000_000;
   if (!Number.isSafeInteger(maxBufferBytes) || maxBufferBytes < 1) {
     throw new Error('[TomnyGateway] maxWebSocketBufferBytes must be a positive safe integer.');
+  }
+  const host = options.host ?? '127.0.0.1';
+  if (options.services.model && !isLoopbackHost(host)) {
+    throw new Error('[TomnyGateway] Model ingress requires a loopback host.');
   }
 
   const requestHandler = async (request: IncomingMessage, response: ServerResponse): Promise<void> => {
@@ -216,6 +223,14 @@ export const startTomniGateway = async (options: TomniGatewayOptions): Promise<T
       return;
     }
 
+    // Model ingress uses its own scoped consumer credential, never the gateway session token.
+    if (
+      options.services.model &&
+      (await handleModelRoute({ request, response, url, service: options.services.model, origin }))
+    ) {
+      return;
+    }
+
     if (!isHttpAuthorized(request.headers, options.auth)) {
       response.setHeader('www-authenticate', 'Bearer');
       failure(response, 401, 'UNAUTHORIZED', 'A valid Tomny session token is required.', origin);
@@ -225,6 +240,33 @@ export const startTomniGateway = async (options: TomniGatewayOptions): Promise<T
     if (options.webAuth && url.pathname === '/api/auth/status' && request.method === 'GET') {
       const status = await options.webAuth.status();
       success(response, status, origin);
+      return;
+    }
+
+    if (options.webAuth && url.pathname === '/register' && request.method === 'POST') {
+      try {
+        const body = await readJsonBody(request);
+        const username = typeof body.username === 'string' ? body.username.trim() : '';
+        const password = typeof body.password === 'string' ? body.password : '';
+        if (!username || !password) {
+          webAuthReply(response, 400, { success: false, message: 'Username and password required.' });
+          return;
+        }
+        const result = await options.webAuth.register(username, password);
+        if ('status' in result) {
+          webAuthReply(response, result.status, { success: false, message: 'Registration failed.' });
+          return;
+        }
+        const maxAge = Math.max(0, Math.floor((result.expiresAt - Date.now()) / 1_000));
+        response.setHeader(
+          'set-cookie',
+          `tomni_session=${encodeURIComponent(result.token)}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${maxAge}`
+        );
+        webAuthReply(response, 200, { success: true, user: result.user });
+      } catch (error) {
+        const message = (error as Error).message;
+        webAuthReply(response, 400, { success: false, message: message || 'Registration failed.' });
+      }
       return;
     }
 
@@ -243,6 +285,7 @@ export const startTomniGateway = async (options: TomniGatewayOptions): Promise<T
             success: false,
             message: result.status === 429 ? 'Too many attempts.' : 'Invalid credentials.',
           });
+
           return;
         }
         const maxAge = Math.max(0, Math.floor((result.expiresAt - Date.now()) / 1_000));
@@ -423,8 +466,8 @@ export const startTomniGateway = async (options: TomniGatewayOptions): Promise<T
     }
   });
 
-  const host = options.host ?? '127.0.0.1';
   const port = options.port ?? 0;
+
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject);
     server.listen(port, host, resolve);

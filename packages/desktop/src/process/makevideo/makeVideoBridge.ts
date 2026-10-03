@@ -6,24 +6,24 @@
 
 /**
  * Make Video IPC bridge — the Main-process backend for the AI movie/anime
- * factory. The whole pipeline runs against the user's configured cloud
- * providers: an LLM authors a scene-by-scene script, and a cloud image model
- * renders each scene.
+ * factory. Script completion runs against the user's configured provider;
+ * remote image rendering is intentionally disabled until it can use the same
+ * governed Main execution contract.
  *
  * Like the Studio chat bridge (`process/studio/studioChatBridge.ts`), the
- * renderer cannot call model providers directly (CORS / `webSecurity`), so each
- * request is issued from the Main process against the OpenAI-compatible
- * `/chat/completions` endpoint (script) or via the shared image-generation core
- * (scene images). Provider resolution is lazy so a model added after startup is
- * picked up without a restart.
+ * renderer cannot call model providers directly (CORS / `webSecurity`). Script
+ * completion is delegated to the shared Main-only ProviderExecutionBroker.
+ * Image rendering is fail-closed rather than handing a stored credential to a
+ * legacy image core that lacks the required run, final-egress, lease, and
+ * durable-receipt authority.
  *
  * Channels:
  * - `makevideo.list` / `makevideo.get` / `makevideo.save` / `makevideo.remove`
  *   proxy CRUD to a singleton {@link createMakeVideoStore}.
  * - `makevideo.generate-script` runs one non-streaming LLM completion and parses
  *   a strict JSON array of scenes out of the reply.
- * - `makevideo.generate-image` renders one scene via {@link executeImageGeneration}
- *   and persists the saved image path on the scene.
+ * - `makevideo.generate-image` returns a stable fail-closed error until a
+ *   governed image execution path is available.
  *
  * Every channel resolves a {@link MakeVideoResult} envelope (never rejects) so a
  * failure is observable instead of hanging the renderer (the platform bridge
@@ -37,16 +37,14 @@
 
 import { app } from 'electron';
 import * as path from 'node:path';
-import * as fs from 'node:fs';
+
 import { randomUUID } from 'node:crypto';
 import { bridge } from '@office-ai/platform';
-import { listReadyProviders } from '@process/services/tomnyProviderBridge';
-import type { IProvider, TProviderWithModel } from '@/common/config/storage';
-import { executeImageGeneration } from '@/common/chat/imageGenCore';
-import { runAgentChatMessages } from '@process/services/agentChat';
+
+import { createProviderChat, runAgentChatMessages } from '@process/services/agentChat';
 import { createMakeVideoStore, type IMakeVideoStore } from './makeVideoStore';
 import { parseScenes } from './scriptParse';
-import { isTransientError, withRetry, withStatus } from './retry';
+import { isTransientError, withRetry } from './retry';
 import type {
   ExportFinalData,
   ExportFinalRequest,
@@ -125,50 +123,14 @@ export const makeVideoChannels = {
 };
 
 // ---------------------------------------------------------------------------
-// Provider helpers (mirrors studioChatBridge.ts)
+// Provider helpers for model selection.
 // ---------------------------------------------------------------------------
-
-/** Whether a model id is enabled for a provider (defaults to enabled). */
-const isModelEnabled = (provider: IProvider, model: string): boolean => provider.model_enabled?.[model] !== false;
-
-/** A provider configured enough to issue a call. */
-const isUsable = (p: IProvider): boolean =>
-  p.enabled !== false && Boolean(p.api_key) && Boolean(p.base_url) && Array.isArray(p.models) && p.models.length > 0;
-
-/** Resolve the OpenAI-compatible chat endpoint for a provider (honours "Full URL"). */
-const resolveChatUrl = (provider: IProvider): string => {
-  const base = provider.base_url.replace(/\/+$/, '');
-  return provider.is_full_url ? base : `${base}/chat/completions`;
-};
-
-/** First non-empty API key (the field may hold several, comma/newline-separated). */
-const firstApiKey = (apiKeys: string): string =>
-  apiKeys
-    .split(/[,\n]/)
-    .map((k) => k.trim())
-    .find((k) => k.length > 0) ?? '';
-
-/** Find the provider owning `model` (preferring enabled); else any usable provider/model. */
-const pickForModel = (providers: IProvider[], model: string): { provider: IProvider; model: string } | null => {
-  const usable = providers.filter(isUsable);
-  const owner = usable.find((p) => p.models.includes(model) && isModelEnabled(p, model));
-  if (owner) return { provider: owner, model };
-  for (const provider of usable) {
-    const fallback = provider.models.find((m) => isModelEnabled(provider, m)) ?? provider.models[0];
-    if (fallback) return { provider, model: fallback };
-  }
-  return null;
-};
 
 /** Detect the "no usable model" case so the UI can show a targeted hint. */
 const classify = (error: unknown): 'no-model' | 'error' => {
   const message = error instanceof Error ? error.message : String(error);
   return /no usable model|no model|requires a generator/i.test(message) ? 'no-model' : 'error';
 };
-
-/** Fetch the user's configured providers (empty list on any failure). */
-const loadProviders = async (): Promise<IProvider[]> =>
-  (await listReadyProviders().catch(() => [] as IProvider[])) || [];
 
 // ---------------------------------------------------------------------------
 // Script generation (provider-backed LLM)
@@ -197,87 +159,40 @@ const buildScriptSystemPrompt = (req: ScriptRequest): string =>
  */
 export { parseScenes } from './scriptParse';
 
-/**
- * `fetch` with an abort-based timeout. Combines an optional external signal with
- * an internal deadline so a hung provider never blocks the pipeline past
- * `timeoutMs`. The returned error names the timeout so the retry classifier and
- * the user both get a clear message.
- */
-const fetchWithTimeout = async (
-  url: string,
-  init: RequestInit,
-  timeoutMs: number,
-  external?: AbortSignal
-): Promise<Response> => {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  const onExternalAbort = (): void => controller.abort();
-  external?.addEventListener('abort', onExternalAbort, { once: true });
-  try {
-    return await fetch(url, { ...init, signal: controller.signal });
-  } catch (error) {
-    if (external?.aborted) throw new Error('Request aborted.', { cause: error });
-    if (controller.signal.aborted) {
-      throw new Error(`Model request timed out after ${Math.round(timeoutMs / 1000)}s.`, { cause: error });
-    }
-    throw error;
-  } finally {
-    clearTimeout(timer);
-    external?.removeEventListener('abort', onExternalAbort);
-  }
-};
-
-/** Per-request timeout for one non-streaming script completion (ms). */
-const SCRIPT_REQUEST_TIMEOUT_MS = 120_000;
+/** Provider egress, credentials, actor binding, and destination policy stay in Main's shared broker. */
+const brokeredProviderChat = createProviderChat();
 
 /**
- * Issue one non-streaming completion against the user's configured provider.
- * Routes a `cli:<agentId>` model id to a CLI agent. Throws on failure.
- *
- * Provider resolution happens once; the network call itself is retried with
- * exponential backoff on transient failures (HTTP 429/5xx, network flaps) so a
- * rate limit or gateway blip does not abort a multi-scene generation.
+ * Issue one non-streaming completion through the shared provider broker.
+ * CLI routing still happens in {@link runScript}; this function only handles
+ * ordinary provider model IDs. The existing bounded retry remains in place for
+ * transient broker network and timeout outcomes.
  */
-const runProviderChat = async (model: string, messages: Array<{ role: string; content: string }>): Promise<string> => {
-  const providers = await loadProviders();
-  const selected = pickForModel(providers, model);
-  if (!selected) {
-    throw new Error('No usable model is configured. Open Settings → Model and add a provider/model, then try again.');
-  }
-
-  const url = resolveChatUrl(selected.provider);
-  const apiKey = firstApiKey(selected.provider.api_key);
-
-  return withRetry(
+const runProviderChat = async (
+  model: string,
+  messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
+  signal?: AbortSignal
+): Promise<string> =>
+  withRetry(
     async () => {
-      const response = await fetchWithTimeout(
-        url,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-          body: JSON.stringify({ model: selected.model, messages, stream: false }),
-        },
-        SCRIPT_REQUEST_TIMEOUT_MS
-      );
-
-      if (!response.ok) {
-        const detail = await response.text().catch(() => '');
-        throw withStatus(
-          new Error(`Model request failed (HTTP ${response.status}). ${detail.slice(0, 300)}`),
-          response.status
-        );
+      try {
+        return await brokeredProviderChat({ model, messages, signal });
+      } catch (error) {
+        if (error instanceof Error && error.message === 'PROVIDER_EXECUTION_UNAVAILABLE') {
+          throw new Error(
+            'No usable model is configured. Open Settings → Model and add a provider/model, then try again.'
+          );
+        }
+        throw error;
       }
-
-      const json = (await response.json()) as { choices?: Array<{ message?: { content?: string | null } }> };
-      const content = json.choices?.[0]?.message?.content;
-      if (typeof content !== 'string' || content.length === 0) {
-        throw new Error('The model returned an empty response.');
-      }
-      return content;
     },
-    { isRetriable: isTransientError }
+    {
+      isRetriable: (error) =>
+        isTransientError(error) ||
+        (error instanceof Error && /PROVIDER_EXECUTION_(NETWORK_FAILED|TIMEOUT)/.test(error.message)),
+      signal,
+    }
   );
-};
 
 /**
  * Generate a script: ask the model (provider OR CLI agent) for a JSON scene
@@ -296,7 +211,8 @@ export const runScript = async (req: ScriptRequest): Promise<Scene[]> => {
     },
   ];
   const content = await runAgentChatMessages(
-    (model, msgs) => runProviderChat(model, msgs as Array<{ role: string; content: string }>),
+    (model, msgs, signal) =>
+      runProviderChat(model, msgs as Array<{ role: 'system' | 'user' | 'assistant'; content: string }>, signal),
     req.model,
     messages,
     undefined,
@@ -306,75 +222,20 @@ export const runScript = async (req: ScriptRequest): Promise<Scene[]> => {
 };
 
 // ---------------------------------------------------------------------------
-// Image generation (cloud image model via the shared core)
+// Image generation containment
 // ---------------------------------------------------------------------------
 
-/** Resolve the workspace dir for saved scene images (userData/make-video). */
-const resolveImageWorkspaceDir = async (): Promise<string> => {
-  const dir = path.join(app.getPath('userData'), 'make-video');
-  await fs.promises.mkdir(dir, { recursive: true });
-  return dir;
-};
-
-/** Build the {@link TProviderWithModel} owning `model`, or null when unconfigured. */
-const pickImageProvider = (providers: IProvider[], model: string): TProviderWithModel | null => {
-  const owner = providers.filter(isUsable).find((p) => p.models.includes(model));
-  if (!owner) return null;
-  return {
-    id: owner.id,
-    name: owner.name,
-    platform: owner.platform,
-    base_url: owner.base_url,
-    api_key: firstApiKey(owner.api_key),
-    use_model: model,
-    capabilities: owner.capabilities,
-    context_limit: owner.context_limit,
-    model_protocols: owner.model_protocols,
-    bedrock_config: owner.bedrock_config,
-    enabled: owner.enabled,
-    model_enabled: owner.model_enabled,
-    model_health: owner.model_health,
-    is_full_url: owner.is_full_url,
-  };
-};
-
 /**
- * Render one scene image via the shared {@link executeImageGeneration} core.
- * Returns the saved image path (preferring the structured `imagePath` field,
- * falling back to parsing it out of the human-readable `text`) plus the model
- * description. Throws on hard failures; the caller wraps it into a result.
+ * Remote image rendering is disabled before provider lookup, credential access,
+ * workspace creation, or network transport. A future replacement must bind the
+ * exact request to a Main-owned run identity, final egress inspection,
+ * destination-bound opaque secret lease, cancellation, and durable receipt.
  *
  * Exported so the Automation `action.app.makeVideo` connector can render scenes
- * through the same cloud image pipeline.
+ * through the same future governed image pipeline.
  */
-export const runImage = async (req: GenerateImageRequest): Promise<GenerateImageData> => {
-  const providers = await loadProviders();
-  const provider = pickImageProvider(providers, req.model);
-  if (!provider) {
-    throw new Error(
-      'no-image-model: no usable image generation model is configured. Select an image model in Settings.'
-    );
-  }
-
-  const workspaceDir = await resolveImageWorkspaceDir();
-  const result = await withRetry(() => executeImageGeneration({ prompt: req.prompt }, provider, workspaceDir), {
-    isRetriable: (error) =>
-      // The image core resolves a `{ success:false, error }` instead of throwing
-      // for many failures, so transient retries here only catch thrown network
-      // flaps; the success-flag path is handled below.
-      isTransientError(error),
-  });
-
-  if (!result.success) {
-    throw new Error(result.error || result.text || 'Image generation failed.');
-  }
-
-  // Prefer the structured path; fall back to parsing "saved to: <path>" out of
-  // the human-readable text the core returns.
-  const fromText = result.text.match(/saved to:\s*(.+\.(?:jpg|jpeg|png|gif|webp|bmp|tiff|svg))/i);
-  const imagePath = result.imagePath ?? (fromText ? fromText[1].trim() : null);
-
-  return { imagePath, text: result.text };
+export const runImage = async (_req: GenerateImageRequest): Promise<GenerateImageData> => {
+  throw new Error('MAKEVIDEO_IMAGE_REMOTE_TRANSPORT_DISABLED');
 };
 
 // ---------------------------------------------------------------------------

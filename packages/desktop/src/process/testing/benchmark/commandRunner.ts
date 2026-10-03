@@ -46,6 +46,36 @@ const appendBounded = (current: string, chunk: Buffer | string, limit: number): 
   return current + text.slice(0, remaining);
 };
 
+/**
+ * Avoid a transient cmd.exe parent for a plainly-tokenized Windows executable.
+ * A direct child lets the hard-kill fallback terminate the command even where
+ * taskkill is unavailable; shell syntax still uses the shell/tree-kill path.
+ */
+const tokenizeDirectWindowsCommand = (command: string): string[] | null => {
+  const tokens: string[] = [];
+  let cursor = 0;
+  while (cursor < command.length) {
+    while (/\s/u.test(command[cursor] ?? '')) cursor += 1;
+    if (cursor >= command.length) break;
+    let token = '';
+    if (command[cursor] === '"') {
+      const closingQuote = command.indexOf('"', cursor + 1);
+      if (closingQuote < 0) return null;
+      token = command.slice(cursor + 1, closingQuote);
+      cursor = closingQuote + 1;
+      if (cursor < command.length && !/\s/u.test(command[cursor] ?? '')) return null;
+    } else {
+      const nextWhitespace = command.slice(cursor).search(/\s/u);
+      const end = nextWhitespace < 0 ? command.length : cursor + nextWhitespace;
+      token = command.slice(cursor, end);
+      cursor = end;
+    }
+    if (!token || /[&|<>()^%!]/u.test(token)) return null;
+    tokens.push(token);
+  }
+  return tokens.length > 0 && command.trimStart().startsWith('"') ? tokens : null;
+};
+
 const abortError = (): DOMException => new DOMException('Operation aborted.', 'AbortError');
 
 const throwIfAborted = (signal?: AbortSignal): void => {
@@ -64,11 +94,16 @@ const waitForTaskkill = (pid: number): Promise<void> =>
     killer.once('close', () => resolve());
   });
 
+const isStillRunning = (child: ChildProcess): boolean =>
+  Boolean(child.pid) &&
+  (child.exitCode === null || child.exitCode === undefined) &&
+  (child.signalCode === null || child.signalCode === undefined);
+
 const terminateProcessTree = async (child: ChildProcess): Promise<void> => {
-  if (!child.pid || child.exitCode !== null || child.signalCode !== null) return;
+  if (!isStillRunning(child)) return;
   if (process.platform === 'win32') {
     await waitForTaskkill(child.pid);
-    if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+    if (isStillRunning(child)) child.kill('SIGKILL');
     return;
   }
   try {
@@ -95,14 +130,22 @@ export const runBenchmarkCommand = (
     let timer: ReturnType<typeof setTimeout> | undefined;
     let forceTimer: ReturnType<typeof setTimeout> | undefined;
     let hardLimitTimer: ReturnType<typeof setTimeout> | undefined;
-    const child = spawn(command, {
-      cwd,
-      detached: process.platform !== 'win32',
-      shell: true,
-      windowsHide: true,
-      env: process.env,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
+    const directWindowsCommand = process.platform === 'win32' ? tokenizeDirectWindowsCommand(command) : null;
+    const child = directWindowsCommand
+      ? spawn(directWindowsCommand[0], directWindowsCommand.slice(1), {
+          cwd,
+          windowsHide: true,
+          env: process.env,
+          stdio: ['ignore', 'pipe', 'pipe'],
+        })
+      : spawn(command, {
+          cwd,
+          detached: process.platform !== 'win32',
+          shell: true,
+          windowsHide: true,
+          env: process.env,
+          stdio: ['ignore', 'pipe', 'pipe'],
+        });
 
     const cleanup = (): void => {
       if (timer) clearTimeout(timer);

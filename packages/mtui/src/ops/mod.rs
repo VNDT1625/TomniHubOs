@@ -32,7 +32,10 @@ fn acquire_understand_stale_lock(
     loop {
         match std::fs::create_dir(&lock_path) {
             Ok(()) => return Some(UnderstandStaleLock { path: lock_path }),
-            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+            Err(error)
+                if error.kind() == std::io::ErrorKind::AlreadyExists
+                    || error.kind() == std::io::ErrorKind::PermissionDenied =>
+            {
                 let metadata = std::fs::symlink_metadata(&lock_path).ok();
                 if metadata.as_ref().is_some_and(|entry| entry.is_file()) {
                     // One-time migration from the earlier Rust-only file-lock protocol.
@@ -222,13 +225,17 @@ pub fn delete_file(
         });
     }
 
-    let backup_path =
-        crate::backup::create_backup(project_root, &operation_id, &canonical, &before).map_err(
-            |e| MtuiError::BackupFailed {
-                message: format!("{}", e),
-                suggestion: "Check disk space".to_string(),
-            },
-        )?;
+    let backup_path = crate::backup::create_backup_with_after(
+        project_root,
+        &operation_id,
+        &canonical,
+        &before,
+        None,
+    )
+    .map_err(|e| MtuiError::BackupFailed {
+        message: format!("{}", e),
+        suggestion: "Check disk space".to_string(),
+    })?;
     let diff_path =
         crate::diff::save_diff(project_root, &operation_id, &diff.diff).map_err(|e| {
             MtuiError::DiffFailed {
@@ -1989,11 +1996,12 @@ pub fn line_replace(
     let operation_id = generate_operation_id();
 
     if !dry_run {
-        let backup_path = crate::backup::create_backup(
+        let backup_path = crate::backup::create_backup_with_after(
             project_root,
             &operation_id,
             &canonical,
             content.as_bytes(),
+            Some(final_text.as_bytes()),
         )
         .map_err(|e| MtuiError::BackupFailed {
             message: format!("{}", e),
@@ -2194,11 +2202,12 @@ fn insert_at_marker(
     };
 
     if !dry_run {
-        let backup_path = crate::backup::create_backup(
+        let backup_path = crate::backup::create_backup_with_after(
             project_root,
             &operation_id,
             &canonical,
             content.as_bytes(),
+            Some(new_content.as_bytes()),
         )
         .map_err(|e| MtuiError::BackupFailed {
             message: format!("{}", e),
@@ -2336,11 +2345,12 @@ pub fn delete_text(
     let operation_id = generate_operation_id();
 
     if !dry_run {
-        let backup_path = crate::backup::create_backup(
+        let backup_path = crate::backup::create_backup_with_after(
             project_root,
             &operation_id,
             &canonical,
             content.as_bytes(),
+            Some(new_content.as_bytes()),
         )
         .map_err(|e| MtuiError::BackupFailed {
             message: format!("{}", e),
@@ -2455,6 +2465,7 @@ pub struct CompassReadOptions {
     pub query: Option<String>,
     pub max_lines: usize,
     pub max_chars: usize,
+    pub page: usize,
 }
 
 #[derive(Debug, Serialize)]
@@ -2477,6 +2488,9 @@ pub struct CompassReadResult {
     pub omitted_lines: usize,
     pub ranges: Vec<CompassRange>,
     pub next_read_commands: Vec<String>,
+    pub page: usize,
+    pub total_pages: usize,
+    pub has_more: bool,
     pub text: String,
 }
 
@@ -2610,55 +2624,106 @@ pub fn compass_read_file(
     let lines = content.lines().collect::<Vec<_>>();
     let total_lines = lines.len();
     let query_terms = query_terms(options.query.as_deref().unwrap_or(""));
-    let mut keep = std::collections::BTreeMap::<usize, String>::new();
+
+    let mut scored_lines: std::collections::BTreeMap<usize, (u8, String)> =
+        std::collections::BTreeMap::new();
+    let mut query_match_lines = Vec::new();
+
     for (idx, line) in lines.iter().enumerate() {
         let line_no = idx + 1;
-        let reason = classify_code_line(line, &query_terms);
-        if let Some(reason) = reason {
-            let is_query_match = reason == "query_match";
-            keep.insert(line_no, reason);
-            if is_query_match {
-                for ctx in line_no.saturating_sub(2).max(1)..=(line_no + 2).min(total_lines) {
-                    keep.entry(ctx)
-                        .or_insert_with(|| "query_context".to_string());
-                }
+        let (rank, reason) = rank_code_line(line, &query_terms);
+        if rank > 0 {
+            scored_lines.insert(line_no, (rank, reason.to_string()));
+            if reason == "query_match" {
+                query_match_lines.push(line_no);
             }
         }
     }
-    if keep.is_empty() {
-        for line_no in 1..=total_lines.min(80) {
-            keep.insert(line_no, "head_fallback".to_string());
+
+    for q_line in query_match_lines {
+        for ctx in q_line.saturating_sub(2).max(1)..=(q_line + 2).min(total_lines) {
+            scored_lines
+                .entry(ctx)
+                .or_insert_with(|| (9, "query_context".to_string()));
         }
     }
 
-    let mut rendered = Vec::new();
+    if scored_lines.is_empty() {
+        for line_no in 1..=total_lines.min(80) {
+            scored_lines.insert(line_no, (10, "head_fallback".to_string()));
+        }
+    }
+
+    let mut candidates: Vec<(usize, u8, String)> = scored_lines
+        .into_iter()
+        .map(|(line_no, (rank, reason))| (line_no, rank, reason))
+        .collect();
+
+    candidates.sort_by(|a, b| {
+        b.1.cmp(&a.1)
+            .then_with(|| a.0.cmp(&b.0))
+    });
+
+    let total_candidates = candidates.len();
+    let page_size = options.max_lines.max(1);
+    let page = options.page.max(1);
+    let total_pages = if total_candidates == 0 {
+        1
+    } else {
+        (total_candidates + page_size - 1) / page_size
+    };
+
+    let start_idx = (page - 1) * page_size;
+    let page_candidates: Vec<(usize, u8, String)> = if start_idx < total_candidates {
+        candidates.into_iter().skip(start_idx).take(page_size).collect()
+    } else {
+        Vec::new()
+    };
+
+    let has_more = page < total_pages;
+
+    let mut selected: Vec<(usize, String)> = Vec::new();
+    let mut budget_chars = 0usize;
+    let mut truncated = false;
+
+    for (line_no, _rank, reason) in page_candidates {
+        let line_len = lines[line_no - 1].len() + 10;
+        if options.max_chars > 0 && budget_chars + line_len > options.max_chars {
+            truncated = true;
+            break;
+        }
+        budget_chars += line_len;
+        selected.push((line_no, reason));
+    }
+
+    selected.sort_by_key(|(line_no, _)| *line_no);
+
+    let mut rendered: Vec<String> = Vec::new();
     let mut ranges = Vec::new();
     let mut current_start = 0usize;
     let mut current_end = 0usize;
     let mut current_reason = String::new();
     let mut last_line = 0usize;
     let mut chars = 0usize;
-    let mut truncated = false;
-    for (line_no, reason) in keep {
-        if rendered.len() >= options.max_lines {
-            truncated = true;
-            break;
-        }
+
+    for (line_no, reason) in selected {
         if last_line > 0 && line_no > last_line + 1 {
             let marker = format!("... lines {}-{} omitted ...", last_line + 1, line_no - 1);
-            if chars + marker.len() < options.max_chars {
+            if options.max_chars == 0 || chars + marker.len() < options.max_chars {
                 rendered.push(marker);
                 chars += rendered.last().map(|line| line.len() + 1).unwrap_or(0);
             }
-            ranges.push(CompassRange {
-                start: current_start,
-                end: current_end,
-                reason: current_reason.clone(),
-            });
-            current_start = 0;
+            if current_start > 0 {
+                ranges.push(CompassRange {
+                    start: current_start,
+                    end: current_end,
+                    reason: current_reason.clone(),
+                });
+                current_start = 0;
+            }
         }
         let line_text = format!("{}: {}", line_no, lines[line_no - 1]);
-        if chars + line_text.len() + 1 > options.max_chars {
+        if options.max_chars > 0 && chars + line_text.len() + 1 > options.max_chars {
             truncated = true;
             break;
         }
@@ -2671,6 +2736,7 @@ pub fn compass_read_file(
         chars += line_text.len() + 1;
         rendered.push(line_text);
     }
+
     if current_start > 0 {
         ranges.push(CompassRange {
             start: current_start,
@@ -2678,6 +2744,7 @@ pub fn compass_read_file(
             reason: current_reason,
         });
     }
+
     let returned_lines = rendered
         .iter()
         .filter(|line| !line.starts_with("... lines "))
@@ -2706,6 +2773,9 @@ pub fn compass_read_file(
         omitted_lines: total_lines.saturating_sub(returned_lines),
         ranges,
         next_read_commands,
+        page,
+        total_pages,
+        has_more,
         text: rendered.join("\n"),
     })
 }
@@ -2718,35 +2788,65 @@ fn query_terms(query: &str) -> Vec<String> {
         .collect()
 }
 
-fn classify_code_line(line: &str, query_terms: &[String]) -> Option<String> {
+fn rank_code_line(line: &str, query_terms: &[String]) -> (u8, &'static str) {
     let trimmed = line.trim_start();
     let lower = trimmed.to_lowercase();
     if !query_terms.is_empty() && query_terms.iter().any(|term| lower.contains(term)) {
-        return Some("query_match".to_string());
+        return (10, "query_match");
+    }
+    if lower.is_empty() {
+        return (0, "empty");
+    }
+    if lower.starts_with("//")
+        || lower.starts_with("/*")
+        || lower.starts_with('*')
+        || (lower.starts_with('#') && !lower.starts_with("#["))
+    {
+        return (1, "comment");
+    }
+    if lower.starts_with("import ")
+        || lower.starts_with("export ")
+        || lower.starts_with("use ")
+        || lower.starts_with("from ")
+        || lower.starts_with("require(")
+    {
+        return (3, "structure");
     }
     let structural = [
-        "import ",
-        "export ",
-        "pub ",
+        "pub fn ",
+        "pub async fn ",
+        "async fn ",
         "fn ",
         "function ",
-        "const ",
-        "let ",
+        "pub struct ",
+        "struct ",
+        "pub enum ",
+        "enum ",
+        "pub type ",
         "type ",
         "interface ",
         "class ",
-        "enum ",
+        "pub trait ",
+        "trait ",
         "impl ",
         "#[",
         "def ",
+        "component ",
     ];
     if structural.iter().any(|prefix| lower.starts_with(prefix)) {
-        return Some("structure".to_string());
+        return (10, "structure");
     }
-    if lower.contains("=>") || lower.contains("useeffect(") || lower.contains("ipc") {
-        return Some("behavior".to_string());
+    if lower.starts_with("pub ")
+        || lower.starts_with("const ")
+        || lower.starts_with("let ")
+        || lower.contains("=>")
+        || lower.contains("useeffect(")
+        || lower.contains("ipc")
+        || lower.contains('(')
+    {
+        return (7, "behavior");
     }
-    None
+    (1, "other")
 }
 
 #[derive(Debug, Clone)]
@@ -3847,6 +3947,7 @@ mod tests {
                 query: Some("planning execute".to_string()),
                 max_lines: 20,
                 max_chars: 4000,
+                page: 1,
             },
         )
         .expect("compass read");
@@ -3855,6 +3956,9 @@ mod tests {
         assert!(result.text.contains("import"));
         assert!(result.text.contains("execute planning"));
         assert!(!result.next_read_commands.is_empty());
+        assert_eq!(result.page, 1);
+        assert_eq!(result.total_pages, 1);
+        assert!(!result.has_more);
     }
 
     #[test]
@@ -3875,12 +3979,57 @@ mod tests {
                 query: Some("firstLine".to_string()),
                 max_lines: 20,
                 max_chars: 4000,
+                page: 1,
             },
         )
         .expect("compass read");
 
         assert!(result.ranges.iter().all(|range| range.start >= 1));
         assert!(result.text.contains("1: export const firstLine"));
+    }
+
+    #[test]
+    fn compass_read_supports_pagination() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let path = temp.path().join("large_sample.ts");
+        let lines: Vec<String> = (1..=30)
+            .map(|i| format!("export const item_{} = {};", i, i))
+            .collect();
+        std::fs::write(&path, lines.join("\n")).expect("write sample");
+
+        let page1 = compass_read_file(
+            temp.path(),
+            std::path::Path::new("large_sample.ts"),
+            &crate::config::MtuiConfig::default(),
+            CompassReadOptions {
+                query: None,
+                max_lines: 10,
+                max_chars: 4000,
+                page: 1,
+            },
+        )
+        .expect("compass read page 1");
+
+        assert_eq!(page1.page, 1);
+        assert!(page1.total_pages > 1);
+        assert!(page1.has_more);
+        assert!(page1.text.contains("item_1"));
+
+        let page2 = compass_read_file(
+            temp.path(),
+            std::path::Path::new("large_sample.ts"),
+            &crate::config::MtuiConfig::default(),
+            CompassReadOptions {
+                query: None,
+                max_lines: 10,
+                max_chars: 4000,
+                page: 2,
+            },
+        )
+        .expect("compass read page 2");
+
+        assert_eq!(page2.page, 2);
+        assert!(page2.text.contains("item_11"));
     }
 
     #[test]

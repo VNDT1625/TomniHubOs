@@ -6,7 +6,11 @@
 
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { ViuLocalAssetService, type ViuLocalAssetIo, type ViuLocalAssetStat } from '@/process/ide/viu/assets';
+import {
+  ViuLocalAssetService,
+  type ViuLocalAssetIo,
+  type ViuLocalAssetStat,
+} from '@package-apps/design/process/viu/assets/index';
 
 type FakeEntryKind = 'file' | 'directory' | 'other';
 

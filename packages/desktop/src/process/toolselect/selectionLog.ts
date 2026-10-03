@@ -124,7 +124,10 @@ export const createSelectionLog = (options: SelectionLogOptions): ISelectionLog 
 
   const serialized = <T>(operation: () => Promise<T>): Promise<T> => {
     const result = pending.then(operation, operation);
-    pending = result.then((): void => undefined, (): void => undefined);
+    pending = result.then(
+      (): void => undefined,
+      (): void => undefined
+    );
     return result;
   };
 
@@ -167,8 +170,7 @@ export const createSelectionLog = (options: SelectionLogOptions): ISelectionLog 
     const latencies = entries.flatMap((entry) => (entry.latencyMs === undefined ? [] : [entry.latencyMs]));
     const decayedSuccessWeight = entries.reduce(
       (total, entry) =>
-        total +
-        (outcomeOf(entry) === 'verified' ? Math.pow(0.5, Math.max(0, now() - entry.at) / halfLife) : 0),
+        total + (outcomeOf(entry) === 'verified' ? Math.pow(0.5, Math.max(0, now() - entry.at) / halfLife) : 0),
       0
     );
     return {
@@ -189,7 +191,11 @@ export const createSelectionLog = (options: SelectionLogOptions): ISelectionLog 
     hashRequest,
     record,
     recall: async (request) =>
-      (await all()).find((entry) => entry.requestHash === hashRequest(request) && (entry.outcome ?? (entry.succeeded ? 'verified' : 'failed')) === 'verified'),
+      (await all()).find(
+        (entry) =>
+          entry.requestHash === hashRequest(request) &&
+          (entry.outcome ?? (entry.succeeded ? 'verified' : 'failed')) === 'verified'
+      ),
     all,
     clear,
     reset: clear,

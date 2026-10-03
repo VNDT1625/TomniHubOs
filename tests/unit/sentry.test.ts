@@ -8,7 +8,7 @@
  * suite runs under the `node` Vitest project.
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { gunzipSync } from 'node:zlib';
 import { randomBytes } from 'node:crypto';
 
@@ -16,6 +16,7 @@ vi.mock('electron', () => ({
   app: { getVersion: () => '0.0.0-test', getPath: () => '/tmp', isPackaged: false },
 }));
 
+const diagnostics = vi.hoisted(() => ({ consent: false, correlationId: 'rotating-diagnostic-id' }));
 let sentryInitOptions: { beforeSend?: (event: unknown) => unknown } | undefined;
 const scopeSetContext = vi.fn();
 const scopeSetExtra = vi.fn();
@@ -35,16 +36,37 @@ vi.mock('@sentry/electron/main', () => ({
     });
   }),
   captureException: vi.fn(),
+  captureMessage: vi.fn(),
   captureEvent: vi.fn(),
   flush: vi.fn(async () => true),
 }));
 
 vi.mock('@/process/utils/analyticsId', () => ({
-  getOrCreateAnalyticsId: () => 'test-device-id',
+  getRotatingDiagnosticsCorrelationId: () => (diagnostics.consent ? diagnostics.correlationId : undefined),
+  hasDiagnosticsConsent: () => diagnostics.consent,
+  setDiagnosticsConsent: (granted: boolean) => {
+    diagnostics.consent = granted;
+  },
 }));
 
 import * as Sentry from '@sentry/electron/main';
-import { selectRecentLogFiles, packAndCap, captureBackendStartupFailure, initSentry } from '@/sentry';
+import {
+  __resetSentryForTests,
+  captureBackendStartupFailure,
+  initSentry,
+  packAndCap,
+  selectRecentLogFiles,
+  setSentryDiagnosticsConsent,
+} from '@/sentry';
+
+beforeEach(() => {
+  diagnostics.consent = false;
+
+  process.env.SENTRY_DSN = 'https://public-key@o0.ingest.sentry.io/1';
+  sentryInitOptions = undefined;
+  __resetSentryForTests();
+  vi.clearAllMocks();
+});
 
 describe('selectRecentLogFiles', () => {
   it('returns every file from the N most recent non-empty days', () => {
@@ -102,6 +124,7 @@ describe('packAndCap', () => {
 
 describe('captureBackendStartupFailure', () => {
   it('captures and flushes a dedicated backend startup failure with diagnostics', async () => {
+    setSentryDiagnosticsConsent(true);
     const error = new Error('tomnycore failed to start within timeout') as Error & {
       details?: Record<string, unknown>;
     };
@@ -114,7 +137,8 @@ describe('captureBackendStartupFailure', () => {
 
     await captureBackendStartupFailure(error);
 
-    expect(Sentry.captureException).toHaveBeenCalledWith(error);
+    expect(Sentry.captureMessage).toHaveBeenCalledWith('backend-startup-failure', 'error');
+    expect(Sentry.captureException).not.toHaveBeenCalled();
     expect(Sentry.flush).toHaveBeenCalledWith(2000);
     expect(Sentry.withScope).toHaveBeenCalledOnce();
     expect(scopeSetContext).toHaveBeenCalledWith(
@@ -129,8 +153,14 @@ describe('captureBackendStartupFailure', () => {
 });
 
 describe('initSentry beforeSend', () => {
-  it('drops native GPU unusable crashes reported only through crashpad context', () => {
+  it('does not initialize a client before persisted diagnostics consent', () => {
     initSentry();
+
+    expect(Sentry.init).not.toHaveBeenCalled();
+  });
+
+  it('drops native GPU unusable crashes reported only through crashpad context', () => {
+    setSentryDiagnosticsConsent(true);
 
     const event = {
       contexts: {
@@ -144,7 +174,7 @@ describe('initSentry beforeSend', () => {
   });
 
   it('keeps native shutdown fatal crashes while filtering GPU crashpad noise', () => {
-    initSentry();
+    setSentryDiagnosticsConsent(true);
 
     const event = {
       contexts: {
@@ -154,11 +184,11 @@ describe('initSentry beforeSend', () => {
       },
     };
 
-    expect(sentryInitOptions?.beforeSend?.(event)).toBe(event);
+    expect(sentryInitOptions?.beforeSend?.(event)).toStrictEqual(event);
   });
 
   it('drops backend-port secondary errors after backend startup already failed', () => {
-    initSentry();
+    setSentryDiagnosticsConsent(true);
     (globalThis as { __backendStartupFailed?: boolean }).__backendStartupFailed = true;
 
     const event = {
@@ -177,7 +207,7 @@ describe('initSentry beforeSend', () => {
   });
 
   it('keeps the primary backend startup failure even when its details contain secondary text', () => {
-    initSentry();
+    setSentryDiagnosticsConsent(true);
     (globalThis as { __backendStartupFailed?: boolean }).__backendStartupFailed = true;
 
     const event = {
@@ -193,8 +223,21 @@ describe('initSentry beforeSend', () => {
       },
     };
 
-    expect(sentryInitOptions?.beforeSend?.(event)).toBe(event);
+    expect(sentryInitOptions?.beforeSend?.(event)).toStrictEqual(event);
 
     delete (globalThis as { __backendStartupFailed?: boolean }).__backendStartupFailed;
+  });
+
+  it('redacts secret-shaped values and local paths before opt-in diagnostic egress', () => {
+    setSentryDiagnosticsConsent(true);
+    const event = {
+      message: 'authorization=Bearer sk-secret-value at C:\\Users\\Ada\\token.txt',
+      extra: { apiKey: 'api_key=very-secret', path: '/home/ada/private.txt' },
+    };
+
+    expect(sentryInitOptions?.beforeSend?.(event)).toEqual({
+      message: expect.stringContaining('[REDACTED_SECRET]'),
+      extra: { apiKey: '[REDACTED_SECRET]', path: '[REDACTED_PATH]' },
+    });
   });
 });

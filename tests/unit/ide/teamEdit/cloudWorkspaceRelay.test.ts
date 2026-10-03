@@ -12,12 +12,12 @@ import type { CloudWorkspaceManifest, CloudWorkspaceOperation } from '@/common/a
 import {
   collectCloudWorkspacePublishFiles,
   isCloudWorkspaceBinaryBuffer,
-} from '@process/ide/teamEdit/cloud/cloudWorkspaceBridge';
+} from '@package-apps/ide/process/collaboration/teamEdit/cloud/cloudWorkspaceBridge';
 import {
   createCloudWorkspaceFileAdapter,
   createCloudWorkspaceRelayClient,
-} from '@process/ide/teamEdit/cloud/cloudWorkspaceRelay';
-import { createRemoteIdeWorkspaceGuide } from '@process/ide/teamEdit/remoteIdeMcp';
+} from '@package-apps/ide/process/collaboration/teamEdit/cloud/cloudWorkspaceRelay';
+import { createRemoteIdeWorkspaceGuide } from '@package-apps/ide/process/collaboration/teamEdit/remoteIdeMcp';
 
 const baseManifest = (): CloudWorkspaceManifest => ({
   workspaceId: 'ws-1',

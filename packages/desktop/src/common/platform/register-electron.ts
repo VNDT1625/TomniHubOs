@@ -3,3 +3,4 @@ import { registerPlatformServices } from './index';
 import { ElectronPlatformServices } from './ElectronPlatformServices';
 
 registerPlatformServices(new ElectronPlatformServices());
+import '../adapter/bridgeErrorWrapper';

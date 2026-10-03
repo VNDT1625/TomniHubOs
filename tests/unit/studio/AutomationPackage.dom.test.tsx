@@ -39,7 +39,7 @@ describe('Automation Studio package runtime boundary', () => {
     let mounted: ReturnType<typeof mount> | undefined;
 
     await act(async () => {
-      mounted = mount(container, { locale: 'vi-VN', onBack, openPackageModule: vi.fn() });
+      mounted = mount(container, { locale: 'vi-VN', onBack, openPackageModule: vi.fn(), openDefaultSurface: vi.fn() });
     });
 
     await waitFor(() => expect(container).toHaveTextContent('automation-studio-vi-VN'));
@@ -60,7 +60,12 @@ describe('Automation Studio package runtime boundary', () => {
     const container = document.createElement('div');
     document.body.append(container);
 
-    const mounted = mount(container, { locale: 'en-US', onBack: vi.fn(), openPackageModule: vi.fn() });
+    const mounted = mount(container, {
+      locale: 'en-US',
+      onBack: vi.fn(),
+      openPackageModule: vi.fn(),
+      openDefaultSurface: vi.fn(),
+    });
     mounted.unmount();
     releaseInitialization?.();
     await act(async () => Promise.resolve());

@@ -128,7 +128,7 @@ const ARTIFACT_MOUNT_SCRIPT = String.raw`
   container.style.width = '1280px';
   container.style.height = '800px';
   document.body.append(container);
-  const mounted = runtime.mount(container, { locale: 'vi-VN', onBack() {}, openPackageModule() {} });
+  const mounted = runtime.mount(container, { locale: 'vi-VN', onBack() {}, openPackageModule() {}, openDefaultSurface() {} });
   const deadline = Date.now() + 15000;
   while (container.childElementCount === 0 && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 20));
   const rendered = container.childElementCount > 0 && Boolean(container.textContent?.trim() || container.innerHTML.trim());
@@ -287,9 +287,27 @@ describe('downloaded package app sandbox', () => {
       packageMocks.readAsset.mock.invocationCallOrder[0]!
     );
     const runtimeId = packageMocks.openRuntime.mock.calls[0]?.[1] as string;
+    expect(packageMocks.openRuntime).toHaveBeenCalledWith('com.tomni.calculator', runtimeId, {
+      packageVersion: '1.0.0',
+      publisherId: 'com.tomni',
+      moduleId: 'calculator',
+    });
 
     unmount();
     await waitFor(() => expect(packageMocks.closeRuntime).toHaveBeenCalledWith('com.tomni.calculator', runtimeId));
+  });
+
+  it('renders the signed installed Surface for the human without automatically invoking capabilities', async () => {
+    render(
+      <PackageAppHost packageId='com.tomni.calculator' moduleId='calculator' onBack={vi.fn()} allowSandboxedWeb />
+    );
+
+    expect(await screen.findByTestId('package-app-frame')).toBeInTheDocument();
+    expect(packageMocks.openRuntime).toHaveBeenCalledTimes(1);
+    expect(packageMocks.readAsset).toHaveBeenCalledWith('com.tomni.calculator', 'index.html');
+    expect(packageMocks.activateCapability).not.toHaveBeenCalled();
+    expect(packageMocks.invokeCapability).not.toHaveBeenCalled();
+    expect(packageMocks.cancelCapability).not.toHaveBeenCalled();
   });
 
   it('retains the runtime id and retries close after the first IPC failure', async () => {

@@ -9,10 +9,10 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import type { ITerminalManager } from '@/process/terminal/terminalManager';
-import type { ITerminalScheduleStore } from '@/process/terminal/terminalScheduleStore';
-import { createTerminalScheduler } from '@/process/terminal/terminalScheduler';
-import type { TerminalSchedule } from '@/process/terminal/terminalTypes';
+import type { ITerminalManager } from '@process/ideTerminal/terminalManager';
+import type { ITerminalScheduleStore } from '@process/ideTerminal/terminalScheduleStore';
+import { createTerminalScheduler } from '@process/ideTerminal/terminalScheduler';
+import type { TerminalSchedule } from '@process/ideTerminal/terminalTypes';
 
 const makeSchedule = (over?: Partial<TerminalSchedule>): TerminalSchedule => ({
   id: 's1',

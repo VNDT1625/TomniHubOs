@@ -16,6 +16,9 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import CssThemeModal from './CssThemeModal.tsx';
 import { PRESET_THEMES, DEFAULT_THEME_ID } from './presets.ts';
+
+import { FIRST_PARTY_PACKAGE_CATALOG } from '@/common/packages/catalog';
+import type { PackageThemeContribution } from '@/common/packages';
 import { BACKGROUND_BLOCK_START, injectBackgroundCssBlock } from './backgroundUtils.ts';
 import { resolveExtensionAssetUrl } from '@renderer/utils/platform.ts';
 
@@ -242,6 +245,8 @@ const dispatchCustomCssUpdated = (css: string) => {
  * CSS 主题设置组件 / CSS Theme Settings Component
  * 用于管理和切换 CSS 皮肤主题 / For managing and switching CSS skin themes
  */
+type DisplayTheme = ICssTheme & { is_package?: boolean };
+
 const CssThemeSettings: React.FC = () => {
   const { t } = useTranslation();
   const { theme: currentTheme } = useThemeContext();
@@ -290,11 +295,39 @@ const CssThemeSettings: React.FC = () => {
           // Extensions not available (e.g., WebUI mode or not initialized yet)
         }
 
+        // 加载 UI Package 主题 / Load themes from UI Packages
+        const packageThemes: (ICssTheme & { is_package?: boolean })[] = [];
+        try {
+          const uiPackages = FIRST_PARTY_PACKAGE_CATALOG.filter((entry) => entry.manifest.type === 'ui');
+          for (const pkg of uiPackages) {
+            const themesFromPkg = (pkg.manifest.contributions?.themes as PackageThemeContribution[] | undefined) ?? [];
+            for (const t of themesFromPkg) {
+              packageThemes.push({
+                id: t.id,
+                name: t.name,
+                is_preset: true,
+                is_package: true,
+                cover: t.cover,
+                css: t.css,
+                created_at: Date.now(),
+                updated_at: Date.now(),
+              });
+            }
+          }
+        } catch (e) {
+          console.error('Failed to load UI package themes:', e);
+        }
+
         // 合并预设主题、扩展主题和用户主题，按 ID 去重（先出现的优先）
         // Merge preset, extension, and user themes; deduplicate by ID (first occurrence wins)
         const seenIds = new Set<string>();
         const allThemes: ICssTheme[] = [];
-        for (const theme of [...normalizedPresets, ...extensionThemes, ...normalized.filter((t) => !t.is_preset)]) {
+        for (const theme of [
+          ...normalizedPresets,
+          ...packageThemes,
+          ...extensionThemes,
+          ...normalized.filter((t) => !t.is_preset),
+        ]) {
           if (!theme?.id || seenIds.has(theme.id)) continue;
           seenIds.add(theme.id);
           allThemes.push(theme);
@@ -536,7 +569,14 @@ const CssThemeSettings: React.FC = () => {
 
               {/* 底部渐变遮罩与名称、编辑按钮 / Bottom gradient overlay with name and edit button */}
               <div className='absolute bottom-0 left-0 right-0 h-1/3 bg-gradient-to-t from-black/60 to-transparent flex items-end justify-between p-8px'>
-                <span className='text-13px text-white truncate flex-1'>{theme.name}</span>
+                <div className='flex items-center gap-6px truncate flex-1'>
+                  <span className='text-13px text-white truncate'>{theme.name}</span>
+                  {Boolean((theme as DisplayTheme).is_package) && (
+                    <span className='text-10px px-4px py-1px rounded bg-blue-500/30 text-blue-300 border border-blue-400/40 font-semibold shrink-0'>
+                      📦 Package UI
+                    </span>
+                  )}
+                </div>
                 {/* 编辑按钮 / Edit button */}
                 {hoveredThemeId === theme.id && (
                   <div

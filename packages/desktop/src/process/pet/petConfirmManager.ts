@@ -5,7 +5,7 @@
  */
 
 import path from 'node:path';
-import { app, BrowserWindow, ipcMain, screen } from 'electron';
+import { app, BrowserWindow, ipcMain, screen, type IpcMainEvent } from 'electron';
 import type { IConfirmation } from '@/common/chat/chatLib';
 import { ipcBridge } from '@/common';
 import { ProcessConfig } from '@process/utils/initStorage';
@@ -17,13 +17,122 @@ const PRELOAD_DIR = path.join(__dirname, '..', '..', 'preload');
 const RENDERER_DIR = path.join(__dirname, '..', '..', 'renderer', 'pet');
 
 let confirmWindow: BrowserWindow | null = null;
-let currentConfirmations = new Map<string, IConfirmation<any> & { conversation_id: string }>();
+let currentConfirmations = new Map<string, IConfirmation<unknown> & { conversation_id: string }>();
 let anchorBounds: { x: number; y: number; width: number; height: number } | null = null;
-let pendingConfirmations: Array<IConfirmation<any> & { conversation_id: string }> = [];
+let pendingConfirmations: Array<IConfirmation<unknown> & { conversation_id: string }> = [];
 let windowReady = false;
 // User-overridden confirm window position (set when user drags the window).
 // Persists for the current app session only; cleared on destroy.
 let userPosition: { x: number; y: number } | null = null;
+
+const MAX_CONFIRM_IDENTIFIER_LENGTH = 512;
+const MAX_CONFIRM_RESPONSE_BYTES = 8192;
+const MAX_CONFIRM_RESPONSE_DEPTH = 8;
+const MAX_CONFIRM_RESPONSE_NODES = 128;
+
+type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
+
+type PetConfirmResponse = {
+  conversation_id: string;
+  msg_id: string;
+  call_id: string;
+  data: JsonValue;
+};
+
+function isTrustedPetConfirmWindowSender(event: IpcMainEvent): boolean {
+  return Boolean(
+    confirmWindow &&
+    !confirmWindow.isDestroyed() &&
+    !event.sender.isDestroyed() &&
+    event.sender === confirmWindow.webContents &&
+    event.senderFrame === event.sender.mainFrame
+  );
+}
+
+function isBoundedIdentifier(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length > 0 &&
+    value.length <= MAX_CONFIRM_IDENTIFIER_LENGTH &&
+    !Array.from(value).some((character) => {
+      const codePoint = character.codePointAt(0);
+      return codePoint !== undefined && (codePoint <= 0x1f || codePoint === 0x7f);
+    })
+  );
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+function isBoundedJsonValue(value: unknown, depth: number, budget: { nodes: number }): value is JsonValue {
+  if (budget.nodes-- <= 0 || depth > MAX_CONFIRM_RESPONSE_DEPTH) return false;
+  if (value === null || typeof value === 'boolean') return true;
+  if (typeof value === 'number') return Number.isFinite(value);
+  if (typeof value === 'string') return value.length <= MAX_CONFIRM_RESPONSE_BYTES;
+  if (Array.isArray(value)) {
+    return (
+      value.length <= MAX_CONFIRM_RESPONSE_NODES && value.every((entry) => isBoundedJsonValue(entry, depth + 1, budget))
+    );
+  }
+  if (!isPlainRecord(value)) return false;
+  const entries = Object.entries(value);
+  return (
+    entries.length <= MAX_CONFIRM_RESPONSE_NODES &&
+    entries.every(
+      ([key, entry]) =>
+        key.length <= MAX_CONFIRM_IDENTIFIER_LENGTH &&
+        key !== '__proto__' &&
+        key !== 'constructor' &&
+        key !== 'prototype' &&
+        isBoundedJsonValue(entry, depth + 1, budget)
+    )
+  );
+}
+
+function serializeJsonValue(value: JsonValue): string {
+  if (Array.isArray(value)) return `[${value.map(serializeJsonValue).join(',')}]`;
+  if (value !== null && typeof value === 'object') {
+    return `{${Object.keys(value)
+      .toSorted()
+      .map((key) => `${JSON.stringify(key)}:${serializeJsonValue(value[key])}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function isValidPetConfirmResponse(value: unknown): value is PetConfirmResponse {
+  if (!isPlainRecord(value)) return false;
+  const keys = Object.keys(value).toSorted();
+  if (
+    keys.length !== 4 ||
+    keys[0] !== 'call_id' ||
+    keys[1] !== 'conversation_id' ||
+    keys[2] !== 'data' ||
+    keys[3] !== 'msg_id'
+  ) {
+    return false;
+  }
+  if (
+    !isBoundedIdentifier(value.conversation_id) ||
+    !isBoundedIdentifier(value.msg_id) ||
+    !isBoundedIdentifier(value.call_id)
+  ) {
+    return false;
+  }
+  if (!isBoundedJsonValue(value.data, 0, { nodes: MAX_CONFIRM_RESPONSE_NODES })) return false;
+  return Buffer.byteLength(serializeJsonValue(value.data), 'utf8') <= MAX_CONFIRM_RESPONSE_BYTES;
+}
+
+function isOfferedConfirmationChoice(confirmation: IConfirmation<unknown>, data: JsonValue): boolean {
+  const serializedData = serializeJsonValue(data);
+  return confirmation.options.some((option) => {
+    if (!isBoundedJsonValue(option.value, 0, { nodes: MAX_CONFIRM_RESPONSE_NODES })) return false;
+    return serializeJsonValue(option.value) === serializedData;
+  });
+}
 
 /**
  * Initialize pet confirm manager with anchor bounds (pet window position).
@@ -177,7 +286,7 @@ function createConfirmWindow(): void {
       if (confirmWindow && !confirmWindow.isDestroyed()) {
         confirmWindow.webContents.send('pet:confirm-theme', theme);
       }
-    } catch (_e) {
+    } catch {
       /* noop — default light theme via CSS */
     }
 
@@ -233,7 +342,7 @@ function loadContent(): void {
 /**
  * Show confirmation in window.
  */
-function showConfirmation(confirmation: IConfirmation<any> & { conversation_id: string }): void {
+export function showPetConfirmation(confirmation: IConfirmation<unknown> & { conversation_id: string }): void {
   currentConfirmations.set(confirmation.id, confirmation);
   const translated = translateConfirmation(confirmation);
 
@@ -254,7 +363,7 @@ function showConfirmation(confirmation: IConfirmation<any> & { conversation_id: 
 /**
  * Update confirmation in window.
  */
-function updateConfirmation(confirmation: IConfirmation<any> & { conversation_id: string }): void {
+function updateConfirmation(confirmation: IConfirmation<unknown> & { conversation_id: string }): void {
   currentConfirmations.set(confirmation.id, confirmation);
 
   if (confirmWindow && !confirmWindow.isDestroyed()) {
@@ -287,7 +396,8 @@ function registerIpcHandlers(): void {
   let confirmDragOffsetY = 0;
   let confirmDragTimer: ReturnType<typeof setInterval> | null = null;
 
-  ipcMain.on('pet:confirm-drag-start', () => {
+  ipcMain.on('pet:confirm-drag-start', (event) => {
+    if (!isTrustedPetConfirmWindowSender(event)) return;
     if (!confirmWindow || confirmWindow.isDestroyed()) return;
     // Clear any stale timer from a previous drag-start that missed its drag-end
     if (confirmDragTimer) {
@@ -310,7 +420,8 @@ function registerIpcHandlers(): void {
     }, 16);
   });
 
-  ipcMain.on('pet:confirm-drag-end', () => {
+  ipcMain.on('pet:confirm-drag-end', (event) => {
+    if (!isTrustedPetConfirmWindowSender(event)) return;
     if (confirmDragTimer) {
       clearInterval(confirmDragTimer);
       confirmDragTimer = null;
@@ -322,48 +433,46 @@ function registerIpcHandlers(): void {
     }
   });
 
-  ipcMain.on(
-    'pet:confirm-respond',
-    (_event, data: { conversation_id: string; msg_id: string; call_id: string; data: any }) => {
-      console.log('[PetConfirm] Received response:', JSON.stringify(data));
+  ipcMain.on('pet:confirm-respond', (event, data: unknown) => {
+    if (!isTrustedPetConfirmWindowSender(event) || !isValidPetConfirmResponse(data)) return;
 
-      // Remove from local tracking
-      const confirmation = Array.from(currentConfirmations.values()).find(
-        (c) => c.call_id === data.call_id && c.conversation_id === data.conversation_id
-      );
+    // Remove from local tracking
+    const confirmation = Array.from(currentConfirmations.values()).find(
+      (c) => c.call_id === data.call_id && c.conversation_id === data.conversation_id
+    );
 
-      if (confirmation) {
-        currentConfirmations.delete(confirmation.id);
+    if (!confirmation || confirmation.id !== data.msg_id || !isOfferedConfirmationChoice(confirmation, data.data))
+      return;
 
-        // Announce removal on the WS channel so any renderer confirmation UI
-        // can drop the entry. NOTE: with the HTTP/WS adapter, emit() is a
-        // no-op in the main process (see httpBridge.ts wsEmitter); the
-        // authoritative remove event is broadcast by the backend itself when
-        // /confirmations/{call_id}/confirm is accepted.
-        ipcBridge.conversation.confirmation.remove.emit({
-          conversation_id: data.conversation_id,
-          id: confirmation.id,
-        });
-      }
+    currentConfirmations.delete(confirmation.id);
 
-      // Forward response to backend via HTTP (tomny-conversation route)
-      ipcBridge.conversation.confirmation.confirm
-        .invoke({
-          conversation_id: data.conversation_id,
-          msg_id: data.msg_id,
-          call_id: data.call_id,
-          data: data.data,
-        })
-        .catch((error: unknown) => {
-          console.error('[PetConfirm] confirmation.confirm.invoke failed:', error);
-        });
+    // Announce removal on the WS channel so any renderer confirmation UI
+    // can drop the entry. NOTE: with the HTTP/WS adapter, emit() is a
+    // no-op in the main process (see httpBridge.ts wsEmitter); the
+    // authoritative remove event is broadcast by the backend itself when
+    // /confirmations/{call_id}/confirm is accepted.
+    ipcBridge.conversation.confirmation.remove.emit({
+      conversation_id: data.conversation_id,
+      id: confirmation.id,
+    });
 
-      // Close window if no confirmations left
-      if (currentConfirmations.size === 0) {
-        destroyConfirmWindow();
-      }
+    // Forward response to backend via HTTP (tomny-conversation route)
+    ipcBridge.conversation.confirmation.confirm
+      .invoke({
+        conversation_id: data.conversation_id,
+        msg_id: data.msg_id,
+        call_id: data.call_id,
+        data: data.data,
+      })
+      .catch((error: unknown) => {
+        console.error('[PetConfirm] confirmation.confirm.invoke failed:', error);
+      });
+
+    // Close window if no confirmations left
+    if (currentConfirmations.size === 0) {
+      destroyConfirmWindow();
     }
-  );
+  });
 }
 
 /**

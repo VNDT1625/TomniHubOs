@@ -1,4 +1,4 @@
-﻿import { redactSecretText } from '@process/agentRuntime/agentMesh/security';
+import { redactSecretText } from '@process/agentRuntime/agentMesh/security';
 import type { SecretFinding } from '@process/agentRuntime/agentMesh/security/types';
 import type { VisualArtifactTextAnalyzer } from './types';
 import { analyzeVisualArtifact } from './visualArtifact';

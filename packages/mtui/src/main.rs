@@ -1069,6 +1069,7 @@ fn run(cli: cli::Cli, output_mode: OutputMode) -> Result<(), error::MtuiError> {
                         query: read_args.query,
                         max_lines: read_args.max_lines,
                         max_chars: read_args.max_chars,
+                        page: read_args.page,
                     },
                 )?,
             };
@@ -1080,11 +1081,13 @@ fn run(cli: cli::Cli, output_mode: OutputMode) -> Result<(), error::MtuiError> {
                 OutputMode::Human => {
                     println!("{}", result.text);
                     eprintln!(
-                        "[mtui compass] {} -> {} lines, omitted {}, truncated {}",
+                        "[mtui compass] {} -> {} lines, omitted {}, page {}/{}, has_more: {}",
                         result.total_lines,
                         result.returned_lines,
                         result.omitted_lines,
-                        result.truncated
+                        result.page,
+                        result.total_pages,
+                        result.has_more
                     );
                 }
             }
@@ -1586,6 +1589,42 @@ fn run(cli: cli::Cli, output_mode: OutputMode) -> Result<(), error::MtuiError> {
                             if helped { "helpful" } else { "unhelpful" },
                             feedback_args.id
                         ),
+                    }
+                }
+            }
+        }
+
+        Commands::Gc(args) => {
+            let options = backup::gc::GcOptions {
+                dry_run: args.dry_run,
+                days: args.days,
+                force: args.force,
+                max_mb: args.max_mb,
+            };
+            let result = backup::gc::run_gc(&project_root, &options).map_err(|e| {
+                error::MtuiError::Internal {
+                    message: format!("GC failed: {}", e),
+                }
+            })?;
+
+            match output_mode {
+                OutputMode::Json => {
+                    output::print_json(&output::SuccessResponse::new(&result))
+                }
+                OutputMode::Human => {
+                    if result.dry_run {
+                        println!("MTUI GC (Dry Run):");
+                        println!("  Current backup size: {:.2} MB", result.before_bytes as f64 / 1_048_576.0);
+                        println!("  Potential space to free: {:.2} MB", result.freed_bytes as f64 / 1_048_576.0);
+                        println!("  Directories to remove: {}", result.deleted_dirs);
+                        println!("  Files to remove: {}", result.deleted_files);
+                    } else {
+                        println!("MTUI GC completed:");
+                        println!("  Space freed: {:.2} MB", result.freed_bytes as f64 / 1_048_576.0);
+                        println!("  Remaining backup size: {:.2} MB", result.after_bytes as f64 / 1_048_576.0);
+                        println!("  Directories removed: {}", result.deleted_dirs);
+                        println!("  Files removed: {}", result.deleted_files);
+                        println!("  Remaining files: {}", result.remaining_files);
                     }
                 }
             }

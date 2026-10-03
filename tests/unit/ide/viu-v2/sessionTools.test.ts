@@ -14,8 +14,8 @@ import {
   type ViuProjectState,
   type ViuTransaction,
 } from '@/common/viu';
-import { registerViuTools, type ViuTeamWorkflowService } from '@/process/ide/viu/agentTools';
-import { ViuV2SessionService, type ViuV2SessionServiceApi } from '@/process/ide/viu/v2SessionService';
+import { registerViuTools, type ViuTeamWorkflowService } from '@package-apps/design/process/viu/agentTools';
+import { ViuV2SessionService, type ViuV2SessionServiceApi } from '@package-apps/design/process/viu/v2SessionService';
 
 type ToolResult = {
   content: Array<{ type: 'text'; text: string }>;
@@ -568,6 +568,20 @@ describe('VIU agent MCP tools', () => {
     );
     expect(committed).toHaveProperty('data.revision', 1);
     expect(service.inspect(workspaceKey).nodes['node-home-title']?.content?.text).toBe('Team-authored home');
+  });
+
+  it('fails closed when the reviewed Design lifecycle has been cancelled', async () => {
+    const { server, tools } = fakeServer();
+    let active = true;
+    registerViuTools(server, new ViuV2SessionService(), undefined, () => active);
+
+    active = false;
+    const result = await tools.get('viu_inspect')!.handler({ workspaceKey: 'revoked-design-session' });
+    const payload = parseResult(result);
+
+    expect(result.isError).toBe(true);
+    expect(payload).toHaveProperty('error.code', 'viu_tool_error');
+    expect(result.content[0]?.text).toContain('no longer active');
   });
 
   it('returns redacted JSON errors from an injected service', async () => {

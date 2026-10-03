@@ -248,8 +248,9 @@ function composeMessageWithIndex(message: TMessage | undefined, list: TMessage[]
             ...existingMsg,
             content: {
               ...existingMsg.content,
+              content: message.content.content || existingMsg.content.content,
               status: 'done' as const,
-              duration: message.content.duration,
+              duration: message.content.duration ?? existingMsg.content.duration,
               subject: message.content.subject || existingMsg.content.subject,
             },
           };
@@ -264,11 +265,34 @@ function composeMessageWithIndex(message: TMessage | undefined, list: TMessage[]
         ...last,
         content: {
           ...last.content,
-          content: last.content.content + message.content.content,
+          content: message.content.content ? last.content.content + message.content.content : last.content.content,
           subject: message.content.subject || last.content.subject,
+          status: message.content.status,
+          duration: message.content.duration ?? last.content.duration,
         },
       };
       return newList;
+    }
+
+    const existingIdx = index.msgIdIndex.get(thinkingKey);
+    if (existingIdx !== undefined && existingIdx < list.length) {
+      const existingMsg = list[existingIdx];
+      if (existingMsg.type === 'thinking') {
+        const newList = list.slice();
+        newList[existingIdx] = {
+          ...existingMsg,
+          content: {
+            ...existingMsg.content,
+            content: message.content.content
+              ? existingMsg.content.content + message.content.content
+              : existingMsg.content.content,
+            subject: message.content.subject || existingMsg.content.subject,
+            status: message.content.status,
+            duration: message.content.duration ?? existingMsg.content.duration,
+          },
+        };
+        return newList;
+      }
     }
 
     const newIdx = list.length;

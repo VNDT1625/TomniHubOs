@@ -1,0 +1,89 @@
+{
+  "schemaVersion": "tomny.qlora-recipe.v1",
+  "recipeVersion": 9,
+  "id": "tomny-qwen35-08b-security-v9-a1-r2",
+  "version": "2026-09-10.v9-a1-r2",
+  "promotionStatus": "candidate-only",
+  "purpose": "security",
+  "dataset": {
+    "datasetId": "tomny-qwen35-08b-security-corrected",
+    "datasetVersion": "2026-09-09.security-corrected-v1",
+    "manifestSha256": "e4433d4440bfacf8a72de5d330e0f76bb2804de526257ad698a7ad449b7388ca"
+  },
+  "baseModel": {
+    "modelId": "Qwen/Qwen3.5-0.8B",
+    "revision": "2fc06364715b967f1860aea9cf38778875588b17",
+    "contentSha256": "ff3a07808a9e83627e69a07131fdec45c60973f23cc5617204d173461ec65fe6"
+  },
+  "seed": 20260909,
+  "dataSeed": 20260909,
+  "hardwareProfile": {
+    "profile": "t4-single",
+    "devices": 1,
+    "gpuAllowed": false,
+    "modal": false,
+    "finiteGradientSmokePassed": true
+  },
+  "training": {
+    "maxSteps": 80,
+    "maxLength": 256,
+    "rank": 8,
+    "loraAlpha": 16,
+    "gradientAccumulationSteps": 8,
+    "learningRate": 0.00008,
+    "precision": "fp16",
+    "warmupRatio": 0.05,
+    "targetProfile": "last-block",
+    "lastBlockLayer": 23,
+    "targetModules": ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
+    "optimizer": "paged_adamw_8bit",
+    "scheduler": "cosine",
+    "weightDecay": 0,
+    "maxGradNorm": 1,
+    "dropLast": false,
+    "packing": false,
+    "perDeviceTrainBatchSize": 1,
+    "numDevices": 1,
+    "datasetShuffle": true,
+    "epochSemantics": "max_steps controls optimizer updates; epoch estimate is diagnostic",
+    "evalSteps": 10,
+    "saveSteps": 10,
+    "loggingSteps": 5,
+    "earlyStoppingPatience": 3,
+    "earlyStoppingEnabled": false,
+    "earlyStoppingThreshold": 0.001,
+    "maxValidationRegression": 0
+  },
+  "devGates": {
+    "schemaValidMin": 0.95,
+    "highRiskFalseAllowMax": 0,
+    "riskTypeExactMin": 0.8,
+    "reasonCodeExactMin": 0.7,
+    "actionExactMin": 0.8,
+    "stopOnFailure": true
+  },
+  "acceptanceGates": {
+    "schemaValidMin": 0.95,
+    "highRiskFalseAllowMax": 0,
+    "riskTypeExactMin": 0.8,
+    "reasonCodeExactMin": 0.75,
+    "actionExactMin": 0.8,
+    "stopOnFailure": true
+  },
+  "spendingBoundary": {
+    "maxModalTrainingJobs": 1,
+    "maxSeeds": 1,
+    "automaticSecondRun": false,
+    "acceptanceOnlyAfterDevPass": true,
+    "shadowInference": false
+  },
+  "loRAAccounting": {
+    "trainableParams": 200704,
+    "totalParams": 752593728,
+    "trainablePercent": 0.0266683
+  },
+  "qualityLimitations": [
+    "Single bounded diagnostic run; no automatic retry or hyperparameter sweep.",
+    "Candidate remains inactive until external planner reviews dev and acceptance evidence."
+  ]
+}

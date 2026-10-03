@@ -208,6 +208,9 @@ resources/bundled-model-gateway
 resources/binaries
 resources/hub
 
+resources/models/
+*.onnx
+
 # Server build output
 dist-server/
 .omc/
@@ -242,3 +245,7 @@ data/*.db-wal
 .local-models/
 .training-data/
 .model-adapters/
+.training-data*/
+.training-logs/
+.model-benchmarks/
+.ruff_cache/

@@ -9,6 +9,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import path from 'node:path';
 import {
   FIRST_PARTY_PACKAGE_CATALOG,
+  excludeDefaultSurfaceCatalogEntries,
   FIRST_PARTY_PACKAGE_TRUSTED_KEYS,
 } from '../../desktop/src/common/packages/index.js';
 import {
@@ -80,8 +81,9 @@ export const createWebCliPackageApiHandler = ({
   const service = createPackageManagerService({
     rootDir: packageRoot,
     appVersion,
-    catalog: FIRST_PARTY_PACKAGE_CATALOG,
+    catalog: excludeDefaultSurfaceCatalogEntries(FIRST_PARTY_PACKAGE_CATALOG),
     trustedKeys: FIRST_PARTY_PACKAGE_TRUSTED_KEYS,
+    firstPartyTrustedKeys: FIRST_PARTY_PACKAGE_TRUSTED_KEYS,
     resolveArtifactUrl,
     allowLocalArtifactUrls,
     isPackageSandboxActive: runtime.isActive,

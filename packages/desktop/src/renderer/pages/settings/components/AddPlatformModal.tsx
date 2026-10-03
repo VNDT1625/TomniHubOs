@@ -1,14 +1,12 @@
 import type { IProvider } from '@/common/config/storage';
 import type { ProtocolDetectionResponse, ProtocolType } from '@/common/utils/protocolDetector';
-import { ipcBridge } from '@/common';
 import { uuid } from '@/common/utils';
 import { isGoogleApisHost } from '@/common/utils/urlValidation';
 import ModalHOC from '@/renderer/utils/ui/ModalHOC';
 import { Form, Input, Message, Select, Switch } from '@arco-design/web-react';
-import { LinkCloud, Edit, Search, Loading } from '@icon-park/react';
+import { LinkCloud, Edit, Loading } from '@icon-park/react';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import useModeModeList from '@renderer/hooks/agent/useModeModeList';
 import useProtocolDetection from '@renderer/hooks/system/useProtocolDetection';
 import TomnyModal from '@/renderer/components/base/TomnyModal';
 import ApiKeyEditorModal from './ApiKeyEditorModal';
@@ -18,8 +16,8 @@ import {
   detectNewApiProtocol,
   getPlatformByValue,
   isCustomOption,
-  isGeminiPlatform,
   isNewApiPlatform,
+  getSuggestedModelsForPlatform,
   type PlatformConfig,
 } from '@/renderer/utils/model/modelPlatforms';
 import type { DeepLinkAddProviderDetail } from '@/renderer/hooks/system/useDeepLink';
@@ -175,14 +173,66 @@ const ProtocolDetectionStatus: React.FC<ProtocolDetectionStatusProps> = ({
   return null;
 };
 
+const PLATFORM_BADGE_COLORS: Record<string, { bg: string; color: string; label: string }> = {
+  gemini: { bg: '#4285F4', color: '#ffffff', label: 'G' },
+  'gemini-vertex-ai': { bg: '#4285F4', color: '#ffffff', label: 'G' },
+  openai: { bg: '#10A37F', color: '#ffffff', label: 'O' },
+  anthropic: { bg: '#D97757', color: '#ffffff', label: 'A' },
+  'new-api': { bg: '#0284C7', color: '#ffffff', label: 'N' },
+  bedrock: { bg: '#FF9900', color: '#ffffff', label: 'B' },
+  'aws-bedrock': { bg: '#FF9900', color: '#ffffff', label: 'B' },
+  deepseek: { bg: '#4D6BFE', color: '#ffffff', label: 'D' },
+};
+
 /**
  * 供应商 Logo 组件
- * Provider Logo Component
+ * Provider Logo Component with fallback to branded badge when image is unavailable
  */
-const ProviderLogo: React.FC<{ logo: string | null; name: string; size?: number }> = ({ logo, name, size = 20 }) => {
-  if (logo) {
-    return <img src={logo} alt={name} className='object-contain shrink-0' style={{ width: size, height: size }} />;
+const ProviderLogo: React.FC<{ logo: string | null; name: string; size?: number; platform?: string }> = ({
+  logo,
+  name,
+  size = 20,
+  platform,
+}) => {
+  const [loadFailed, setLoadFailed] = useState(false);
+
+  useEffect(() => {
+    setLoadFailed(false);
+  }, [logo]);
+
+  if (logo && !loadFailed) {
+    return (
+      <img
+        src={logo}
+        alt={name}
+        className='object-contain shrink-0'
+        style={{ width: size, height: size }}
+        onError={() => setLoadFailed(true)}
+      />
+    );
   }
+
+  const key = (platform || name || '').toLowerCase();
+  const badge = PLATFORM_BADGE_COLORS[key] || Object.entries(PLATFORM_BADGE_COLORS).find(([k]) => key.includes(k))?.[1];
+
+  if (badge) {
+    return (
+      <div
+        className='flex items-center justify-center font-bold shrink-0 rounded-4px shadow-xs'
+        style={{
+          width: size,
+          height: size,
+          backgroundColor: badge.bg,
+          color: badge.color,
+          fontSize: Math.max(9, Math.round(size * 0.55)),
+          lineHeight: 1,
+        }}
+      >
+        {badge.label}
+      </div>
+    );
+  }
+
   return <LinkCloud theme='outline' size={size} className='text-t-secondary flex shrink-0' />;
 };
 
@@ -199,7 +249,7 @@ const renderPlatformOption = (platform: PlatformConfig, t?: (key: string) => str
   const display_name = platform.i18nKey && t ? t(platform.i18nKey) : platform.name;
   return (
     <div className='flex items-center gap-8px'>
-      <ProviderLogo logo={platform.logo} name={display_name} size={18} />
+      <ProviderLogo logo={platform.logo} name={display_name} platform={platform.value || platform.platform} size={18} />
       <span>{display_name}</span>
     </div>
   );
@@ -231,7 +281,6 @@ const AddPlatformModal = ModalHOC<{
   // 判断是否为"自定义"选项（没有预设 base_url） / Check if "Custom" option (no preset base_url)
   const isCustom = isCustomOption(platformValue);
   const isBedrock = platform === 'bedrock';
-  const isGemini = isGeminiPlatform(platform);
   const isNewApi = isNewApiPlatform(platform);
 
   // new-api 每模型协议选择状态 / new-api per-model protocol selection state
@@ -247,14 +296,14 @@ const AddPlatformModal = ModalHOC<{
 
   // 计算实际使用的 base_url（优先使用用户输入，否则使用平台预设）
   // Calculate actual base_url (prefer user input, fallback to platform preset)
+  const suggestedModelOptions = useMemo(() => {
+    return getSuggestedModelsForPlatform(platformValue || platform);
+  }, [platformValue, platform]);
+
   const actualBaseUrl = useMemo(() => {
     if (base_url) return base_url;
     return selectedPlatform?.base_url || '';
   }, [base_url, selectedPlatform?.base_url]);
-
-  // For Bedrock, don't pass bedrock_config to avoid auto-refresh on input changes
-  // We'll build it dynamically in onFocus
-  const modelListState = useModeModeList(platform, actualBaseUrl, api_key, true, undefined);
 
   // 协议检测 Hook / Protocol detection hook
   // 启用检测的条件：
@@ -273,9 +322,9 @@ const AddPlatformModal = ModalHOC<{
     shouldEnableDetection && inputChangedSinceLastSwitch ? actualBaseUrl : '',
     shouldEnableDetection && inputChangedSinceLastSwitch ? api_key : '',
     {
-      debounceMs: 1000,
+      debounceMs: 300,
       autoDetect: true,
-      timeout: 10000,
+      timeout: 3000,
     }
   );
 
@@ -320,20 +369,6 @@ const AddPlatformModal = ModalHOC<{
       }
     }
   }, [modalProps.visible, deepLinkData]);
-
-  useEffect(() => {
-    if (platform?.includes('gemini')) {
-      void modelListState.mutate();
-    }
-  }, [platform]);
-
-  // 处理自动修复的 base_url / Handle auto-fixed base_url
-  useEffect(() => {
-    if (modelListState.data?.fix_base_url) {
-      form.setFieldValue('base_url', modelListState.data.fix_base_url);
-      message.info(t('settings.baseUrlAutoFix', { base_url: modelListState.data.fix_base_url }));
-    }
-  }, [modelListState.data?.fix_base_url, form]);
 
   const handleSubmit = () => {
     form
@@ -457,9 +492,6 @@ const AddPlatformModal = ModalHOC<{
                     ? 'https://your-newapi-instance.com'
                     : selectedPlatform?.base_url || ''
               }
-              onBlur={() => {
-                void modelListState.mutate();
-              }}
             />
           </Form.Item>
 
@@ -504,9 +536,6 @@ const AddPlatformModal = ModalHOC<{
             }
           >
             <Input
-              onBlur={() => {
-                void modelListState.mutate();
-              }}
               suffix={
                 <Edit
                   theme='outline'
@@ -590,99 +619,21 @@ const AddPlatformModal = ModalHOC<{
           </Form.Item>
 
           {/* 模型选择 / Model Selection */}
-          <Form.Item
-            label={t('settings.modelName')}
-            field={'model'}
-            required
-            rules={[{ required: true }]}
-            validateStatus={!isFullUrl && modelListState.error ? 'error' : 'success'}
-            help={
-              !isFullUrl && modelListState.error instanceof Error
-                ? modelListState.error.message
-                : !isFullUrl && modelListState.error
-                  ? String(modelListState.error)
-                  : undefined
-            }
-          >
+          <Form.Item label={t('settings.modelName')} field={'model'} required rules={[{ required: true }]}>
             <Select
-              loading={!isFullUrl && modelListState.isLoading}
               showSearch
               allowCreate
-              suffixIcon={
-                isFullUrl ? undefined : (
-                  <Search
-                    onClick={async (e) => {
-                      e.stopPropagation();
-                      if ((isCustom || isNewApi) && !base_url) {
-                        message.warning(t('settings.pleaseEnterBaseUrl'));
-                        return;
-                      }
-                      // For Bedrock, build bedrock_config from current form values and fetch models
-                      if (isBedrock) {
-                        const values = form.getFields();
-                        if (!values.bedrockAuthMethod || !values.bedrockRegion) {
-                          message.warning(t('settings.bedrock.fillRequiredFields'));
-                          return;
-                        }
-                        if (
-                          values.bedrockAuthMethod === 'accessKey' &&
-                          (!values.bedrockAccessKeyId || !values.bedrockSecretAccessKey)
-                        ) {
-                          message.warning(t('settings.bedrock.fillRequiredFields'));
-                          return;
-                        }
-                        if (values.bedrockAuthMethod === 'profile' && !values.bedrockProfile) {
-                          message.warning(t('settings.bedrock.fillRequiredFields'));
-                          return;
-                        }
-                        // Build bedrock_config and fetch models manually
-                        const bedrock_config = {
-                          auth_method: values.bedrockAuthMethod,
-                          region: values.bedrockRegion,
-                          ...(values.bedrockAuthMethod === 'accessKey'
-                            ? {
-                                access_key_id: values.bedrockAccessKeyId,
-                                secret_access_key: values.bedrockSecretAccessKey,
-                              }
-                            : {
-                                profile: values.bedrockProfile,
-                              }),
-                        };
-                        try {
-                          const res = await ipcBridge.mode.fetchModelList.invoke({
-                            platform,
-                            api_key: '',
-                            bedrock_config,
-                          });
-                          const models =
-                            res.models.map((v) => {
-                              if (typeof v === 'string') {
-                                return { label: v, value: v };
-                              } else {
-                                return { label: v.name, value: v.id };
-                              }
-                            }) || [];
-                          // Update the model list state manually
-                          void modelListState.mutate({ models }, false);
-                        } catch (error: any) {
-                          message.error(error.message || 'Failed to fetch models');
-                        }
-                        return;
-                      }
-                      // For Gemini, no api_key check needed
-                      if (!isGemini && !api_key) {
-                        message.warning(t('settings.pleaseEnterApiKey'));
-                        return;
-                      }
-                      void modelListState.mutate();
-                    }}
-                    theme='outline'
-                    size={16}
-                    className='cursor-pointer text-t-secondary hover:text-t-primary'
-                  />
-                )
-              }
-              options={isFullUrl ? [] : modelListState.data?.models || []}
+              placeholder={t('settings.addModelPlaceholder')}
+              options={suggestedModelOptions}
+              filterOption={(inputValue, option) => {
+                const props = (option as React.ReactElement<{ value?: string; children?: React.ReactNode }>)?.props;
+                const val = typeof props?.value === 'string' ? props.value : '';
+                const lab = typeof props?.children === 'string' ? props.children : '';
+                return (
+                  val.toLowerCase().includes(inputValue.toLowerCase()) ||
+                  lab.toLowerCase().includes(inputValue.toLowerCase())
+                );
+              }}
             />
           </Form.Item>
 
@@ -705,19 +656,6 @@ const AddPlatformModal = ModalHOC<{
         onClose={() => setApiKeyEditorVisible(false)}
         onSave={(keys) => {
           form.setFieldValue('api_key', keys);
-          void modelListState.mutate();
-        }}
-        onTestKey={async (key) => {
-          try {
-            const res = await ipcBridge.mode.fetchModelList.invoke({
-              base_url: actualBaseUrl,
-              api_key: key,
-              platform: selectedPlatform?.platform ?? 'custom',
-            });
-            return Array.isArray(res?.models) && res.models.length > 0;
-          } catch {
-            return false;
-          }
         }}
       />
     </TomnyModal>

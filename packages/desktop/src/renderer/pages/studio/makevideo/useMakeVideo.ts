@@ -35,7 +35,7 @@ import {
   type VideoProject,
   type VoiceConfig,
 } from './makeVideoClient';
-import { recordGenDuration } from '../components/GenerationProgress';
+import { recordGenDuration } from '@package-apps/shared/renderer/GenerationProgress';
 
 /** Failure arm of the result envelope; cast target under the no-`strictNullChecks` tsconfig. */
 type MakeVideoFailure = { ok: false; error: string; code: 'no-model' | 'no-image-model' | 'error' };

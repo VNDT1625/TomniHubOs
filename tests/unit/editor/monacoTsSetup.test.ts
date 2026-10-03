@@ -12,7 +12,7 @@ import {
   isTypeScriptLike,
   SINGLE_FILE_IGNORED_DIAGNOSTICS,
   type TypeScriptEnums,
-} from '../../../packages/desktop/src/renderer/pages/editor/adapters/monacoTsSetup';
+} from '../../../packages/package-apps/ide/src/monacoTsSetup';
 
 const enums: TypeScriptEnums = {
   ScriptTarget: { ESNext: 99 },

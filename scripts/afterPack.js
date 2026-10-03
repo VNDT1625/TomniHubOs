@@ -42,6 +42,21 @@ function requirePackagedResource(resourcesDir, relativePath, missing) {
   }
 }
 
+function verifySharpRuntime(resourcesDir, electronPlatformName, targetArch) {
+  if (electronPlatformName !== 'win32' || targetArch !== 'x64') return;
+
+  const sharpRoot = path.join(resourcesDir, 'app.asar.unpacked', 'node_modules', '@img', 'sharp-win32-x64', 'lib');
+
+  const colourManifest = path.join(resourcesDir, 'app.asar.unpacked', 'node_modules', '@img', 'colour', 'package.json');
+  const required = ['sharp-win32-x64.node', 'libvips-42.dll', 'libvips-cpp-8.17.3.dll'];
+  const missing = required.filter((file) => !fs.existsSync(path.join(sharpRoot, file)));
+
+  if (!fs.existsSync(colourManifest)) missing.push('@img/colour/package.json');
+  if (missing.length > 0) {
+    throw new Error(`Packaged sharp runtime is missing: ${missing.join(', ')}`);
+  }
+}
+
 function verifyBundledResources(resourcesDir, electronPlatformName, targetArch) {
   const runtimeKey = `${electronPlatformName}-${targetArch}`;
   const missing = [];
@@ -140,6 +155,7 @@ module.exports = async function afterPack(context) {
     }
 
     verifyBundledResources(resourcesDir, electronPlatformName, targetArch);
+    verifySharpRuntime(resourcesDir, electronPlatformName, targetArch);
   } else {
     throw new Error(`resources directory not found: ${resourcesDir}`);
   }

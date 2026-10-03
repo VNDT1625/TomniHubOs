@@ -1,6 +1,6 @@
 .container {
   width: 100%;
-  margin: 4px 0;
+  margin: 6px 0;
 }
 
 .header {
@@ -11,11 +11,17 @@
   color: var(--aou-6);
   cursor: pointer;
   user-select: none;
-  line-height: 1;
+  line-height: 1.2;
+  padding: 4px 6px;
+  border-radius: 6px;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
 }
 
 .header:hover {
   color: var(--aou-7);
+  background-color: var(--aou-1);
 }
 
 .headerIcon {
@@ -44,26 +50,63 @@
   transform: rotate(90deg);
 }
 
+.copyBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 4px;
+  padding: 2px 4px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: var(--aou-4);
+  cursor: pointer;
+  transition:
+    color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.copyBtn:hover {
+  color: var(--aou-7);
+  background: var(--aou-2);
+}
+
+.bodyWrapper {
+  transition:
+    max-height 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.2s ease;
+  overflow: hidden;
+}
+
+.bodyExpanded {
+  max-height: 800px;
+  opacity: 1;
+}
+
+.bodyCollapsed {
+  max-height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
 .body {
   color: #86909c;
   font-size: 13px;
-  line-height: 1.7;
-  padding: 10px 14px;
-  margin-top: 6px;
-  margin-left: 20px;
+  line-height: 1.6;
+  padding: 8px 14px;
+  margin-top: 4px;
+  margin-left: 12px;
   background: color-mix(in srgb, var(--aou-1) 50%, #fff);
   border-radius: 8px;
-  white-space: pre-wrap;
+  border-left: 2px solid var(--aou-3);
   word-break: break-word;
-  overflow: hidden;
+  overflow-y: auto;
+  max-height: 500px;
 }
 
 :global([data-theme='dark']) .body {
   background: var(--aou-1);
-}
-
-.collapsed {
-  display: none;
+  border-left-color: var(--aou-4);
 }
 
 .summary {
@@ -74,5 +117,7 @@
   .body {
     font-size: 13px;
     line-height: 1.4;
+    margin-left: 4px;
+    padding: 6px 10px;
   }
 }

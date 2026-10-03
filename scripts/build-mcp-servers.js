@@ -59,7 +59,7 @@ async function main() {
     }),
     esbuild.build({
       ...SHARED_OPTIONS,
-      entryPoints: [path.join(ROOT, 'packages/desktop/src/process/ide/mcp/strictClaudeAcp.ts')],
+      entryPoints: [path.join(ROOT, 'packages/package-apps/ide/src/process/mcp/strictClaudeAcp.ts')],
       outfile: path.join(ROOT, 'out/main/strict-claude-acp.js'),
     }),
   ]);

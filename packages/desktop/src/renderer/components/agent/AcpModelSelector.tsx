@@ -36,12 +36,16 @@ const AcpModelSelector: React.FC<{
   const { model_info, canSwitch, selectModel } = useAcpModelInfo({ conversation_id, backend, initialModelId });
 
   const defaultModelLabel = t('common.defaultModel');
-  const rawDisplayLabel =
-    (model_info?.current_model_id &&
-      model_info.available_models.find((m) => m.id === model_info.current_model_id)?.label) ||
-    model_info?.current_model_label ||
-    model_info?.current_model_id ||
-    '';
+  const autoModelLabel = `${t('guid.hubHome.status.automatic', { defaultValue: 'Tự động (Auto)' })} (Laya Decision)`;
+  const isAutoModel =
+    model_info?.current_model_id === 'auto' || (!model_info?.current_model_id && initialModelId === 'auto');
+  const rawDisplayLabel = isAutoModel
+    ? autoModelLabel
+    : (model_info?.current_model_id &&
+        model_info.available_models.find((m) => m.id === model_info.current_model_id)?.label) ||
+      model_info?.current_model_label ||
+      model_info?.current_model_id ||
+      '';
   const display_label = getModelDisplayLabel({
     selected_value: model_info?.current_model_id,
     selectedLabel: rawDisplayLabel,
@@ -53,8 +57,12 @@ const AcpModelSelector: React.FC<{
   const renderLogo = () => <Brain theme='outline' size='14' fill={iconColors.secondary} className='shrink-0' />;
 
   if (!model_info) {
+    const isAutoFallback = initialModelId === 'auto' || backend === 'tomny';
     return (
-      <Tooltip content={t('conversation.welcome.modelSwitchNotSupported')} position='top'>
+      <Tooltip
+        content={isAutoFallback ? autoModelLabel : t('conversation.welcome.modelSwitchNotSupported')}
+        position='top'
+      >
         <Button
           className='sendbox-model-btn header-model-btn agent-mode-compact-pill'
           shape='round'
@@ -63,7 +71,10 @@ const AcpModelSelector: React.FC<{
         >
           <span className='flex items-center gap-6px min-w-0 leading-none'>
             {renderLogo()}
-            <MarqueePillLabel>{t('conversation.welcome.useCliModel')}</MarqueePillLabel>
+            {isAutoFallback && <div className='w-6px h-6px rounded-full shrink-0 bg-blue-500 mr-2px' />}
+            <MarqueePillLabel>
+              {isAutoFallback ? autoModelLabel : t('conversation.welcome.useCliModel')}
+            </MarqueePillLabel>
           </span>
         </Button>
       </Tooltip>
@@ -95,7 +106,13 @@ const AcpModelSelector: React.FC<{
       // Desktop: leave default container so click events reach Menu.Item normally.
       {...(isMobileHeaderCompact ? { getPopupContainer: () => document.body } : {})}
       droplist={
-        <Menu>
+        <Menu selectedKeys={isAutoModel ? ['auto'] : [model_info.current_model_id || '']}>
+          <Menu.Item key='auto' className={isAutoModel ? 'bg-2!' : ''} onClick={() => selectModel('auto')}>
+            <div className='flex items-center gap-8px w-full font-medium'>
+              <div className='w-6px h-6px rounded-full shrink-0 bg-blue-500' />
+              <span>{autoModelLabel}</span>
+            </div>
+          </Menu.Item>
           {model_info.available_models.map((model) => (
             <Menu.Item
               key={model.id}

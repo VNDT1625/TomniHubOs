@@ -36,7 +36,7 @@
 import { app, shell } from 'electron';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import type { IDefaultBrowserStatus } from '@/common/adapter/ipcBridge';
+import type { DefaultBrowserStatus as IDefaultBrowserStatus } from '@/common/packages/browserHost';
 
 const execFileAsync = promisify(execFile);
 

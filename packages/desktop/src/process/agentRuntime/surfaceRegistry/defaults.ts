@@ -75,7 +75,7 @@ const createIdeCapability = (): SurfaceCapabilityBinding => ({
   kind: 'mcp',
   providerId: 'builtin.ide',
   serverName: 'tomny-ide',
-  toolPatterns: ['ide_*', 'tomny_*', 'terminal_*', 'git_*', 'team_*', 'db_*', 'exp_*'],
+  toolPatterns: ['ide_*', 'tomny_*', 'terminal_*', 'test_*', 'git_*', 'team_*', 'db_*', 'exp_*'],
   minimumPermissionMode: 'workspace-write',
   requiredPermissionScopes: ['workspace.read', 'workspace.write'],
   requireExplicitGrant: true,

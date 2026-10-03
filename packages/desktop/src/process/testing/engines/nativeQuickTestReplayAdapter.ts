@@ -1,4 +1,7 @@
-import type { ReplayPageAdapter, ReplayScenario } from '../../ide/quickTestReplay';
+import type {
+  ReplayPageAdapter,
+  ReplayScenario,
+} from '@package-apps/ide/process/execution/quickTest/analysis/quickTestReplay';
 import { createAndroidQuickTestAdapter } from './androidQuickTestAdapter';
 import { createWindowsQuickTestAdapter } from './windowsQuickTestAdapter';
 

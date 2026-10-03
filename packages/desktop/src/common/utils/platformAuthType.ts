@@ -66,12 +66,13 @@ export function getAuthTypeFromPlatform(platform: string): AuthType {
  */
 export function getProviderAuthType(provider: {
   platform: string;
-  auth_type?: AuthType;
+  /** Protocol auth type; transport values ('api-key'/'oauth') are handled by the provider broker. */
+  auth_type?: AuthType | 'api-key' | 'oauth';
   model_protocols?: Record<string, string>;
   use_model?: string;
 }): AuthType {
-  // If auth_type is explicitly specified, use it directly
-  if (provider.auth_type) {
+  // Transport auth values are distinct from the SDK protocol selector.
+  if (provider.auth_type && provider.auth_type !== 'api-key' && provider.auth_type !== 'oauth') {
     return provider.auth_type;
   }
 

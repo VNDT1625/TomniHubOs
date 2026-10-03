@@ -11,8 +11,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createSqliteDriver } from '@/process/ide/db/drivers/sqliteDriver';
-import type { DbConnectionConfig } from '@/process/ide/db/dbTypes';
+import { createSqliteDriver } from '@package-apps/ide/process/data/db/drivers/sqliteDriver';
+import type { DbConnectionConfig } from '@package-apps/ide/process/data/db/dbTypes';
 
 /**
  * Probe better-sqlite3 by actually opening an in-memory DB. The native binding

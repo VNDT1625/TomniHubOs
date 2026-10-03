@@ -1,21 +1,12 @@
 import type { ConfigKey, ConfigKeyMap } from './configKeys';
+import { getBaseUrl } from '../adapter/httpBridge';
+import { systemSettings } from '../adapter/ipcBridge';
 
 type Subscriber = (value: unknown) => void;
 
-declare global {
-  interface Window {
-    __backendPort?: number;
-  }
-}
-
-function getBaseUrl(): string {
-  // WebUI browser mode: no preload, fetch same-origin so web-host's
-  // static-server reverse-proxies /api/* to the backend.
-  if (typeof window !== 'undefined' && typeof document !== 'undefined' && !(window as Window).__backendPort) {
-    return '';
-  }
-  const port = typeof window !== 'undefined' ? (window as Window).__backendPort || 13400 : 13400;
-  return `http://127.0.0.1:${port}`;
+function hasNativeIpc(): boolean {
+  if (typeof window === 'undefined') return false;
+  return Boolean((window as unknown as { electronAPI?: unknown }).electronAPI);
 }
 
 function configValuesEqual(left: unknown, right: unknown): boolean {
@@ -65,6 +56,21 @@ class ConfigServiceImpl {
   initialize(): Promise<void> {
     if (this.initPromise) return this.initPromise;
     this.initPromise = (async () => {
+      if (hasNativeIpc()) {
+        try {
+          const data = await systemSettings.getClientConfig.invoke();
+          this.cache.clear();
+          if (data && typeof data === 'object') {
+            for (const [key, value] of Object.entries(data)) {
+              this.cache.set(key, value);
+            }
+          }
+          this.initialized = true;
+          return;
+        } catch (error) {
+          console.warn('[ConfigService] Native IPC initialize failed, falling back to HTTP:', error);
+        }
+      }
       const data = await fetchJson<Record<string, unknown>>('GET', '/api/settings/client');
       this.cache.clear();
       if (data) {
@@ -90,8 +96,20 @@ class ConfigServiceImpl {
   }
 
   async refresh<K extends ConfigKey>(key: K): Promise<ConfigKeyMap[K] | undefined> {
-    const data = await fetchJson<Record<string, unknown>>('GET', '/api/settings/client');
-    const nextValue = data?.[key] as ConfigKeyMap[K] | undefined;
+    let nextValue: ConfigKeyMap[K] | undefined;
+    if (hasNativeIpc()) {
+      try {
+        const data = await systemSettings.getClientConfig.invoke();
+        nextValue = data?.[key] as ConfigKeyMap[K] | undefined;
+      } catch (error) {
+        console.warn('[ConfigService] Native IPC refresh failed, falling back to HTTP:', error);
+        const data = await fetchJson<Record<string, unknown>>('GET', '/api/settings/client');
+        nextValue = data?.[key] as ConfigKeyMap[K] | undefined;
+      }
+    } else {
+      const data = await fetchJson<Record<string, unknown>>('GET', '/api/settings/client');
+      nextValue = data?.[key] as ConfigKeyMap[K] | undefined;
+    }
     const previousValue = this.get(key);
 
     if (!configValuesEqual(previousValue, nextValue)) {
@@ -109,6 +127,14 @@ class ConfigServiceImpl {
   async set<K extends ConfigKey>(key: K, value: ConfigKeyMap[K]): Promise<void> {
     this.cache.set(key, value);
     this.notify(key, value);
+    if (hasNativeIpc()) {
+      try {
+        await systemSettings.setClientConfig.invoke({ key, value });
+        return;
+      } catch (error) {
+        console.warn('[ConfigService] Native IPC set failed, falling back to HTTP:', error);
+      }
+    }
     await fetchJson<void>('PUT', '/api/settings/client', { [key]: value });
   }
 
@@ -120,6 +146,14 @@ class ConfigServiceImpl {
   async remove(key: ConfigKey): Promise<void> {
     this.cache.delete(key);
     this.notify(key, undefined);
+    if (hasNativeIpc()) {
+      try {
+        await systemSettings.removeClientConfig.invoke({ key });
+        return;
+      } catch (error) {
+        console.warn('[ConfigService] Native IPC remove failed, falling back to HTTP:', error);
+      }
+    }
     await fetchJson<void>('PUT', '/api/settings/client', { [key]: null });
   }
 
@@ -127,6 +161,14 @@ class ConfigServiceImpl {
     for (const [key, value] of Object.entries(entries)) {
       this.cache.set(key, value);
       this.notify(key as ConfigKey, value);
+    }
+    if (hasNativeIpc()) {
+      try {
+        await systemSettings.setBatchClientConfig.invoke({ entries: entries as Record<string, unknown> });
+        return;
+      } catch (error) {
+        console.warn('[ConfigService] Native IPC setBatch failed, falling back to HTTP:', error);
+      }
     }
     await fetchJson<void>('PUT', '/api/settings/client', entries);
   }

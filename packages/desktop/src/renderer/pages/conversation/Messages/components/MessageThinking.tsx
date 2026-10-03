@@ -5,10 +5,12 @@
  */
 
 import type { IMessageThinking } from '@/common/chat/chatLib';
-import { Spin } from '@arco-design/web-react';
-import { Brain, Right } from '@icon-park/react';
+import { Spin, Tooltip } from '@arco-design/web-react';
+import { Brain, Check, Copy, Right } from '@icon-park/react';
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import MarkdownView from '@renderer/components/Markdown';
+import { copyText } from '@/renderer/utils/ui/clipboard';
 import styles from './MessageThinking.module.css';
 
 const MessageThinking: React.FC<{ message: IMessageThinking }> = ({ message }) => {
@@ -39,6 +41,8 @@ const MessageThinking: React.FC<{ message: IMessageThinking }> = ({ message }) =
   const duration = message.content.duration ?? (message.content as { duration_ms?: number }).duration_ms;
   const isDone = status === 'done';
   const [expanded, setExpanded] = useState(!isDone);
+  const userToggledRef = useRef(false);
+  const [copied, setCopied] = useState(false);
   const [elapsedTime, setElapsedTime] = useState(() => {
     const initialStartedAt = message.created_at ?? Date.now();
     return isDone ? 0 : Math.max(0, Math.floor((Date.now() - initialStartedAt) / 1000));
@@ -47,16 +51,14 @@ const MessageThinking: React.FC<{ message: IMessageThinking }> = ({ message }) =
   const activeMsgIdRef = useRef(message.msg_id);
   const bodyRef = useRef<HTMLDivElement>(null);
 
-  // Auto-collapse when status changes to done
+  // Auto-collapse when status changes to done ONLY if user hasn't explicitly toggled
   useEffect(() => {
-    if (isDone) {
+    if (isDone && !userToggledRef.current) {
       setExpanded(false);
     }
   }, [isDone]);
 
-  // Elapsed timer for active thinking. Stream updates may carry a fresh
-  // `created_at`; that is an update timestamp, not a new thinking run. Keep
-  // the original start time for the same msg_id so the clock never jumps back.
+  // Elapsed timer for active thinking
   useEffect(() => {
     if (isDone) return;
 
@@ -83,21 +85,52 @@ const MessageThinking: React.FC<{ message: IMessageThinking }> = ({ message }) =
     }
   }, [text, isDone, expanded]);
 
+  const handleToggle = () => {
+    userToggledRef.current = true;
+    setExpanded((v) => !v);
+  };
+
+  const handleCopy = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!text) return;
+    copyText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
   const summaryText = isDone
     ? `${t('conversation.thinking.complete', { defaultValue: 'Thought complete' })} · ${formatDuration(duration || 0)}`
     : `${subject || t('conversation.thinking.label', { defaultValue: 'Thinking...' })} · ${formatElapsedTime(elapsedTime)}`;
 
+  if (!text && isDone) {
+    return null;
+  }
+
   return (
     <div className={styles.container}>
-      <div className={styles.header} onClick={() => setExpanded((v) => !v)}>
+      <div className={styles.header} onClick={handleToggle}>
         <span className={styles.headerIcon}>{!isDone ? <Spin size={12} /> : <Brain theme='outline' size='14' />}</span>
         <span className={styles.summary}>{summaryText}</span>
         <span className={`${styles.arrow} ${expanded ? styles.arrowExpanded : ''}`}>
           <Right theme='outline' size='12' />
         </span>
+        {expanded && text ? (
+          <Tooltip
+            content={
+              copied ? t('common.copied', { defaultValue: 'Copied!' }) : t('common.copy', { defaultValue: 'Copy' })
+            }
+          >
+            <button type='button' className={styles.copyBtn} onClick={handleCopy} aria-label='Copy thinking'>
+              {copied ? <Check theme='outline' size='12' /> : <Copy theme='outline' size='12' />}
+            </button>
+          </Tooltip>
+        ) : null}
       </div>
-      <div ref={bodyRef} className={`${styles.body} ${!expanded ? styles.collapsed : ''}`}>
-        {text}
+      <div ref={bodyRef} className={`${styles.bodyWrapper} ${expanded ? styles.bodyExpanded : styles.bodyCollapsed}`}>
+        <div className={styles.body}>
+          <MarkdownView>{text}</MarkdownView>
+        </div>
       </div>
     </div>
   );

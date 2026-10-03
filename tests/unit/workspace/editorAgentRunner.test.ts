@@ -14,7 +14,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { createEditorAgentRunner, type EditorFileIO } from '@/process/workspace/editorAgentRunner';
-import type { AgentChat } from '@/process/browser/webAgentRunner';
+import type { AgentChat } from '@process/browser/webAgentRunner';
 import type { SurfaceRunContext } from '@/process/workspace/surfaceTypes';
 
 /** An in-memory file store implementing the runner's narrow IO slice. */

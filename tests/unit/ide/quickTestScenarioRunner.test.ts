@@ -8,8 +8,8 @@ import {
   loadSavedQuickTestScenario,
   QuickTestScenarioRunner,
   type ScenarioRunnerAdapter,
-} from '../../../packages/desktop/src/process/ide/mcp/quickTestScenarioRunner';
-import type { ReplayScenario } from '../../../packages/desktop/src/process/ide/quickTestReplay';
+} from '@package-apps/ide/process/mcp/quickTestScenarioRunner';
+import type { ReplayScenario } from '@package-apps/ide/process/execution/quickTest/analysis/quickTestReplay';
 
 const roots: string[] = [];
 

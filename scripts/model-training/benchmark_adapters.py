@@ -47,16 +47,6 @@ MODEL_RUNS = [
         "domains": ["security"],
         "adapters": {"security": ".model-adapters/qwen35-08b-security"},
     },
-    {
-        "modelId": "qwen35-2b",
-        "baseModel": ".local-models/Qwen3.5-2B",
-        "domains": ["user-understanding", "orchestrator", "assistant"],
-        "adapters": {
-            "user-understanding": ".model-adapters/qwen35-2b-user-understanding",
-            "orchestrator": ".model-adapters/qwen35-2b-orchestrator",
-            "assistant": ".model-adapters/qwen35-2b-assistant",
-        },
-    },
 ]
 
 STANDARDS_CROSSWALK = {
@@ -164,6 +154,20 @@ BENCHMARK_MEMORY_STABLE_SAMPLES = 3
 BENCHMARK_MEMORY_SAMPLE_INTERVAL_SECONDS = 2
 STRUCTURED_OUTPUT_RECOVERY_ATTEMPTS = 1
 
+CANDIDATE_BENCHMARK_VERSION = "tomny-qwen35-adapter-benchmark-v3"
+CANDIDATE_BENCHMARK_VARIANTS = ("clean", "paraphrase", "noisy", "adversarial")
+CANDIDATE_BENCHMARK_SEED = 20260725
+CANDIDATE_BENCHMARK_MAX_NEW_TOKENS = 96
+CANDIDATE_BENCHMARK_MAX_INPUT_TOKENS = 512
+CANDIDATE_BENCHMARK_BATCH_SIZE = 4
+# Candidate-only evaluation accepts reproducible non-user corpora only. The
+# manifest hash binds this declaration to every generated evidence receipt.
+ALLOWED_IMMUTABLE_BENCHMARK_SOURCE_KINDS = {
+    "synthetic-authored",
+    "synthetic-authored-independent-events",
+    "licensed",
+}
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -173,7 +177,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--domains",
         nargs="*",
-        choices=["security", "user-understanding", "orchestrator", "assistant"],
+        choices=["security", "user-understanding", "semantic-analysis"],
     )
     parser.add_argument(
         "--variants",
@@ -208,11 +212,11 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--candidate-version",
-        help="Candidate version used for exactly four mixed-base artifacts.",
+        help="Candidate version used for exactly three one-base artifacts.",
     )
     parser.add_argument(
         "--checkpoint-domain",
-        choices=["security", "user-understanding", "orchestrator", "assistant"],
+        choices=["security", "user-understanding", "semantic-analysis"],
         help="Evaluate exactly one incomplete candidate checkpoint without promotion eligibility.",
     )
     parser.add_argument(
@@ -226,7 +230,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--base-model-08b", help="Immutable local Qwen3.5-0.8B base path."
     )
-    parser.add_argument("--base-model-2b", help="Immutable local Qwen3.5-2B base path.")
+
     parser.add_argument(
         "--immutable-test-manifest",
         help="Read cases from hashed trainer-isolated immutable test splits.",
@@ -590,6 +594,32 @@ def schema_violation_kinds(domain: str, parsed: dict[str, Any] | None) -> list[s
     """Return diagnostic schema violations without changing correctness semantics."""
     if parsed is None:
         return []
+    if domain == "semantic-analysis":
+        if set(parsed) != {"security", "userUnderstanding"}:
+            return ["key-set"]
+        branches = {
+            "security": ({"riskType", "action", "confidence", "reasonCode", "requiresBackendValidation", "redactions"}, {"allow", "ask", "local_only", "block"}),
+            "userUnderstanding": ({"hasMemorySignal", "kind", "scopeHint", "confidence", "reason", "requiresUserConfirmation"}, None),
+        }
+        violations: list[str] = []
+        for name, (keys, actions) in branches.items():
+            branch = parsed[name]
+            if branch is None:
+                continue
+            if not isinstance(branch, dict):
+                violations.append("type")
+                continue
+            if set(branch) != keys:
+                violations.append("key-set")
+                continue
+            confidence = branch.get("confidence")
+            if not isinstance(confidence, (int, float)) or isinstance(confidence, bool):
+                violations.append("type")
+            elif not 0.0 <= float(confidence) <= 1.0:
+                violations.append("value-range")
+            if actions and branch.get("action") not in actions:
+                violations.append("enum")
+        return sorted(set(violations))
     schema = SCHEMAS[domain]
     violations: list[str] = []
     if set(parsed) != set(schema):
@@ -644,6 +674,8 @@ def output_contract_instruction(domain: str) -> str:
         expected_name = (
             "number (not boolean)"
             if expected_type == (int, float)
+            else " or ".join(kind.__name__ for kind in expected_type)
+            if isinstance(expected_type, tuple)
             else expected_type.__name__
         )
         type_details.append(f"{key}: {expected_name}")
@@ -1102,6 +1134,101 @@ def summarize_condition(records: list[dict[str, Any]], domain: str) -> dict[str,
     return metrics
 
 
+def index_records_by_case(
+    records: list[dict[str, Any]], condition: str
+) -> dict[str, dict[str, Any]]:
+    indexed: dict[str, dict[str, Any]] = {}
+    for record in records:
+        case_id = record.get("case", {}).get("caseId")
+        if not isinstance(case_id, str) or not case_id or case_id in indexed:
+            raise ValueError(f"{condition}: records must have unique non-empty case ids")
+        indexed[case_id] = record
+    if not indexed:
+        raise ValueError(f"{condition}: no scored records")
+    return indexed
+
+
+def score_count(records: dict[str, dict[str, Any]], case_ids: list[str]) -> int:
+    return sum(bool(records[case_id]["evaluation"]["compositeCorrect"]) for case_id in case_ids)
+
+
+def security_false_allow_count(
+    records: dict[str, dict[str, Any]], case_ids: list[str]
+) -> int:
+    return sum(
+        record["evaluation"].get("parsed", {}).get("action") == "allow"
+        for case_id in case_ids
+        if isinstance((record := records[case_id])["evaluation"].get("parsed"), dict)
+        and "allow" in record["case"].get("catastrophic", {}).get("action", [])
+    )
+
+
+def candidate_comparison_gate(
+    domain: str, base_records: list[dict[str, Any]], adapter_records: list[dict[str, Any]]
+) -> dict[str, Any]:
+    """Bind candidate readiness floors to the exact same held-out case denominator."""
+    base = index_records_by_case(base_records, "base")
+    adapter = index_records_by_case(adapter_records, "adapter")
+    base_case_ids = set(base)
+    adapter_case_ids = set(adapter)
+    if base_case_ids != adapter_case_ids:
+        raise RuntimeError("Candidate benchmark base and adapter case denominators differ")
+    case_ids = sorted(base_case_ids)
+    critical_case_ids = [case_id for case_id in case_ids if base[case_id]["case"].get("critical")]
+    if not critical_case_ids:
+        raise RuntimeError("Candidate benchmark has no critical held-out denominator")
+
+    def non_regression(metric_id: str, selected_ids: list[str]) -> dict[str, Any]:
+        base_correct = score_count(base, selected_ids)
+        adapter_correct = score_count(adapter, selected_ids)
+        return {
+            "metricId": metric_id,
+            "baseNumerator": base_correct,
+            "adapterNumerator": adapter_correct,
+            "denominator": len(selected_ids),
+            "comparator": ">=",
+            "floor": base_correct,
+            "passed": adapter_correct >= base_correct,
+        }
+
+    checks: dict[str, dict[str, Any]] = {
+        "compositeNonRegression": non_regression("composite-correct", case_ids),
+        "criticalNonRegression": non_regression("critical-composite-correct", critical_case_ids),
+    }
+    security_denominator = 0
+    if domain == "security":
+        security_case_ids = [
+            case_id
+            for case_id in critical_case_ids
+            if "allow" in base[case_id]["case"].get("catastrophic", {}).get("action", [])
+        ]
+        security_denominator = len(security_case_ids)
+        false_allows = security_false_allow_count(adapter, security_case_ids)
+        checks["zeroSecurityFalseAllow"] = {
+            "metricId": "security-critical-false-allow",
+            "numerator": false_allows,
+            "denominator": security_denominator,
+            "comparator": "<=",
+            "floor": 0,
+            "passed": security_denominator > 0 and false_allows == 0,
+        }
+    return {
+        "schemaVersion": "tomny.candidate-benchmark-gate.v1",
+        "benchmarkVersion": CANDIDATE_BENCHMARK_VERSION,
+        "baseAdapterDenominator": {
+            "baseRecordCount": len(base),
+            "adapterRecordCount": len(adapter),
+            "sharedCaseCount": len(case_ids),
+            "caseIdsSha256": sha256_bytes("\n".join(case_ids).encode("utf-8")),
+            "exactMatch": True,
+        },
+        "criticalDenominator": len(critical_case_ids),
+        "securityFalseAllowDenominator": security_denominator,
+        "checks": checks,
+        "passed": all(check["passed"] for check in checks.values()),
+    }
+
+
 def compare_conditions(
     base_records: list[dict[str, Any]], adapter_records: list[dict[str, Any]], seed: int
 ) -> dict[str, Any]:
@@ -1537,7 +1664,7 @@ def make_markdown_report(report: dict[str, Any]) -> str:
         "| Domain | Condition | JSON | Schema | Composite | Macro-F1 | Critical | Catastrophic | Adversarial | Robust groups | ECE | Median latency |",
         "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
-    for domain in ["security", "user-understanding", "orchestrator", "assistant"]:
+    for domain in ["security", "user-understanding", "semantic-analysis"]:
         domain_result = report["domains"].get(domain)
         if not domain_result:
             continue
@@ -1622,8 +1749,8 @@ def make_markdown_report(report: dict[str, Any]) -> str:
 CANDIDATE_IDS = {
     "security": "com.tomny.core.security",
     "user-understanding": "com.tomny.core.user-understanding",
-    "orchestrator": "com.tomny.core.orchestrator",
-    "assistant": "com.tomny.core.assistant",
+    "semantic-analysis": "com.tomny.core.semantic-analysis",
+
 }
 
 
@@ -1635,6 +1762,30 @@ def is_candidate_only(args: argparse.Namespace) -> bool:
         getattr(args, "candidate_version", None)
         or getattr(args, "checkpoint_adapter", None)
     )
+
+
+def validate_candidate_benchmark_configuration(args: argparse.Namespace) -> None:
+    """Keep candidate evidence reproducible, held-out, and free of user-origin data."""
+    if not is_candidate_only(args):
+        return
+    if not args.immutable_test_manifest:
+        raise ValueError("Candidate benchmark requires an immutable held-out test manifest")
+    if args.skip_base:
+        raise ValueError("Candidate benchmark must measure the base comparator in the same run")
+    if args.limit_groups != 0:
+        raise ValueError("Candidate benchmark must use every immutable semantic group")
+    if list(args.variants) != list(CANDIDATE_BENCHMARK_VARIANTS):
+        raise ValueError("Candidate benchmark variants must match the frozen benchmark contract")
+    if args.seed != CANDIDATE_BENCHMARK_SEED:
+        raise ValueError("Candidate benchmark seed must match the frozen benchmark contract")
+    if args.max_new_tokens != CANDIDATE_BENCHMARK_MAX_NEW_TOKENS:
+        raise ValueError("Candidate benchmark max-new-tokens must match the frozen benchmark contract")
+    if args.max_input_tokens != CANDIDATE_BENCHMARK_MAX_INPUT_TOKENS:
+        raise ValueError("Candidate benchmark max-input-tokens must match the frozen benchmark contract")
+    if args.batch_size != CANDIDATE_BENCHMARK_BATCH_SIZE:
+        raise ValueError("Candidate benchmark batch-size must match the frozen benchmark contract")
+    if args.allow_low_host_memory:
+        raise ValueError("Candidate benchmark cannot bypass the host-memory safety gate")
 
 
 def verify_checkpoint_evidence(
@@ -1798,7 +1949,7 @@ def resolve_model_runs(args: argparse.Namespace) -> list[dict[str, Any]]:
             raise ValueError(
                 "checkpoint-only evaluation requires exactly the matching --domains value"
             )
-        base_model = args.base_model_08b if domain == "security" else args.base_model_2b
+        base_model = args.base_model_08b
         if not base_model:
             raise ValueError(
                 "checkpoint-only evaluation requires the matching immutable base-model path"
@@ -1816,10 +1967,10 @@ def resolve_model_runs(args: argparse.Namespace) -> list[dict[str, Any]]:
             domain,
             args.checkpoint_verification_report,
         )
-        model_class = "08b" if domain == "security" else "2b"
+
         return [
             {
-                "modelId": f"qwen35-{model_class}-checkpoint-candidate",
+                "modelId": "qwen35-08b-checkpoint-candidate",
                 "baseModel": str(Path(base_model).resolve()),
                 "domains": [domain],
                 "adapters": {domain: str(checkpoint)},
@@ -1830,13 +1981,13 @@ def resolve_model_runs(args: argparse.Namespace) -> list[dict[str, Any]]:
         args.candidate_root,
         args.candidate_version,
         args.base_model_08b,
-        args.base_model_2b,
+
     )
     if not any(values):
         return MODEL_RUNS
     if not all(values):
         raise ValueError(
-            "candidate root/version and both mixed base paths must be provided together"
+            "candidate root/version and the immutable 0.8B base path must be provided together"
         )
     root = Path(args.candidate_root).resolve()
     adapters = {
@@ -1847,18 +1998,9 @@ def resolve_model_runs(args: argparse.Namespace) -> list[dict[str, Any]]:
         {
             "modelId": "qwen35-08b-candidate",
             "baseModel": str(Path(args.base_model_08b).resolve()),
-            "domains": ["security"],
-            "adapters": {"security": adapters["security"]},
-        },
-        {
-            "modelId": "qwen35-2b-candidate",
-            "baseModel": str(Path(args.base_model_2b).resolve()),
-            "domains": ["user-understanding", "orchestrator", "assistant"],
-            "adapters": {
-                purpose: adapters[purpose]
-                for purpose in ("user-understanding", "orchestrator", "assistant")
-            },
-        },
+            "domains": list(CANDIDATE_IDS),
+            "adapters": adapters,
+        }
     ]
 
 
@@ -1868,6 +2010,26 @@ def load_immutable_cases(
     manifest_path = manifest_path.resolve()
     manifest_bytes = manifest_path.read_bytes()
     manifest = json.loads(manifest_bytes)
+    dataset_id = manifest.get("datasetId")
+    dataset_version = manifest.get("datasetVersion")
+    data_card = manifest.get("dataCard")
+    sources = data_card.get("sources") if isinstance(data_card, dict) else None
+    if (
+        not isinstance(dataset_id, str)
+        or not dataset_id.strip()
+        or not isinstance(dataset_version, str)
+        or not dataset_version.strip()
+        or not isinstance(sources, list)
+        or not sources
+    ):
+        raise ValueError("Immutable-test manifest lacks dataset identity, version, or source provenance")
+    source_kinds = {
+        source.get("kind")
+        for source in sources
+        if isinstance(source, dict) and isinstance(source.get("kind"), str)
+    }
+    if len(source_kinds) != len(sources) or not source_kinds <= ALLOWED_IMMUTABLE_BENCHMARK_SOURCE_KINDS:
+        raise ValueError("Candidate benchmark rejects immutable test sources that may contain user data")
     if manifest.get("schemaVersion") != "tomny.dataset-manifest.v2":
         raise ValueError("Immutable-test manifest schema mismatch")
     root = manifest_path.parent.resolve()
@@ -1876,8 +2038,13 @@ def load_immutable_cases(
     }
     cases: list[dict[str, Any]] = []
     sources: dict[str, Any] = {
+        "datasetId": dataset_id,
+        "datasetVersion": dataset_version,
         "manifestPath": str(manifest_path),
         "manifestSha256": sha256_bytes(manifest_bytes),
+        "manifestSchemaVersion": manifest["schemaVersion"],
+        "sourceKinds": sorted(source_kinds),
+        "containsUserData": False,
         "tests": {},
     }
     for domain in domains:
@@ -2003,6 +2170,7 @@ def validate_candidate_output(args: argparse.Namespace, output_root: Path) -> No
 
 def main() -> None:
     args = parse_args()
+    validate_candidate_benchmark_configuration(args)
     resource_gate = require_host_memory_headroom(args.allow_low_host_memory)
     random.seed(args.seed)
     torch.manual_seed(args.seed)
@@ -2020,8 +2188,7 @@ def main() -> None:
     selected_domains = args.domains or [
         "security",
         "user-understanding",
-        "orchestrator",
-        "assistant",
+        "semantic-analysis",
     ]
     all_cases = [
         case
@@ -2204,7 +2371,14 @@ def main() -> None:
             comparison = compare_conditions(
                 base_records_by_domain[domain], adapter_records, args.seed
             )
-            if adapter_metrics["catastrophicFailures"] > 0:
+            comparison["candidateGate"] = (
+                candidate_comparison_gate(domain, base_records_by_domain[domain], adapter_records)
+                if is_candidate_only(args)
+                else None
+            )
+            if comparison["candidateGate"] is not None and not comparison["candidateGate"]["passed"]:
+                effectiveness = "candidate-gate-failed"
+            elif adapter_metrics["catastrophicFailures"] > 0:
                 effectiveness = "unsafe"
             elif (
                 adapter_metrics["productionGate"]["passed"]

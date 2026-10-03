@@ -105,7 +105,9 @@ export const createToolSelector = (deps: ToolSelectorDeps): IToolSelector => {
 
   const shortlist: IToolSelector['shortlist'] = async (request) => {
     const entries = await deps.catalog.list();
-    const eligible = entries.filter((entry) => deps.eligible?.(entry, request) !== false && typeof deps.eligible?.(entry, request) !== 'string');
+    const eligible = entries.filter(
+      (entry) => deps.eligible?.(entry, request) !== false && typeof deps.eligible?.(entry, request) !== 'string'
+    );
     const keyworded = keywordFilter(request, eligible, { ...deps.keywordOptions, limit: Math.max(topK * 2, topK) });
     shortlistTier = 'keyword';
 
@@ -129,15 +131,26 @@ export const createToolSelector = (deps: ToolSelectorDeps): IToolSelector => {
     for (const entry of allEntries) {
       const eligibility = deps.eligible?.(entry, request);
       if (eligibility === false || typeof eligibility === 'string') {
-        rejected.push({ entry, reason: typeof eligibility === 'string' ? eligibility : 'ineligible', factors: factorValues(entry, request) });
+        rejected.push({
+          entry,
+          reason: typeof eligibility === 'string' ? eligibility : 'ineligible',
+          factors: factorValues(entry, request),
+        });
       }
     }
 
     let tier: SelectionTier = shortlistTier;
     let explanation = candidates[0]?.reason ?? 'no candidate matched';
     const explained = (): ExplainedCandidate[] =>
-      candidates.map((candidate) => ({ ...candidate, tier: shortlistTier, explanation: candidate.reason, factors: factorValues(candidate.entry, request) }));
-    const hardCase = candidates.length === 0 || (candidates[0]?.score ?? 0) < advisorThreshold ||
+      candidates.map((candidate) => ({
+        ...candidate,
+        tier: shortlistTier,
+        explanation: candidate.reason,
+        factors: factorValues(candidate.entry, request),
+      }));
+    const hardCase =
+      candidates.length === 0 ||
+      (candidates[0]?.score ?? 0) < advisorThreshold ||
       (candidates.length > 1 && Math.abs(candidates[0].score - candidates[1].score) <= ambiguityDelta);
 
     if (hardCase && deps.advisor && candidates.length > 0) {
@@ -162,9 +175,23 @@ export const createToolSelector = (deps: ToolSelectorDeps): IToolSelector => {
       if (entry) {
         const result = await attempt(entry, request);
         if (result.ok) {
-          return { succeeded: true, candidates, tried: [entry], chosen: entry, fromRecall: true, explanation: 'verified historical selection', tier: 'recall', rejected, factors: factorValues(entry, request) };
+          return {
+            succeeded: true,
+            candidates,
+            tried: [entry],
+            chosen: entry,
+            fromRecall: true,
+            explanation: 'verified historical selection',
+            tier: 'recall',
+            rejected,
+            factors: factorValues(entry, request),
+          };
         }
-        rejected.push({ entry, reason: result.detail ?? 'recalled candidate failed', factors: factorValues(entry, request) });
+        rejected.push({
+          entry,
+          reason: result.detail ?? 'recalled candidate failed',
+          factors: factorValues(entry, request),
+        });
         candidates = candidates.filter((candidate) => candidate.entry.id !== entry.id);
       }
     }
@@ -179,13 +206,26 @@ export const createToolSelector = (deps: ToolSelectorDeps): IToolSelector => {
       const result = await attempt(entry, request);
       if (result.ok) {
         await deps.selectionLog.record(request, [entry.id], true);
-        return { succeeded: true, candidates, tried, chosen: entry, fromRecall: false, explanation: tier === 'advisor' && i === 0 ? explanation : candidate.reason, tier: tier === 'advisor' && i === 0 ? 'advisor' : shortlistTier, rejected, factors: factorValues(entry, request) };
+        return {
+          succeeded: true,
+          candidates,
+          tried,
+          chosen: entry,
+          fromRecall: false,
+          explanation: tier === 'advisor' && i === 0 ? explanation : candidate.reason,
+          tier: tier === 'advisor' && i === 0 ? 'advisor' : shortlistTier,
+          rejected,
+          factors: factorValues(entry, request),
+        };
       }
       rejected.push({ entry, reason: result.detail ?? 'attempt failed', factors: factorValues(entry, request) });
     }
 
-
-    await deps.selectionLog.record(request, tried.map((entry) => entry.id), false);
+    await deps.selectionLog.record(
+      request,
+      tried.map((entry) => entry.id),
+      false
+    );
     return { succeeded: false, candidates, tried, fromRecall: false, explanation, tier, rejected, factors: {} };
   };
 

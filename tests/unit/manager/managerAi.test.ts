@@ -17,7 +17,7 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import type { AgentChat, ChatMessageInput } from '@/process/browser/webAgentRunner';
+import type { AgentChat, ChatMessageInput } from '@process/browser/webAgentRunner';
 import type { IResourceCoordinator } from '@/process/resource/resourceCoordinator';
 import type { Lease } from '@/process/resource/leaseTypes';
 import { createManagerAi, extractJson } from '@/process/manager/managerAi';

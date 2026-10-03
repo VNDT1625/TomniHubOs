@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Minus, CloseSmall } from '@icon-park/react';
 import { ipcBridge } from '@/common';
+import { isElectronDesktop, isMacOS } from '@/renderer/utils/platform';
+import './WindowControls.css';
 
 const WindowMaximizeIcon: React.FC<{ size?: number }> = ({ size = 14 }) => (
   <svg width={size} height={size} viewBox='0 0 18 18' fill='none' stroke='currentColor' strokeWidth='1.4'>
@@ -20,10 +22,17 @@ const WindowRestoreIcon: React.FC<{ size?: number }> = ({ size = 14 }) => (
 
 const WindowControls: React.FC = () => {
   const [isMaximized, setIsMaximized] = useState(false);
-  const [available, setAvailable] = useState(true);
+  const [isDesktop, setIsDesktop] = useState(() => isElectronDesktop());
+
+  useEffect(() => {
+    if (isElectronDesktop()) {
+      setIsDesktop(true);
+    }
+  }, []);
 
   // 初始化时同步窗口状态并订阅最大化事件 / Sync current window state and subscribe to maximize events
   useEffect(() => {
+    if (!isDesktop || isMacOS()) return undefined;
     let isMounted = true;
 
     // 获取初始窗口状态 / Get initial window state
@@ -31,19 +40,22 @@ const WindowControls: React.FC = () => {
       .invoke()
       .then((state) => {
         if (isMounted) {
-          setIsMaximized(state);
+          setIsMaximized(Boolean(state));
         }
       })
-      .catch(() => {
+      .catch((err) => {
+        // A failure to determine maximized state must NOT hide window controls.
+        // Safe fallback to unmaximized.
+        console.warn('[WindowControls] Could not query initial maximized state, using fallback:', err);
         if (isMounted) {
-          setAvailable(false);
+          setIsMaximized(false);
         }
       });
 
     // 订阅窗口最大化状态变化 / Subscribe to window maximize state changes
     const unsubscribe = ipcBridge.windowControls.maximizedChanged.on(({ is_maximized }) => {
       if (isMounted) {
-        setIsMaximized(is_maximized);
+        setIsMaximized(Boolean(is_maximized));
       }
     });
 
@@ -51,14 +63,18 @@ const WindowControls: React.FC = () => {
       isMounted = false;
       unsubscribe();
     };
-  }, []);
+  }, [isDesktop]);
 
-  // 桌面环境缺少控制接口时直接不渲染 / Hide when window controls are not available (non-desktop)
-  if (!available) {
+  // 桌面环境缺少控制接口时直接不渲染 / Hide when window controls are not available (non-desktop browser)
+  if (!isDesktop || isMacOS()) {
     return null;
   }
 
   // 以下处理三种窗口按钮点击事件 / Handle minimize, maximize/restore, and close button events
+  const handleRestart = () => {
+    void ipcBridge.windowControls.restart.invoke();
+  };
+
   const handleMinimize = () => {
     void ipcBridge.windowControls.minimize.invoke();
   };
@@ -77,6 +93,17 @@ const WindowControls: React.FC = () => {
 
   return (
     <div className='app-window-controls'>
+      <button
+        type='button'
+        className='app-window-controls__button app-window-controls__button--restart'
+        onClick={handleRestart}
+        title='Khởi động lại ứng dụng (Restart)'
+        aria-label='Restart'
+      >
+        <svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.2'>
+          <path d='M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.19' />
+        </svg>
+      </button>
       <button type='button' className='app-window-controls__button' onClick={handleMinimize} aria-label='Minimize'>
         <Minus theme='outline' size='14' fill='currentColor' strokeWidth={4} />
       </button>

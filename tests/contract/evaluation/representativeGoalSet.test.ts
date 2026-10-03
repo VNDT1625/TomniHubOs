@@ -9,7 +9,7 @@ import {
 
 const fixturePath = path.resolve('tests/contract/evaluation/representative-goals.v1.json');
 
-describe('Wave 0 representative-goal evaluation baseline', () => {
+describe('C0 representative-goal evaluation baseline', () => {
   it('loads an immutable, deterministic, versioned set that covers every required journey', () => {
     const first = loadRepresentativeGoalSet(fixturePath);
     const second = loadRepresentativeGoalSet(fixturePath);
@@ -25,7 +25,7 @@ describe('Wave 0 representative-goal evaluation baseline', () => {
     expect(Object.isFrozen(first.cases[0])).toBe(true);
   });
 
-  it('freezes all release metrics required by the Wave 0 gate', () => {
+  it('freezes all release metrics required by the C0 evidence gate', () => {
     const { metricBudget } = loadRepresentativeGoalSet(fixturePath);
 
     expect(metricBudget).toMatchObject({

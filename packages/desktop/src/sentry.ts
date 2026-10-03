@@ -5,12 +5,16 @@
  */
 
 import * as Sentry from '@sentry/electron/main';
-import { app, type BrowserWindow } from 'electron';
-import * as fs from 'node:fs';
-import * as path from 'node:path';
+import { app } from 'electron';
 import { gzipSync } from 'node:zlib';
-import { getOrCreateAnalyticsId } from './process/utils/analyticsId';
+import {
+  getRotatingDiagnosticsCorrelationId,
+  hasDiagnosticsConsent,
+  setDiagnosticsConsent,
+} from './process/utils/analyticsId';
 import { readAutoUpdateDiagnostics } from './process/services/diagnostics/autoUpdateDiagnostics';
+
+import { systemEgressAuthority } from './process/services/security/systemEgressAuthority';
 import { collectBackendInstallDiagnostics } from './process/startup/backendInstallDiagnostics';
 import { classifyBackendStartupFailure } from './process/startup/backendStartupFailure';
 import {
@@ -39,6 +43,53 @@ type SearchableEvent = {
   contexts?: Record<string, unknown>;
   extra?: Record<string, unknown>;
 };
+
+type SentryScope = {
+  setContext: (key: string, value: unknown) => void;
+  setExtra: (key: string, value: unknown) => void;
+  setTag: (key: string, value: string) => void;
+};
+
+let sentryInitialized = false;
+
+const MAX_DIAGNOSTIC_TEXT_LENGTH = 240;
+const DIAGNOSTIC_SECRET_PATTERNS = [
+  /\b(?:api[_-]?key|access[_-]?token|refresh[_-]?token|authorization)\s*[:=]\s*[^\s,;]+/gi,
+  /\bbearer\s+[a-z0-9._~+/=-]+/gi,
+  /\bsk-[a-z0-9_-]+/gi,
+  /\bgh[pousr]_[a-z0-9_-]+/gi,
+];
+const DIAGNOSTIC_PATH_PATTERNS = [/[A-Za-z]:\\(?:[^\s"']+\\?)+/g, /\/(?:Users|home|tmp)\/(?:[^\s"']+\/?)*/g];
+
+const redactDiagnosticText = (value: unknown): string | undefined => {
+  if (typeof value !== 'string') return undefined;
+  let redacted = value;
+  for (const pattern of DIAGNOSTIC_SECRET_PATTERNS) redacted = redacted.replace(pattern, '[REDACTED_SECRET]');
+  for (const pattern of DIAGNOSTIC_PATH_PATTERNS) redacted = redacted.replace(pattern, '[REDACTED_PATH]');
+  return redacted.length > MAX_DIAGNOSTIC_TEXT_LENGTH ? `${redacted.slice(0, MAX_DIAGNOSTIC_TEXT_LENGTH)}…` : redacted;
+};
+
+const safeDiagnosticValue = (value: unknown, depth = 0): unknown => {
+  if (typeof value === 'string') return redactDiagnosticText(value);
+  if (typeof value === 'number' || typeof value === 'boolean' || value === null) return value;
+  if (!value || typeof value !== 'object' || depth >= 3) return undefined;
+  if (Array.isArray(value)) return value.slice(0, 20).map((item) => safeDiagnosticValue(item, depth + 1));
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .slice(0, 30)
+      .map(([key, item]) => [key, safeDiagnosticValue(item, depth + 1)])
+      .filter(([, item]) => item !== undefined)
+  );
+};
+
+const redactSentryEvent = <T extends SearchableEvent>(event: T): T =>
+  ({
+    ...event,
+    ...(event.message === undefined ? {} : { message: redactDiagnosticText(event.message) }),
+    ...(event.exception === undefined ? {} : { exception: safeDiagnosticValue(event.exception) }),
+    ...(event.contexts === undefined ? {} : { contexts: safeDiagnosticValue(event.contexts) }),
+    ...(event.extra === undefined ? {} : { extra: safeDiagnosticValue(event.extra) }),
+  }) as T;
 
 function collectStringLeaves(value: unknown, haystacks: string[], seen = new WeakSet<object>(), depth = 0): void {
   if (typeof value === 'string') {
@@ -101,10 +152,20 @@ function isBackendStartupSecondaryEvent(event: { tags?: Record<string, unknown> 
 }
 
 export function initSentry(): void {
+  // Diagnostics are opt-in. Do not initialize a Sentry client or transport
+  // before Main-owned persisted consent exists.
+  if (!hasDiagnosticsConsent() || sentryInitialized) return;
+  const egress = systemEgressAuthority.authorize({
+    egressClass: 'opt-in-diagnostics',
+    destination: process.env.SENTRY_DSN,
+    diagnosticsConsent: true,
+  });
+  if (egress.decision !== 'allow') return;
   Sentry.init({
     dsn: process.env.SENTRY_DSN,
     environment: app.isPackaged ? 'production' : 'development',
     beforeSend(event) {
+      if (!hasDiagnosticsConsent()) return null;
       const haystacks = collectEventSearchText(event);
       if (GPU_CRASH_DROP_PATTERNS.some((re) => haystacks.some((h) => re.test(h)))) {
         return null;
@@ -117,31 +178,47 @@ export function initSentry(): void {
       // Sentry sends, so we forward a copy and always return the event.
       try {
         if (sentryErrorTap.hasListeners()) {
-          const captured = capturedErrorFromSentryEvent(event as SentryLikeEvent);
+          const captured = capturedErrorFromSentryEvent(redactSentryEvent(event) as SentryLikeEvent);
           if (captured) sentryErrorTap.push(captured);
         }
       } catch (err) {
         console.warn('[sentry] bug-monitor tap failed (ignored):', err);
       }
-      return event;
+      return redactSentryEvent(event);
     },
   });
+  sentryInitialized = true;
 
   Sentry.setTag('app.arch', process.arch);
   Sentry.setTag('app.version', app.getVersion());
   Sentry.setTag('os.name', process.platform);
+  const correlationId = getRotatingDiagnosticsCorrelationId();
+  if (correlationId) Sentry.setTag('diagnostics.correlation_id', correlationId);
 }
 
 /**
- * Attach the persistent anonymous installation id to the active Sentry scope
- * so every subsequent event (crashes, feedback, startup log report) carries
- * a stable device identifier.
+ * Updates the persisted Main-owned choice. A UI/IPC owner must authenticate
+ * the user before calling this Main-only authority.
  */
-export function setSentryDeviceId(): void {
-  const id = getOrCreateAnalyticsId();
-  Sentry.setUser({ id });
-  Sentry.setTag('device_id', id);
+export function setSentryDiagnosticsConsent(granted: boolean): void {
+  setDiagnosticsConsent(granted);
+  if (granted) {
+    initSentry();
+    return;
+  }
+  clearSentryDiagnosticsScope();
 }
+
+/** Clears all account-like diagnostic identity on sign-out or consent withdrawal. */
+export function clearSentryDiagnosticsScope(): void {
+  Sentry.setUser(null);
+  Sentry.setTag('diagnostics.correlation_id', '');
+}
+
+/** Test-only reset for the process-local Sentry initialization latch. */
+export const __resetSentryForTests = (): void => {
+  sentryInitialized = false;
+};
 
 function getBackendStartupDetails(error: unknown): Record<string, unknown> | undefined {
   if (!error || typeof error !== 'object') return undefined;
@@ -154,7 +231,7 @@ const BACKEND_STARTUP_FLUSH_TIMEOUT_MS = 2000;
 
 export async function captureBackendStartupFailure(error: unknown): Promise<void> {
   (globalThis as typeof globalThis & { __backendStartupFailed?: boolean }).__backendStartupFailed = true;
-  const capturedError = error instanceof Error ? error : new Error(String(error));
+  if (!hasDiagnosticsConsent() || !sentryInitialized) return;
   const details = getBackendStartupDetails(error);
   const failureInfo = classifyBackendStartupFailure(error);
   const installDiagnostics = collectBackendInstallDiagnostics(details, {
@@ -166,28 +243,41 @@ export async function captureBackendStartupFailure(error: unknown): Promise<void
     resourcesPath: process.resourcesPath,
   });
   const autoUpdateDiagnostics = readAutoUpdateDiagnostics(app.getPath('userData'));
-  Sentry.withScope((scope) => {
+  Sentry.withScope((scope: SentryScope) => {
     scope.setTag('tomny.failure', 'backend_startup');
     scope.setTag('tomny.backend_startup.reason', failureInfo.reason);
     if (failureInfo.runtime) {
       scope.setTag('tomny.backend_startup.runtime', failureInfo.runtime);
     }
     if (typeof details?.stage === 'string') {
-      scope.setTag('tomny.backend_startup.stage', details.stage);
+      scope.setTag('tomny.backend_startup.stage', redactDiagnosticText(details.stage) ?? 'redacted');
     }
-    if (details) {
-      scope.setContext('tomnycore_startup', details);
-      scope.setExtra('tomnycore_startup', details);
-    }
-    scope.setContext('tomnycore_startup_classification', { ...failureInfo });
-    scope.setExtra('tomnycore_startup_classification', failureInfo);
-    scope.setContext('tomnycore_install_diagnostics', installDiagnostics);
-    scope.setExtra('tomnycore_install_diagnostics', installDiagnostics);
+    scope.setContext('tomnycore_startup_classification', safeDiagnosticValue(failureInfo));
+    scope.setContext(
+      'tomnycore_install_diagnostics',
+      safeDiagnosticValue({
+        appVersion: installDiagnostics.appVersion,
+        arch: installDiagnostics.arch,
+        isPackaged: installDiagnostics.isPackaged,
+        platform: installDiagnostics.platform,
+      })
+    );
     if (autoUpdateDiagnostics) {
-      scope.setContext('auto_update_diagnostics', autoUpdateDiagnostics);
-      scope.setExtra('auto_update_diagnostics', autoUpdateDiagnostics);
+      scope.setContext(
+        'auto_update_diagnostics',
+        safeDiagnosticValue({
+          currentAppVersion: autoUpdateDiagnostics.currentAppVersion,
+          lastEvent: autoUpdateDiagnostics.lastEvent
+            ? {
+                progressPercent: autoUpdateDiagnostics.lastEvent.progressPercent,
+                status: autoUpdateDiagnostics.lastEvent.status,
+                version: autoUpdateDiagnostics.lastEvent.version,
+              }
+            : undefined,
+        })
+      );
     }
-    Sentry.captureException(capturedError);
+    Sentry.captureMessage('backend-startup-failure', 'error');
   });
   try {
     await Sentry.flush(BACKEND_STARTUP_FLUSH_TIMEOUT_MS);
@@ -202,8 +292,6 @@ export async function captureBackendStartupFailure(error: unknown): Promise<void
  * launch only needs the last calendar day. The app always writes today's
  * log on startup, so this slice is never empty in practice.
  */
-const REPORT_DAYS = 1;
-
 export type LogFileMeta = { path: string; mtime: number; size: number };
 
 /**
@@ -266,148 +354,4 @@ export function packAndCap(segments: LogSegment[], maxBytes: number): PackResult
   truncated = truncated.slice(-Math.floor(maxBytes / 2));
   gzipped = gzipSync(truncated);
   return { gzipped, truncated: true };
-}
-
-const STATE_FILE = 'sentry-log-report-state.json';
-const ATTACHMENT_CAP_BYTES = 19 * 1024 * 1024;
-const STARTUP_DELAY_MS = 30_000;
-const THROTTLE_WINDOW_MS = 24 * 60 * 60 * 1000;
-
-type State = { lastReportAt?: number };
-
-function readState(): State {
-  try {
-    const p = path.join(app.getPath('userData'), STATE_FILE);
-    return JSON.parse(fs.readFileSync(p, 'utf8')) as State;
-  } catch {
-    return {};
-  }
-}
-
-function writeState(state: State): void {
-  try {
-    const p = path.join(app.getPath('userData'), STATE_FILE);
-    fs.writeFileSync(p, JSON.stringify(state), 'utf8');
-  } catch {
-    // best-effort; failure to persist throttle state is not fatal
-  }
-}
-
-function listLogFilesSync(dir: string): LogFileMeta[] {
-  let entries: string[];
-  try {
-    entries = fs.readdirSync(dir);
-  } catch {
-    return [];
-  }
-  const out: LogFileMeta[] = [];
-  for (const name of entries) {
-    const full = path.join(dir, name);
-    try {
-      const stat = fs.statSync(full);
-      if (stat.isFile() && name.endsWith('.log')) {
-        out.push({ path: full, mtime: stat.mtimeMs, size: stat.size });
-      }
-    } catch {
-      // skip unreadable entries
-    }
-  }
-  return out;
-}
-
-class UnretryableError extends Error {}
-class RetryableError extends Error {}
-
-async function runStartupLogReport(): Promise<void> {
-  const now = Date.now();
-  const state = readState();
-
-  if (state.lastReportAt && now - state.lastReportAt < THROTTLE_WINDOW_MS) {
-    const remainingHours = ((THROTTLE_WINDOW_MS - (now - state.lastReportAt)) / 3_600_000).toFixed(1);
-    console.info(`[sentry] startup log report skipped (throttled, next attempt in ~${remainingHours}h)`);
-    return;
-  }
-
-  // DSN gate goes first so we don't read the disk for nothing.
-  // Don't write state — the next launch with a DSN should still fire.
-  if (!process.env.SENTRY_DSN) {
-    console.info('[sentry] startup log report skipped (SENTRY_DSN not set)');
-    throw new UnretryableError('no DSN');
-  }
-
-  const logsRoot = app.getPath('logs');
-  const frontendFiles = listLogFilesSync(logsRoot);
-  const backendFiles = listLogFilesSync(path.join(logsRoot, 'logs'));
-  const all = [...frontendFiles, ...backendFiles];
-  if (all.length === 0) {
-    writeState({ lastReportAt: now });
-    throw new UnretryableError('no log files');
-  }
-
-  const selected = selectRecentLogFiles(all, REPORT_DAYS);
-  if (selected.length === 0) {
-    writeState({ lastReportAt: now });
-    throw new UnretryableError('no non-empty logs');
-  }
-
-  let segments: LogSegment[];
-  try {
-    segments = selected.map((f) => ({
-      name: path.basename(f.path),
-      mtime: f.mtime,
-      content: fs.readFileSync(f.path, 'utf8'),
-    }));
-  } catch (err) {
-    throw new RetryableError(`read failed: ${(err as Error).message}`);
-  }
-
-  let pack: PackResult;
-  try {
-    pack = packAndCap(segments, ATTACHMENT_CAP_BYTES);
-  } catch (err) {
-    throw new RetryableError(`gzip failed: ${(err as Error).message}`);
-  }
-
-  Sentry.withScope((scope) => {
-    scope.addAttachment({
-      filename: 'tomny-logs.log.gz',
-      data: pack.gzipped,
-      contentType: 'application/gzip',
-    });
-    scope.setExtra('truncated', pack.truncated);
-    scope.setExtra('days_covered', REPORT_DAYS);
-    Sentry.captureMessage('startup-log-report', 'info');
-  });
-
-  writeState({ lastReportAt: now });
-  const sizeKb = (pack.gzipped.length / 1024).toFixed(1);
-  console.info(
-    `[sentry] startup log report sent (days=${REPORT_DAYS}, files=${selected.length}, gzipped=${sizeKb}KB, truncated=${pack.truncated})`
-  );
-}
-
-/**
- * Schedule a one-shot startup log report 30s after the renderer finishes
- * loading. Best-effort: any failure is logged to console only and never
- * affects app startup.
- *
- * Failure semantics: `UnretryableError` paths (other than missing DSN) update
- * `lastReportAt` before throwing so the skip persists for 24h. `RetryableError`
- * and the missing-DSN path leave `lastReportAt` untouched so the next launch
- * retries.
- */
-export function scheduleStartupLogReport(window: BrowserWindow): void {
-  const trigger = () => {
-    setTimeout(() => {
-      runStartupLogReport().catch((err) => {
-        console.error('[sentry] startup log report failed:', err);
-      });
-    }, STARTUP_DELAY_MS);
-  };
-
-  if (window.webContents.isLoading()) {
-    window.webContents.once('did-finish-load', trigger);
-  } else {
-    trigger();
-  }
 }

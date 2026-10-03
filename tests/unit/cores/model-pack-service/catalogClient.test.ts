@@ -22,17 +22,17 @@ const sha = 'a'.repeat(64);
 const urls = {
   metadata: 'https://catalog.example.com/model-metadata.json',
   catalog: 'https://catalog.example.com/model-catalog.json',
-  artifact: 'https://cdn.example.com/assistant.zip',
+  artifact: 'https://cdn.example.com/security.zip',
 };
 
 const manifest = (): ModelPackManifest => ({
   schemaVersion: 1,
   kind: 'model-adapter',
-  id: 'com.tomny.core.assistant',
+  id: 'com.tomny.core.security',
   version: '0.1.0',
-  purpose: 'assistant',
+  purpose: 'security',
   format: 'peft-lora-safetensors',
-  baseModel: { id: 'Qwen/Qwen3.5-2B', revision: 'immutable-r1', sha256: sha },
+  baseModel: { id: 'Qwen/Qwen3.5-0.8B', revision: 'immutable-r1', sha256: sha },
   runtime: {
     engine: 'transformers-peft',
     peft: '>=0.18.1 <0.19.0',
@@ -40,8 +40,8 @@ const manifest = (): ModelPackManifest => ({
     minTomnyVersion: '0.0.0',
   },
   contracts: {
-    inputSchema: 'tomny.assistant.input.v1',
-    outputSchema: 'tomny.assistant.output.v1',
+    inputSchema: 'tomny.security.input.v1',
+    outputSchema: 'tomny.security.output.v1',
     policyVersion: 'core-policy-v1',
   },
   files: [
@@ -123,7 +123,7 @@ describe('Model Pack catalog client', () => {
 
   it('rejects catalog bytes changed after metadata was signed', async () => {
     const trustedBytes = catalogBytes(1);
-    const tamperedBytes = Buffer.from(trustedBytes.toString().replace('assistant', 'assistanz'));
+    const tamperedBytes = Buffer.from(trustedBytes.toString().replace('security', 'assistanz'));
     const metadata = Buffer.from(JSON.stringify(signedMetadata(1, trustedBytes)));
     const fetcher = vi.fn(async (input: URL | RequestInfo) =>
       response(String(input) === urls.metadata ? metadata : tamperedBytes)

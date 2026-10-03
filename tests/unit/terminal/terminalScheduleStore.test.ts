@@ -9,7 +9,7 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import * as path from 'node:path';
-import { createTerminalScheduleStore, type ScheduleFs } from '@/process/terminal/terminalScheduleStore';
+import { createTerminalScheduleStore, type ScheduleFs } from '@process/ideTerminal/terminalScheduleStore';
 
 /** A minimal in-memory fs that records the tmp+rename atomic write pattern. */
 const makeFakeFs = (seed?: Record<string, string>) => {

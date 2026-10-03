@@ -97,6 +97,10 @@ type ActiveTurn = {
   userPrompt: string;
   assistantMessageId: string;
   assistantText: string;
+  thinkingMessageId?: string;
+  thinkingText?: string;
+  thinkingStartedAt?: number;
+  thinkingStatus?: 'thinking' | 'done';
   /** Retain arguments between the requested/running and result frames. */
   toolInputs: Map<string, unknown>;
   /** Bounded action journal exists only after the model passes StartAction. */
@@ -522,6 +526,9 @@ export class NativeConversationService {
     (preparedConversation.extra as Record<string, unknown>).tomny_core_session_id = preparedConversation.id;
     (preparedConversation.extra as Record<string, unknown>).tomny_core_target_id = targetFor(preparedConversation);
     (preparedConversation.extra as Record<string, unknown>).tomny_core_model_key = modelKeyFor(preparedConversation);
+    if (typeof (preparedConversation.extra as Record<string, unknown>).ide_memory_id !== 'string') {
+      (preparedConversation.extra as Record<string, unknown>).ide_memory_id = crypto.randomUUID();
+    }
     await this.repository.saveConversation(preparedConversation);
     this.events.listChanged({
       conversation_id: preparedConversation.id,
@@ -892,18 +899,32 @@ export class NativeConversationService {
         undefined,
         contextIdentityFor(conversation, savedMemoryContextFor(conversation, this.memory, prompt))
       );
-      void started.terminal?.then((terminal) => {
-        if (!terminal) return;
-        this.handleCoreEvent({
-          requestId,
-          sessionId: started.sessionId,
-          targetId: targetFor(conversation),
-          type: terminal.type,
-          timestamp: Date.now(),
-          sequence: -1,
-          text: terminal.text,
+      void started.terminal
+        ?.then((terminal) => {
+          if (terminal) {
+            this.handleCoreEvent({
+              requestId,
+              sessionId: started.sessionId,
+              targetId: targetFor(conversation),
+              type: terminal.type,
+              timestamp: Date.now(),
+              sequence: -1,
+              text: terminal.text,
+            });
+          }
+        })
+        .catch((error: unknown) => {
+          console.error('[NativeConversation] Terminal execution failed:', error);
+          this.handleCoreEvent({
+            requestId,
+            sessionId: started.sessionId,
+            targetId: targetFor(conversation),
+            type: 'error',
+            timestamp: Date.now(),
+            sequence: -1,
+            text: error instanceof Error ? error.message : String(error),
+          });
         });
-      });
     } catch (error) {
       this.activeByConversation.delete(conversation.id);
       this.activeByRequest.delete(requestId);

@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => ({
   configureHost: vi.fn(),
 }));
 
-vi.mock('@process/studio/cloudflareTunnel', () => ({
+vi.mock('@process/services/remoteGateway/cloudflareTunnel', () => ({
   startTunnel: mocks.startTunnel,
   stopTunnel: mocks.stopTunnel,
 }));
@@ -33,8 +33,8 @@ describe('Telegram remote startup lifecycle', () => {
     mocks.startTunnel.mockResolvedValue({ ok: true, url: 'https://remote.trycloudflare.com' });
     const { startTelegramRemoteTunnel, syncTelegramRemoteLanguage } =
       await import('@process/startup/telegramRemoteStartup');
-    await startTelegramRemoteTunnel('vi-VN');
-    await startTelegramRemoteTunnel('en-US');
+    await startTelegramRemoteTunnel('vi-VN', () => true);
+    await startTelegramRemoteTunnel('en-US', () => true);
     mocks.configureGateway.mockReturnValue(true);
 
     await expect(syncTelegramRemoteLanguage('ja-JP')).resolves.toBe(true);
@@ -52,11 +52,21 @@ describe('Telegram remote startup lifecycle', () => {
       .mockResolvedValueOnce({ ok: true, url: 'https://retry.trycloudflare.com' });
     const { startTelegramRemoteTunnel } = await import('@process/startup/telegramRemoteStartup');
 
-    await expect(startTelegramRemoteTunnel()).resolves.toEqual({ ok: false, reason: 'timeout' });
-    await expect(startTelegramRemoteTunnel()).resolves.toEqual({
+    await expect(startTelegramRemoteTunnel('en-US', () => true)).resolves.toEqual({ ok: false, reason: 'timeout' });
+    await expect(startTelegramRemoteTunnel('en-US', () => true)).resolves.toEqual({
       ok: true,
       url: 'https://retry.trycloudflare.com',
     });
     expect(mocks.startTunnel).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not create a gateway or spawn a public tunnel without Main authority', async () => {
+    const { startTelegramRemoteTunnel } = await import('@process/startup/telegramRemoteStartup');
+    const existingSecret = process.env.TOMNI_TELEGRAM_REMOTE_SECRET;
+
+    await expect(startTelegramRemoteTunnel()).resolves.toEqual({ ok: false, reason: 'external-authority-required' });
+    expect(mocks.startGateway).not.toHaveBeenCalled();
+    expect(mocks.startTunnel).not.toHaveBeenCalled();
+    expect(process.env.TOMNI_TELEGRAM_REMOTE_SECRET).toBe(existingSecret);
   });
 });

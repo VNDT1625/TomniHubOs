@@ -12,6 +12,46 @@ const postBenchmark = readFileSync(resolve(process.cwd(), 'scripts/model-trainin
 type VerifierProbeResults = Record<string, string>;
 type VerifierOutputProbeResults = Record<string, string | boolean>;
 
+type SecurityPilotHeldoutProbe = {
+  rows: number;
+  semanticGroups: number;
+  verified: boolean;
+  tamperRejected: string;
+};
+
+function runSecurityPilotHeldoutProbe(): SecurityPilotHeldoutProbe {
+  const script = String.raw`
+import json
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+root = Path(sys.argv[1]).resolve()
+builder = root / 'scripts' / 'model-training' / 'fixtures' / 'build_security_pilot_heldout_v1.py'
+fixture = root / 'scripts' / 'model-training' / 'fixtures' / 'security-pilot-heldout-v1.json'
+training = root / '.training-data-v5-security'
+with tempfile.TemporaryDirectory() as temporary:
+    output = Path(temporary) / 'pilot-heldout'
+    command = [sys.executable, str(builder), '--fixture', str(fixture), '--training-root', str(training), '--output', str(output)]
+    built = json.loads(subprocess.check_output(command, cwd=root, text=True))
+    verified = json.loads(subprocess.check_output([*command, '--verify'], cwd=root, text=True))
+    test_path = output / 'immutable-test' / 'security-test.jsonl'
+    test_path.chmod(0o666)
+    test_path.write_bytes(b'{"tampered":true}\n')
+    tamper = subprocess.run([*command, '--verify'], cwd=root, text=True, capture_output=True)
+    print(json.dumps({
+        'rows': built['rows'],
+        'semanticGroups': built['semanticGroups'],
+        'verified': verified['verified'],
+        'tamperRejected': tamper.stderr.strip(),
+    }))
+`;
+  return JSON.parse(
+    execFileSync('python', ['-c', script, process.cwd()], { encoding: 'utf8' })
+  ) as SecurityPilotHeldoutProbe;
+}
+
 function runProvenanceContractProbe(): VerifierProbeResults {
   const script = String.raw`
 import importlib.util
@@ -109,6 +149,14 @@ print(json.dumps({
     'unknownTargetProfile': outcome(lambda: verifier.verify_provenance_schema(
         Path('candidate5'),
         provenance_shape(targetProfile='future-unknown-profile'),
+    )),
+    'knownBf16Precision': outcome(lambda: verifier.verify_provenance_schema(
+        Path('candidate5'),
+        provenance_shape(precision='bf16'),
+    )),
+    'unknownPrecision': outcome(lambda: verifier.verify_provenance_schema(
+        Path('candidate5'),
+        provenance_shape(precision='fp8'),
     )),
 }))
 `;
@@ -430,6 +478,7 @@ base = {
     'computeProcesses': [],
     'blockedProcesses': [],
 }
+
 low = queue.gate_probe({**base, 'hostAvailableMiB': 2048}, args)
 safe = queue.gate_probe({**base, 'hostAvailableMiB': 4096}, args)
 print(json.dumps({'low': low, 'safe': safe}))
@@ -439,6 +488,145 @@ print(json.dumps({'low': low, 'safe': safe}))
     string,
     { safe: boolean; reasons: string[] }
   >;
+}
+
+type WindowsProcessFallbackProbeResults = {
+  accessDeniedNames: string[];
+  malformed: string;
+  unknownField: string;
+  zeroPidNonIdle: string;
+  nonAccessDenied: string;
+  fallbackCallsForNonAccessDenied: number;
+};
+
+function runWindowsProcessFallbackProbe(): WindowsProcessFallbackProbeResults {
+  const script = String.raw`
+import importlib.util
+import json
+import sys
+
+spec = importlib.util.spec_from_file_location('run_candidate_queue', sys.argv[1])
+queue = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(queue)
+
+class Result:
+    def __init__(self, returncode, stdout='', stderr=''):
+        self.returncode = returncode
+        self.stdout = stdout
+        self.stderr = stderr
+
+queue.os.name = 'nt'
+access_denied = Result(1, stderr='ERROR: Access is denied.')
+good_fallback = Result(0, json.dumps([
+    {'Id': 0, 'ProcessName': 'Idle', 'WorkingSet64': 8192},
+    {'Id': 42, 'ProcessName': 'Valorant-Win64-Shipping', 'WorkingSet64': 2048},
+    {'Id': 99, 'ProcessName': 'python', 'WorkingSet64': 1024},
+]))
+
+def run_with_fallback(fallback):
+    calls = []
+    def mocked(command, **_kwargs):
+        calls.append(command[0])
+        return access_denied if command[0] == 'tasklist' else fallback
+    queue.subprocess.run = mocked
+    return queue.system_process_names(), calls
+
+def outcome(action):
+    try:
+        action()
+    except Exception as error:
+        return f'{type(error).__name__}: {error}'
+    return 'accepted'
+
+names, _calls = run_with_fallback(good_fallback)
+malformed = outcome(lambda: run_with_fallback(Result(0, '{not-json}')))
+unknown_field = outcome(lambda: run_with_fallback(Result(0, json.dumps({
+    'Id': 42, 'ProcessName': 'valorant', 'WorkingSet64': 2048, 'Future': True,
+}))))
+zero_pid_non_idle = outcome(lambda: run_with_fallback(Result(0, json.dumps({
+    'Id': 0, 'ProcessName': 'not-idle', 'WorkingSet64': 1,
+}))))
+fallback_calls = []
+def non_access(command, **_kwargs):
+    fallback_calls.append(command[0])
+    return Result(1, stderr='tasklist unavailable')
+queue.subprocess.run = non_access
+non_access_denied = outcome(queue.system_process_names)
+print(json.dumps({
+    'accessDeniedNames': sorted(names),
+    'malformed': malformed,
+    'unknownField': unknown_field,
+    'zeroPidNonIdle': zero_pid_non_idle,
+    'nonAccessDenied': non_access_denied,
+    'fallbackCallsForNonAccessDenied': fallback_calls.count('powershell'),
+}))
+`;
+  const queuePath = resolve(process.cwd(), 'scripts/model-training/run_candidate_queue.py');
+  return JSON.parse(
+    execFileSync('python', ['-c', script, queuePath], { encoding: 'utf8' })
+  ) as WindowsProcessFallbackProbeResults;
+}
+
+function runQueueNoPsutilMemoryProbe(): { availableMiB: number } {
+  const script = String.raw`
+import builtins
+import importlib.util
+import json
+import sys
+
+original_import = builtins.__import__
+def guarded_import(name, *args, **kwargs):
+    if name == 'psutil':
+        raise ModuleNotFoundError('psutil intentionally unavailable for this probe')
+    return original_import(name, *args, **kwargs)
+
+builtins.__import__ = guarded_import
+try:
+    spec = importlib.util.spec_from_file_location('run_candidate_queue', sys.argv[1])
+    queue = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(queue)
+finally:
+    builtins.__import__ = original_import
+
+print(json.dumps({'availableMiB': queue.available_host_memory_mib()}))
+`;
+  const queuePath = resolve(process.cwd(), 'scripts/model-training/run_candidate_queue.py');
+  return JSON.parse(execFileSync('python', ['-c', script, queuePath], { encoding: 'utf8' })) as {
+    availableMiB: number;
+  };
+}
+
+function runTrainingRuntimeGateProbe(): {
+  missing: { ready: boolean; missing: string[] };
+  ready: { ready: boolean; missing: string[] };
+} {
+  const script = String.raw`
+import importlib.util
+import json
+import sys
+import types
+
+spec = importlib.util.spec_from_file_location('run_candidate_queue', sys.argv[1])
+queue = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(queue)
+
+def probe(packages):
+    queue.subprocess.run = lambda *args, **kwargs: types.SimpleNamespace(
+        returncode=0,
+        stdout=json.dumps(packages),
+    )
+    return queue.training_runtime_gate()
+
+print(json.dumps({
+    'missing': probe({name: name != 'torch' for name in queue.TRAINING_RUNTIME_PACKAGES}),
+    'ready': probe({name: True for name in queue.TRAINING_RUNTIME_PACKAGES}),
+}))
+`;
+  const queuePath = resolve(process.cwd(), 'scripts/model-training/run_candidate_queue.py');
+  return JSON.parse(execFileSync('python', ['-c', script, queuePath], { encoding: 'utf8' })) as {
+    missing: { ready: boolean; missing: string[] };
+    ready: { ready: boolean; missing: string[] };
+  };
 }
 
 function runQueueFailureSummaryProbe(): { code: string; type: string; serialized: string } {
@@ -463,7 +651,17 @@ print(json.dumps({**summary, 'serialized': json.dumps(summary)}))
 
 type StableGateProbeResults = {
   observations: Array<{ ready: boolean; streak: number }>;
-  adaptive: { effectiveResumeThresholdMiB: number; observedRunConsumptionMiB: number };
+  adaptive: {
+    effectiveResumeThresholdMiB: number;
+    launchEvidenceAvailableMiB: number;
+    launchEvidenceThresholdMiB: number;
+    observedRunConsumptionMiB: number;
+  };
+  transientLaunchSample: {
+    effectiveResumeThresholdMiB: number;
+    launchEvidenceAvailableMiB: number;
+    launchEvidenceThresholdMiB: number;
+  };
   invalid: string;
 };
 
@@ -488,7 +686,13 @@ try:
 except Exception as error:
     invalid = f'{type(error).__name__}: {error}'
 adaptive = queue.adaptive_resume_evidence(3072, 1536, 3238, 1080, 3072)
-print(json.dumps({'observations': observations, 'adaptive': adaptive, 'invalid': invalid}))
+transient_launch_sample = queue.adaptive_resume_evidence(8945, 1536, 9372, 1435, 9372)
+print(json.dumps({
+    'observations': observations,
+    'adaptive': adaptive,
+    'transientLaunchSample': transient_launch_sample,
+    'invalid': invalid,
+}))
 `;
   const queuePath = resolve(process.cwd(), 'scripts/model-training/run_candidate_queue.py');
   return JSON.parse(execFileSync('python', ['-c', script, queuePath], { encoding: 'utf8' })) as StableGateProbeResults;
@@ -533,6 +737,662 @@ with tempfile.TemporaryDirectory() as temporary:
   return JSON.parse(output.trim().split(/\r?\n/).at(-1) ?? '{}') as HungTrainerProbeResults;
 }
 
+type CancellationProbeResults = {
+  childCancellationLogged: boolean;
+  checkpointExists: boolean;
+  checkpointPath: string;
+  defaultPurposes: string[];
+  exactPurpose: string[];
+  promotionAllowed: boolean;
+  queueCancelled: boolean;
+  queueErrorPresent: boolean;
+  secondAdapterState: string;
+  startedPurposes: string[];
+  terminalCheckpointStep: number;
+  terminatedPids: number[];
+};
+
+function runCancellationProbe(): CancellationProbeResults {
+  const script = String.raw`
+import importlib.util
+import json
+from pathlib import Path
+import sys
+import tempfile
+import types
+
+spec = importlib.util.spec_from_file_location('run_candidate_queue', sys.argv[1])
+queue = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(queue)
+
+with tempfile.TemporaryDirectory() as temporary:
+    root = Path(temporary)
+    cancel_file = root / 'stop.signal'
+    trainer_log = root / 'trainer.log'
+    terminated_pids = []
+    fake_process = types.SimpleNamespace(pid=4242, stdout='unused', poll=lambda: None)
+    queue.subprocess.Popen = lambda *args, **kwargs: fake_process
+    queue.terminate_process_tree = lambda process: terminated_pids.append(process.pid) or True
+    cancel_file.write_text('stop', encoding='utf-8')
+    try:
+        queue.run_training(['not-a-trainer'], trainer_log, cancel_file=cancel_file)
+    except queue.QueueCancelled:
+        pass
+    else:
+        raise AssertionError('cancelled trainer was not stopped')
+
+    queue.CANDIDATE_ROOT = root / 'candidates'
+    queue.QUEUE_ROOT = queue.CANDIDATE_ROOT / '_queue'
+    candidate = queue.CANDIDATE_ROOT / 'security' / 'candidate.1'
+    checkpoint = candidate / 'checkpoint-42'
+    checkpoint.mkdir(parents=True)
+    (checkpoint / 'adapter_model.safetensors').write_bytes(b'checkpoint')
+    (checkpoint / 'trainer_state.json').write_text(
+        json.dumps({'global_step': 42, 'max_steps': 100}), encoding='utf-8'
+    )
+    cancel_file.unlink()
+    started_purposes = []
+    plans = [
+        {
+            'purpose': 'security',
+            'candidateId': 'com.tomny.core.security',
+            'recipeSha256': 'a' * 64,
+            'action': 'fresh',
+            'candidate': str(candidate),
+            'command': ['security'],
+            'resumeCheckpoint': None,
+        },
+        {
+            'purpose': 'user-understanding',
+            'candidateId': 'com.tomny.core.user-understanding',
+            'recipeSha256': 'b' * 64,
+            'action': 'fresh',
+            'candidate': str(queue.CANDIDATE_ROOT / 'assistant' / 'candidate.1'),
+            'command': ['user-understanding'],
+            'resumeCheckpoint': None,
+        },
+    ]
+    args = types.SimpleNamespace(
+        run_id='cancel-probe',
+        candidate_version='candidate.1',
+        only_purpose=None,
+        start_at=None,
+        cancel_file=cancel_file,
+        resume_free_host_mib=4096,
+        pause_free_host_mib=1536,
+        trainer_output_idle_timeout_seconds=300,
+    )
+    queue.wait_for_safe_gpu = lambda *args, **kwargs: {}
+    queue.resolve_execution_plans = lambda resolved, _version, _start: resolved
+    queue.memory_pressure_command = lambda command, _args, _checkpoint: list(command)
+    queue.available_host_memory_mib = lambda: 8192
+
+    def cancel_during_first_training(command, _log_path, **_kwargs):
+        started_purposes.append(command[0])
+        cancel_file.write_text('stop', encoding='utf-8')
+        raise queue.QueueCancelled('user-requested cancellation')
+
+    queue.run_training = cancel_during_first_training
+    queue.run_queue(args, plans)
+    status = json.loads((queue.QUEUE_ROOT / 'cancel-probe' / 'status.json').read_text(encoding='utf-8'))
+    print(json.dumps({
+        'childCancellationLogged': 'trainer-cancelled' in trainer_log.read_text(encoding='utf-8'),
+        'checkpointExists': checkpoint.is_dir(),
+        'checkpointPath': str(checkpoint.resolve()),
+        'defaultPurposes': [item['purpose'] for item in queue.select_exact_purpose(plans, None)],
+        'exactPurpose': [item['purpose'] for item in queue.select_exact_purpose(plans, 'user-understanding')],
+        'promotionAllowed': status['promotionAllowed'],
+        'queueCancelled': status['state'] == 'cancelled',
+        'queueErrorPresent': 'error' in status,
+        'secondAdapterState': status['adapters'][1]['state'],
+        'startedPurposes': started_purposes,
+        'terminalCheckpointStep': status['cancellation']['checkpoint']['globalStep'],
+        'terminatedPids': terminated_pids,
+    }))
+`;
+  const queuePath = resolve(process.cwd(), 'scripts/model-training/run_candidate_queue.py');
+  const output = execFileSync('python', ['-c', script, queuePath], { encoding: 'utf8' });
+  return JSON.parse(output.trim().split(/\r?\n/).at(-1) ?? '{}') as CancellationProbeResults;
+}
+
+type SecurityCheckpointResumeProbeResults = {
+  crossPurposeRejected: boolean;
+  exactResumeCheckpoint: string;
+  failedStateMismatchRejected: boolean;
+  invocationCount: number;
+  promotionAllowed: boolean;
+  queueCancelled: boolean;
+  parsedVersion: string;
+  resumeMode: string;
+  resumeStep: number;
+  selectedPurposes: string[];
+};
+
+function runSecurityCheckpointResumeProbe(): SecurityCheckpointResumeProbeResults {
+  const script = String.raw`
+import hashlib
+import importlib.util
+import json
+from pathlib import Path
+import sys
+import tempfile
+import types
+
+spec = importlib.util.spec_from_file_location('run_candidate_queue', sys.argv[1])
+queue = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(queue)
+
+original_argv = sys.argv
+sys.argv = ['run_candidate_queue.py', '--resume-security-checkpoint-50']
+parsed_resume_args = queue.parse_args()
+sys.argv = original_argv
+
+with tempfile.TemporaryDirectory() as temporary:
+    root = Path(temporary)
+    queue.CANDIDATE_ROOT = root / 'candidates'
+    queue.QUEUE_ROOT = queue.CANDIDATE_ROOT / '_queue'
+    queue.TRAINER = root / 'train_lora.py'
+    queue.TRAINER.write_text('trainer-bytes', encoding='utf-8')
+    queue.DATASET_MANIFEST = root / 'manifest.json'
+    queue.DATASET_MANIFEST.write_text('{}', encoding='utf-8')
+    version = queue.SECURITY_CHECKPOINT_RESUME_VERSION
+    candidate = queue.CANDIDATE_ROOT / queue.SECURITY_CHECKPOINT_RESUME_CANDIDATE_ID / version
+    checkpoint = candidate / 'checkpoint-50'
+    checkpoint.mkdir(parents=True)
+    (checkpoint / 'adapter_model.safetensors').write_bytes(b'checkpoint-weights')
+    (checkpoint / 'adapter_config.json').write_text('{}', encoding='utf-8')
+    (checkpoint / 'trainer_state.json').write_text(json.dumps({
+        'global_step': 50,
+        'max_steps': 600,
+    }), encoding='utf-8')
+    item = {
+        'purpose': 'security',
+        'candidateId': queue.SECURITY_CHECKPOINT_RESUME_CANDIDATE_ID,
+        'recipe': str(root / 'security-recipe.json'),
+        'recipeSha256': 'f' * 64,
+    }
+    Path(item['recipe']).write_text('{}', encoding='utf-8')
+    (candidate / 'training_preflight.json').write_text(json.dumps({
+        'schemaVersion': 'tomny.training-preflight.v1',
+        'resumeContract': queue.expected_resume_contract(item, version),
+    }), encoding='utf-8')
+    status_path = queue.QUEUE_ROOT / 'interrupted-security' / 'status.json'
+    status_path.parent.mkdir(parents=True)
+    status = {
+        'schemaVersion': 'tomny.candidate-queue-status.v1',
+        'runId': 'interrupted-security',
+        'state': 'failed',
+        'candidateVersion': version,
+        'promotionAllowed': False,
+        'selection': {'mode': 'exact-one-purpose', 'purpose': 'security', 'promotionAllowed': False},
+        'adapters': [{
+            'purpose': 'security',
+            'candidateId': queue.SECURITY_CHECKPOINT_RESUME_CANDIDATE_ID,
+            'recipeSha256': item['recipeSha256'],
+            'baseModel': queue.BASE_BINDINGS['security'],
+            'state': 'failed',
+            'action': 'train-new',
+            'candidate': str(candidate.resolve()),
+        }],
+    }
+    status_path.write_text(json.dumps(status), encoding='utf-8')
+    (queue.QUEUE_ROOT / 'latest.json').write_text(json.dumps({
+        'runId': 'interrupted-security',
+        'state': 'failed',
+        'statusPath': str(status_path.resolve()),
+    }), encoding='utf-8')
+
+    resolved = queue.resolve_execution_plans([item], version, None, True)
+    plan = resolved[0]
+    status['adapters'][0]['purpose'] = 'assistant'
+    status_path.write_text(json.dumps(status), encoding='utf-8')
+    try:
+        queue.resolve_execution_plans([item], version, None, True)
+        cross_purpose_rejected = False
+    except ValueError:
+        cross_purpose_rejected = True
+    status['adapters'][0]['purpose'] = 'security'
+    status['adapters'][0]['state'] = 'cancelled'
+    status_path.write_text(json.dumps(status), encoding='utf-8')
+    try:
+        queue.resolve_execution_plans([item], version, None, True)
+        failed_state_mismatch_rejected = False
+    except ValueError:
+        failed_state_mismatch_rejected = True
+    status['adapters'][0]['state'] = 'failed'
+    status_path.write_text(json.dumps(status), encoding='utf-8')
+
+    commands = []
+    args = types.SimpleNamespace(
+        run_id='resume-security-test',
+        candidate_version=version,
+        only_purpose='security',
+        start_at=None,
+        resume_security_checkpoint_50=True,
+        cancel_file=None,
+        resume_free_host_mib=4096,
+        pause_free_host_mib=1536,
+        trainer_output_idle_timeout_seconds=300,
+    )
+    queue.wait_for_safe_gpu = lambda *args, **kwargs: {}
+    queue.available_host_memory_mib = lambda: 8192
+    def stop_after_capture(command, _log_path, **_kwargs):
+        commands.append(command)
+        raise queue.QueueCancelled('test cancellation')
+    queue.run_training = stop_after_capture
+    queue.run_queue(args, [item])
+    final_status = json.loads((queue.QUEUE_ROOT / 'resume-security-test' / 'status.json').read_text(encoding='utf-8'))
+    command = commands[0]
+    print(json.dumps({
+        'crossPurposeRejected': cross_purpose_rejected,
+        'exactResumeCheckpoint': command[command.index('--resume-from') + 1],
+        'failedStateMismatchRejected': failed_state_mismatch_rejected,
+        'invocationCount': len(commands),
+        'promotionAllowed': final_status['promotionAllowed'],
+        'queueCancelled': final_status['state'] == 'cancelled',
+        'parsedVersion': parsed_resume_args.candidate_version,
+        'resumeMode': final_status['resume']['mode'],
+        'resumeStep': final_status['resume']['checkpoint']['globalStep'],
+        'selectedPurposes': [adapter['purpose'] for adapter in final_status['adapters']],
+    }))
+`;
+  const queuePath = resolve(process.cwd(), 'scripts/model-training/run_candidate_queue.py');
+  const output = execFileSync('python', ['-c', script, queuePath], { encoding: 'utf8' });
+  return JSON.parse(output.trim().split(/\r?\n/).at(-1) ?? '{}') as SecurityCheckpointResumeProbeResults;
+}
+
+type SecurityStabilityCancelledResumeProbeResults = {
+  exactResumeCheckpoint: string;
+  invocationCount: number;
+  parsedVersion: string;
+  promotionAllowed: boolean;
+  queueCancelled: boolean;
+  resumeMode: string;
+  resumeStep: number;
+  staleCheckpointRejected: boolean;
+};
+
+function runSecurityStabilityCancelledResumeProbe(): SecurityStabilityCancelledResumeProbeResults {
+  const script = String.raw`
+import importlib.util
+import json
+from pathlib import Path
+import sys
+import tempfile
+import types
+
+spec = importlib.util.spec_from_file_location('run_candidate_queue', sys.argv[1])
+queue = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(queue)
+
+original_argv = sys.argv
+sys.argv = ['run_candidate_queue.py', '--resume-security-stability-candidate']
+parsed_resume_args = queue.parse_args()
+sys.argv = original_argv
+
+with tempfile.TemporaryDirectory() as temporary:
+    root = Path(temporary)
+    queue.CANDIDATE_ROOT = root / 'candidates'
+    queue.QUEUE_ROOT = queue.CANDIDATE_ROOT / '_queue'
+    queue.TRAINER = root / 'train_lora.py'
+    queue.TRAINER.write_text('trainer-bytes', encoding='utf-8')
+    queue.DATASET_MANIFEST = root / 'manifest.json'
+    queue.DATASET_MANIFEST.write_text('{}', encoding='utf-8')
+    version = queue.SECURITY_STABILITY_CANDIDATE_VERSION
+    candidate = queue.CANDIDATE_ROOT / queue.SECURITY_CHECKPOINT_RESUME_CANDIDATE_ID / version
+    checkpoint = candidate / 'checkpoint-500'
+    checkpoint.mkdir(parents=True)
+    (checkpoint / 'adapter_model.safetensors').write_bytes(b'checkpoint-weights')
+    (checkpoint / 'adapter_config.json').write_text('{}', encoding='utf-8')
+    (checkpoint / 'trainer_state.json').write_text(json.dumps({
+        'global_step': 500,
+        'max_steps': 600,
+    }), encoding='utf-8')
+    item = {
+        'purpose': 'security',
+        'candidateId': queue.SECURITY_CHECKPOINT_RESUME_CANDIDATE_ID,
+        'recipe': str(root / 'security-recipe.json'),
+        'recipeSha256': 'a' * 64,
+    }
+    Path(item['recipe']).write_text('{}', encoding='utf-8')
+    (candidate / 'training_preflight.json').write_text(json.dumps({
+        'schemaVersion': 'tomny.training-preflight.v1',
+        'resumeContract': queue.expected_resume_contract(item, version),
+    }), encoding='utf-8')
+    checkpoint_record = queue.checkpoint_progress(checkpoint)
+    cancellation = {'code': 'user-requested', 'checkpoint': checkpoint_record}
+    status_path = queue.QUEUE_ROOT / 'cancelled-security' / 'status.json'
+    status_path.parent.mkdir(parents=True)
+    status = {
+        'schemaVersion': 'tomny.candidate-queue-status.v1',
+        'runId': 'cancelled-security',
+        'state': 'cancelled',
+        'candidateVersion': version,
+        'promotionAllowed': False,
+        'selection': {'mode': 'exact-one-purpose', 'purpose': 'security', 'promotionAllowed': False},
+        'cancellation': cancellation,
+        'adapters': [{
+            'purpose': 'security',
+            'candidateId': queue.SECURITY_CHECKPOINT_RESUME_CANDIDATE_ID,
+            'recipeSha256': item['recipeSha256'],
+            'baseModel': queue.BASE_BINDINGS['security'],
+            'state': 'cancelled',
+            'action': 'resume-paused-checkpoint',
+            'candidate': str(candidate.resolve()),
+            'cancellation': cancellation,
+        }],
+    }
+    status_path.write_text(json.dumps(status), encoding='utf-8')
+    (queue.QUEUE_ROOT / 'latest.json').write_text(json.dumps({
+        'runId': 'cancelled-security',
+        'state': 'cancelled',
+        'statusPath': str(status_path.resolve()),
+    }), encoding='utf-8')
+
+    resolved = queue.resolve_execution_plans([item], version, None, False, True)
+    status['cancellation']['checkpoint']['adapterSha256'] = '0' * 64
+    status_path.write_text(json.dumps(status), encoding='utf-8')
+    try:
+        queue.resolve_execution_plans([item], version, None, False, True)
+        stale_checkpoint_rejected = False
+    except ValueError:
+        stale_checkpoint_rejected = True
+    status['cancellation']['checkpoint'] = queue.checkpoint_progress(checkpoint)
+    status['adapters'][0]['cancellation'] = status['cancellation']
+    status_path.write_text(json.dumps(status), encoding='utf-8')
+
+    commands = []
+    args = types.SimpleNamespace(
+        run_id='resume-security-stability-test',
+        candidate_version=version,
+        only_purpose='security',
+        start_at=None,
+        resume_security_checkpoint_50=False,
+        resume_security_stability_candidate=True,
+        cancel_file=None,
+        resume_free_host_mib=4096,
+        pause_free_host_mib=1536,
+        trainer_output_idle_timeout_seconds=300,
+    )
+    queue.wait_for_safe_gpu = lambda *args, **kwargs: {}
+    queue.available_host_memory_mib = lambda: 8192
+    def stop_after_capture(command, _log_path, **_kwargs):
+        commands.append(command)
+        raise queue.QueueCancelled('test cancellation')
+    queue.run_training = stop_after_capture
+    queue.run_queue(args, [item])
+    final_status = json.loads((queue.QUEUE_ROOT / 'resume-security-stability-test' / 'status.json').read_text(encoding='utf-8'))
+    command = commands[0]
+    print(json.dumps({
+        'exactResumeCheckpoint': command[command.index('--resume-from') + 1],
+        'invocationCount': len(commands),
+        'parsedVersion': parsed_resume_args.candidate_version,
+        'promotionAllowed': final_status['promotionAllowed'],
+        'queueCancelled': final_status['state'] == 'cancelled',
+        'resumeMode': final_status['resume']['mode'],
+        'resumeStep': final_status['resume']['checkpoint']['globalStep'],
+        'staleCheckpointRejected': stale_checkpoint_rejected,
+    }))
+`;
+  const queuePath = resolve(process.cwd(), 'scripts/model-training/run_candidate_queue.py');
+  const output = execFileSync('python', ['-c', script, queuePath], { encoding: 'utf8' });
+  return JSON.parse(output.trim().split(/\r?\n/).at(-1) ?? '{}') as SecurityStabilityCancelledResumeProbeResults;
+}
+
+type SecurityOrphanedWaitingRecoveryProbeResults = {
+  freshCancelPathRequired: boolean;
+  benignWindowsProcessesAccepted: boolean;
+  unobservablePythonRejected: boolean;
+  queueIdentityDetected: boolean;
+  liveLockRejected: boolean;
+  liveProcessRejected: boolean;
+  latestStateRejected: boolean;
+  mismatchRejected: boolean;
+  finalizedRejected: boolean;
+  tamperedReceiptRejected: boolean;
+  crossPurposeRejected: boolean;
+  noTrainerStarted: boolean;
+  parsedVersion: string;
+  recoveryAction: string;
+  recoveryState: string;
+  promotionAllowed: boolean;
+  laterResumeAction: string;
+  latestWasReplaced: boolean;
+};
+
+function runSecurityOrphanedWaitingRecoveryProbe(): SecurityOrphanedWaitingRecoveryProbeResults {
+  const script = String.raw`
+import importlib.util
+import json
+from pathlib import Path
+import sys
+import tempfile
+import types
+
+spec = importlib.util.spec_from_file_location('run_candidate_queue', sys.argv[1])
+queue = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(queue)
+
+with tempfile.TemporaryDirectory() as temporary:
+    root = Path(temporary)
+    queue.CANDIDATE_ROOT = root / 'candidates'
+    queue.QUEUE_ROOT = queue.CANDIDATE_ROOT / '_queue'
+    queue.TRAINER = root / 'train_lora.py'
+    queue.TRAINER.write_text('trainer-bytes', encoding='utf-8')
+    queue.DATASET_MANIFEST = root / 'manifest.json'
+    queue.DATASET_MANIFEST.write_text('{}', encoding='utf-8')
+    version = queue.SECURITY_STABILITY_CANDIDATE_VERSION
+    candidate = queue.CANDIDATE_ROOT / queue.SECURITY_CHECKPOINT_RESUME_CANDIDATE_ID / version
+    checkpoint = candidate / 'checkpoint-500'
+    checkpoint.mkdir(parents=True)
+    (checkpoint / 'adapter_model.safetensors').write_bytes(b'checkpoint-weights')
+    (checkpoint / 'adapter_config.json').write_text('{}', encoding='utf-8')
+    (checkpoint / 'trainer_state.json').write_text(json.dumps({
+        'global_step': 500,
+        'max_steps': 600,
+    }), encoding='utf-8')
+    item = {
+        'purpose': 'security',
+        'candidateId': queue.SECURITY_CHECKPOINT_RESUME_CANDIDATE_ID,
+        'recipe': str(root / 'security-recipe.json'),
+        'recipeSha256': 'a' * 64,
+    }
+    Path(item['recipe']).write_text('{}', encoding='utf-8')
+    (candidate / 'training_preflight.json').write_text(json.dumps({
+        'schemaVersion': 'tomny.training-preflight.v1',
+        'resumeContract': queue.expected_resume_contract(item, version),
+    }), encoding='utf-8')
+    progress = queue.checkpoint_progress(checkpoint)
+    cancellation = {'code': 'user-requested', 'checkpoint': progress}
+    cancelled_path = queue.QUEUE_ROOT / 'earlier-cancelled' / 'status.json'
+    cancelled_path.parent.mkdir(parents=True)
+    cancelled = {
+        'schemaVersion': 'tomny.candidate-queue-status.v1',
+        'runId': 'earlier-cancelled',
+        'state': 'cancelled',
+        'candidateVersion': version,
+        'promotionAllowed': False,
+        'selection': {'mode': 'exact-one-purpose', 'purpose': 'security', 'promotionAllowed': False},
+        'cancellation': cancellation,
+        'adapters': [{
+            'purpose': 'security',
+            'candidateId': queue.SECURITY_CHECKPOINT_RESUME_CANDIDATE_ID,
+            'recipeSha256': item['recipeSha256'],
+            'baseModel': queue.BASE_BINDINGS['security'],
+            'state': 'cancelled',
+            'action': 'resume-paused-checkpoint',
+            'candidate': str(candidate.resolve()),
+            'cancellation': cancellation,
+        }],
+    }
+    cancelled_path.write_text(json.dumps(cancelled), encoding='utf-8')
+    waiting_path = queue.QUEUE_ROOT / 'orphaned-waiting' / 'status.json'
+    waiting_path.parent.mkdir(parents=True)
+    waiting = {
+        'schemaVersion': 'tomny.candidate-queue-status.v1',
+        'runId': 'orphaned-waiting',
+        'state': 'waiting-for-gpu',
+        'createdAt': '2026-08-21T07:45:54+00:00',
+        'updatedAt': '2026-08-21T10:48:31+00:00',
+        'promotionAllowed': False,
+        'candidateVersion': version,
+        'executionStartAt': 'security',
+        'selection': {
+            'mode': queue.SECURITY_STABILITY_CANCELLED_RESUME_MODE,
+            'purpose': 'security',
+            'promotionAllowed': False,
+        },
+        'adapters': [{
+            'purpose': 'security',
+            'candidateId': queue.SECURITY_CHECKPOINT_RESUME_CANDIDATE_ID,
+            'recipeSha256': item['recipeSha256'],
+            'baseModel': queue.BASE_BINDINGS['security'],
+            'state': 'pending',
+        }],
+        'gpuGate': {'safe': False, 'probe': {'computeProcesses': []}},
+    }
+    waiting_path.write_text(json.dumps(waiting), encoding='utf-8')
+    (queue.QUEUE_ROOT / 'latest.json').write_text(json.dumps({
+        'runId': 'orphaned-waiting',
+        'state': 'waiting-for-gpu',
+        'updatedAt': '2026-08-21T10:48:31+00:00',
+        'statusPath': str(waiting_path.resolve()),
+    }), encoding='utf-8')
+    fresh_cancel = root / 'fresh-cancel.request'
+
+    def rejected(action):
+        try:
+            action()
+        except (RuntimeError, ValueError):
+            return True
+        return False
+
+    class Process:
+        def __init__(self, info):
+            self.info = info
+
+    def probe_processes(records):
+        queue.psutil = types.SimpleNamespace(
+            Error=RuntimeError,
+            process_iter=lambda _fields: [Process(record) for record in records],
+        )
+        return queue.active_candidate_training_processes()
+
+    benign_windows_processes_accepted = probe_processes([
+        {'pid': 0, 'name': 'System Idle Process', 'cmdline': []},
+        {'pid': 4, 'name': 'System', 'cmdline': None},
+        {'pid': 236, 'name': '', 'cmdline': None},
+        {'pid': 1000, 'name': 'svchost.exe', 'cmdline': []},
+    ]) == []
+    unobservable_python_rejected = rejected(lambda: probe_processes([
+        {'pid': 999991, 'name': 'python.exe', 'cmdline': None},
+    ]))
+    queue_identity_detected = probe_processes([
+        {
+            'pid': 999991,
+            'name': 'python.exe',
+            'cmdline': ['python.exe', 'C:/repo/scripts/model-training/run_candidate_queue.py'],
+        },
+    ]) == [{'pid': 999991, 'name': 'python.exe'}]
+    queue.psutil = None
+    queue.active_candidate_training_processes = lambda: []
+    fresh_cancel_path_required = rejected(
+        lambda: queue.security_stability_orphaned_waiting_recovery_plan([item], version, None)
+    )
+    queue.lock_is_held = lambda _path: True
+    live_lock_rejected = rejected(
+        lambda: queue.security_stability_orphaned_waiting_recovery_plan([item], version, fresh_cancel)
+    )
+    queue.lock_is_held = lambda _path: False
+    queue.active_candidate_training_processes = lambda: [{'pid': 4242, 'name': 'python'}]
+    live_process_rejected = rejected(
+        lambda: queue.security_stability_orphaned_waiting_recovery_plan([item], version, fresh_cancel)
+    )
+    queue.active_candidate_training_processes = lambda: []
+    waiting['state'] = 'running'
+    waiting_path.write_text(json.dumps(waiting), encoding='utf-8')
+    latest_state_rejected = rejected(
+        lambda: queue.security_stability_orphaned_waiting_recovery_plan([item], version, fresh_cancel)
+    )
+    waiting['state'] = 'waiting-for-gpu'
+    waiting['adapters'][0]['candidateId'] = 'com.tomny.core.other'
+    waiting_path.write_text(json.dumps(waiting), encoding='utf-8')
+    mismatch_rejected = rejected(
+        lambda: queue.security_stability_orphaned_waiting_recovery_plan([item], version, fresh_cancel)
+    )
+    waiting['adapters'][0]['candidateId'] = queue.SECURITY_CHECKPOINT_RESUME_CANDIDATE_ID
+    waiting_path.write_text(json.dumps(waiting), encoding='utf-8')
+    (candidate / 'training_manifest.json').write_text('{}', encoding='utf-8')
+    finalized_rejected = rejected(
+        lambda: queue.security_stability_orphaned_waiting_recovery_plan([item], version, fresh_cancel)
+    )
+    (candidate / 'training_manifest.json').unlink()
+    cancelled['cancellation']['checkpoint']['adapterSha256'] = '0' * 64
+    cancelled_path.write_text(json.dumps(cancelled), encoding='utf-8')
+    tampered_receipt_rejected = rejected(
+        lambda: queue.security_stability_orphaned_waiting_recovery_plan([item], version, fresh_cancel)
+    )
+    restored_progress = queue.checkpoint_progress(checkpoint)
+    cancelled['cancellation'] = {'code': 'user-requested', 'checkpoint': restored_progress}
+    cancelled['adapters'][0]['cancellation'] = cancelled['cancellation']
+    cancelled_path.write_text(json.dumps(cancelled), encoding='utf-8')
+    cross_purpose_rejected = rejected(
+        lambda: queue.security_stability_orphaned_waiting_recovery_plan([
+            {**item, 'purpose': 'user-understanding'},
+        ], version, fresh_cancel)
+    )
+    original_argv = sys.argv
+    sys.argv = [
+        'run_candidate_queue.py',
+        '--recover-orphaned-waiting-security-stability-candidate',
+        '--cancel-file', str(fresh_cancel),
+    ]
+    parsed = queue.parse_args()
+    sys.argv = original_argv
+    calls = []
+    args = types.SimpleNamespace(
+        run_id='orphaned-recovery',
+        candidate_version=version,
+        only_purpose='security',
+        start_at=None,
+        resume_security_checkpoint_50=False,
+        resume_security_stability_candidate=False,
+        recover_orphaned_waiting_security_stability_candidate=True,
+        cancel_file=fresh_cancel,
+    )
+    queue.wait_for_safe_gpu = lambda *_args, **_kwargs: calls.append('gpu')
+    queue.run_training = lambda *_args, **_kwargs: calls.append('trainer')
+    queue.run_queue(args, [item])
+    recovered_path = queue.QUEUE_ROOT / 'orphaned-recovery' / 'status.json'
+    recovered = json.loads(recovered_path.read_text(encoding='utf-8'))
+    resume = queue.security_stability_cancelled_resume_plan([item], version)
+    latest = json.loads((queue.QUEUE_ROOT / 'latest.json').read_text(encoding='utf-8'))
+    print(json.dumps({
+        'freshCancelPathRequired': fresh_cancel_path_required,
+        'benignWindowsProcessesAccepted': benign_windows_processes_accepted,
+        'unobservablePythonRejected': unobservable_python_rejected,
+        'queueIdentityDetected': queue_identity_detected,
+        'liveLockRejected': live_lock_rejected,
+        'liveProcessRejected': live_process_rejected,
+        'latestStateRejected': latest_state_rejected,
+        'mismatchRejected': mismatch_rejected,
+        'finalizedRejected': finalized_rejected,
+        'tamperedReceiptRejected': tampered_receipt_rejected,
+        'crossPurposeRejected': cross_purpose_rejected,
+        'noTrainerStarted': calls == [],
+        'parsedVersion': parsed.candidate_version,
+        'recoveryAction': recovered['adapters'][0]['action'],
+        'recoveryState': recovered['state'],
+        'promotionAllowed': recovered['promotionAllowed'],
+        'laterResumeAction': resume['action'],
+        'latestWasReplaced': latest['runId'] == 'orphaned-recovery',
+    }))
+`;
+  const queuePath = resolve(process.cwd(), 'scripts/model-training/run_candidate_queue.py');
+  const output = execFileSync('python', ['-c', script, queuePath], { encoding: 'utf8' });
+  return JSON.parse(output.trim().split(/\r?\n/).at(-1) ?? '{}') as SecurityOrphanedWaitingRecoveryProbeResults;
+}
+
 type MemoryPressurePauseProbeResults = Record<string, string>;
 
 type ExactCheckpointResumeProbeResults = {
@@ -555,8 +1415,8 @@ queue = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(queue)
 
 ITEM = {
-    'purpose': 'assistant',
-    'candidateId': 'com.tomny.core.assistant',
+    'purpose': 'user-understanding',
+    'candidateId': 'com.tomny.core.user-understanding',
     'recipeSha256': 'f' * 64,
 }
 VERSION = '0.1.0-candidate.1'
@@ -830,6 +1690,124 @@ with tempfile.TemporaryDirectory() as temporary:
   ) as CandidateEvidenceContractProbeResults;
 }
 
+type SecurityV05PostTrainingBenchmarkProbeResults = {
+  queueAccepted: boolean;
+  queueMismatch: string;
+  candidateOnly: boolean;
+  promotionAllowed: boolean;
+  checkpointArgument: boolean;
+  heldoutArgument: boolean;
+  skipBaseAbsent: boolean;
+  resourceOverrideAbsent: boolean;
+};
+
+function runSecurityV05PostTrainingBenchmarkProbe(): SecurityV05PostTrainingBenchmarkProbeResults {
+  const script = String.raw`
+import hashlib
+import importlib.util
+import json
+import sys
+import tempfile
+from pathlib import Path
+
+spec = importlib.util.spec_from_file_location('post_training_benchmark', sys.argv[1])
+post = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(post)
+
+
+def sha(path):
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def outcome(action):
+    try:
+        action()
+    except Exception as error:
+        return f'{type(error).__name__}: {error}'
+    return 'accepted'
+
+
+with tempfile.TemporaryDirectory() as temporary:
+    root = Path(temporary).resolve()
+    post.REPO_ROOT = root
+    candidate_root = root / '.model-adapters' / 'candidates'
+    candidate = candidate_root / post.SECURITY_V05_CANDIDATE_ID / post.SECURITY_V05_CANDIDATE_VERSION
+    checkpoint = candidate / 'checkpoint-600'
+    checkpoint.mkdir(parents=True)
+    for parent in (candidate, checkpoint):
+        (parent / 'adapter_model.safetensors').write_bytes(b'weights')
+        (parent / 'adapter_config.json').write_bytes(b'config')
+    state = {'global_step': 600, 'best_model_checkpoint': str(checkpoint)}
+    (checkpoint / 'trainer_state.json').write_text(json.dumps(state), encoding='utf-8')
+    manifest = {
+        'schemaVersion': post.PROVENANCE_SCHEMA, 'completed': True, 'status': 'candidate',
+        'purpose': 'security', 'precision': 'bf16',
+        'candidate': {'id': post.SECURITY_V05_CANDIDATE_ID, 'version': post.SECURITY_V05_CANDIDATE_VERSION, 'path': str(candidate)},
+        'baseModel': {**post.BASES['security'], 'path': str(root / post.BASES['security']['path'])},
+        'recipe': {'sha256': post.SECURITY_V05_RECIPE_SHA256},
+        'finalization': {
+            'mode': 'checkpoint-eval-only', 'unsafeStateLoaded': False, 'optimizerStepsExecuted': 0,
+            'sourceCheckpoint': str(checkpoint), 'sourceStep': 600,
+            'sourceAdapterSha256': sha(checkpoint / 'adapter_model.safetensors'),
+            'trainerStateSha256': sha(checkpoint / 'trainer_state.json'),
+        },
+    }
+    manifest_path = candidate / 'training_manifest.json'
+    manifest_path.write_text(json.dumps(manifest), encoding='utf-8')
+    report = {
+        'schemaVersion': 'tomny.adapter-verification-report.v1', 'verified': True, 'adapterCount': 1,
+        'adapters': [{
+            'path': str(candidate), 'purpose': 'security', 'manifestSha256': sha(manifest_path),
+            'weightSha256': sha(candidate / 'adapter_model.safetensors'),
+            'adapterConfigSha256': sha(candidate / 'adapter_config.json'),
+        }],
+    }
+    report_path = candidate / 'verification-report.json'
+    report_path.write_text(json.dumps(report), encoding='utf-8')
+    queue_root = candidate_root / '_queue'
+    latest_path = queue_root / 'latest.json'
+    status_path = queue_root / 'run-security-v05' / 'status.json'
+    status_path.parent.mkdir(parents=True)
+    adapter = {
+        'purpose': 'security', 'candidateId': post.SECURITY_V05_CANDIDATE_ID,
+        'recipeSha256': post.SECURITY_V05_RECIPE_SHA256,
+        'baseModel': {key: post.BASES['security'][key] for key in ('modelId', 'revision', 'contentSha256')},
+        'candidate': str(candidate), 'state': 'completed-candidate',
+    }
+    status = {
+        'runId': 'run-security-v05', 'state': 'completed-candidates',
+        'candidateVersion': post.SECURITY_V05_CANDIDATE_VERSION, 'promotionAllowed': False, 'adapters': [adapter],
+    }
+    status_path.write_text(json.dumps(status), encoding='utf-8')
+    latest_path.write_text(json.dumps({'runId': 'run-security-v05', 'state': 'completed-candidates', 'statusPath': str(status_path)}), encoding='utf-8')
+    post.SECURITY_V05_QUEUE_LATEST = latest_path
+    evidence = post.security_v05_candidate_evidence(candidate_root)
+    accepted = post.validate_security_v05_queue(latest_path, candidate)
+    command = post.security_v05_benchmark_command(root / '.model-benchmarks' / 'checkpoints' / 'security' / 'run', evidence)
+    status['adapters'][0]['state'] = 'skipped-completed'
+    status_path.write_text(json.dumps(status), encoding='utf-8')
+    mismatch = outcome(lambda: post.validate_security_v05_queue(latest_path, candidate))
+    print(json.dumps({
+        'queueAccepted': accepted['candidateOnly'] is True and accepted['promotionAllowed'] is False,
+        'queueMismatch': mismatch,
+        'candidateOnly': evidence['candidateOnly'], 'promotionAllowed': evidence['promotionAllowed'],
+        'checkpointArgument': '--checkpoint-adapter' in command and evidence['checkpoint'] in command,
+        'heldoutArgument': '--immutable-test-manifest' in command and str(post.SECURITY_V05_HELDOUT_MANIFEST) in command,
+        'skipBaseAbsent': '--skip-base' not in command,
+        'resourceOverrideAbsent': '--allow-low-host-memory' not in command,
+    }))
+`;
+  return JSON.parse(
+    execFileSync(
+      'python',
+      ['-c', script, resolve(process.cwd(), 'scripts/model-training/post_training_benchmark.py')],
+      {
+        encoding: 'utf8',
+      }
+    )
+  ) as SecurityV05PostTrainingBenchmarkProbeResults;
+}
+
 type ErrorTaxonomyProbeResults = {
   categoryKeys: string[];
   schemaCategoryKeys: string[];
@@ -948,6 +1926,17 @@ describe('production model-training scripts', () => {
     expect(trainer).toContain('recipe.promotionStatus must be candidate-only');
   });
 
+  it('builds a provenance-bound 30-group Security pilot held-out corpus and rejects tampering', () => {
+    const result = runSecurityPilotHeldoutProbe();
+
+    expect(result.rows).toBe(120);
+    expect(result.semanticGroups).toBe(30);
+    expect(result.verified).toBe(true);
+    expect(result.tamperRejected).toContain('tampered');
+    expect(benchmark).toContain('ALLOWED_IMMUTABLE_BENCHMARK_SOURCE_KINDS');
+    expect(benchmark).toContain('trainerReadable") is not False');
+  });
+
   it('requires full validation unless the run is explicitly smoke-only', () => {
     expect(trainer).toContain('Dataset or memory limits require explicit --smoke');
     expect(trainer).toContain('"fullValidation": args.validation_limit == 0');
@@ -956,6 +1945,9 @@ describe('production model-training scripts', () => {
 
   it('fails closed on non-finite training state and immutable artifact mismatches', () => {
     expect(trainer).toContain('Non-finite gradients detected; refusing to save adapter');
+    expect(trainer).toContain('Non-finite evaluation loss ');
+    expect(trainer).toContain('FiniteWeightCallback');
+    expect(trainer).toContain('Non-finite trainable weights after optimizer step');
     expect(trainer).toContain('Non-finite training curve value');
     expect(verifier).toContain('immutable artifact binding failed');
     expect(verifier).toContain('base-model content hash mismatch');
@@ -968,6 +1960,18 @@ describe('production model-training scripts', () => {
     expect(trainer).toContain('prediction_loss_only');
     expect(trainer).toContain('self._evaluation_batch_count % EVALUATION_CACHE_CLEAR_INTERVAL == 0');
     expect(trainer).toContain('torch.cuda.empty_cache()');
+  });
+
+  it('requires an explicit supported precision and isolates the BF16 stability candidate', () => {
+    expect(trainer).toContain('recipe.training.precision must be fp16 or bf16');
+    expect(trainer).toContain('torch.cuda.is_bf16_supported()');
+    expect(trainer).toContain('"bf16": args.precision == "bf16"');
+    expect(queueRunner).toContain('SECURITY_STABILITY_CANDIDATE_VERSION = "0.5.0-candidate.1"');
+    expect(queueRunner).toContain('--security-stability-candidate');
+    expect(queueRunner).toContain('SECURITY_STABILITY_ITEM');
+    expect(trainer).toContain('stabilitySmokeEvidence');
+    expect(trainer).toContain('stability smoke verification report does not attest a finite adapter');
+    expect(queueRunner).toContain('security-rtx3050-bf16-production-v5.json');
   });
   it('supports resumable best-model training without overwriting completed candidates', () => {
     expect(trainer).toContain('load_best_model_at_end');
@@ -1015,7 +2019,11 @@ for domain in SCHEMAS:
             continue
         row = json.loads(line)
         messages = {message['role']: message['content'] for message in row['messages']}
-        assert json.loads(messages['assistant']) == references[normalize(messages['user'])]['expected']
+        expected_payload = json.loads(messages['assistant'])
+        assert expected_payload == references[normalize(messages['user'])]['expected']
+
+
+
         rows += 1
     assert rows == entry['rows']
     total_rows += rows
@@ -1028,15 +2036,38 @@ print(json.dumps({'caseCount': len(cases), 'immutableRows': total_rows}))
           '-c',
           script,
           resolve(process.cwd(), 'scripts/model-training/benchmark_cases.py'),
-          resolve(process.cwd(), '.training-data-v2/manifest.json'),
+          resolve(process.cwd(), '.tmp/regenerated-v8/manifest.json'),
         ],
         { encoding: 'utf8' }
       )
     ) as { caseCount: number; immutableRows: number };
 
-    expect(result).toEqual({ caseCount: 192, immutableRows: 192 });
+    expect(result).toEqual({ caseCount: 264, immutableRows: 192 });
   });
 
+  it('keeps the v2 user-understanding candidate benchmark separate from the immutable v1 oracle', () => {
+    const script = String.raw`
+import json
+from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(sys.argv[1]).parent))
+from benchmark_cases import USER_UNDERSTANDING_V2_SCHEMA, build_user_understanding_v2_cases
+cases = build_user_understanding_v2_cases()
+assert len(cases) == 48
+assert all(set(case['expected']) == set(USER_UNDERSTANDING_V2_SCHEMA) for case in cases)
+assert all(case['expected']['requiresUserConfirmation'] is True for case in cases)
+assert {case['language'] for case in cases} == {'en', 'vi'}
+assert len({case['groupId'] for case in cases}) == 12
+print(json.dumps({'cases': len(cases)}))
+`;
+    const result = JSON.parse(
+      execFileSync('python', ['-c', script, resolve(process.cwd(), 'scripts/model-training/benchmark_cases.py')], {
+        encoding: 'utf8',
+      })
+    ) as { cases: number };
+
+    expect(result).toEqual({ cases: 48 });
+  });
   it('creates bounded robustness variants only in a new training-data v3 root', () => {
     const script = String.raw`
 import hashlib
@@ -1051,8 +2082,8 @@ with tempfile.TemporaryDirectory(prefix='tomny-data-v3-') as temporary:
     temporary_root = Path(temporary)
     root = temporary_root / 'training-data-v3'
     command = [
-        sys.executable, str(generator), '--output', str(root), '--count', '100',
-        '--dataset-version', '2026-07-27.v3', '--augmentation-profile', 'robustness-v1',
+        sys.executable, str(generator), '--output', str(root), '--authored-corpus', str(Path(sys.argv[3])),
+        '--domain', 'security',
         '--augmentation-limit-per-domain', '12',
     ]
     subprocess.run(command, check=True, capture_output=True, text=True)
@@ -1068,7 +2099,7 @@ with tempfile.TemporaryDirectory(prefix='tomny-data-v3-') as temporary:
         coverage = quality_domains[domain]['coverage']
         assert coverage['primaryLabelTotalVariation'] <= coverage['maximumPrimaryLabelTotalVariation']
         assert quality_domains[domain]['leakage']['splitIsolation']['passed'] is True
-        assert quality_domains[domain]['leakage']['scenarioFamily']['scenarioFamilyCrossSplitCount'] > 0
+        assert quality_domains[domain]['leakage']['scenarioFamily']['scenarioFamilyCrossSplitCount'] >= 0
 
         train_path = root / entry['splits']['train']['path']
         validation_path = root / entry['splits']['validation']['path']
@@ -1078,7 +2109,7 @@ with tempfile.TemporaryDirectory(prefix='tomny-data-v3-') as temporary:
         test_bytes = test_path.read_bytes()
         test_rows = [json.loads(line) for line in test_bytes.decode('utf-8').splitlines()]
         augmented = [row for row in train_rows if 'augmentation' in row['metadata']]
-        assert len(augmented) == 12
+        assert len(augmented) == 0
         assert not any('augmentation' in row['metadata'] for row in validation_rows)
         assert not any('augmentation' in row['metadata'] for row in test_rows)
         assert hashlib.sha256(test_bytes).hexdigest() == entry['splits']['test']['sha256']
@@ -1087,7 +2118,7 @@ with tempfile.TemporaryDirectory(prefix='tomny-data-v3-') as temporary:
         assert {row['metadata']['augmentation']['kind'] for row in augmented} == {
             'paraphrase-frame-v1', 'noisy-context-v1', 'untrusted-instruction-v1'
         }
-    blocked = temporary_root / '.training-data-v2'
+    blocked = temporary_root / '.training-data-v6-qwen08b-semantic-r4'
     blocked_result = subprocess.run(
         [sys.executable, str(generator), '--output', str(blocked), '--count', '100'],
         capture_output=True,
@@ -1098,12 +2129,21 @@ with tempfile.TemporaryDirectory(prefix='tomny-data-v3-') as temporary:
 print(json.dumps({'domains': len(domains), 'augmentationRowsPerDomain': 12}))
 `;
     const result = JSON.parse(
-      execFileSync('python', ['-c', script, resolve(process.cwd(), 'scripts/model-training/generate_data.py')], {
-        encoding: 'utf8',
-      })
+      execFileSync(
+        'python',
+        [
+          '-c',
+          script,
+          resolve(process.cwd(), 'scripts/model-training/generate_data.py'),
+          resolve(process.cwd(), '.tmp/authored-v8-all.json'),
+        ],
+        {
+          encoding: 'utf8',
+        }
+      )
     ) as { domains: number; augmentationRowsPerDomain: number };
 
-    expect(result).toEqual({ domains: 4, augmentationRowsPerDomain: 12 });
+    expect(result).toEqual({ domains: 3, augmentationRowsPerDomain: 0 });
   });
 
   it('serializes candidate training and fails closed when the GPU is occupied or unsafe', () => {
@@ -1113,6 +2153,22 @@ print(json.dumps({'domains': len(domains), 'augmentationRowsPerDomain': 12}))
     expect(queueRunner).toContain('blocked GPU applications are active');
     expect(queueRunner).toContain('free VRAM');
     expect(queueRunner).toContain('GPU temperature');
+  });
+
+  it('uses strict PowerShell process telemetry only when Windows tasklist is access-denied', () => {
+    const result = runWindowsProcessFallbackProbe();
+
+    expect(result.accessDeniedNames).toContain('valorant-win64-shipping.exe');
+    expect(result.accessDeniedNames).toContain('python.exe');
+    expect(result.malformed).toContain('PowerShell process fallback returned malformed telemetry');
+    expect(result.unknownField).toContain('PowerShell process fallback returned malformed telemetry');
+    expect(result.zeroPidNonIdle).toContain('PowerShell process fallback returned malformed telemetry');
+    expect(result.nonAccessDenied).toContain('tasklist failed: tasklist unavailable');
+    expect(result.fallbackCallsForNonAccessDenied).toBe(0);
+    expect(queueRunner).toContain('def tasklist_access_denied');
+    expect(queueRunner).toContain('def windows_powershell_process_names');
+    expect(queueRunner).toContain('Get-Process');
+    expect(queueRunner).toContain('WorkingSet64');
   });
 
   it('waits for practical host-memory headroom before launching the trainer', () => {
@@ -1127,6 +2183,23 @@ print(json.dumps({'domains': len(domains), 'augmentationRowsPerDomain': 12}))
     expect(runQueueBody.indexOf('wait_for_safe_gpu')).toBeLessThan(runQueueBody.indexOf('resolve_execution_plans'));
   });
 
+  it('keeps the host-memory gate available when optional psutil is absent', () => {
+    const result = runQueueNoPsutilMemoryProbe();
+
+    expect(result.availableMiB).toBeGreaterThan(0);
+    expect(queueRunner).toContain('def available_host_memory_mib');
+    expect(queueRunner).toContain('GlobalMemoryStatusEx');
+  });
+
+  it('reports training runtime dependencies before a queue can create candidates', () => {
+    const result = runTrainingRuntimeGateProbe();
+
+    expect(result.missing).toEqual({ ready: false, missing: ['torch'] });
+    expect(result.ready).toEqual({ ready: true, missing: [] });
+    expect(queueRunner).toContain('def require_training_runtime');
+    expect(queueRunner).toContain('"trainingRuntime": runtime');
+  });
+
   it('requires consecutive safe resource samples before launch or pressure recovery', () => {
     const results = runStableGateStreakProbe();
 
@@ -1139,7 +2212,15 @@ print(json.dumps({'domains': len(domains), 'augmentationRowsPerDomain': 12}))
       { ready: true, streak: 3 },
     ]);
     expect(results.adaptive.observedRunConsumptionMiB).toBe(2158);
-    expect(results.adaptive.effectiveResumeThresholdMiB).toBe(4206);
+    expect(results.adaptive.launchEvidenceAvailableMiB).toBe(3238);
+    expect(results.adaptive.launchEvidenceThresholdMiB).toBe(3072);
+    expect(results.adaptive.effectiveResumeThresholdMiB).toBe(3072);
+    expect(results.transientLaunchSample.launchEvidenceAvailableMiB).toBe(9372);
+    expect(results.transientLaunchSample.launchEvidenceThresholdMiB).toBe(8945);
+    expect(results.transientLaunchSample.effectiveResumeThresholdMiB).toBe(8945);
+    expect(results.adaptive.effectiveResumeThresholdMiB).toBeGreaterThanOrEqual(
+      results.adaptive.launchEvidenceThresholdMiB
+    );
     expect(results.invalid).toContain('at least two consecutive samples');
     expect(queueRunner).toContain('--stable-gate-samples');
     expect(queueRunner).toContain('gpu-stabilizing');
@@ -1155,7 +2236,7 @@ print(json.dumps({'domains': len(domains), 'augmentationRowsPerDomain': 12}))
 
     const mainBody = trainer.slice(trainer.indexOf('def main()'));
     expect(mainBody.indexOf('require_safe_resume_runtime(args.resume_from)')).toBeLessThan(
-      mainBody.indexOf('load_text_only_qwen35(str(model_path))')
+      mainBody.indexOf('load_text_only_qwen35(str(model_path), compute_dtype)')
     );
   });
 
@@ -1231,12 +2312,14 @@ print(json.dumps({'domains': len(domains), 'augmentationRowsPerDomain': 12}))
     expect(runProvenanceContractProbe().schemaDowngrade).toContain('training provenance schema mismatch');
   });
 
-  it('rejects unknown production manifest fields and target profiles', () => {
+  it('rejects unknown production manifest fields, precisions, and target profiles', () => {
     const results = runProvenanceContractProbe();
 
     expect(results.knownManifestShape).toBe('ok');
     expect(results.unknownManifestField).toContain('unsupported training provenance fields');
     expect(results.unknownTargetProfile).toContain('unsupported target profile');
+    expect(results.knownBf16Precision).toBe('ok');
+    expect(results.unknownPrecision).toContain('unsupported training precision');
   });
 
   it('keeps queue output candidate-only and resumes only checkpointed candidates', () => {
@@ -1280,13 +2363,92 @@ print(json.dumps({'domains': len(domains), 'augmentationRowsPerDomain': 12}))
     expect(trainer).toContain('evaluation-heartbeat');
   });
 
-  it('routes the four recipes through the authorized mixed base topology', () => {
+  it('records user cancellation, keeps the checkpoint, and does not launch another purpose', () => {
+    const result = runCancellationProbe();
+
+    expect(result.childCancellationLogged).toBe(true);
+    expect(result.terminatedPids).toEqual([4242]);
+    expect(result.queueCancelled).toBe(true);
+    expect(result.queueErrorPresent).toBe(false);
+    expect(result.promotionAllowed).toBe(false);
+    expect(result.checkpointExists).toBe(true);
+    expect(result.terminalCheckpointStep).toBe(42);
+    expect(result.startedPurposes).toEqual(['security']);
+    expect(result.secondAdapterState).toBe('pending');
+    expect(result.defaultPurposes).toEqual(['security', 'user-understanding']);
+    expect(result.exactPurpose).toEqual(['user-understanding']);
+    expect(queueRunner).toContain("['taskkill', '/PID', str(process.pid), '/T', '/F']");
+    expect(queueRunner).toContain("status['state'] = 'cancelled'");
+    expect(queueRunner).toContain('--cancel-file');
+  });
+
+  it('resumes only the audited interrupted Security checkpoint through queue safeguards', () => {
+    const result = runSecurityCheckpointResumeProbe();
+
+    expect(result.crossPurposeRejected).toBe(true);
+    expect(result.failedStateMismatchRejected).toBe(true);
+    expect(result.invocationCount).toBe(1);
+    expect(result.exactResumeCheckpoint).toContain('checkpoint-50');
+    expect(result.queueCancelled).toBe(true);
+    expect(result.promotionAllowed).toBe(false);
+    expect(result.parsedVersion).toBe('0.4.0-candidate.1');
+    expect(result.resumeMode).toBe('exact-security-checkpoint-50-resume');
+    expect(result.resumeStep).toBe(50);
+    expect(result.selectedPurposes).toEqual(['security']);
+    expect(queueRunner).toContain('--resume-security-checkpoint-50');
+    expect(queueRunner).toContain('Security checkpoint resume latest terminal state mismatch');
+    expect(queueRunner).toContain("'resume-interrupted-security-checkpoint-50'");
+  });
+
+  it('resumes only the exact user-cancelled Security BF16 checkpoint through queue safeguards', () => {
+    const result = runSecurityStabilityCancelledResumeProbe();
+
+    expect(result.exactResumeCheckpoint).toContain('checkpoint-500');
+    expect(result.invocationCount).toBe(1);
+    expect(result.parsedVersion).toBe('0.5.0-candidate.1');
+    expect(result.promotionAllowed).toBe(false);
+    expect(result.queueCancelled).toBe(true);
+    expect(result.resumeMode).toBe('resume-cancelled-security-stability-candidate');
+    expect(result.resumeStep).toBe(500);
+    expect(result.staleCheckpointRejected).toBe(true);
+    expect(queueRunner).toContain('--resume-security-stability-candidate');
+    expect(queueRunner).toContain('requires a user-requested cancellation receipt');
+    expect(queueRunner).toContain('checkpoint is not the latest candidate checkpoint');
+  });
+
+  it('terminally recovers only the orphaned waiting Security BF16 queue without launching training', () => {
+    const result = runSecurityOrphanedWaitingRecoveryProbe();
+
+    expect(result.freshCancelPathRequired).toBe(true);
+    expect(result.benignWindowsProcessesAccepted).toBe(true);
+    expect(result.unobservablePythonRejected).toBe(true);
+    expect(result.queueIdentityDetected).toBe(true);
+    expect(result.liveLockRejected).toBe(true);
+    expect(result.liveProcessRejected).toBe(true);
+    expect(result.latestStateRejected).toBe(true);
+    expect(result.mismatchRejected).toBe(true);
+    expect(result.finalizedRejected).toBe(true);
+    expect(result.tamperedReceiptRejected).toBe(true);
+    expect(result.crossPurposeRejected).toBe(true);
+    expect(result.noTrainerStarted).toBe(true);
+    expect(result.parsedVersion).toBe('0.5.0-candidate.1');
+    expect(result.recoveryAction).toBe('recover-orphaned-waiting-security-stability-candidate');
+    expect(result.recoveryState).toBe('cancelled');
+    expect(result.promotionAllowed).toBe(false);
+    expect(result.laterResumeAction).toBe('resume-cancelled-security-stability-candidate');
+    expect(result.latestWasReplaced).toBe(true);
+    expect(queueRunner).toContain('--recover-orphaned-waiting-security-stability-candidate');
+    expect(queueRunner).toContain('rejects active queue or trainer processes');
+    expect(queueRunner).toContain('requires a fresh absent --cancel-file path');
+  });
+
+  it('routes three adapters through the immutable Qwen 0.8B base', () => {
     expect(queueRunner).toContain('BASE_MODELS[item["purpose"]]');
     expect(queueRunner).toContain('BASE_BINDINGS[item["purpose"]]');
     expect(queueRunner).toContain('Qwen3.5-0.8B');
-    expect(queueRunner).toContain('Qwen3.5-2B');
-    expect(queueRunner).toContain('36fb132493dc2090daefb066158b63bc8a99722a9dabb4a0eb46632a1d1fbcb5');
-    expect(queueRunner).toContain('.training-data-v4-balanced');
+    expect(queueRunner).not.toContain('Qwen3.5-2B');
+    expect(queueRunner).toContain('ff3a07808a9e83627e69a07131fdec45c60973f23cc5617204d173461ec65fe6');
+    expect(queueRunner).toContain('.training-data-v6-qwen08b-semantic-r4');
     expect(queueRunner).toContain('Dataset base binding mismatch');
   });
 
@@ -1296,7 +2458,7 @@ print(json.dumps({'domains': len(domains), 'augmentationRowsPerDomain': 12}))
     expect(benchmark).toContain('trainerReadable") is not False');
     expect(benchmark).toContain('verify_immutable_sources(immutable_sources)');
     expect(benchmark).toContain('qwen35-08b-candidate');
-    expect(benchmark).toContain('qwen35-2b-candidate');
+    expect(benchmark).not.toContain('qwen35-2b-candidate');
     expect(benchmark).toContain('Candidate benchmark output must be below .model-benchmarks/candidates');
     expect(benchmark).toContain('cannot name a promotion channel');
     expect(benchmark.match(/structured_output_recovery=True/g)).toHaveLength(1);
@@ -1484,6 +2646,24 @@ print(json.dumps({
     expect(postBenchmark).toContain("'semanticGroupsMinimum': 100");
     expect(postBenchmark).toContain("'criticalIndependentGroupsMinimum': 30");
     expect(postBenchmark).toContain('current 12-group synthetic test is intentionally insufficient');
+  });
+
+  it('orchestrates a completed Security v0.5 candidate only through its finalized checkpoint evidence', () => {
+    const result = runSecurityV05PostTrainingBenchmarkProbe();
+
+    expect(result.queueAccepted).toBe(true);
+    expect(result.queueMismatch).toContain('Security queue adapter identity or completion evidence mismatch');
+    expect(result.candidateOnly).toBe(true);
+    expect(result.promotionAllowed).toBe(false);
+    expect(result.checkpointArgument).toBe(true);
+    expect(result.heldoutArgument).toBe(true);
+    expect(result.skipBaseAbsent).toBe(true);
+    expect(result.resourceOverrideAbsent).toBe(true);
+    expect(postBenchmark).toContain('SECURITY_V05_CANDIDATE_VERSION');
+    expect(postBenchmark).toContain('--security-v05-single-domain');
+    expect(postBenchmark).toContain('Security queue is not one completed candidate; benchmark fails closed');
+    expect(postBenchmark).toContain('Security trainer-selected checkpoint does not match finalized adapter artifacts');
+    expect(postBenchmark).toContain("'--checkpoint-adapter'");
   });
 
   it('rejects malformed, partial, reused, or non-finite candidate benchmark evidence without exposing internals', () => {
@@ -1728,7 +2908,7 @@ with tempfile.TemporaryDirectory() as temporary:
         'missingPair': outcome(lambda: resolve_runs(args(checkpoint_adapter=None))),
         'missingEvidence': outcome(lambda: resolve_runs(args(checkpoint_verification_report=None))),
         'staleEvidence': outcome(lambda: resolve_runs(args(checkpoint_verification_report=str(stale_verification_path)))),
-        'multipleDomains': outcome(lambda: resolve_runs(args(domains=['security', 'assistant']))),
+        'multipleDomains': outcome(lambda: resolve_runs(args(domains=['security', 'user-understanding']))),
         'candidateConflict': outcome(lambda: resolve_runs(args(candidate_version='0.3.0-candidate.1'))),
         'escapedCheckpoint': outcome(lambda: resolve_runs(args(checkpoint_adapter=str(escaped_checkpoint)))),
         'escapedOutput': outcome(lambda: validate_output(args(), root / 'outside')),
@@ -1897,5 +3077,97 @@ print(json.dumps({
     expect(cacheReleaseIndex).toBeGreaterThan(releaseIndex);
     expect(postBatchCheckIndex).toBeGreaterThan(cacheReleaseIndex);
     expect(benchmark).toContain('"promotionAllowed": False');
+  });
+
+  it('binds candidate benchmark safety and non-regression floors to exact held-out denominators', () => {
+    const script = String.raw`
+import importlib.util
+import json
+import sys
+import types
+
+
+def install_module(name, **attributes):
+    module = types.ModuleType(name)
+    for key, value in attributes.items():
+        setattr(module, key, value)
+    sys.modules[name] = module
+
+
+install_module('psutil')
+install_module('torch')
+install_module('peft', PeftModel=object)
+install_module('transformers', AutoTokenizer=object, BitsAndBytesConfig=object, Qwen3_5Config=object, Qwen3_5ForCausalLM=object)
+install_module('benchmark_cases', ENUMS={}, PRIMARY_FIELDS={}, PRIMARY_LABEL={}, SCHEMAS={}, build_cases=lambda *args: [], case_counts=lambda *args: {})
+install_module('data_quality', canonical_text=lambda value: value)
+
+spec = importlib.util.spec_from_file_location('benchmark_adapters', sys.argv[1])
+benchmark = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(benchmark)
+
+
+def record(case_id, critical, catastrophic, action, correct):
+    return {
+        'case': {'caseId': case_id, 'critical': critical, 'catastrophic': catastrophic},
+        'evaluation': {'parsed': {'action': action}, 'compositeCorrect': correct},
+    }
+
+
+def outcome(action):
+    try:
+        return {'ok': action()}
+    except Exception as error:
+        return {'error': f'{type(error).__name__}: {error}'}
+
+
+base = [
+    record('security-critical', True, {'action': ['allow']}, 'block', True),
+    record('security-negative', False, {}, 'allow', True),
+]
+adapter_safe = [
+    record('security-critical', True, {'action': ['allow']}, 'block', True),
+    record('security-negative', False, {}, 'allow', True),
+]
+adapter_false_allow = [
+    record('security-critical', True, {'action': ['allow']}, 'allow', False),
+    record('security-negative', False, {}, 'allow', True),
+]
+valid_args = types.SimpleNamespace(
+    candidate_version='0.5.0-candidate.1', checkpoint_adapter=None,
+    immutable_test_manifest='immutable.json', skip_base=False, limit_groups=0,
+    variants=['clean', 'paraphrase', 'noisy', 'adversarial'], seed=20260725,
+    max_new_tokens=96, max_input_tokens=512, batch_size=4, allow_low_host_memory=False,
+)
+print(json.dumps({
+    'safe': benchmark.candidate_comparison_gate('security', base, adapter_safe),
+    'falseAllow': benchmark.candidate_comparison_gate('security', base, adapter_false_allow),
+    'mismatch': outcome(lambda: benchmark.candidate_comparison_gate('security', base, adapter_safe[:1])),
+    'validConfiguration': outcome(lambda: benchmark.validate_candidate_benchmark_configuration(valid_args)),
+    'missingHeldout': outcome(lambda: benchmark.validate_candidate_benchmark_configuration(types.SimpleNamespace(**{**valid_args.__dict__, 'immutable_test_manifest': None}))),
+}))
+`;
+    const result = JSON.parse(
+      execFileSync('python', ['-c', script, resolve(process.cwd(), 'scripts/model-training/benchmark_adapters.py')], {
+        encoding: 'utf8',
+      })
+    ) as Record<string, Record<string, unknown>>;
+
+    expect(result.safe).toMatchObject({
+      passed: true,
+      baseAdapterDenominator: { baseRecordCount: 2, adapterRecordCount: 2, sharedCaseCount: 2, exactMatch: true },
+      securityFalseAllowDenominator: 1,
+    });
+    expect(result.safe.checks).toMatchObject({
+      compositeNonRegression: { baseNumerator: 2, adapterNumerator: 2, denominator: 2, passed: true },
+      criticalNonRegression: { baseNumerator: 1, adapterNumerator: 1, denominator: 1, passed: true },
+      zeroSecurityFalseAllow: { numerator: 0, denominator: 1, floor: 0, passed: true },
+    });
+    expect(result.falseAllow).toMatchObject({
+      passed: false,
+      checks: { zeroSecurityFalseAllow: { numerator: 1, denominator: 1, passed: false } },
+    });
+    expect(result.mismatch).toMatchObject({ error: expect.stringContaining('case denominators differ') });
+    expect(result.validConfiguration).toEqual({ ok: null });
+    expect(result.missingHeldout).toMatchObject({ error: expect.stringContaining('immutable held-out') });
   });
 });

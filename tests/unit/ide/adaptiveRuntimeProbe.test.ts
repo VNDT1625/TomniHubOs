@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { selectAdaptiveEvidence } from '@/process/ide/adaptiveRuntimeProbe';
+import { selectAdaptiveEvidence } from '@package-apps/ide/process/execution/inspection/adaptiveRuntimeProbe';
 
 describe('selectAdaptiveEvidence', () => {
   it('uses full CDP evidence when a web target is available', () => {

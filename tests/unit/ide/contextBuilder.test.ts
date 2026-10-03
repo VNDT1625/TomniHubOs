@@ -8,8 +8,8 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { createContextBuilder, lexicalGraphRanker } from '@/process/ide/contextBuilder';
-import type { KnowledgeGraph } from '@/process/ide/understandTypes';
+import { createContextBuilder, lexicalGraphRanker } from '@package-apps/ide/process/knowledge/context/contextBuilder';
+import type { KnowledgeGraph } from '@package-apps/ide/process/knowledge/graph/understandTypes';
 
 const node = (
   id: string,
@@ -80,9 +80,9 @@ describe('lexicalGraphRanker', () => {
       ...graph,
       nodes: [
         node('mobile/src/utils/messageAdapter.ts', 'Generic message utilities', 50),
-        node('musicdaw/src/agent/producer.ts', 'Music producer agent', 40),
+        node('packages/music-core/src/agent/producer.ts', 'Music producer agent', 40),
         node('tests/e2e/fixtures.ts', 'Playwright fixtures', 35),
-        node('packages/desktop/src/process/browser/browserBridge.ts', 'Điều khiển trình duyệt và các tab', 2),
+        node('packages/package-apps/browser/src/process/browserBridge.ts', 'Điều khiển trình duyệt và các tab', 2),
         node(
           'packages/desktop/src/process/services/contentExtract/ytDlpTranscript.ts',
           'Lấy phụ đề và transcript YouTube cho phần trình duyệt',
@@ -105,7 +105,7 @@ describe('lexicalGraphRanker', () => {
         .toSorted()
     ).toEqual(
       [
-        'packages/desktop/src/process/browser/browserBridge.ts',
+        'packages/package-apps/browser/src/process/browserBridge.ts',
         'packages/desktop/src/renderer/pages/browser/BrowserPage.tsx',
         'packages/desktop/src/process/services/contentExtract/ytDlpTranscript.ts',
       ].toSorted()
@@ -118,7 +118,7 @@ describe('lexicalGraphRanker', () => {
     const subtitleTop = subtitleRanked.slice(0, 3).map((r) => r.id);
     expect(subtitleTop).toContain('packages/desktop/src/process/services/contentExtract/ytDlpTranscript.ts');
     expect(subtitleTop).not.toContain('mobile/src/utils/messageAdapter.ts');
-    expect(subtitleTop).not.toContain('musicdaw/src/agent/producer.ts');
+    expect(subtitleTop).not.toContain('packages/music-core/src/agent/producer.ts');
   });
 
   it('prefers source files over tests unless the request asks for tests', async () => {
@@ -131,7 +131,7 @@ describe('lexicalGraphRanker', () => {
         'test'
       ),
       node(
-        'packages/desktop/src/process/ide/knowledgeGraphBuilder.ts',
+        'packages/package-apps/ide/src/process/knowledge/graph/knowledgeGraphBuilder.ts',
         'Knowledge graph builder implementation',
         2,
         [{ name: 'createKnowledgeGraphBuilder', kind: 'function', line: 10 }],
@@ -139,7 +139,7 @@ describe('lexicalGraphRanker', () => {
       ),
     ]);
 
-    expect(ranked[0]?.id).toBe('packages/desktop/src/process/ide/knowledgeGraphBuilder.ts');
+    expect(ranked[0]?.id).toBe('packages/package-apps/ide/src/process/knowledge/graph/knowledgeGraphBuilder.ts');
 
     const testRanked = await lexicalGraphRanker('fix knowledge graph builder test', [
       node(
@@ -150,7 +150,7 @@ describe('lexicalGraphRanker', () => {
         'test'
       ),
       node(
-        'packages/desktop/src/process/ide/knowledgeGraphBuilder.ts',
+        'packages/package-apps/ide/src/process/knowledge/graph/knowledgeGraphBuilder.ts',
         'Knowledge graph builder implementation',
         2,
         [{ name: 'createKnowledgeGraphBuilder', kind: 'function', line: 10 }],
@@ -164,22 +164,28 @@ describe('lexicalGraphRanker', () => {
   it('uses fuzzy path and symbol matching for abbreviation-style code queries', async () => {
     const ranked = await lexicalGraphRanker('kg builder', [
       node(
-        'packages/desktop/src/process/ide/knowledgeGraphBuilder.ts',
+        'packages/package-apps/ide/src/process/knowledge/graph/knowledgeGraphBuilder.ts',
         'Builds the Understand knowledge graph',
         2,
         [{ name: 'createKnowledgeGraphBuilder', kind: 'function', line: 10 }],
         'service'
       ),
-      node('packages/desktop/src/process/ide/graphSnapshot.ts', 'Diffs graph snapshots', 8, [], 'service'),
+      node(
+        'packages/package-apps/ide/src/process/knowledge/graph/graphSnapshot.ts',
+        'Diffs graph snapshots',
+        8,
+        [],
+        'service'
+      ),
       node('packages/desktop/src/renderer/pages/browser/BrowserPage.tsx', 'Browser page UI', 20, [], 'ui'),
     ]);
 
-    expect(ranked[0]?.id).toBe('packages/desktop/src/process/ide/knowledgeGraphBuilder.ts');
+    expect(ranked[0]?.id).toBe('packages/package-apps/ide/src/process/knowledge/graph/knowledgeGraphBuilder.ts');
   });
 
   it('uses basename and camelCase fuzzy matching for Cursor-like file jumps', async () => {
     const ranked = await lexicalGraphRanker('browserpage', [
-      node('packages/desktop/src/process/browser/browserBridge.ts', 'Browser process bridge', 12, [], 'api'),
+      node('packages/package-apps/browser/src/process/browserBridge.ts', 'Browser process bridge', 12, [], 'api'),
       node(
         'packages/desktop/src/renderer/pages/browser/BrowserPage.tsx',
         'Embedded browser page',
@@ -203,7 +209,7 @@ describe('lexicalGraphRanker', () => {
         [{ name: 'fetchYtDlpTranscript', kind: 'function', line: 12 }],
         'service'
       ),
-      node('packages/desktop/src/process/browser/browserBridge.ts', 'Browser tab control', 5, [], 'api'),
+      node('packages/package-apps/browser/src/process/browserBridge.ts', 'Browser tab control', 5, [], 'api'),
     ]);
 
     expect(ranked[0]?.id).toBe('packages/desktop/src/process/services/contentExtract/ytDlpTranscript.ts');

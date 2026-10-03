@@ -7,7 +7,7 @@
 import { spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createChildProcessBackend, killProcessTree } from '@/process/terminal/ptyBackend';
+import { createChildProcessBackend, killProcessTree } from '@process/ideTerminal/ptyBackend';
 
 vi.mock('node:child_process', () => ({
   spawn: vi.fn(() => ({ on: vi.fn() })),

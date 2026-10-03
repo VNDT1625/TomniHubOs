@@ -140,6 +140,9 @@ export type AiSummarizeDocRequest = {
 /** Failure category for the UI to render a targeted hint. */
 export type ManagerErrorCode = 'no-model' | 'no-vision' | 'error';
 
+/** Stable renderer-safe denial for an operation without an online account session. */
+export const ACCOUNT_SESSION_ONLINE_REQUIRED = 'ACCOUNT_SESSION_ONLINE_REQUIRED';
+
 /** Every manager channel resolves with this envelope (never rejects on a handled failure). */
 export type ManagerResult<T> = { ok: true; data: T } | { ok: false; error: string; code: ManagerErrorCode };
 
@@ -199,8 +202,25 @@ export type ManagerBridgeServices = {
   scheduler: IReminderScheduler;
 };
 
+/**
+ * Main-owned admission for optional Manager weather and travel egress.
+ *
+ * This deliberately names operations rather than accepting destinations so a
+ * caller cannot turn the Manager bridge into a generic host allowlist. The
+ * final Trust transport will replace this containment seam.
+ */
+export type ManagerExternalAuthority = Readonly<{
+  authorizeExternalEgress(operation: 'weather-forecast' | 'travel-estimate'): Promise<void>;
+}>;
+
 /** Options for {@link registerManagerBridge}. */
-export type RegisterManagerBridgeOptions = { services: ManagerBridgeServices };
+export type RegisterManagerBridgeOptions = {
+  services: ManagerBridgeServices;
+  /** Main-owned account authority. It is never derived from renderer input. */
+  requireAuthenticatedAccount?: () => void;
+  /** Main-owned, operation-scoped egress authority. Absent authority denies optional remote enrichment. */
+  externalAuthority?: ManagerExternalAuthority;
+};
 
 /** Detect the "no usable model" vs "no vision" cases for a targeted UI hint. */
 const classify = (error: unknown): ManagerErrorCode => {
@@ -283,11 +303,33 @@ let unsubscribeChange: (() => void) | undefined;
  */
 export function registerManagerBridge(options: RegisterManagerBridgeOptions): void {
   const { store, ai, scheduler } = options.services;
+  const requireAuthenticatedAccount = options.requireAuthenticatedAccount ?? (() => undefined);
+
+  /**
+   * Remote schedule enrichment is optional. Do not construct a provider, read
+   * its key, resolve a location, or fetch until Main has admitted the exact
+   * operation. Authority errors intentionally degrade to no enrichment.
+   */
+  const mayUseExternalEgress = async (operation: 'weather-forecast' | 'travel-estimate'): Promise<boolean> => {
+    if (!options.externalAuthority) return false;
+    try {
+      await options.externalAuthority.authorizeExternalEgress(operation);
+      return true;
+    } catch {
+      return false;
+    }
+  };
 
   /** Wrap a handler so it ALWAYS resolves a {@link ManagerResult}. */
   const safe =
     <Req, Res>(label: string, handler: (req: Req) => Promise<Res>) =>
     async (req: Req): Promise<ManagerResult<Res>> => {
+      try {
+        requireAuthenticatedAccount();
+      } catch (error) {
+        console.warn(`[ManagerBridge] ${label} denied:`, error);
+        return { ok: false, error: ACCOUNT_SESSION_ONLINE_REQUIRED, code: 'error' };
+      }
       try {
         return { ok: true, data: await handler(req) };
       } catch (error) {
@@ -369,14 +411,14 @@ export function registerManagerBridge(options: RegisterManagerBridgeOptions): vo
       const events = data.events.filter(inRange);
       // Resolve weather for the optimiser when enabled + a location is known.
       let weather: WeatherForecast | null = null;
-      if (data.settings.weatherEnabled) {
+      if (data.settings.weatherEnabled && (await mayUseExternalEgress('weather-forecast'))) {
         const location = data.settings.defaultLocation ?? events.find((e) => e.location)?.location ?? null;
         weather = await getForecast(location, 7).catch((): WeatherForecast | null => null);
       }
       // Resolve travel legs between located events when enabled (Google → OSRM →
       // straight-line estimate). Degrades to [] on any failure.
       let travelLegs: TravelLeg[] = [];
-      if (data.settings.travelTimeEnabled) {
+      if (data.settings.travelTimeEnabled && (await mayUseExternalEgress('travel-estimate'))) {
         travelLegs = await computeTravelLegs(events, data.settings).catch((): TravelLeg[] => []);
       }
       return requireAi().optimizeSchedule({ events, tasks: data.tasks, weather, travelLegs });

@@ -7,6 +7,15 @@
   color: var(--text-primary);
 }
 
+.scrollArea {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  gap: 4px;
+}
+
 .navigation,
 .section {
   display: flex;
@@ -31,6 +40,138 @@
 
 .navButtonActive {
   background: color-mix(in srgb, var(--color-primary) 14%, transparent) !important;
+  color: var(--color-primary) !important;
+}
+
+.appItemWrapper {
+  display: flex;
+  align-items: center;
+  position: relative;
+  width: 100%;
+}
+
+.appSubToggle {
+  position: absolute;
+  right: 4px;
+  width: 22px !important;
+  height: 22px !important;
+  min-width: 22px !important;
+  padding: 0 !important;
+  border-radius: 4px !important;
+  color: var(--text-tertiary) !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.appSubToggle:hover {
+  background: var(--surface-glass-hover) !important;
+  color: var(--text-primary) !important;
+}
+
+.subAppList {
+  display: flex;
+  flex-direction: column;
+  padding-left: 28px;
+  gap: 2px;
+  margin: 2px 0 4px;
+}
+
+.subAppItem {
+  height: 26px !important;
+  font-size: 11px !important;
+  padding-inline: 8px !important;
+  color: var(--text-tertiary) !important;
+  border-radius: 6px !important;
+  justify-content: flex-start !important;
+}
+
+.subAppItem:hover {
+  background: var(--surface-glass-hover) !important;
+  color: var(--text-primary) !important;
+}
+
+.workspaceTree {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.workspaceFolder {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.workspaceHeader {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+}
+
+.workspaceHeader:hover {
+  background: var(--surface-glass-hover);
+  color: var(--text-primary);
+}
+
+.conversationList {
+  display: flex;
+  flex-direction: column;
+  padding-left: 18px;
+  gap: 2px;
+  margin-top: 2px;
+}
+
+.conversationItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 6px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  cursor: pointer;
+  text-decoration: none;
+  user-select: none;
+}
+
+.conversationItem:hover {
+  background: var(--surface-glass-hover);
+  color: var(--text-primary);
+}
+
+.conversationItemActive {
+  background: color-mix(in srgb, var(--color-primary) 14%, transparent) !important;
+  color: var(--color-primary) !important;
+  font-weight: 500;
+}
+
+.conversationTitle {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.showMoreBtn {
+  height: 24px !important;
+  padding: 0 8px !important;
+  font-size: 10px !important;
+  color: var(--text-tertiary) !important;
+  justify-content: flex-start !important;
+}
+
+.showMoreBtn:hover {
   color: var(--color-primary) !important;
 }
 
@@ -118,8 +259,12 @@
 }
 
 .collapsed .sectionLabel > :first-child,
-.collapsed .sidebarCopy {
-  display: none;
+.collapsed .sidebarCopy,
+.collapsed .appSubToggle,
+.collapsed .subAppList,
+.collapsed .conversationList,
+.collapsed .showMoreBtn {
+  display: none !important;
 }
 
 @media (prefers-reduced-motion: reduce) {

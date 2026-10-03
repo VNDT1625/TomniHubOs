@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { LinkedMicrosoftAppRecord } from '../../../../common/packages';
+import { createHash } from 'node:crypto';
+import type { LinkedMicrosoftAppRecord, PackageManifest } from '../../../../common/packages';
 import { CatalogFederationError, type InstalledMicrosoftAppIdentity } from './types';
 
 const MAX_QUERY_LENGTH = 200;
@@ -13,6 +14,181 @@ const SAFE_PACKAGE_ID = /^[a-z0-9]+(?:[.-][a-z0-9]+)+$/;
 const SAFE_MICROSOFT_PRODUCT_ID = /^[A-Z0-9]{8,32}$/;
 const SAFE_PACKAGE_FAMILY_NAME = /^[A-Za-z0-9.-]+_[A-Za-z0-9]+$/;
 const DENIED_ACTIVATION_PROTOCOLS = new Set(['data:', 'file:', 'javascript:', 'shell:', 'vbscript:']);
+
+export type AutomatedPackageReviewReason =
+  | 'REVIEW_FINGERPRINT_CHANGED'
+  | 'PACKAGE_TYPE_REQUIRES_REVIEW'
+  | 'RUNTIME_REQUIRES_REVIEW'
+  | 'PERMISSIONS_REQUIRE_REVIEW'
+  | 'DEPENDENCIES_REQUIRE_REVIEW'
+  | 'NATIVE_CODE_REQUIRES_REVIEW'
+  | 'NATIVE_CODE_UNKNOWN'
+  | 'AI_OPERATIONS_REQUIRE_REVIEW'
+  | 'AI_OPERATIONS_UNKNOWN'
+  | 'DESTINATIONS_REQUIRE_REVIEW'
+  | 'DESTINATIONS_UNKNOWN';
+
+/**
+ * A publisher-safe explanation of one deterministic technical review outcome.
+ * Evidence deliberately names only the review class; it never includes archive
+ * paths, bytes, destinations, signing material, or other untrusted artifact data.
+ */
+export type AutomatedPackageReviewFinding = Readonly<{
+  code: AutomatedPackageReviewReason;
+  severity: 'warning';
+  evidence: string;
+  remediation: string;
+}>;
+
+export type AutomatedPackageReviewInput = Readonly<{
+  manifest: PackageManifest;
+  inspection: Readonly<{
+    hasNativeCode: boolean | 'unknown';
+    aiOperations: readonly string[] | 'unknown';
+    destinations: readonly string[] | 'unknown';
+  }>;
+  /** The exact fingerprint produced by the previous review, if one exists. */
+  priorApprovalFingerprint?: string;
+}>;
+
+export type AutomatedPackageReviewDecision = Readonly<{
+  disposition: 'auto-approved' | 'human-review-required';
+  fingerprint: string;
+  reasons: readonly AutomatedPackageReviewReason[];
+  findings: readonly AutomatedPackageReviewFinding[];
+}>;
+
+const REVIEW_FINDING_DETAILS: Readonly<
+  Record<AutomatedPackageReviewReason, Omit<AutomatedPackageReviewFinding, 'code'>>
+> = {
+  REVIEW_FINGERPRINT_CHANGED: {
+    severity: 'warning',
+    evidence: 'The submitted technical review state differs from the prior approval.',
+    remediation: 'Request a new authoritative review for this exact package version.',
+  },
+  PACKAGE_TYPE_REQUIRES_REVIEW: {
+    severity: 'warning',
+    evidence: 'The package type is outside the automatic technical review scope.',
+    remediation: 'Request authoritative review for the declared package type.',
+  },
+  RUNTIME_REQUIRES_REVIEW: {
+    severity: 'warning',
+    evidence: 'The package declares a runtime outside the automatic technical review scope.',
+    remediation: 'Request authoritative review for the declared runtime.',
+  },
+  PERMISSIONS_REQUIRE_REVIEW: {
+    severity: 'warning',
+    evidence: 'The package declares one or more permissions.',
+    remediation: 'Request authoritative review for the declared permissions.',
+  },
+  DEPENDENCIES_REQUIRE_REVIEW: {
+    severity: 'warning',
+    evidence: 'The package declares one or more dependencies.',
+    remediation: 'Request authoritative review for the declared dependencies.',
+  },
+  NATIVE_CODE_REQUIRES_REVIEW: {
+    severity: 'warning',
+    evidence: 'The technical inspection reports native code.',
+    remediation: 'Request authoritative review for the inspected native code.',
+  },
+  NATIVE_CODE_UNKNOWN: {
+    severity: 'warning',
+    evidence: 'The technical inspection could not determine whether native code is present.',
+    remediation: 'Provide a complete inspection, then request authoritative review.',
+  },
+  AI_OPERATIONS_REQUIRE_REVIEW: {
+    severity: 'warning',
+    evidence: 'The technical inspection reports one or more AI operations.',
+    remediation: 'Request authoritative review for the inspected AI operations.',
+  },
+  AI_OPERATIONS_UNKNOWN: {
+    severity: 'warning',
+    evidence: 'The technical inspection could not determine the package AI operations.',
+    remediation: 'Provide a complete inspection, then request authoritative review.',
+  },
+  DESTINATIONS_REQUIRE_REVIEW: {
+    severity: 'warning',
+    evidence: 'The technical inspection reports one or more outbound destinations.',
+    remediation: 'Request authoritative review for the inspected outbound access.',
+  },
+  DESTINATIONS_UNKNOWN: {
+    severity: 'warning',
+    evidence: 'The technical inspection could not determine outbound destinations.',
+    remediation: 'Provide a complete inspection, then request authoritative review.',
+  },
+};
+
+export const automatedPackageReviewFindings = (
+  reasons: readonly AutomatedPackageReviewReason[]
+): readonly AutomatedPackageReviewFinding[] =>
+  Object.freeze(
+    reasons.map((code) =>
+      Object.freeze({
+        code,
+        ...REVIEW_FINDING_DETAILS[code],
+      })
+    )
+  );
+
+const canonicalizeReviewValue = (value: unknown): string => {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(canonicalizeReviewValue).join(',')}]`;
+  return `{${Object.entries(value as Record<string, unknown>)
+    .toSorted(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+    .map(([key, entry]) => `${JSON.stringify(key)}:${canonicalizeReviewValue(entry)}`)
+    .join(',')}}`;
+};
+
+const normalizedInspectionValues = (value: readonly string[]): string[] =>
+  [...new Set(value.map((item) => item.trim()))].toSorted();
+
+/**
+ * Produces a deterministic, fail-closed review decision for Store admission.
+ * A prior approval is valid only for this exact manifest plus the inspected
+ * native-code, AI-operation, and destination findings.
+ */
+export const decideAutomatedPackageReview = (input: AutomatedPackageReviewInput): AutomatedPackageReviewDecision => {
+  const aiOperations =
+    input.inspection.aiOperations === 'unknown' ? 'unknown' : normalizedInspectionValues(input.inspection.aiOperations);
+  const destinations =
+    input.inspection.destinations === 'unknown' ? 'unknown' : normalizedInspectionValues(input.inspection.destinations);
+  const fingerprint = `sha256-${createHash('sha256')
+    .update(
+      canonicalizeReviewValue({
+        manifest: input.manifest,
+        inspection: {
+          hasNativeCode: input.inspection.hasNativeCode,
+          aiOperations,
+          destinations,
+        },
+      })
+    )
+    .digest('hex')}`;
+  const reasons: AutomatedPackageReviewReason[] = [];
+
+  if (input.priorApprovalFingerprint !== undefined && input.priorApprovalFingerprint !== fingerprint) {
+    reasons.push('REVIEW_FINGERPRINT_CHANGED');
+  }
+  if (input.manifest.type !== 'app') reasons.push('PACKAGE_TYPE_REQUIRES_REVIEW');
+  if (input.manifest.modules.some((module) => module.runtime !== 'sandboxed-web')) {
+    reasons.push('RUNTIME_REQUIRES_REVIEW');
+  }
+  if (input.manifest.permissions.length > 0) reasons.push('PERMISSIONS_REQUIRE_REVIEW');
+  if (input.manifest.dependencies.length > 0) reasons.push('DEPENDENCIES_REQUIRE_REVIEW');
+  if (input.inspection.hasNativeCode === 'unknown') reasons.push('NATIVE_CODE_UNKNOWN');
+  if (input.inspection.hasNativeCode === true) reasons.push('NATIVE_CODE_REQUIRES_REVIEW');
+  if (aiOperations === 'unknown') reasons.push('AI_OPERATIONS_UNKNOWN');
+  if (Array.isArray(aiOperations) && aiOperations.length > 0) reasons.push('AI_OPERATIONS_REQUIRE_REVIEW');
+  if (destinations === 'unknown') reasons.push('DESTINATIONS_UNKNOWN');
+  if (Array.isArray(destinations) && destinations.length > 0) reasons.push('DESTINATIONS_REQUIRE_REVIEW');
+
+  return {
+    disposition: reasons.length === 0 ? 'auto-approved' : 'human-review-required',
+    fingerprint,
+    reasons,
+    findings: automatedPackageReviewFindings(reasons),
+  };
+};
 
 const containsControlCharacters = (value: string): boolean =>
   [...value].some((character) => {

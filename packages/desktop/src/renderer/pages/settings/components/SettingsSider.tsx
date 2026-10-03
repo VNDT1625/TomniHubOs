@@ -5,26 +5,21 @@ import { type IExtensionSettingsTab } from '@/common/adapter/ipcBridge';
 import { useExtI18n } from '@/renderer/hooks/system/useExtI18n';
 import { useExtensionSettingsTabs } from '@/renderer/hooks/system/useExtensionSettingsTabs';
 import {
-  Bug,
-  Cat,
+  Brain,
   Communication,
-  Compass,
   Computer,
   Dashboard,
-  BuildingTwo,
   Earth,
-  ExperimentOne,
   Info,
   Lightning,
-  LinkCloud,
-  PersonalCollection,
+  Lock,
   Puzzle,
-  Refresh,
+  Remind,
   Robot,
-  Rss,
-  Speed,
-  System,
-  Terminal,
+  SettingConfig,
+  Shield,
+  User,
+  Wallet,
 } from '@icon-park/react';
 import classNames from 'classnames';
 import React, { useMemo } from 'react';
@@ -33,47 +28,55 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { Tooltip } from '@arco-design/web-react';
 import { getSiderTooltipProps } from '@/renderer/utils/ui/siderTooltip';
 
-/** Builtin settings tab IDs in display order (must match router paths). */
+/**
+ * Builtin settings tab IDs in display order:
+ * 1. ACCOUNT: profile, billing, personal
+ * 2. AI: model, capabilities, pipeline, aiconfig
+ * 3. GENERAL: display, notification, webui, resource, privacy, system
+ * 4. OTHER: about
+ */
 export const BUILTIN_TAB_IDS = [
-  'agent',
+  // CỤM 1: ACCOUNT
+  'profile',
+  'billing',
   'personal',
+
+  // CỤM 2: AI
   'model',
-  'assistants',
   'capabilities',
+  'pipeline',
+  'aiconfig',
+
+  // CỤM 3: GENERAL
   'display',
+  'notification',
   'webui',
-  'pet',
   'resource',
-  'company',
-  'knowledge',
-  'browser',
-  'news',
-  'testing',
-  'monitor',
-  'terminal',
+  'privacy',
   'system',
+
+  // CỤM 4: OTHER
   'about',
 ] as const;
 
 /**
  * Legacy anchor IDs that have been merged into other tabs.
- * When an extension anchors to one of these, it is redirected to the new host.
- * This keeps older extensions working without requiring them to update.
  */
 export const LEGACY_ANCHOR_REMAP: Record<string, string> = {
   'skills-hub': 'capabilities',
   tools: 'capabilities',
+  assistants: 'capabilities',
+  agent: 'model',
 };
 
 /**
  * Group headers displayed above specific builtin tabs.
- * The header is rendered once, immediately before the first item whose id matches.
- * Extension tabs anchored between these builtins inherit the enclosing group visually.
  */
 const GROUP_HEADER_BEFORE: Record<string, string> = {
-  agent: 'settings.groupAiCore',
-  display: 'settings.groupApp',
-  about: 'settings.groupAbout',
+  profile: 'settings.groupAccount',
+  model: 'settings.groupAiCore',
+  display: 'settings.groupGeneral',
+  about: 'settings.groupOther',
 };
 
 type SiderItem = {
@@ -81,7 +84,6 @@ type SiderItem = {
   label: string;
   icon: React.ReactElement;
   isImageIcon?: boolean;
-  /** Route path segment — for builtins: `/settings/{path}`, for extensions: `/settings/ext/{id}` */
   path: string;
 };
 
@@ -99,69 +101,102 @@ const SettingsSider: React.FC<{ collapsed?: boolean; tooltipEnabled?: boolean }>
   const { resolveExtTabName } = useExtI18n();
 
   const { menus, groupHeaderAt } = useMemo(() => {
-    // Build builtin items
     const builtinMap: Record<string, SiderItem> = {
-      model: { id: 'model', label: t('settings.model'), icon: <LinkCloud />, path: 'model' },
-      assistants: {
-        id: 'assistants',
-        label: t('settings.assistants', { defaultValue: 'Assistants' }),
-        icon: <Robot />,
-        path: 'assistants',
+      // 1. ACCOUNT
+      profile: {
+        id: 'profile',
+        label: t('settings.tabProfile', { defaultValue: 'Profile' }),
+        icon: <User theme='outline' size={16} />,
+        path: 'profile',
       },
-      agent: {
-        id: 'agent',
-        label: t('settings.agents', { defaultValue: 'Agents' }),
-        icon: <Speed />,
-        path: 'agent',
+      billing: {
+        id: 'billing',
+        label: t('settings.tabBilling', { defaultValue: 'Billing & Usage' }),
+        icon: <Wallet theme='outline' size={16} />,
+        path: 'billing',
       },
       personal: {
         id: 'personal',
-        label: t('settings.personal'),
-        icon: <PersonalCollection />,
+        label: t('settings.tabPersonal', { defaultValue: 'Personal' }),
+        icon: <Lock theme='outline' size={16} />,
         path: 'personal',
+      },
+
+      // 2. AI
+      model: {
+        id: 'model',
+        label: t('settings.tabAiCore', { defaultValue: 'AI Core' }),
+        icon: <Brain theme='outline' size={16} />,
+        path: 'model',
       },
       capabilities: {
         id: 'capabilities',
-        label: t('settings.capabilities', { defaultValue: 'Capabilities' }),
-        icon: <Lightning />,
+        label: t('settings.tabCustomize', { defaultValue: 'Customize' }),
+        icon: <Lightning theme='outline' size={16} />,
         path: 'capabilities',
       },
-      display: { id: 'display', label: t('settings.display'), icon: <Computer />, path: 'display' },
+      pipeline: {
+        id: 'pipeline',
+        label: t('settings.tabPipeline', { defaultValue: 'Pipeline Chat' }),
+        icon: <Shield theme='outline' size={16} />,
+        path: 'pipeline',
+      },
+      aiconfig: {
+        id: 'aiconfig',
+        label: t('settings.tabAiConfig', { defaultValue: 'AI Configuration' }),
+        icon: <SettingConfig theme='outline' size={16} />,
+        path: 'aiconfig',
+      },
+
+      // 3. GENERAL
+      display: {
+        id: 'display',
+        label: t('settings.tabDisplay', { defaultValue: 'Display' }),
+        icon: <Computer theme='outline' size={16} />,
+        path: 'display',
+      },
+      notification: {
+        id: 'notification',
+        label: t('settings.tabNotification', { defaultValue: 'Notifications' }),
+        icon: <Remind theme='outline' size={16} />,
+        path: 'notification',
+      },
       webui: {
         id: 'webui',
-        label: t('settings.webui'),
-        icon: isDesktop ? <Earth /> : <Communication />,
+        label: t('settings.tabRemote', { defaultValue: 'Remote' }),
+        icon: isDesktop ? <Earth theme='outline' size={16} /> : <Communication theme='outline' size={16} />,
         path: 'webui',
       },
-      pet: { id: 'pet', label: t('pet.desktopPet'), icon: <Cat />, path: 'pet' },
-      resource: { id: 'resource', label: t('resource.navTitle'), icon: <Dashboard />, path: 'resource' },
-      company: { id: 'company', label: t('company.navTitle'), icon: <BuildingTwo />, path: 'company' },
-      knowledge: { id: 'knowledge', label: t('realtimeKnowledge.navTitle'), icon: <Refresh />, path: 'knowledge' },
-      browser: { id: 'browser', label: t('browser.navTitle'), icon: <Compass />, path: 'browser' },
-      news: { id: 'news', label: t('news.navTitle'), icon: <Rss />, path: 'realtime' },
-      testing: { id: 'testing', label: t('testing.navTitle'), icon: <ExperimentOne />, path: 'testing' },
-      monitor: { id: 'monitor', label: t('monitor.navTitle'), icon: <Bug />, path: 'monitor' },
-      terminal: { id: 'terminal', label: t('terminal.navTitle'), icon: <Terminal />, path: 'terminal' },
-      system: { id: 'system', label: t('settings.system'), icon: <System />, path: 'system' },
-      about: { id: 'about', label: t('settings.about'), icon: <Info />, path: 'about' },
+      resource: {
+        id: 'resource',
+        label: t('settings.tabResource', { defaultValue: 'Resource' }),
+        icon: <Dashboard theme='outline' size={16} />,
+        path: 'resource',
+      },
+      privacy: {
+        id: 'privacy',
+        label: t('settings.tabPrivacySecurity', { defaultValue: 'Privacy & Security' }),
+        icon: <Lock theme='outline' size={16} />,
+        path: 'privacy',
+      },
+      system: {
+        id: 'system',
+        label: t('settings.tabSystem', { defaultValue: 'Application' }),
+        icon: <SettingConfig theme='outline' size={16} />,
+        path: 'system',
+      },
+
+      // 4. OTHER
+      about: {
+        id: 'about',
+        label: t('settings.tabAbout', { defaultValue: 'About' }),
+        icon: <Info theme='outline' size={16} />,
+        path: 'about',
+      },
     };
 
-    // Start with ordered builtin IDs, hiding desktop-only tabs in browser mode
-    const result: SiderItem[] = BUILTIN_TAB_IDS.filter(
-      (id) =>
-        isDesktop ||
-        (id !== 'pet' &&
-          id !== 'resource' &&
-          id !== 'company' &&
-          id !== 'knowledge' &&
-          id !== 'browser' &&
-          id !== 'news' &&
-          id !== 'testing' &&
-          id !== 'monitor' &&
-          id !== 'terminal')
-    ).map((id) => builtinMap[id]);
+    const result: SiderItem[] = BUILTIN_TAB_IDS.map((id) => builtinMap[id]);
 
-    // Extension tabs with position anchoring
     const beforeMap = new Map<string, IExtensionSettingsTab[]>();
     const afterMap = new Map<string, IExtensionSettingsTab[]>();
     const unanchored: IExtensionSettingsTab[] = [];
@@ -186,7 +221,6 @@ const SettingsSider: React.FC<{ collapsed?: boolean; tooltipEnabled?: boolean }>
       list.push(tab);
     }
 
-    // Helper to create SiderItem from extension tab
     const toSiderItem = (tab: IExtensionSettingsTab): SiderItem => {
       const resolvedIcon = resolveExtensionAssetUrl(tab.icon) || tab.icon;
       return {
@@ -198,7 +232,6 @@ const SettingsSider: React.FC<{ collapsed?: boolean; tooltipEnabled?: boolean }>
       };
     };
 
-    // Insert anchored tabs (reverse iteration to preserve indices)
     for (let i = result.length - 1; i >= 0; i--) {
       const builtinId = result[i].id;
       const afters = afterMap.get(builtinId);
@@ -211,19 +244,12 @@ const SettingsSider: React.FC<{ collapsed?: boolean; tooltipEnabled?: boolean }>
       }
     }
 
-    // Append unanchored before "system"
     if (unanchored.length > 0) {
       const systemIdx = result.findIndex((item) => item.id === 'system');
       const insertIdx = systemIdx >= 0 ? systemIdx : result.length;
       result.splice(insertIdx, 0, ...unanchored.map(toSiderItem));
     }
 
-    // Compute group header render positions.
-    //
-    // A header must appear before the first *visible* item of its group, which may
-    // be an extension tab anchored with placement='before' to the group's first
-    // builtin — not the builtin itself. Otherwise such an extension would render
-    // above the header and visually belong to the previous group.
     const headerAt = new Map<number, string>();
     for (const [builtinId, headerKey] of Object.entries(GROUP_HEADER_BEFORE)) {
       const builtinIdx = result.findIndex((item) => item.id === builtinId);
@@ -247,8 +273,8 @@ const SettingsSider: React.FC<{ collapsed?: boolean; tooltipEnabled?: boolean }>
         const groupHeaderKey = groupHeaderAt.get(index);
         const groupHeader =
           groupHeaderKey && !collapsed ? (
-            <div className='settings-sider__group-header px-12px mt-8px h-28px flex items-center text-14px font-[500] text-t-tertiary select-none'>
-              {t(groupHeaderKey)}
+            <div className='settings-sider__group-header px-12px mt-12px mb-4px h-20px flex items-center text-11px font-[700] tracking-wider text-t-tertiary select-none uppercase opacity-80'>
+              {t(groupHeaderKey, { defaultValue: groupHeaderKey })}
             </div>
           ) : null;
         return (
@@ -260,49 +286,41 @@ const SettingsSider: React.FC<{ collapsed?: boolean; tooltipEnabled?: boolean }>
                 data-settings-path={item.path}
                 className={classNames(
                   'settings-sider__item h-34px rd-8px flex items-center gap-8px group cursor-pointer relative overflow-hidden shrink-0 conversation-item [&.conversation-item+&.conversation-item]:mt-2px transition-colors',
-                  collapsed ? 'w-full justify-center px-0' : 'justify-start px-10px',
                   {
-                    'hover:bg-fill-3': !isSelected,
-                    '!bg-fill-3': isSelected,
+                    'settings-sider__item--active active': isSelected,
+                    'settings-sider__item--collapsed': collapsed,
+                    'px-8px': collapsed,
+                    'px-12px': !collapsed,
                   }
                 )}
                 onClick={() => {
-                  const target = `/settings/${item.path}`;
-                  if (layout?.navigateWithFeedback) {
-                    layout.navigateWithFeedback(target, { replace: true });
-                    return;
-                  }
-                  Promise.resolve(navigate(target, { replace: true })).catch((error) => {
-                    console.error('Navigation failed:', error);
-                  });
+                  void navigate(`/settings/${item.path}`);
                 }}
               >
-                {/* Leading icon — 22px slot to align with main sider rows */}
-                <span className='size-22px flex items-center justify-center shrink-0 line-height-0'>
-                  {item.isImageIcon ? (
-                    <span className='w-16px h-16px flex items-center justify-center'>{item.icon}</span>
-                  ) : (
-                    React.cloneElement(
-                      item.icon as React.ReactElement<{
-                        theme?: string;
-                        size?: string | number;
-                        className?: string;
-                        strokeWidth?: number;
-                      }>,
-                      {
-                        theme: 'outline',
-                        size: '16',
-                        strokeWidth: 3,
-                        className: 'block leading-none text-t-secondary',
-                      }
-                    )
+                <div
+                  className={classNames(
+                    'w-16px h-16px shrink-0 flex items-center justify-center transition-colors',
+                    isSelected
+                      ? 'text-primary'
+                      : 'text-t-secondary group-hover:text-t-primary group-hover:dark:text-t-primary'
                   )}
-                </span>
-                <FlexFullContainer className='h-24px collapsed-hidden'>
-                  <div className='settings-sider__item-label text-nowrap overflow-hidden inline-block w-full text-14px font-[500] lh-24px whitespace-nowrap text-t-primary'>
-                    {item.label}
+                >
+                  {item.icon}
+                </div>
+                {!collapsed && (
+                  <div className='flex items-center justify-between min-w-0 flex-1 pr-8px'>
+                    <span
+                      className={classNames(
+                        'text-13px overflow-hidden text-ellipsis whitespace-nowrap leading-20px transition-colors',
+                        isSelected
+                          ? 'text-primary font-[500]'
+                          : 'text-t-primary group-hover:text-t-primary group-hover:dark:text-t-primary'
+                      )}
+                    >
+                      {item.label}
+                    </span>
                   </div>
-                </FlexFullContainer>
+                )}
               </div>
             </Tooltip>
           </React.Fragment>

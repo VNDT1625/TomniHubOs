@@ -5,7 +5,12 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { buildSearchRegExp, escapeRegExp, grepText, replaceInText } from '@/process/ide/search/grepCore';
+import {
+  buildSearchRegExp,
+  escapeRegExp,
+  grepText,
+  replaceInText,
+} from '@package-apps/ide/process/coding/search/grepCore';
 
 describe('escapeRegExp', () => {
   it('escapes regex metacharacters', () => {

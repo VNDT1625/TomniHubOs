@@ -7,8 +7,9 @@
 // configureChromium sets app name (dev isolation) and Chromium flags — must run before
 // ANY module that calls app.getPath('userData'), because Electron caches the path on first call.
 import './process/utils/configureChromium';
+import './common/adapter/bridgeErrorWrapper';
 import { installGpuCrashHandler } from './process/utils/gpuRecovery';
-import { captureBackendStartupFailure, initSentry, scheduleStartupLogReport, setSentryDeviceId } from './sentry';
+import { captureBackendStartupFailure, initSentry } from './sentry';
 
 initSentry();
 
@@ -17,25 +18,21 @@ import { app, BrowserWindow, ipcMain, nativeImage, powerMonitor } from 'electron
 import fixPath from 'fix-path';
 import * as fs from 'fs';
 import * as path from 'path';
-import { initMainAdapterWithWindow } from './common/adapter/main';
+import { initMainAdapterWithWindow, isTrustedDesktopRendererSender } from './common/adapter/main';
 import { ipcBridge } from './common';
 import { initializeProcess } from './process';
 import { startBackendOrExit } from './process/startup/backendStartup';
-import { resolveCoreBootPolicy } from './process/startup/coreBootPolicy';
+import { registerTrustedBootstrapIpc } from './process/startup/bootstrapIpc';
+import { getTomniGatewayPort } from './process/tomnigateway';
+import { isDevelopmentCompatibilityOptIn, resolveCoreBootPolicy } from './process/startup/coreBootPolicy';
 import { classifyBackendStartupFailure } from './process/startup/backendStartupFailure';
 import { installQuitCleanup } from './process/startup/quitCleanup';
 
 import { completeAppTermination, requestAppExit } from './process/startup/appTermination';
-import {
-  prepareTelegramRemoteSecret,
-  startTelegramRemoteTunnel,
-  stopTelegramRemoteTunnel,
-  syncTelegramRemoteLanguage,
-} from './process/startup/telegramRemoteStartup';
+import { stopTelegramRemoteTunnel, syncTelegramRemoteLanguage } from './process/startup/telegramRemoteStartup';
 import { ProcessConfig } from './process/utils/initStorage';
 import {
   resolveStudioSplitRouteRedirectEnvironment,
-  STUDIO_SPLIT_ROUTE_REDIRECT_BOOTSTRAP_CHANNEL,
   STUDIO_SPLIT_ROUTE_REDIRECT_ENV_KEY,
 } from './common/packages/studioCompatibility';
 import type { BackendStartupFailureInfo } from './common/types/platform/electron';
@@ -68,12 +65,7 @@ import {
   showAndFocusMainWindow,
   showOrCreateMainWindow,
 } from './process/utils/mainWindowLifecycle';
-import {
-  loadUserWebUIConfig,
-  resolveRemoteAccess,
-  resolveWebUIPort,
-  restoreDesktopWebUIFromPreferences,
-} from './process/utils/webuiConfig';
+import { loadUserWebUIConfig, resolveRemoteAccess, resolveWebUIPort } from './process/utils/webuiConfig';
 import {
   createOrUpdateTray,
   destroyTray,
@@ -219,23 +211,47 @@ let backendStartupFailureInfo: BackendStartupFailureInfo | null = null;
 let backendMigrationsScheduled = false;
 let ensureAdminUserPromise: Promise<void> | null = null;
 
-ipcMain.on('get-backend-port', (event) => {
-  event.returnValue = backendManager.port;
-});
+/** Writes a bounded local readiness receipt only for the release harness. */
+function writeCleanMachineReadyReceipt(): void {
+  if (process.env.TOMNY_CLEAN_MACHINE !== '1') return;
 
-ipcMain.on('get-backend-startup-failed', (event) => {
-  event.returnValue = backendStartupFailed;
-});
+  const userDataPath = app.getPath('userData');
+  const receiptPath = path.join(userDataPath, 'clean-machine-ready.json');
+  const temporaryPath = `${receiptPath}.${process.pid}.tmp`;
+  const receipt = {
+    schemaVersion: 1,
+    runId: process.env.TOMNY_CLEAN_MACHINE_RUN_ID ?? null,
+    processId: process.pid,
+    isPackaged: app.isPackaged,
+    appVersion: app.getVersion(),
+    userDataPath,
+    backend: backendStartedOk ? 'ready' : backendStartupFailed ? 'failed' : 'not-required-or-pending',
+    rendererLoadedAt: new Date().toISOString(),
+  };
 
-ipcMain.on('get-backend-startup-failure', (event) => {
-  event.returnValue = backendStartupFailureInfo;
-});
+  try {
+    fs.mkdirSync(userDataPath, { recursive: true });
+    fs.writeFileSync(temporaryPath, `${JSON.stringify(receipt)}\n`, 'utf8');
+    fs.renameSync(temporaryPath, receiptPath);
+  } catch (error) {
+    console.error('[Tomny] Could not write clean-machine readiness receipt:', error);
+  }
+}
 
-// The operator-controlled environment is read only in the main process and
-// exposed once during preload bootstrap. There is intentionally no renderer
-// setter, remote fetch, or generic configuration channel for this release gate.
-ipcMain.on(STUDIO_SPLIT_ROUTE_REDIRECT_BOOTSTRAP_CHANNEL, (event) => {
-  event.returnValue = resolveStudioSplitRouteRedirectEnvironment(process.env[STUDIO_SPLIT_ROUTE_REDIRECT_ENV_KEY]);
+registerTrustedBootstrapIpc({
+  ipcMain,
+  isTrustedSender: isTrustedDesktopRendererSender,
+  getBackendPort: () => {
+    const gatewayPort = getTomniGatewayPort();
+    if (typeof gatewayPort === 'number' && gatewayPort > 0) return gatewayPort;
+    const globalPort = (globalThis as typeof globalThis & { __backendPort?: number }).__backendPort;
+    if (typeof globalPort === 'number' && globalPort > 0) return globalPort;
+    return backendManager.port > 0 ? backendManager.port : 0;
+  },
+  getBackendStartupFailed: () => backendStartupFailed,
+  getBackendStartupFailure: () => backendStartupFailureInfo,
+  getStudioSplitRouteRedirectEnabled: () =>
+    resolveStudioSplitRouteRedirectEnvironment(process.env[STUDIO_SPLIT_ROUTE_REDIRECT_ENV_KEY]),
 });
 
 function markBackendStartupFailed(error: unknown): void {
@@ -371,8 +387,6 @@ const createWindow = ({ showOnReady = true }: { showOnReady?: boolean } = {}): v
   });
   console.log(`[Tomny] Main window created (id=${mainWindow.id})`);
 
-  scheduleStartupLogReport(mainWindow);
-
   // Show window after content is ready to prevent FOUC (Flash of Unstyled Content)
   // Use 'ready-to-show' which fires when renderer has painted first frame,
   // combined with 'did-finish-load' as belt-and-suspenders approach.
@@ -393,6 +407,7 @@ const createWindow = ({ showOnReady = true }: { showOnReady?: boolean } = {}): v
       console.log('[Tomny] Renderer did-finish-load');
       showWindow();
       scheduleBackendMigrations();
+      writeCleanMachineReadyReceipt();
     });
     // Fallback: show window after 5s even if events don't fire (e.g. loadURL failure)
     setTimeout(showWindow, 5000);
@@ -534,6 +549,8 @@ const handleAppReady = async (): Promise<void> => {
   try {
     coreBootPolicy = resolveCoreBootPolicy({
       requestedMode: getSwitchValue('core-mode') || process.env.TOMNY_CORE_BOOT_MODE,
+      isPackaged: app.isPackaged,
+      developmentCompatibilityOptIn: isDevelopmentCompatibilityOptIn(process.env.TOMNY_ENABLE_DEV_COMPAT),
       isWebUIMode,
       isResetPasswordMode,
     });
@@ -560,8 +577,6 @@ const handleAppReady = async (): Promise<void> => {
     }
   }
 
-  setSentryDeviceId();
-
   try {
     await initializeProcess();
     mark('initializeProcess');
@@ -570,18 +585,6 @@ const handleAppReady = async (): Promise<void> => {
     requestAppExit(1);
     return;
   }
-
-  // Start the remote surface from Tomny's native conversation gateway. This is
-  // intentionally independent from legacy backend readiness and __backendPort.
-  prepareTelegramRemoteSecret();
-  void ProcessConfig.get('language')
-    .then((language) => startTelegramRemoteTunnel(language ?? 'en-US'))
-    .then((result) => {
-      if (result.ok) console.log('[TelegramRemote] Tomny-native secure tunnel ready');
-      else if ('reason' in result)
-        console.warn(`[TelegramRemote] native tunnel unavailable (${result.reason})`, result.detail ?? '');
-    })
-    .catch((error) => console.warn('[TelegramRemote] native gateway failed to start', error));
 
   // Start tomnycore only after initializeProcess(). initStorage may open
   // the legacy Electron SQLite catalog for a one-shot v26 migration and must
@@ -776,25 +779,6 @@ const handleAppReady = async (): Promise<void> => {
     appReadyDone = true;
     mark('createWindow');
 
-    // Initialize desktop pet (delayed to not block main window)
-    setTimeout(() => {
-      void (async () => {
-        try {
-          const petEnabled = await ProcessConfig.get('pet.enabled');
-          if (petEnabled === true) {
-            // Read pet sub-settings before creating the pet so flags are honored
-            // on the first createPetWindow() call (which is sync).
-            const confirmEnabled = (await ProcessConfig.get('pet.confirmEnabled')) ?? true;
-            const { createPetWindow, setPetConfirmEnabled } = await import('./process/pet/petManager');
-            setPetConfirmEnabled(confirmEnabled);
-            createPetWindow();
-          }
-        } catch (error) {
-          console.error('[Pet] Failed to initialize:', error);
-        }
-      })();
-    }, 3000);
-
     // 读取语言设置并初始化主进程 i18n，然后刷新托盘菜单
     // Read language setting and initialize main process i18n, then refresh tray menu
     try {
@@ -811,13 +795,6 @@ const handleAppReady = async (): Promise<void> => {
       void refreshTrayMenu();
       void syncTelegramRemoteLanguage(language);
     });
-
-    if (!isE2ETestMode) {
-      // 窗口创建后异步恢复 WebUI，不阻塞 UI / Restore WebUI async after window creation, non-blocking
-      restoreDesktopWebUIFromPreferences().catch((error) => {
-        console.error('[WebUI] Failed to auto-restore:', error);
-      });
-    }
 
     // Flush pending deep-link URL (received before window was ready)
     const pendingUrl = getPendingDeepLinkUrl();
@@ -923,10 +900,9 @@ installQuitCleanup({
     disposeCronResumeListener?.();
     disposeCronResumeListener = null;
   },
-  shutdownModelGateway: async () => {
-    const { shutdownRouter9Integration } = await import('./process/router9/router9Lifecycle');
-    await shutdownRouter9Integration();
-  },
+
+  shutdownModelGateway: async () => undefined,
+
   // Stop both compatibility services. Tomny Gateway owns native REST/WS; the
   // optional legacy process is stopped only when compatibility mode launched it.
   stopBackend: async () => {
@@ -935,8 +911,8 @@ installQuitCleanup({
     await Promise.all([stopProductionTomniGateway(), backendManager.stop()]);
   },
   destroyPetWindow: async () => {
-    const { destroyPetWindow } = await import('./process/pet/petManager');
-    destroyPetWindow();
+    const { deactivatePetPackageRuntime } = await import('./process/resources/packageProcessRuntime/petPackageRuntime');
+    deactivatePetPackageRuntime();
   },
   logInfo: console.log,
   logWarn: console.warn,

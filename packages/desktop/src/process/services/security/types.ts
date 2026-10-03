@@ -1,14 +1,6 @@
 import type { SecretConfidence, SecretFindingType } from '@process/agentRuntime/agentMesh/security/types';
 
-export type OutboundSurface =
-  | 'chat'
-  | 'agent'
-  | 'tool'
-  | 'browser'
-  | 'command'
-  | 'file'
-  | 'image'
-  | 'provider';
+export type OutboundSurface = 'chat' | 'agent' | 'tool' | 'browser' | 'command' | 'file' | 'image' | 'provider';
 
 export type InspectionDecision = 'allow' | 'sanitize' | 'block' | 'approval_required' | 'failed_closed';
 export type InspectionSensitivity = 'normal' | 'restricted' | 'secret-bearing';

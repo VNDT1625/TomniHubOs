@@ -5,10 +5,12 @@
  */
 
 import { bridge } from '@office-ai/platform';
+import '@/common/adapter/bridgeErrorWrapper';
 import {
   cron,
   telegramChannel,
   type PersonalContextExport,
+  type PersonalLearningControlRequest,
   type PersonalLearningCorrectRequest,
   type PersonalLearningOutcomeRequest,
   type PersonalLearningProposeRequest,
@@ -20,7 +22,11 @@ import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 
 import { createFoundationConversationRuntime, createFoundationRunLifecycle } from '@process/bridge/foundationBridge';
-import { registerNativeConversationBridge } from '@process/services/database/nativeConversation';
+import {
+  guardAccountExecution,
+  registerNativeConversationBridge,
+  type RequireAuthenticatedAccount,
+} from '@process/services/database/nativeConversation';
 import type { TChatConversation } from '@/common/config/storage';
 import {
   publishTomniRemoteEvent,
@@ -34,11 +40,14 @@ import { discoverLegacyDatabasePaths } from '@process/services/database/runLegac
 import { getCompanyServices } from '@process/company/companyBridge';
 import { getMcpRegistry } from '@process/resources/mcpRegistry';
 import { JsonTeamStore } from '@process/team';
-import { startProductionTomniGateway } from '@process/tomnigateway';
+import { startProductionTomniGateway, stopProductionTomniGateway } from '@process/tomnigateway';
 import { createCompanyCoreRunner } from '@process/agentRuntime/companyCoreRunner';
 import { configureSecretContextStoredCallback } from '@process/agentRuntime/agentMesh/mcp/secret-context/wiring';
 import type { AgentMeshService } from '@process/agentRuntime/agentMesh/service';
-import { createElectronContextServices } from '@process/agentRuntime/electronContext';
+import {
+  createElectronContextServices,
+  ensureActiveAccountPersonalContext,
+} from '@process/agentRuntime/electronContext';
 import {
   createPersonalContextMutationCoordinator,
   createPersonalLearningCoordinator,
@@ -47,9 +56,14 @@ import {
 import type {
   ContextFact,
   PersonalContext,
+  PersonalLearningCausalChain,
+  PersonalLearningControl,
   PersonalLearningRecord,
   SecretDescriptor,
 } from '@process/agentRuntime/contextTypes';
+import type { UserUnderstandingConsumer } from '@process/userUnderstanding/userUnderstandingConsumer';
+import type { LocalInferenceBroker } from './adapters/sidecar/localInferenceBroker';
+import type { TomniGatewayModelService } from '@process/tomnigateway';
 import { normalizeExactSecretHostnames } from '@process/agentRuntime/secretVault';
 import {
   bindScheduledCoreRuntime,
@@ -63,7 +77,12 @@ import {
   type CoreScheduleDraft,
   type CoreScheduledTask,
 } from '@process/cron/scheduledTasks';
-import { createBuiltinSurfaceManifests, createSurfaceRegistry } from '@process/agentRuntime/surfaceRegistry';
+import {
+  createBuiltinSurfaceManifests,
+  createPackageSurfaceRegistrySynchronizer,
+  createSurfaceRegistry,
+  type PackageSurfaceRegistrySource,
+} from '@process/agentRuntime/surfaceRegistry';
 import { JsonlDurableEventStore } from '@process/services/agentChat/durability';
 import { buildCoreDoctorReport, type CoreDoctorReport } from '@process/services/diagnostics/coreDoctor';
 import {
@@ -73,6 +92,7 @@ import {
   type CoreTelemetryEvent,
 } from '@process/services/diagnostics/coreTelemetry';
 import { JsonPermissionRepository, PermissionStore } from '@process/services/agentChat/permission';
+import type { AccountExecutionLease } from '@process/services/security/accountSession/accountExecutionLifecycle';
 import {
   AcpCoreAdapter,
   CodexAppServerAdapter,
@@ -114,6 +134,7 @@ export const EXPERIMENTAL_CORE_CHANNELS = {
   resolveOrchestrationProposal: 'experimental-core.resolve-orchestration-proposal',
   personalGet: 'personal-context.get',
   personalSave: 'personal-context.save',
+  personalLearningSetPaused: 'personal-context.learning.set-paused',
   personalLearningPropose: 'personal-context.learning.propose',
   personalLearningConfirm: 'personal-context.learning.confirm',
   personalLearningReject: 'personal-context.learning.reject',
@@ -237,8 +258,37 @@ export const parsePersonalLearningRecordId = (value: unknown): string => {
   return parsePersonalLearningRecordIdValue(value.recordId);
 };
 
+/** Records why a preference may apply; unexplained repetition can never become a reusable rule. */
+export const parsePersonalLearningCausalChain = (value: unknown): PersonalLearningCausalChain => {
+  if (!isPlainRecord(value) || !hasOnlyKeys(value, ['context', 'origin', 'reason', 'reasonKnown', 'proposal'])) {
+    throw new Error('INVALID_PERSONAL_LEARNING_CAUSAL_CHAIN');
+  }
+  const reasonKnown = value.reasonKnown;
+  const hasReason = typeof value.reason === 'string' && Boolean(value.reason.trim());
+  if (typeof reasonKnown !== 'boolean' || (reasonKnown && !hasReason) || (!reasonKnown && value.reason !== null)) {
+    throw new Error('INVALID_PERSONAL_LEARNING_CAUSAL_CHAIN');
+  }
+  return {
+    context: parseBoundedLearningText(value.context, 'CAUSAL_CONTEXT', 1_000),
+    origin: parseBoundedLearningText(value.origin, 'CAUSAL_ORIGIN', MAX_PERSONAL_LEARNING_PROVENANCE_LENGTH),
+    reason: reasonKnown
+      ? parseBoundedLearningText(value.reason, 'CAUSAL_REASON', MAX_PERSONAL_LEARNING_EXPLANATION_LENGTH)
+      : undefined,
+    reasonKnown,
+    proposal: parseBoundedLearningText(value.proposal, 'CAUSAL_PROPOSAL', MAX_PERSONAL_LEARNING_EXPLANATION_LENGTH),
+  };
+};
+
+/** Accepts only the explicit one-field pause control at the Main-process boundary. */
+export const parsePersonalLearningControlRequest = (value: unknown): PersonalLearningControlRequest => {
+  if (!isPlainRecord(value) || !hasOnlyKeys(value, ['paused']) || typeof value.paused !== 'boolean') {
+    throw new Error('INVALID_PERSONAL_LEARNING_CONTROL');
+  }
+  return { paused: value.paused };
+};
+
 export const parsePersonalLearningProposeRequest = (value: unknown): PersonalLearningProposeRequest => {
-  if (!isPlainRecord(value) || !hasOnlyKeys(value, ['collection', 'fact', 'explanation', 'provenance'])) {
+  if (!isPlainRecord(value) || !hasOnlyKeys(value, ['collection', 'fact', 'explanation', 'provenance', 'causal'])) {
     throw new Error('INVALID_PERSONAL_LEARNING_PROPOSAL');
   }
   if (!['facts', 'preferences', 'habits'].includes(value.collection as string)) {
@@ -249,17 +299,19 @@ export const parsePersonalLearningProposeRequest = (value: unknown): PersonalLea
     fact: parsePersonalLearningFact(value.fact),
     explanation: parseBoundedLearningText(value.explanation, 'EXPLANATION', MAX_PERSONAL_LEARNING_EXPLANATION_LENGTH),
     provenance: parseBoundedLearningText(value.provenance, 'PROVENANCE', MAX_PERSONAL_LEARNING_PROVENANCE_LENGTH),
+    causal: parsePersonalLearningCausalChain(value.causal),
   };
 };
 
 export const parsePersonalLearningCorrectRequest = (value: unknown): PersonalLearningCorrectRequest => {
-  if (!isPlainRecord(value) || !hasOnlyKeys(value, ['recordId', 'fact', 'explanation'])) {
+  if (!isPlainRecord(value) || !hasOnlyKeys(value, ['recordId', 'fact', 'explanation', 'causal'])) {
     throw new Error('INVALID_PERSONAL_LEARNING_CORRECTION');
   }
   return {
     recordId: parsePersonalLearningRecordIdValue(value.recordId),
     fact: parsePersonalLearningFact(value.fact),
     explanation: parseBoundedLearningText(value.explanation, 'EXPLANATION', MAX_PERSONAL_LEARNING_EXPLANATION_LENGTH),
+    causal: parsePersonalLearningCausalChain(value.causal),
   };
 };
 
@@ -331,6 +383,9 @@ const channels = {
   personalSave: bridge.buildProvider<PersonalContext, { profile: PersonalContext }>(
     EXPERIMENTAL_CORE_CHANNELS.personalSave
   ),
+  personalLearningSetPaused: bridge.buildProvider<PersonalLearningControl, PersonalLearningControlRequest>(
+    EXPERIMENTAL_CORE_CHANNELS.personalLearningSetPaused
+  ),
   personalLearningPropose: bridge.buildProvider<PersonalLearningRecord, PersonalLearningProposeRequest>(
     EXPERIMENTAL_CORE_CHANNELS.personalLearningPropose
   ),
@@ -384,8 +439,33 @@ const channels = {
 
 let registeredRuntime: ExperimentalCoreRuntime | undefined;
 
+export type ExperimentalCoreBridgeOptions = Readonly<{
+  requireAuthenticatedAccount?: RequireAuthenticatedAccount;
+  /** Main-owned account identity; never supplied by a renderer payload. */
+  accountId?: () => string;
+  /** Main-owned Telegram egress admission; absence deliberately leaves transport inert. */
+  isTelegramExternalAuthorityGranted?: () => boolean;
+  /** Main-owned revoke signal for an admitted Telegram polling transport. */
+  subscribeTelegramExternalAuthorityRevocation?: (listener: () => void) => () => void;
+  /** Optional Main-only confirmed-only learning observer for native chat queries. */
+  userUnderstandingConsumer?: UserUnderstandingConsumer;
+  /** Optional Main-owned local model broker for confirmed-only understanding. */
+  localInferenceBroker?: LocalInferenceBroker;
+  /** Optional Main-owned consumer-scoped model ingress for the native gateway. */
+  modelService?: TomniGatewayModelService;
+  registerAccountExecutionLease?: (lease: AccountExecutionLease) => void;
+  /**
+   * Main-owned Package lifecycle facts. Package Apps are mirrored as metadata
+   * Surface entries only after the Package Manager validates their activation.
+   */
+  packageSurfaceSource?: PackageSurfaceRegistrySource;
+}>;
+
 /** Register the temporary parallel-core IPC surface. */
-export const registerExperimentalCoreBridge = (agentMeshService: AgentMeshService): ExperimentalCoreRuntime => {
+export const registerExperimentalCoreBridge = (
+  agentMeshService: AgentMeshService,
+  options: ExperimentalCoreBridgeOptions = {}
+): ExperimentalCoreRuntime => {
   if (registeredRuntime) return registeredRuntime;
   const sessionStore = new JsonCoreSessionStore(
     path.join(app.getPath('userData'), 'tomny-core', 'session-checkpoints.json')
@@ -401,7 +481,13 @@ export const registerExperimentalCoreBridge = (agentMeshService: AgentMeshServic
   );
   const eventStore = new RustMirroredDurableEventStore(primaryEventStore, rustSidecar);
   const sessionActionHistory = createTomnySessionActionHistorySource(eventStore, sessionStore);
-  void rustSidecar.start().catch((): void => undefined);
+  options.registerAccountExecutionLease?.({
+    name: 'experimental-core.rust-sidecar',
+    start: async () => {
+      await rustSidecar.start();
+    },
+    stop: () => rustSidecar.stop(),
+  });
   app.once('before-quit', () => void disposeMainRustSidecarLifecycle());
   const telemetrySink = new JsonlCoreTelemetrySink(path.join(app.getPath('userData'), 'tomny-core', 'telemetry.jsonl'));
   const telemetry = new CoreTelemetryRecorder(telemetrySink);
@@ -409,33 +495,35 @@ export const registerExperimentalCoreBridge = (agentMeshService: AgentMeshServic
     new JsonPermissionRepository(path.join(app.getPath('userData'), 'tomny-core', 'permissions.json'))
   );
   const contextServices = createElectronContextServices();
+  const personalMutationsByProfileId = new Map<string, ReturnType<typeof createPersonalContextMutationCoordinator>>();
+  const personalLearningByProfileId = new Map<string, ReturnType<typeof createPersonalLearningCoordinator>>();
   const getPersonalProfile = async (): Promise<PersonalContext> => {
     await contextServices.ready;
-    const profile = await contextServices.store.getPersonal('default');
-    if (!profile) throw new Error('Default Personal Context is unavailable.');
-    return profile;
+    const accountId = options.accountId?.();
+    if (!accountId) throw new Error('ACCOUNT_PERSONAL_CONTEXT_UNAVAILABLE');
+    return ensureActiveAccountPersonalContext(contextServices.store, accountId);
   };
-  const personalMutations = createPersonalContextMutationCoordinator({
-    getPersonal: async (id) => {
-      await contextServices.ready;
-      return contextServices.store.getPersonal(id);
-    },
-    upsertPersonal: async (profile) => {
-      await contextServices.ready;
-      return contextServices.store.upsertPersonal(profile);
-    },
+  const getPersonalMutations = async () => {
+    const profile = await getPersonalProfile();
+    let coordinator = personalMutationsByProfileId.get(profile.id);
+    if (!coordinator) {
+      coordinator = createPersonalContextMutationCoordinator(contextServices.store, { personalId: profile.id });
+      personalMutationsByProfileId.set(profile.id, coordinator);
+    }
+    return coordinator;
+  };
+  const getPersonalLearning = async () => {
+    const profile = await getPersonalProfile();
+    let coordinator = personalLearningByProfileId.get(profile.id);
+    if (!coordinator) {
+      coordinator = createPersonalLearningCoordinator(contextServices.store, { personalId: profile.id });
+      personalLearningByProfileId.set(profile.id, coordinator);
+    }
+    return coordinator;
+  };
+  configureSecretContextStoredCallback(async ({ descriptor }) => {
+    await (await getPersonalMutations()).bindSecret(descriptor);
   });
-  const personalLearning = createPersonalLearningCoordinator({
-    getPersonal: async (id) => {
-      await contextServices.ready;
-      return contextServices.store.getPersonal(id);
-    },
-    upsertPersonal: async (profile) => {
-      await contextServices.ready;
-      return contextServices.store.upsertPersonal(profile);
-    },
-  });
-  configureSecretContextStoredCallback(({ descriptor }) => personalMutations.bindSecret(descriptor));
   const capabilityHosts = createElectronSurfaceCapabilityHosts(contextServices.vault);
   const remoteServices = createElectronRemoteCoreServices(
     contextServices.vault,
@@ -445,6 +533,15 @@ export const registerExperimentalCoreBridge = (agentMeshService: AgentMeshServic
     manifests: createBuiltinSurfaceManifests(),
     defaultSurfaceId: 'chat',
   });
+  const packageSurfaceSynchronizer = options.packageSurfaceSource
+    ? createPackageSurfaceRegistrySynchronizer(surfaceRegistry, options.packageSurfaceSource)
+    : undefined;
+  if (packageSurfaceSynchronizer) {
+    void packageSurfaceSynchronizer
+      .start()
+      .catch((error) => console.error('[ExperimentalCore] Package Surface registry synchronization failed.', error));
+    app.once('before-quit', () => packageSurfaceSynchronizer.dispose());
+  }
   const detectTargets = async () => [
     ...(await detectCoreTargets((candidates) =>
       resolveExecutableOnPath(candidates, (filePath) => rustAccelerator.sha256File(filePath))
@@ -543,6 +640,8 @@ export const registerExperimentalCoreBridge = (agentMeshService: AgentMeshServic
       coreEventListeners.add(listener);
       return () => coreEventListeners.delete(listener);
     },
+    requireAuthenticatedAccount: options.requireAuthenticatedAccount,
+    userUnderstandingConsumer: options.userUnderstandingConsumer,
   });
   registerTomniRemoteConversations(conversationService);
   const telegramService = new TelegramChannelService({
@@ -567,12 +666,19 @@ export const registerExperimentalCoreBridge = (agentMeshService: AgentMeshServic
         agent,
       };
     },
+    requireAuthenticatedAccount: options.requireAuthenticatedAccount,
+    isExternalAuthorityGranted: options.isTelegramExternalAuthorityGranted,
+    subscribeExternalAuthorityRevocation: options.subscribeTelegramExternalAuthorityRevocation,
   });
   registerTelegramChannelBridge(telegramService);
   subscribeTomniRemoteEvents((event) => {
     if (event.kind === 'conversation.completed') void telegramService.forwardCompleted(event.payload);
   });
-  void telegramService.resume().catch((error) => console.error('[Telegram] Native polling startup failed:', error));
+  options.registerAccountExecutionLease?.({
+    name: 'experimental-core.telegram-polling',
+    start: () => telegramService.resume(),
+    stop: () => telegramService.suspendPolling(),
+  });
   const scheduledPort = bindScheduledCoreRuntime(
     {
       start: (
@@ -585,8 +691,9 @@ export const registerExperimentalCoreBridge = (agentMeshService: AgentMeshServic
         sessionId,
         _companyId,
         contextIdentity
-      ) =>
-        scheduledFoundationLifecycle.start({
+      ) => {
+        options.requireAuthenticatedAccount?.();
+        return scheduledFoundationLifecycle.start({
           requestId,
           targetId,
           prompt,
@@ -595,7 +702,8 @@ export const registerExperimentalCoreBridge = (agentMeshService: AgentMeshServic
           permissionMode,
           sessionId,
           contextIdentity,
-        }),
+        });
+      },
       cancel: (requestId) => scheduledFoundationLifecycle.cancel(requestId),
       resolvePermission: (permissionId, approved) => runtime.resolvePermission(permissionId, approved),
     },
@@ -625,27 +733,49 @@ export const registerExperimentalCoreBridge = (agentMeshService: AgentMeshServic
       }, 0);
     },
   });
-  const scheduledReady = scheduledService.start();
-  void scheduledReady.catch((error) => console.error('[TomnyCore] Scheduled task startup failed:', error));
-  void scheduledReady
-    .then(() =>
-      startProductionTomniGateway({
-        conversation: conversationService,
-        teams: new JsonTeamStore(path.join(app.getPath('userData'), 'tomny-core', 'teams.json')),
-        companies: getCompanyServices(),
-        cron: scheduledService,
-        mcp: getMcpRegistry(),
-        dataDir: app.getPath('userData'),
-        subscribe: (listener) => {
-          const forward = (event: ExperimentalCoreEvent): void =>
-            listener({ topic: `core.${event.type}`, data: event, timestamp: event.timestamp });
-          coreEventListeners.add(forward);
-          return () => coreEventListeners.delete(forward);
-        },
-      })
-    )
-    .then((endpoint) => console.log(`[TomnyGateway] Listening on ${endpoint.url}.`))
-    .catch((error) => console.error('[TomnyGateway] Startup failed:', error));
+  let resolveScheduledReady: (() => void) | undefined;
+  const scheduledReady = new Promise<void>((resolve) => {
+    resolveScheduledReady = resolve;
+  });
+  const startScheduledTasks = async (): Promise<void> => {
+    await scheduledService.start();
+    resolveScheduledReady?.();
+    resolveScheduledReady = undefined;
+  };
+  const startGateway = async (): Promise<void> => {
+    const endpoint = await startProductionTomniGateway({
+      conversation: conversationService,
+      teams: new JsonTeamStore(path.join(app.getPath('userData'), 'tomny-core', 'teams.json')),
+      companies: getCompanyServices(),
+      cron: scheduledService,
+      mcp: getMcpRegistry(),
+      modelService: options.modelService,
+      dataDir: app.getPath('userData'),
+      subscribe: (listener) => {
+        const forward = (event: ExperimentalCoreEvent): void =>
+          listener({ topic: `core.${event.type}`, data: event, timestamp: event.timestamp });
+        coreEventListeners.add(forward);
+        return () => coreEventListeners.delete(forward);
+      },
+    });
+    console.log(`[TomnyGateway] Listening on ${endpoint.url}.`);
+  };
+  void startScheduledTasks().catch((error) => console.error('[ScheduledTasks] Startup failed:', error));
+  void startGateway().catch((error) => console.error('[TomnyGateway] Startup failed:', error));
+  app.once('before-quit', () => {
+    void scheduledService.stop();
+    void stopProductionTomniGateway();
+  });
+  options.registerAccountExecutionLease?.({
+    name: 'experimental-core.scheduled-tasks',
+    start: startScheduledTasks,
+    stop: () => scheduledService.stop(),
+  });
+  options.registerAccountExecutionLease?.({
+    name: 'experimental-core.tomny-gateway',
+    start: startGateway,
+    stop: stopProductionTomniGateway,
+  });
   legacyCronAdapter = new LegacyCronAdapter({
     service: scheduledService,
     ready: scheduledReady,
@@ -660,16 +790,26 @@ export const registerExperimentalCoreBridge = (agentMeshService: AgentMeshServic
   });
   configureLegacyCronAdapter(legacyCronAdapter);
   const scheduledHandlers = createCoreScheduledTaskIpcHandlers(scheduledService);
+  const registerAuthenticated = <Input, Result>(
+    channel: { provider: (handler: (input: Input) => Promise<Result>) => unknown },
+    operation: (input: Input) => Result | Promise<Result>
+  ): void => {
+    const guarded = guardAccountExecution(options.requireAuthenticatedAccount ?? (() => {}), operation);
+    channel.provider(async (input) => guarded(input));
+  };
   channels.listTargets.provider(() => runtime.listTargets());
   channels.listModels.provider(({ targetId, workspace }) => runtime.listModels(targetId, workspace));
   channels.listSessions.provider(() => runtime.listSessions());
 
   channels.listActiveRuns.provider(() => Promise.resolve(runtime.listActiveRuns()));
   channels.replayEvents.provider((query) => runtime.replayEvents(query));
-  channels.resumeInterrupted.provider(({ sessionId, requestId }) => runtime.resumeInterrupted(sessionId, requestId));
-  channels.forkSession.provider(({ sessionId }) => runtime.forkSession(sessionId));
-  channels.start.provider(
-    ({
+  registerAuthenticated(channels.resumeInterrupted, ({ sessionId, requestId }) =>
+    runtime.resumeInterrupted(sessionId, requestId)
+  );
+  registerAuthenticated(channels.forkSession, ({ sessionId }) => runtime.forkSession(sessionId));
+  registerAuthenticated(
+    channels.start,
+    async ({
       requestId,
       sessionId,
       targetId,
@@ -678,64 +818,82 @@ export const registerExperimentalCoreBridge = (agentMeshService: AgentMeshServic
       modelKey,
       surface,
       agentId,
-      personalId,
       permissionScopes,
       capabilityGrants,
       availableCapabilities,
       modelCapabilities,
       permissionMode,
-    }) =>
-      Promise.resolve(
-        experimentalFoundationLifecycle.start({
-          requestId,
-          targetId,
-          prompt,
-          workspace,
-          modelKey,
-          permissionMode,
-          sessionId,
-          contextIdentity: {
-            surface,
-            agentId,
-            personalId,
-            permissionScopes,
-            capabilityGrants,
-            availableCapabilities,
-            modelCapabilities,
-          },
-        })
-      )
+    }) => {
+      const profile = await getPersonalProfile();
+      return experimentalFoundationLifecycle.start({
+        requestId,
+        targetId,
+        prompt,
+        workspace,
+        modelKey,
+        permissionMode,
+        sessionId,
+        contextIdentity: {
+          surface,
+          agentId,
+          // Renderer input cannot select a different account's profile.
+          personalId: profile.id,
+          permissionScopes,
+          capabilityGrants,
+          availableCapabilities,
+          modelCapabilities,
+        },
+      });
+    }
   );
-  channels.cancel.provider(({ requestId }) => experimentalFoundationLifecycle.cancel(requestId));
-  channels.resolvePermission.provider(({ permissionId, approved, lifetime }) =>
+  registerAuthenticated(channels.cancel, ({ requestId }) => experimentalFoundationLifecycle.cancel(requestId));
+  registerAuthenticated(channels.resolvePermission, ({ permissionId, approved, lifetime }) =>
     runtime.resolvePermission(permissionId, approved, lifetime)
   );
-  channels.resolveOrchestrationProposal.provider(({ proposalId, approved }) =>
+  registerAuthenticated(channels.resolveOrchestrationProposal, ({ proposalId, approved }) =>
     runtime.resolveOrchestrationProposal(proposalId, approved)
   );
-  channels.personalGet.provider(() => getPersonalProfile());
-  channels.personalSave.provider(({ profile }) => personalMutations.saveProfile(profile));
-  channels.personalLearningPropose.provider((input) =>
-    personalLearning.propose(parsePersonalLearningProposeRequest(input))
+  registerAuthenticated(channels.personalGet, () => getPersonalProfile());
+  registerAuthenticated(channels.personalSave, async ({ profile }) =>
+    (await getPersonalMutations()).saveProfile(profile)
   );
-  channels.personalLearningConfirm.provider((input) => personalLearning.confirm(parsePersonalLearningRecordId(input)));
-  channels.personalLearningReject.provider((input) => personalLearning.reject(parsePersonalLearningRecordId(input)));
-  channels.personalLearningCorrect.provider((input) => {
+  registerAuthenticated(channels.personalLearningSetPaused, async (input) =>
+    (await getPersonalLearning()).setPaused(parsePersonalLearningControlRequest(input).paused)
+  );
+  registerAuthenticated(channels.personalLearningPropose, async (input) =>
+    (await getPersonalLearning()).propose(parsePersonalLearningProposeRequest(input))
+  );
+  registerAuthenticated(channels.personalLearningConfirm, async (input) =>
+    (await getPersonalLearning()).confirm(parsePersonalLearningRecordId(input))
+  );
+  registerAuthenticated(channels.personalLearningReject, async (input) =>
+    (await getPersonalLearning()).reject(parsePersonalLearningRecordId(input))
+  );
+  registerAuthenticated(channels.personalLearningCorrect, async (input) => {
     const request = parsePersonalLearningCorrectRequest(input);
-    return personalLearning.correct(request.recordId, request.fact, request.explanation);
+    return (await getPersonalLearning()).correct(request.recordId, request.fact, request.explanation, request.causal);
   });
-  channels.personalLearningOutcome.provider((input) => {
+  registerAuthenticated(channels.personalLearningOutcome, async (input) => {
     const request = parsePersonalLearningOutcomeRequest(input);
-    return personalLearning.recordOutcome(request.recordId, request.outcome);
+    return (await getPersonalLearning()).recordOutcome(request.recordId, request.outcome);
   });
-  channels.personalLearningForget.provider((input) => personalLearning.forget(parsePersonalLearningRecordId(input)));
-  channels.personalLearningDelete.provider((input) => personalLearning.delete(parsePersonalLearningRecordId(input)));
-  channels.personalLearningExport.provider(() => personalLearning.export());
-  channels.personalSecretsList.provider(async () => {
-    await contextServices.ready;
-    return contextServices.vault.list();
+  registerAuthenticated(channels.personalLearningForget, async (input) =>
+    (await getPersonalLearning()).forget(parsePersonalLearningRecordId(input))
+  );
+  registerAuthenticated(channels.personalLearningDelete, async (input) =>
+    (await getPersonalLearning()).delete(parsePersonalLearningRecordId(input))
+  );
+  registerAuthenticated(channels.personalLearningExport, async () => (await getPersonalLearning()).export());
+  registerAuthenticated(channels.personalSecretsList, async () => {
+    const profile = await getPersonalProfile();
+    const allowedHandles = new Set(profile.secretReferences.map((reference) => reference.handle));
+    return (await contextServices.vault.list()).filter((descriptor) => allowedHandles.has(descriptor.handle));
   });
-  channels.personalSecretsSave.provider(async ({ handle, name, note, targets, variables }) => {
+  registerAuthenticated(channels.personalSecretsSave, async ({ handle, name, note, targets, variables }) => {
+    const profile = await getPersonalProfile();
+    if (handle && !profile.secretReferences.some((reference) => reference.handle === handle)) {
+      throw new Error('ACCOUNT_PERSONAL_SECRET_NOT_FOUND');
+    }
     if (typeof name !== 'string' || !name.trim()) throw new Error('A secret-set name is required.');
     if (!Array.isArray(variables) || variables.length === 0 || variables.length > 50) {
       throw new Error('A secret set must contain between 1 and 50 variables.');
@@ -767,54 +925,57 @@ export const registerExperimentalCoreBridge = (agentMeshService: AgentMeshServic
     const descriptor = handle
       ? await contextServices.vault.replace(handle, descriptorInput, payload)
       : await contextServices.vault.put(descriptorInput, payload);
-    await personalMutations.bindSecret(descriptor);
+    await (await getPersonalMutations()).bindSecret(descriptor);
     return descriptor;
   });
-  channels.personalSecretsRemove.provider(async ({ handle }) => {
-    await contextServices.ready;
+  registerAuthenticated(channels.personalSecretsRemove, async ({ handle }) => {
+    const profile = await getPersonalProfile();
+    if (!profile.secretReferences.some((reference) => reference.handle === handle)) {
+      throw new Error('ACCOUNT_PERSONAL_SECRET_NOT_FOUND');
+    }
     const removed = await contextServices.vault.remove(handle);
-    await personalMutations.removeSecretReference(handle);
+    await (await getPersonalMutations()).removeSecretReference(handle);
     return removed;
   });
-  cron.listJobs.provider(() => legacyCronAdapter.listJobs());
-  cron.listJobsByConversation.provider((input) => legacyCronAdapter.listJobsByConversation(input));
-  cron.getJob.provider((input) => legacyCronAdapter.getJob(input));
-  cron.addJob.provider((input) => legacyCronAdapter.addJob(input));
-  cron.updateJob.provider((input) => legacyCronAdapter.updateJob(input));
-  cron.removeJob.provider((input) => legacyCronAdapter.removeJob(input));
-  cron.runNow.provider((input) => legacyCronAdapter.runNow(input));
-  cron.saveSkill.provider((input) => legacyCronAdapter.saveSkill(input));
-  cron.hasSkill.provider((input) => legacyCronAdapter.hasSkill(input));
-  cron.deleteSkill.provider((input) => legacyCronAdapter.deleteSkill(input));
-  channels.scheduledList.provider(async () => {
+  registerAuthenticated(cron.listJobs, () => legacyCronAdapter.listJobs());
+  registerAuthenticated(cron.listJobsByConversation, (input) => legacyCronAdapter.listJobsByConversation(input));
+  registerAuthenticated(cron.getJob, (input) => legacyCronAdapter.getJob(input));
+  registerAuthenticated(cron.addJob, (input) => legacyCronAdapter.addJob(input));
+  registerAuthenticated(cron.updateJob, (input) => legacyCronAdapter.updateJob(input));
+  registerAuthenticated(cron.removeJob, (input) => legacyCronAdapter.removeJob(input));
+  registerAuthenticated(cron.runNow, (input) => legacyCronAdapter.runNow(input));
+  registerAuthenticated(cron.saveSkill, (input) => legacyCronAdapter.saveSkill(input));
+  registerAuthenticated(cron.hasSkill, (input) => legacyCronAdapter.hasSkill(input));
+  registerAuthenticated(cron.deleteSkill, (input) => legacyCronAdapter.deleteSkill(input));
+  registerAuthenticated(channels.scheduledList, async () => {
     await scheduledReady;
     return scheduledHandlers.list();
   });
-  channels.scheduledGet.provider(async (input) => {
+  registerAuthenticated(channels.scheduledGet, async (input) => {
     await scheduledReady;
     return scheduledHandlers.get(input);
   });
-  channels.scheduledSave.provider(async (input) => {
+  registerAuthenticated(channels.scheduledSave, async (input) => {
     await scheduledReady;
     return scheduledHandlers.save(input);
   });
-  channels.scheduledRemove.provider(async (input) => {
+  registerAuthenticated(channels.scheduledRemove, async (input) => {
     await scheduledReady;
     return scheduledHandlers.remove(input);
   });
-  channels.scheduledRunNow.provider(async (input) => {
+  registerAuthenticated(channels.scheduledRunNow, async (input) => {
     await scheduledReady;
     return scheduledHandlers.runNow(input);
   });
-  channels.scheduledCancel.provider(async (input) => {
+  registerAuthenticated(channels.scheduledCancel, async (input) => {
     await scheduledReady;
     return scheduledHandlers.cancel(input);
   });
-  channels.scheduledAudit.provider(async (input) => {
+  registerAuthenticated(channels.scheduledAudit, async (input) => {
     await scheduledReady;
     return scheduledHandlers.listAudit(input);
   });
-  channels.queryTelemetry.provider(async (query) =>
+  registerAuthenticated(channels.queryTelemetry, async (query) =>
     (await telemetrySink.query({ ...query, limit: normalizeTelemetryLimit(query.limit) })).map(
       toPublicCoreTelemetryEvent
     )

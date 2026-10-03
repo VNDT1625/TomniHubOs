@@ -24,7 +24,20 @@ export type LoopbackOpenAiAdapterOptions = {
 };
 
 type OpenAiModelResponse = { data?: Array<{ id?: unknown }> };
-type OpenAiStreamFrame = { choices?: Array<{ delta?: { content?: unknown } }> };
+type OpenAiStreamFrame = {
+  choices?: Array<{
+    delta?: {
+      content?: unknown;
+      reasoning_content?: unknown;
+      reasoning?: unknown;
+    };
+  }>;
+};
+
+type DecodedStreamFrame = {
+  content: string;
+  reasoning: string;
+};
 
 /** Reject every non-loopback endpoint before a request can leave the device. */
 export const validateLoopbackOpenAiEndpoint = (value: string): URL => {
@@ -54,23 +67,32 @@ const modelsFromResponse = (value: unknown): ExperimentalCoreModel[] => {
   });
 };
 
-const decodeStreamFrame = (raw: string): string => {
+const decodeStreamFrame = (raw: string): DecodedStreamFrame => {
   let value: OpenAiStreamFrame;
   try {
     value = JSON.parse(raw) as OpenAiStreamFrame;
   } catch {
     throw new Error('The local engine returned an invalid stream frame.');
   }
-  const content = value.choices?.[0]?.delta?.content;
-  if (typeof content === 'string') return content;
-  if (!Array.isArray(content)) return '';
-  return content
-    .map((part) =>
-      part && typeof part === 'object' && typeof (part as { text?: unknown }).text === 'string'
-        ? (part as { text: string }).text
-        : ''
-    )
-    .join('');
+  const delta = value.choices?.[0]?.delta;
+  const rawReasoning = delta?.reasoning_content ?? delta?.reasoning;
+  const reasoning = typeof rawReasoning === 'string' ? rawReasoning : '';
+
+  const rawContent = delta?.content;
+  let content = '';
+  if (typeof rawContent === 'string') {
+    content = rawContent;
+  } else if (Array.isArray(rawContent)) {
+    content = rawContent
+      .map((part) =>
+        part && typeof part === 'object' && typeof (part as { text?: unknown }).text === 'string'
+          ? (part as { text: string }).text
+          : ''
+      )
+      .join('');
+  }
+
+  return { content, reasoning };
 };
 
 const consumeCompletionStream = async (response: Response, input: CoreRunInput): Promise<void> => {
@@ -80,6 +102,7 @@ const consumeCompletionStream = async (response: Response, input: CoreRunInput):
   let buffer = '';
   let completed = false;
   let emittedText = false;
+  let inThinkTag = false;
 
   const consumeLine = (line: string): void => {
     const trimmed = line.trim();
@@ -90,10 +113,46 @@ const consumeCompletionStream = async (response: Response, input: CoreRunInput):
       completed = true;
       return;
     }
-    const text = decodeStreamFrame(data);
-    if (!text) return;
-    emittedText = true;
-    input.emit({ type: 'delta', text });
+    const { content, reasoning } = decodeStreamFrame(data);
+    if (reasoning) {
+      emittedText = true;
+      input.emit({ type: 'thinking', text: reasoning });
+    }
+    if (content) {
+      // If the model outputs raw <think> tags in content stream (e.g. Ollama deepseek-r1)
+      let remaining = content;
+      while (remaining.length > 0) {
+        if (!inThinkTag) {
+          const thinkStart = remaining.indexOf('<think>');
+          if (thinkStart !== -1) {
+            const before = remaining.slice(0, thinkStart);
+            if (before) {
+              emittedText = true;
+              input.emit({ type: 'delta', text: before });
+            }
+            inThinkTag = true;
+            remaining = remaining.slice(thinkStart + '<think>'.length);
+          } else {
+            emittedText = true;
+            input.emit({ type: 'delta', text: remaining });
+            break;
+          }
+        } else {
+          const thinkEnd = remaining.indexOf('</think>');
+          if (thinkEnd !== -1) {
+            const thinkContent = remaining.slice(0, thinkEnd);
+            if (thinkContent) {
+              input.emit({ type: 'thinking', text: thinkContent });
+            }
+            inThinkTag = false;
+            remaining = remaining.slice(thinkEnd + '</think>'.length);
+          } else {
+            input.emit({ type: 'thinking', text: remaining });
+            break;
+          }
+        }
+      }
+    }
   };
 
   try {

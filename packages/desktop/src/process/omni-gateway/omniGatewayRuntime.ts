@@ -16,7 +16,7 @@
  */
 
 import { randomBytes } from 'node:crypto';
-import type { IdeServerDeps } from '@process/ide/mcp/ideServer';
+import type { IdeServerDeps } from '@package-apps/ide/process/mcp/ideServer';
 import { buildOmniIdeServer } from './omniGatewayProfile';
 import { createOmniGatewayState, type OmniGatewayState } from './omniGatewayState';
 import { startOmniGatewayHost, type OmniGatewayHost } from './omniGatewayHost';

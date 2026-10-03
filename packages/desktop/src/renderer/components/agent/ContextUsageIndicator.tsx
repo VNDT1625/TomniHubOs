@@ -51,8 +51,8 @@ const ContextUsageIndicator: React.FC<ContextUsageIndicatorProps> = ({
     };
   }, [tokenUsage, context_limit]);
 
-  // 如果没有 token 数据，不显示
-  if (!tokenUsage) {
+  // 如果没有 token 数据或 token 为 0，不显示
+  if (!tokenUsage || tokenUsage.total_tokens <= 0) {
     return null;
   }
 

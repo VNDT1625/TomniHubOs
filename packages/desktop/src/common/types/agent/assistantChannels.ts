@@ -1,4 +1,5 @@
 import { bridge } from '@office-ai/platform';
+import '@/common/adapter/bridgeErrorWrapper';
 import type {
   Assistant,
   CreateAssistantRequest,

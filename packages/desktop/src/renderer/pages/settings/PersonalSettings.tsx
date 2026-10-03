@@ -1,6 +1,11 @@
 import { ipcBridge } from '@/common';
 import type { PersonalSecretSetSaveRequest } from '@/common/adapter/ipcBridge';
-import type { ContextFact, PersonalContext, SecretDescriptor } from '@process/agentRuntime/contextTypes';
+import type {
+  ContextFact,
+  PersonalContext,
+  PersonalLearningRecord,
+  SecretDescriptor,
+} from '@process/agentRuntime/contextTypes';
 import {
   Button,
   Empty,
@@ -31,7 +36,7 @@ import {
   Save,
   User,
 } from '@icon-park/react';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import SettingsPageWrapper from './components/SettingsPageWrapper';
 
@@ -47,6 +52,13 @@ type SecretEditorState = {
   note: string;
   targets: string[];
   variables: SecretVariableDraft[];
+};
+type LearningCorrectionState = {
+  visible: boolean;
+  saving: boolean;
+  record?: PersonalLearningRecord;
+  value: string;
+  reason: string;
 };
 
 const PROFILE_CATEGORY_KEYS = [
@@ -390,6 +402,18 @@ const PersonalSettings: React.FC = () => {
   const [activeCategory, setActiveCategory] = useState<ProfileCategoryKey>('personalInformation');
   const [loading, setLoading] = useState(true);
   const [savingProfile, setSavingProfile] = useState(false);
+  const [savingLearningControl, setSavingLearningControl] = useState(false);
+  const [learningActionId, setLearningActionId] = useState<string | undefined>(undefined);
+  const [exportingLearning, setExportingLearning] = useState(false);
+  const [learningCorrection, setLearningCorrection] = useState<LearningCorrectionState>({
+    visible: false,
+    saving: false,
+    value: '',
+    reason: '',
+  });
+  const [loadingDiagnosticsConsent, setLoadingDiagnosticsConsent] = useState(true);
+  const [savingDiagnosticsConsent, setSavingDiagnosticsConsent] = useState(false);
+  const [diagnosticsConsent, setDiagnosticsConsent] = useState<boolean | undefined>(undefined);
   const [profile, setProfile] = useState<PersonalContext | null>(null);
   const [secrets, setSecrets] = useState<SecretDescriptor[]>([]);
   const [secretEditor, setSecretEditor] = useState<SecretEditorState>({
@@ -401,28 +425,78 @@ const PersonalSettings: React.FC = () => {
     variables: [createVariable('USERNAME'), createVariable('PASSWORD')],
   });
 
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const isMountedRef = useRef(true);
+
   const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [nextProfile, nextSecrets] = await Promise.all([
-        ipcBridge.personal.get.invoke(),
-        ipcBridge.personal.listSecrets.invoke(),
-      ]);
-      setProfile({
-        ...nextProfile,
-        structuredProfile: resolveStructuredProfile(nextProfile),
-      });
-      setSecrets(nextSecrets.toSorted((left, right) => right.updatedAt - left.updatedAt));
-    } catch (error) {
-      message.error(error instanceof Error ? error.message : t('settings.personalProfile.messages.loadError'));
-    } finally {
-      setLoading(false);
+    if (isMountedRef.current) {
+      setLoading(true);
+      setLoadError(null);
     }
-  }, [message, t]);
+
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error('TIMEOUT')), 8000);
+    });
+
+    try {
+      const [nextProfile, nextSecrets] = await Promise.race([
+        Promise.all([ipcBridge.personal.get.invoke(), ipcBridge.personal.listSecrets.invoke()]),
+        timeoutPromise,
+      ]);
+      if (isMountedRef.current) {
+        setProfile({
+          ...nextProfile,
+          structuredProfile: resolveStructuredProfile(nextProfile),
+        });
+        setSecrets(nextSecrets.toSorted((left, right) => right.updatedAt - left.updatedAt));
+        setLoadError(null);
+      }
+    } catch (error) {
+      if (isMountedRef.current) {
+        const rawMsg = error instanceof Error ? error.message : String(error);
+        const errorMsg =
+          rawMsg === 'TIMEOUT'
+            ? 'Hết thời gian tải thông tin cá nhân (Timeout).'
+            : rawMsg.includes('ACCOUNT_EXECUTION_REJECTED') || rawMsg.includes('ACCOUNT_SESSION')
+              ? 'Yêu cầu đăng nhập tài khoản để sử dụng tính năng hồ sơ cá nhân.'
+              : error instanceof Error
+                ? error.message
+                : t('settings.personalProfile.messages.loadError');
+        setLoadError(errorMsg);
+      }
+    } finally {
+      if (isMountedRef.current) {
+        setLoading(false);
+      }
+    }
+  }, [t]);
 
   useEffect(() => {
+    isMountedRef.current = true;
     void load();
+    return () => {
+      isMountedRef.current = false;
+    };
   }, [load]);
+
+  useEffect(() => {
+    let mounted = true;
+    const loadDiagnosticsConsent = async (): Promise<void> => {
+      setLoadingDiagnosticsConsent(true);
+      try {
+        const result = await window.electronAPI?.accountSession?.getDiagnosticsConsent();
+        if (mounted) setDiagnosticsConsent(result?.ok ? result.granted : undefined);
+      } catch {
+        if (mounted) setDiagnosticsConsent(undefined);
+      } finally {
+        if (mounted) setLoadingDiagnosticsConsent(false);
+      }
+    };
+    void loadDiagnosticsConsent();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const updateProfile = (patch: Partial<PersonalContext>) => {
     setProfile((current) => (current ? { ...current, ...patch } : current));
@@ -470,6 +544,141 @@ const PersonalSettings: React.FC = () => {
       message.error(error instanceof Error ? error.message : t('settings.personalProfile.messages.saveError'));
     } finally {
       setSavingProfile(false);
+    }
+  };
+
+  const setLearningPaused = async (paused: boolean) => {
+    if (!profile) return;
+    setSavingLearningControl(true);
+    try {
+      const control = await ipcBridge.personal.setLearningPaused.invoke({ paused });
+      setProfile((current) => (current ? { ...current, learningControl: control } : current));
+      message.success(
+        t(paused ? 'settings.personalProfile.learning.pausedSaved' : 'settings.personalProfile.learning.activeSaved')
+      );
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : t('settings.personalProfile.learning.saveError'));
+    } finally {
+      setSavingLearningControl(false);
+    }
+  };
+
+  const refreshPersonalProfile = async (): Promise<void> => {
+    const nextProfile = await ipcBridge.personal.get.invoke();
+    setProfile({ ...nextProfile, structuredProfile: resolveStructuredProfile(nextProfile) });
+  };
+
+  const runLearningAction = async (
+    recordId: string,
+    operation: () => Promise<boolean>,
+    successKey: string
+  ): Promise<void> => {
+    setLearningActionId(recordId);
+    try {
+      if (!(await operation())) throw new Error('PERSONAL_LEARNING_RECORD_UNAVAILABLE');
+      await refreshPersonalProfile();
+      message.success(t(successKey));
+    } catch {
+      message.error(t('settings.personalProfile.learning.review.actionError'));
+    } finally {
+      setLearningActionId(undefined);
+    }
+  };
+
+  const openLearningCorrection = (record: PersonalLearningRecord): void => {
+    setLearningCorrection({
+      visible: true,
+      saving: false,
+      record,
+      value: record.fact.value,
+      reason: record.causal.reason ?? '',
+    });
+  };
+
+  const closeLearningCorrection = (): void => {
+    if (learningCorrection.saving) return;
+    setLearningCorrection({ visible: false, saving: false, value: '', reason: '' });
+  };
+
+  const submitLearningCorrection = async (): Promise<void> => {
+    const record = learningCorrection.record;
+    const value = learningCorrection.value.trim();
+    const reason = learningCorrection.reason.trim();
+    if (!record || !value || !reason || value.length > 8_000 || reason.length > 4_000) {
+      message.warning(t('settings.personalProfile.learning.review.correctionInvalid'));
+      return;
+    }
+    setLearningCorrection((current) => ({ ...current, saving: true }));
+    try {
+      const corrected = await ipcBridge.personal.correctLearning.invoke({
+        recordId: record.id,
+        fact: {
+          ...record.fact,
+          value,
+          confidence: 1,
+          source: 'user',
+          learnedAt: Date.now(),
+          lastConfirmedAt: Date.now(),
+          userLocked: true,
+        },
+        explanation: record.explanation,
+        causal: {
+          ...record.causal,
+          reason,
+          reasonKnown: true,
+        },
+      });
+      if (!corrected) throw new Error('PERSONAL_LEARNING_RECORD_UNAVAILABLE');
+      await refreshPersonalProfile();
+      setLearningCorrection({ visible: false, saving: false, value: '', reason: '' });
+      message.success(t('settings.personalProfile.learning.review.corrected'));
+    } catch {
+      message.error(t('settings.personalProfile.learning.review.actionError'));
+      setLearningCorrection((current) => ({ ...current, saving: false }));
+    }
+  };
+
+  const exportLearning = async (): Promise<void> => {
+    setExportingLearning(true);
+    try {
+      const exportData = await ipcBridge.personal.exportLearning.invoke();
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+      const href = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = href;
+      anchor.download = 'tomni-personal-context.json';
+      anchor.click();
+      URL.revokeObjectURL(href);
+      message.success(t('settings.personalProfile.learning.review.exported'));
+    } catch {
+      message.error(t('settings.personalProfile.learning.review.exportError'));
+    } finally {
+      setExportingLearning(false);
+    }
+  };
+
+  const updateDiagnosticsConsent = async (granted: boolean) => {
+    const accountSession = window.electronAPI?.accountSession;
+    if (!accountSession || diagnosticsConsent === undefined) {
+      message.error(t('settings.personalProfile.diagnostics.unavailable'));
+      return;
+    }
+    setSavingDiagnosticsConsent(true);
+    try {
+      const result = await accountSession.setDiagnosticsConsent({ granted });
+      if (!result.ok) throw new Error(t('settings.personalProfile.diagnostics.saveError'));
+      setDiagnosticsConsent(result.granted);
+      message.success(
+        t(
+          granted
+            ? 'settings.personalProfile.diagnostics.enabledSaved'
+            : 'settings.personalProfile.diagnostics.disabledSaved'
+        )
+      );
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : t('settings.personalProfile.diagnostics.saveError'));
+    } finally {
+      setSavingDiagnosticsConsent(false);
     }
   };
 
@@ -581,6 +790,10 @@ const PersonalSettings: React.FC = () => {
     : 0;
   const activeCategoryDefinition = PROFILE_CATEGORY_DEFINITIONS[activeCategory];
   const activeCategoryFacts = structuredProfile?.[activeCategory] ?? [];
+  const learningRecords = profile?.learningRecords ?? [];
+  const proposedLearningCount = learningRecords.filter(
+    (record) => record.status === 'proposed' || record.status === 'needs_reason'
+  ).length;
 
   return (
     <SettingsPageWrapper contentClassName='max-w-1100px'>
@@ -631,6 +844,174 @@ const PersonalSettings: React.FC = () => {
                     </p>
                   </div>
                 </div>
+
+                <SectionCard
+                  title={t('settings.personalProfile.learning.title')}
+                  description={t('settings.personalProfile.learning.description')}
+                  action={
+                    <Switch
+                      aria-label={t('settings.personalProfile.learning.title')}
+                      checked={!(profile.learningControl?.paused ?? false)}
+                      checkedText={t('settings.personalProfile.learning.active')}
+                      uncheckedText={t('settings.personalProfile.learning.paused')}
+                      loading={savingLearningControl}
+                      disabled={loading || savingLearningControl}
+                      onChange={(enabled) => void setLearningPaused(!enabled)}
+                    />
+                  }
+                >
+                  <p className='m-0 text-12px leading-19px text-t-secondary'>
+                    {t('settings.personalProfile.learning.boundary')}
+                  </p>
+                </SectionCard>
+
+                <SectionCard
+                  title={t('settings.personalProfile.learning.review.title')}
+                  description={t('settings.personalProfile.learning.review.description')}
+                  action={
+                    <Button size='small' loading={exportingLearning} onClick={() => void exportLearning()}>
+                      {t('settings.personalProfile.learning.review.export')}
+                    </Button>
+                  }
+                >
+                  {learningRecords.length === 0 ? (
+                    <Empty description={t('settings.personalProfile.learning.review.empty')} />
+                  ) : (
+                    <div className='flex flex-col gap-10px'>
+                      <div className='text-12px text-t-secondary'>
+                        {t('settings.personalProfile.learning.review.proposedSummary', {
+                          count: proposedLearningCount,
+                        })}
+                      </div>
+                      {learningRecords.map((record) => {
+                        const canConfirm = record.status === 'proposed';
+                        const canReject = record.status === 'proposed' || record.status === 'needs_reason';
+                        const canForget = record.status === 'applied' || record.status === 'corrected';
+                        const actionPending = learningActionId === record.id;
+                        return (
+                          <article
+                            key={record.id}
+                            className='rd-12px border border-solid border-border-2 bg-fill-1 p-12px'
+                          >
+                            <div className='flex flex-wrap items-start justify-between gap-8px'>
+                              <div className='min-w-0'>
+                                <div className='text-13px font-600 text-t-primary'>{record.fact.key}</div>
+                                <p className='m-0 mt-3px whitespace-pre-wrap text-12px leading-18px text-t-secondary'>
+                                  {record.fact.value}
+                                </p>
+                              </div>
+                              <Tag bordered>
+                                {t(`settings.personalProfile.learning.review.status.${record.status}`)}
+                              </Tag>
+                            </div>
+                            <p className='m-0 mt-8px text-12px leading-18px text-t-secondary'>{record.explanation}</p>
+                            <p className='m-0 mt-4px text-11px leading-17px text-t-tertiary'>
+                              {record.causal.proposal}
+                            </p>
+                            <div className='mt-10px flex flex-wrap gap-6px'>
+                              {canConfirm ? (
+                                <Button
+                                  size='small'
+                                  type='primary'
+                                  loading={actionPending}
+                                  onClick={() =>
+                                    void runLearningAction(
+                                      record.id,
+                                      () => ipcBridge.personal.confirmLearning.invoke({ recordId: record.id }),
+                                      'settings.personalProfile.learning.review.confirmed'
+                                    )
+                                  }
+                                >
+                                  {t('settings.personalProfile.learning.review.confirm')}
+                                </Button>
+                              ) : null}
+                              {canReject ? (
+                                <Button
+                                  size='small'
+                                  loading={actionPending}
+                                  onClick={() =>
+                                    void runLearningAction(
+                                      record.id,
+                                      () => ipcBridge.personal.rejectLearning.invoke({ recordId: record.id }),
+                                      'settings.personalProfile.learning.review.rejected'
+                                    )
+                                  }
+                                >
+                                  {t('settings.personalProfile.learning.review.reject')}
+                                </Button>
+                              ) : null}
+                              <Button
+                                size='small'
+                                disabled={actionPending}
+                                onClick={() => openLearningCorrection(record)}
+                              >
+                                {t('settings.personalProfile.learning.review.correct')}
+                              </Button>
+                              {canForget ? (
+                                <Button
+                                  size='small'
+                                  loading={actionPending}
+                                  onClick={() =>
+                                    void runLearningAction(
+                                      record.id,
+                                      () => ipcBridge.personal.forgetLearning.invoke({ recordId: record.id }),
+                                      'settings.personalProfile.learning.review.forgotten'
+                                    )
+                                  }
+                                >
+                                  {t('settings.personalProfile.learning.review.forget')}
+                                </Button>
+                              ) : null}
+                              <Popconfirm
+                                title={t('settings.personalProfile.learning.review.deleteTitle')}
+                                content={t('settings.personalProfile.learning.review.deleteDescription')}
+                                onOk={() =>
+                                  runLearningAction(
+                                    record.id,
+                                    () => ipcBridge.personal.deleteLearning.invoke({ recordId: record.id }),
+                                    'settings.personalProfile.learning.review.deleted'
+                                  )
+                                }
+                              >
+                                <Button size='small' status='danger' loading={actionPending}>
+                                  {t('settings.personalProfile.learning.review.delete')}
+                                </Button>
+                              </Popconfirm>
+                            </div>
+                          </article>
+                        );
+                      })}
+                    </div>
+                  )}
+                </SectionCard>
+
+                <SectionCard
+                  title={t('settings.personalProfile.diagnostics.title')}
+                  description={t('settings.personalProfile.diagnostics.description')}
+                  action={
+                    diagnosticsConsent === undefined ? (
+                      <Tag bordered>{t('settings.personalProfile.diagnostics.unavailable')}</Tag>
+                    ) : (
+                      <Switch
+                        aria-label={t('settings.personalProfile.diagnostics.title')}
+                        checked={diagnosticsConsent}
+                        checkedText={t('settings.personalProfile.diagnostics.enabled')}
+                        uncheckedText={t('settings.personalProfile.diagnostics.disabled')}
+                        loading={savingDiagnosticsConsent}
+                        disabled={loadingDiagnosticsConsent || savingDiagnosticsConsent}
+                        onChange={(granted) => void updateDiagnosticsConsent(granted)}
+                      />
+                    )
+                  }
+                >
+                  <p className='m-0 text-12px leading-19px text-t-secondary'>
+                    {t(
+                      diagnosticsConsent === undefined
+                        ? 'settings.personalProfile.diagnostics.accountRequired'
+                        : 'settings.personalProfile.diagnostics.boundary'
+                    )}
+                  </p>
+                </SectionCard>
 
                 <SectionCard
                   title={t('settings.personalProfile.structured.title')}
@@ -770,6 +1151,21 @@ const PersonalSettings: React.FC = () => {
                   </div>
                 </section>
               </div>
+            ) : !loading && loadError ? (
+              <div className='rd-14px border border-solid border-border-2 bg-bg-2 p-32px text-center flex flex-col items-center gap-14px'>
+                <PersonalPrivacy size={36} className='text-t-tertiary' />
+                <div className='max-w-440px'>
+                  <div className='text-15px font-600 text-t-primary mb-6px'>{loadError}</div>
+                  <p className='text-13px text-t-secondary m-0'>
+                    {loadError.includes('đăng nhập')
+                      ? 'Vui lòng đăng nhập tài khoản để quản lý hồ sơ cá nhân và sở thích AI.'
+                      : 'Không thể kết nối đến dịch vụ hồ sơ cục bộ. Vui lòng thử lại.'}
+                  </p>
+                </div>
+                <Button type='primary' size='small' onClick={() => void load()}>
+                  {t('common.retry', { defaultValue: 'Thử lại' })}
+                </Button>
+              </div>
             ) : null}
           </Spin>
         </Tabs.TabPane>
@@ -799,7 +1195,22 @@ const PersonalSettings: React.FC = () => {
                 <span>{t('settings.personalSecrets.keychainProtected')}</span>
               </div>
 
-              {secrets.length === 0 ? (
+              {!loading && loadError ? (
+                <div className='rd-14px border border-solid border-border-2 bg-bg-2 p-32px text-center flex flex-col items-center gap-14px'>
+                  <Lock size={36} className='text-t-tertiary' />
+                  <div className='max-w-440px'>
+                    <div className='text-15px font-600 text-t-primary mb-6px'>{loadError}</div>
+                    <p className='text-13px text-t-secondary m-0'>
+                      {loadError.includes('đăng nhập')
+                        ? 'Kho bí mật được bảo vệ theo tài khoản. Vui lòng đăng nhập để truy cập.'
+                        : 'Không thể truy cập kho bí mật.'}
+                    </p>
+                  </div>
+                  <Button type='primary' size='small' onClick={() => void load()}>
+                    {t('common.retry', { defaultValue: 'Thử lại' })}
+                  </Button>
+                </div>
+              ) : secrets.length === 0 ? (
                 <div className='rd-14px border border-dashed border-border-3 bg-bg-2 py-50px'>
                   <Empty description={t('settings.personalSecrets.empty')} />
                   <div className='mt-14px flex justify-center'>
@@ -989,6 +1400,38 @@ const PersonalSettings: React.FC = () => {
               ))}
             </div>
           </div>
+        </div>
+      </Modal>
+
+      <Modal
+        visible={learningCorrection.visible}
+        title={t('settings.personalProfile.learning.review.correctTitle')}
+        okText={t('settings.personalProfile.learning.review.saveCorrection')}
+        cancelText={t('settings.personalSecrets.cancel')}
+        confirmLoading={learningCorrection.saving}
+        onCancel={closeLearningCorrection}
+        onOk={() => void submitLearningCorrection()}
+        unmountOnExit
+      >
+        <div className='flex flex-col gap-14px'>
+          <label className='flex flex-col gap-6px text-13px text-t-secondary'>
+            {t('settings.personalProfile.learning.review.correctValueLabel')}
+            <Input.TextArea
+              value={learningCorrection.value}
+              maxLength={8_000}
+              autoSize={{ minRows: 2, maxRows: 5 }}
+              onChange={(value) => setLearningCorrection((current) => ({ ...current, value }))}
+            />
+          </label>
+          <label className='flex flex-col gap-6px text-13px text-t-secondary'>
+            {t('settings.personalProfile.learning.review.reasonLabel')}
+            <Input.TextArea
+              value={learningCorrection.reason}
+              maxLength={4_000}
+              autoSize={{ minRows: 2, maxRows: 5 }}
+              onChange={(reason) => setLearningCorrection((current) => ({ ...current, reason }))}
+            />
+          </label>
         </div>
       </Modal>
     </SettingsPageWrapper>

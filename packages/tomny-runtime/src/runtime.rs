@@ -11,6 +11,7 @@ use crate::{
     journal::EventJournal,
     protocol::{Request, Response},
     supervisor::{ProcessSupervisor, SpawnRequest},
+    workspace_writer::{validate_request, write_atomic, WorkspaceWriterError, WriteAtomicRequest},
     PROTOCOL_VERSION,
 };
 
@@ -83,6 +84,7 @@ impl TomnyRuntime {
             "process.spawn" => self.process_spawn(request).await,
             "process.status" => self.process_status(request).await,
             "process.terminate" => self.process_terminate(request).await,
+            "workspace.write_atomic" => self.workspace_write_atomic(request),
             _ => failed(
                 request.id,
                 "METHOD_NOT_FOUND",
@@ -286,6 +288,49 @@ impl TomnyRuntime {
             Err(error) => failed(request.id, "PROCESS_ERROR", error.to_string()),
         }
     }
+
+    fn workspace_write_atomic(&self, request: Request) -> DispatchResult {
+        let params = match parse_params::<WorkspaceWriteAtomicParams>(request.params) {
+            Ok(params) => params,
+            Err(message) => return failed(request.id, "INVALID_PARAMS", message),
+        };
+        let content = match base64::Engine::decode(
+            &base64::engine::general_purpose::STANDARD,
+            params.content_base64,
+        ) {
+            Ok(content) => content,
+            Err(_) => {
+                return failed(
+                    request.id,
+                    "INVALID_PARAMS",
+                    "contentBase64 must be valid base64",
+                )
+            }
+        };
+        let write = WriteAtomicRequest {
+            workspace_root: params.workspace_root,
+            relative_path: params.relative_path,
+            content,
+            expected_target_digest: params.expected_target_digest,
+            expected_content_digest: params.expected_content_digest,
+        };
+        if let Err(error) = validate_request(&write) {
+            return failed(request.id, "INVALID_PARAMS", error.to_string());
+        }
+        match write_atomic(write) {
+            Ok(()) => failed(
+                request.id,
+                "INTERNAL_ERROR",
+                "writer returned without a commit attestation",
+            ),
+            Err(WorkspaceWriterError::Unavailable) => failed(
+                request.id,
+                "NATIVE_NO_REPARSE_WRITE_UNAVAILABLE",
+                "the Windows handle-relative atomic writer is not available",
+            ),
+            Err(error) => failed(request.id, "WORKSPACE_WRITE_ERROR", error.to_string()),
+        }
+    }
 }
 
 #[derive(Deserialize)]
@@ -336,6 +381,16 @@ struct CancelParams {
     process_id: Option<String>,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct WorkspaceWriteAtomicParams {
+    workspace_root: PathBuf,
+    relative_path: String,
+    content_base64: String,
+    expected_target_digest: String,
+    expected_content_digest: String,
+}
+
 fn default_client_name() -> String {
     "unknown".into()
 }
@@ -383,6 +438,35 @@ mod tests {
         }
     }
 
+    async fn initialized_runtime(directory: &tempfile::TempDir) -> TomnyRuntime {
+        let mut runtime = TomnyRuntime::new(directory.path().into(), 2).unwrap();
+        let response = runtime
+            .dispatch(request("core.initialize", json!({ "clientName": "test" })))
+            .await
+            .response;
+        assert!(response.ok);
+        runtime
+    }
+
+    fn valid_workspace_write_params(workspace_root: &std::path::Path) -> Value {
+        json!({
+            "workspaceRoot": workspace_root,
+            "relativePath": "src/app.ts",
+            "contentBase64": "c2FmZQ==",
+            "expectedTargetDigest": "a".repeat(64),
+            "expectedContentDigest": "b".repeat(64),
+        })
+    }
+
+    fn assert_invalid_workspace_params(response: Response) {
+        assert!(!response.ok);
+        let error = response
+            .error
+            .expect("invalid params response must include an error");
+        assert_eq!(error.code, "INVALID_PARAMS");
+        assert_ne!(error.code, "NATIVE_NO_REPARSE_WRITE_UNAVAILABLE");
+    }
+
     #[tokio::test]
     async fn requires_initialize_before_health() {
         let directory = tempfile::tempdir().unwrap();
@@ -409,6 +493,89 @@ mod tests {
             .await
             .response;
         assert!(healthy.ok);
+    }
+
+    #[tokio::test]
+    async fn refuses_workspace_writes_without_advertising_an_unimplemented_native_capability() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut runtime = TomnyRuntime::new(directory.path().into(), 2).unwrap();
+        let initialized = runtime
+            .dispatch(request("core.initialize", json!({ "clientName": "test" })))
+            .await
+            .response;
+        let capabilities = initialized.result.unwrap()["capabilities"].clone();
+        assert!(!capabilities
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|capability| capability == "workspace.write.atomic.no-reparse"));
+
+        let response = runtime
+            .dispatch(request(
+                "workspace.write_atomic",
+                json!({
+                    "workspaceRoot": directory.path(),
+                    "relativePath": "src/app.ts",
+                    "contentBase64": "c2FmZQ==",
+                    "expectedTargetDigest": "a".repeat(64),
+                    "expectedContentDigest": "b".repeat(64),
+                }),
+            ))
+            .await
+            .response;
+        assert!(!response.ok);
+        assert_eq!(
+            response.error.unwrap().code,
+            "NATIVE_NO_REPARSE_WRITE_UNAVAILABLE"
+        );
+    }
+
+    #[tokio::test]
+    async fn rejects_unknown_workspace_write_fields_before_native_writer_availability() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut runtime = initialized_runtime(&directory).await;
+        let mut params = valid_workspace_write_params(directory.path());
+        params
+            .as_object_mut()
+            .expect("workspace params must be an object")
+            .insert("unexpected".into(), json!(true));
+
+        let response = runtime
+            .dispatch(request("workspace.write_atomic", params))
+            .await
+            .response;
+
+        assert_invalid_workspace_params(response);
+    }
+
+    #[tokio::test]
+    async fn rejects_malformed_workspace_write_base64_before_native_writer_availability() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut runtime = initialized_runtime(&directory).await;
+        let mut params = valid_workspace_write_params(directory.path());
+        params["contentBase64"] = json!("not-base64%%");
+
+        let response = runtime
+            .dispatch(request("workspace.write_atomic", params))
+            .await
+            .response;
+
+        assert_invalid_workspace_params(response);
+    }
+
+    #[tokio::test]
+    async fn rejects_invalid_workspace_write_path_before_native_writer_availability() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut runtime = initialized_runtime(&directory).await;
+        let mut params = valid_workspace_write_params(directory.path());
+        params["relativePath"] = json!("../outside.txt");
+
+        let response = runtime
+            .dispatch(request("workspace.write_atomic", params))
+            .await
+            .response;
+
+        assert_invalid_workspace_params(response);
     }
 
     #[tokio::test]

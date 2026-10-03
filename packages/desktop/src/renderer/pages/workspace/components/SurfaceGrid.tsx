@@ -53,7 +53,7 @@ const SurfaceGrid: React.FC<SurfaceGridProps> = ({ surfaces, logs }) => {
       style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
     >
       {surfaces.map((surface) => (
-        <SurfaceFrame key={surface.id} surface={surface} log={logs[surface.id] ?? []} reloadTick={0} />
+        <SurfaceFrame key={surface.id} surface={surface} log={logs[surface.id] ?? []} />
       ))}
     </div>
   );

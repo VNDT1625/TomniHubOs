@@ -63,12 +63,7 @@ export class PackageOperationError extends Error {
   }
 }
 
-const PACKAGE_OPERATION_PHASES = new Set<PackageOperationPhase>([
-  'install',
-  'activation',
-  'restore',
-  'uninstall',
-]);
+const PACKAGE_OPERATION_PHASES = new Set<PackageOperationPhase>(['install', 'activation', 'restore', 'uninstall']);
 const PACKAGE_OPERATION_FAILURE_CODES = new Set<PackageOperationFailureCode>([
   'PACKAGE_DEPENDENCY_MISSING',
   'PACKAGE_DEPENDENCY_DISABLED',
@@ -100,10 +95,7 @@ const operationFailureFrom = (error: unknown): PackageOperationFailure | undefin
 };
 
 /** Converts internal dependency failures to a stable public error without exposing package metadata. */
-export const toPackageOperationFailure = (
-  error: unknown,
-  phase: PackageOperationPhase
-): PackageOperationFailure => {
+export const toPackageOperationFailure = (error: unknown, phase: PackageOperationPhase): PackageOperationFailure => {
   if (error instanceof PackageOperationError) return error.failure;
   const nestedFailure = operationFailureFrom(error);
   if (nestedFailure) return nestedFailure;

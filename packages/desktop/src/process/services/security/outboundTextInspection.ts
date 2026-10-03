@@ -18,7 +18,11 @@ const MAX_PART_LENGTH = 200_000;
 const MAX_TOTAL_LENGTH = 1_000_000;
 const SAFE_ID = /^[a-zA-Z0-9][a-zA-Z0-9._:@/-]{0,255}$/u;
 
-const invalid = (request: OutboundInspectionRequest, reasonCode: string, context: OutboundPolicyContext): OutboundInspectionResult => {
+const invalid = (
+  request: OutboundInspectionRequest,
+  reasonCode: string,
+  context: OutboundPolicyContext
+): OutboundInspectionResult => {
   const now = context.now?.() ?? Date.now();
   const receipt: OutboundSecurityReceipt = {
     schemaVersion: 1,
@@ -48,7 +52,10 @@ const invalid = (request: OutboundInspectionRequest, reasonCode: string, context
 
 const toFindings = (result: SecretFirewallResult): SafeFinding[] => result.findings.map((finding) => ({ ...finding }));
 
-const inspectPart = (part: OutboundTextPart, sensitivity: OutboundInspectionRequest['sensitivity']): { part: OutboundTextPart; findings: SafeFinding[] } => {
+const inspectPart = (
+  part: OutboundTextPart,
+  sensitivity: OutboundInspectionRequest['sensitivity']
+): { part: OutboundTextPart; findings: SafeFinding[] } => {
   const result = sensitivity === 'secret-bearing' ? redactSensitiveText(part.text) : redactSecretText(part.text);
   return { part: { ...part, text: result.text }, findings: toFindings(result) };
 };
@@ -60,7 +67,8 @@ const validateRequest = (request: OutboundInspectionRequest): string | undefined
   if (request.parts.length === 0 || request.parts.length > MAX_PARTS) return 'invalid_parts';
   let total = 0;
   for (const part of request.parts) {
-    if (!SAFE_ID.test(part.id) || typeof part.text !== 'string' || part.text.length > MAX_PART_LENGTH) return 'invalid_part';
+    if (!SAFE_ID.test(part.id) || typeof part.text !== 'string' || part.text.length > MAX_PART_LENGTH)
+      return 'invalid_part';
     total += part.text.length;
     if (total > MAX_TOTAL_LENGTH) return 'input_too_large';
   }
@@ -79,7 +87,11 @@ export const inspectOutboundText = async (
     const inspected = request.parts.map((part) => inspectPart(part, request.sensitivity));
     const safeParts = inspected.map(({ part }) => part);
     const findings = inspected.flatMap(({ findings: partFindings }) => partFindings);
-    const uniqueFindings = [...new Map(findings.map((finding) => [`${finding.name}:${finding.type}:${finding.confidence}`, finding])).values()];
+    const uniqueFindings = [
+      ...new Map(
+        findings.map((finding) => [`${finding.name}:${finding.type}:${finding.confidence}`, finding])
+      ).values(),
+    ];
     const authorized = context.authorize ? await context.authorize(request) : true;
     const hasFindings = uniqueFindings.length > 0;
     let decision: InspectionDecision;
@@ -119,7 +131,16 @@ export const inspectOutboundText = async (
       policyVersion: context.policyVersion,
       createdAt: now,
     };
-    return { schemaVersion: 1, requestId: request.requestId, decision, safeParts, findings: uniqueFindings, reasonCode, requiresUserDecision, receipt };
+    return {
+      schemaVersion: 1,
+      requestId: request.requestId,
+      decision,
+      safeParts,
+      findings: uniqueFindings,
+      reasonCode,
+      requiresUserDecision,
+      receipt,
+    };
   } catch {
     return invalid(request, 'inspection_error', context);
   }

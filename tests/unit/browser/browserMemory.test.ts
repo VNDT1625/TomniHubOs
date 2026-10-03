@@ -10,7 +10,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { createBrowserMemory, hostOf, type BrowserMemoryFs } from '@/process/browser/browserMemory';
+import { createBrowserMemory, hostOf, type BrowserMemoryFs } from '@process/browser/browserMemory';
 
 /** Build an in-memory fs double implementing the BrowserMemoryFs surface. */
 const memFs = (): { fs: BrowserMemoryFs; files: Map<string, string> } => {

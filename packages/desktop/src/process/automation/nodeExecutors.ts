@@ -20,8 +20,7 @@
  * Process boundary: Main-process (Node.js) module. No DOM APIs.
  */
 
-import { listReadyProviders } from '@process/services/tomnyProviderBridge';
-import type { IProvider } from '@/common/config/storage';
+import { createProviderChat as createBrokeredProviderChat } from '@process/services/agentChat';
 import type {
   AiNodeConfig,
   BrowserNodeConfig,
@@ -348,71 +347,18 @@ export const createNodeExecutors = (deps: NodeExecutorDeps): NodeExecutorMap => 
 // Provider-backed chat (production `chat` for the AI node)
 // ---------------------------------------------------------------------------
 
-/** Whether a model id is enabled for a provider (defaults to enabled). */
-const isModelEnabled = (provider: IProvider, model: string): boolean => provider.model_enabled?.[model] !== false;
-
-/** A provider configured enough to issue a chat call. */
-const isUsable = (p: IProvider): boolean =>
-  p.enabled !== false && Boolean(p.api_key) && Boolean(p.base_url) && Array.isArray(p.models) && p.models.length > 0;
-
-/** Resolve the OpenAI-compatible chat endpoint for a provider (honours "Full URL"). */
-const resolveChatUrl = (provider: IProvider): string => {
-  const base = provider.base_url.replace(/\/+$/, '');
-  return provider.is_full_url ? base : `${base}/chat/completions`;
-};
-
-/** First non-empty API key (the field may hold several, comma/newline-separated). */
-const firstApiKey = (apiKeys: string): string =>
-  apiKeys
-    .split(/[,\n]/)
-    .map((k) => k.trim())
-    .find((k) => k.length > 0) ?? '';
-
-/** Find the provider owning `model` (preferring enabled); else any usable provider/model. */
-const pickForModel = (providers: IProvider[], model: string): { provider: IProvider; model: string } | null => {
-  const usable = providers.filter(isUsable);
-  const owner = usable.find((p) => p.models.includes(model) && isModelEnabled(p, model));
-  if (owner) return { provider: owner, model };
-  for (const provider of usable) {
-    const fallback = provider.models.find((m) => isModelEnabled(provider, m)) ?? provider.models[0];
-    if (fallback) return { provider, model: fallback };
-  }
-  return null;
-};
-
 /**
- * Build the production `chat` function backing the `action.ai` node. Resolves
- * the provider lazily so a model added after startup is picked up without a
- * restart. Throws clear errors on misconfiguration / HTTP failure / empty reply.
+ * The Automation AI node must use the Main-owned provider broker rather than
+ * reading API keys or opening a destination itself. The broker binds the
+ * authenticated actor, trusted destination, final egress inspection, and opaque
+ * credential handling before it invokes a configured provider.
  */
 export const createProviderChat = (): ((model: string, prompt: string, signal?: AbortSignal) => Promise<string>) => {
-  return async (model, prompt, signal) => {
-    const providers = (await listReadyProviders().catch(() => [] as IProvider[])) || [];
-    const selected = pickForModel(providers, model);
-    if (!selected) {
-      throw new Error('No usable model is configured. Open Settings → Model and add a provider/model, then try again.');
-    }
-
-    const url = resolveChatUrl(selected.provider);
-    const apiKey = firstApiKey(selected.provider.api_key);
-
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({ model: selected.model, messages: [{ role: 'user', content: prompt }], stream: false }),
+  const brokeredChat = createBrokeredProviderChat();
+  return (model, prompt, signal) =>
+    brokeredChat({
+      model,
+      messages: [{ role: 'user', content: prompt }],
       signal,
     });
-
-    if (!response.ok) {
-      const detail = await response.text().catch(() => '');
-      throw new Error(`Model request failed (HTTP ${response.status}). ${detail.slice(0, 300)}`);
-    }
-
-    const json = (await response.json()) as { choices?: Array<{ message?: { content?: string | null } }> };
-    const content = json.choices?.[0]?.message?.content;
-    if (typeof content !== 'string' || content.length === 0) {
-      throw new Error('The model returned an empty response.');
-    }
-    return content;
-  };
 };

@@ -15,8 +15,8 @@ import {
   isErrorEvent,
   isSignificantEvent,
   pushBounded,
-} from '@/process/ide/quickTestBuffer';
-import type { TraceEvent } from '@/process/ide/quickTestTracer';
+} from '@package-apps/ide/process/execution/quickTest/runtime/quickTestBuffer';
+import type { TraceEvent } from '@package-apps/ide/process/execution/quickTest/runtime/quickTestTracer';
 
 const log = (message: string): TraceEvent => ({ kind: 'console', level: 'log', message, at: 0 });
 const errConsole = (message: string): TraceEvent => ({ kind: 'console', level: 'error', message, at: 0 });

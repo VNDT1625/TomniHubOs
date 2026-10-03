@@ -288,12 +288,7 @@ describe('Resource lifecycle capability bridge', () => {
     const coordinator = await create();
     registerResourceBridge(coordinator);
     const registerLifecycle = vi.spyOn(coordinator, 'registerLifecycleResource');
-    const invalidResourceIds: unknown[] = [
-      'private\u0085secret',
-      'private\u202Esecret',
-      'x'.repeat(129),
-      undefined,
-    ];
+    const invalidResourceIds: unknown[] = ['private\u0085secret', 'private\u202Esecret', 'x'.repeat(129), undefined];
 
     for (const resourceId of invalidResourceIds) {
       let error: unknown;

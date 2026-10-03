@@ -179,6 +179,11 @@ describe('BenchmarkService', () => {
       interval: 50,
     });
 
+    // `running` is persisted before the Tomny turns are dispatched. The first
+    // prompt completes immediately; wait for the second, deliberately hung turn
+    // so this assertion covers cancellation of an active adapter request.
+    await vi.waitFor(() => expect(port.start).toHaveBeenCalledTimes(2), { timeout: 15_000, interval: 50 });
+
     await expect(service.cancel(started.runIds[0])).resolves.toBe(true);
     await vi.waitFor(async () => expect((await store.getRun(started.runIds[0]))?.status).toBe('cancelled'), {
       timeout: 15_000,

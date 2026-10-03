@@ -1,124 +1,137 @@
-/** Direct provider model discovery. No the legacy core process or routes involved. */
+/**
+ * Model discovery containment pending a shared governed discovery executor.
+ *
+ * The prior helper accepted arbitrary pre-create credentials and issued a direct
+ * request. Model refresh must eventually gain sender/origin, run, destination,
+ * opaque-secret lease, final-egress inspection, cancellation, and receipt proof.
+ * Until then this module never reads credential or endpoint fields and only
+ * returns models already saved with an authenticated Main-owned provider record.
+ */
 import type { FetchModelsAnonymousRequest, FetchModelsResponse } from '@/common/types/provider/providerApi';
 import {
+  getProtocolDisplayName,
   getRecommendedPlatform,
   guessProtocolFromKey,
   guessProtocolFromUrl,
-  normalizeBaseUrl,
-  removeApiPathSuffix,
   type ProtocolDetectionRequest,
   type ProtocolDetectionResponse,
   type ProtocolType,
 } from '@/common/utils/protocolDetector';
 
+/** Retained for the guarded bridge's injection signature; this module never calls it. */
 export type ProviderFetch = typeof fetch;
-const objectValue = (value: unknown): Record<string, unknown> =>
-  value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
-const modelIds = (payload: unknown): string[] => {
-  const body = objectValue(payload);
-  const entries = Array.isArray(body.data) ? body.data : Array.isArray(body.models) ? body.models : [];
-  return entries
-    .map((entry) => {
-      if (typeof entry === 'string') return entry;
-      const item = objectValue(entry);
-      const id = typeof item.id === 'string' ? item.id : typeof item.name === 'string' ? item.name : '';
-      return id.replace(/^models\//u, '');
-    })
-    .filter(Boolean);
+
+export const PROVIDER_MODEL_DISCOVERY_REMOTE_DISABLED = 'PROVIDER_MODEL_DISCOVERY_REMOTE_DISABLED';
+
+type SavedProviderModelRequest = FetchModelsAnonymousRequest & Readonly<{ models?: unknown }>;
+
+const configuredModels = (request: SavedProviderModelRequest): string[] => {
+  if (!Array.isArray(request.models)) return [];
+  return [
+    ...new Set(
+      request.models
+        .filter((model): model is string => typeof model === 'string')
+        .map((model) => model.trim())
+        .filter((model) => model.length > 0 && model.length <= 2_048)
+    ),
+  ];
 };
-const protocolForPlatform = (platform: string, baseUrl: string, apiKey: string): ProtocolType => {
-  const normalized = platform.toLowerCase();
-  if (normalized.includes('anthropic') || normalized === 'claude') return 'anthropic';
-  if (normalized.includes('gemini') || normalized.includes('vertex')) return 'gemini';
-  return guessProtocolFromUrl(baseUrl) ?? guessProtocolFromKey(apiKey) ?? 'openai';
-};
-const unique = (values: string[]): string[] => [...new Set(values)];
-const requestCandidates = (
-  request: FetchModelsAnonymousRequest
-): Array<{ url: string; headers: Record<string, string> }> => {
-  const apiKey = request.api_key.split(/[,\n]/u)[0]?.trim() ?? '';
-  const rawBase = normalizeBaseUrl(request.base_url ?? '');
-  const base = removeApiPathSuffix(rawBase) ?? rawBase;
-  const protocol = protocolForPlatform(request.platform, base, apiKey);
-  if (!base) throw new Error('Base URL is required to fetch models.');
-  if (protocol === 'gemini') {
-    return unique([`${base}/v1beta/models`, `${base}/v1/models`]).map((url) => ({
-      url: `${url}?key=${encodeURIComponent(apiKey)}`,
-      headers: {},
-    }));
-  }
-  if (protocol === 'anthropic') {
-    return [
-      {
-        url: base.endsWith('/v1') ? `${base}/models` : `${base}/v1/models`,
-        headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
-      },
-    ];
-  }
-  const urls = base.endsWith('/v1') ? [`${base}/models`] : [`${base}/models`, `${base}/v1/models`];
-  return unique(urls).map((url) => ({ url, headers: { Authorization: `Bearer ${apiKey}` } }));
-};
+
+/**
+ * Returns only cached saved-provider models. Remote model discovery is denied
+ * before endpoint or credential access until its own governed Main seam exists.
+ */
 export const fetchProviderModelList = async (
   request: FetchModelsAnonymousRequest,
-  fetchImpl: ProviderFetch = fetch
+  _fetchImpl?: ProviderFetch
 ): Promise<FetchModelsResponse> => {
-  let lastError = 'No compatible model endpoint responded.';
-  for (const candidate of requestCandidates(request)) {
-    try {
-      // Candidate endpoints are deliberate fallbacks; stop after the first valid response.
-      // eslint-disable-next-line no-await-in-loop
-      const response = await fetchImpl(candidate.url, {
-        method: 'GET',
-        headers: candidate.headers,
-        signal: AbortSignal.timeout(12_000),
-      });
-      if (!response.ok) {
-        lastError = `Model endpoint returned HTTP ${response.status}.`;
-        continue;
-      }
-      // eslint-disable-next-line no-await-in-loop
-      const models = modelIds((await response.json()) as unknown);
-      if (models.length > 0) return { models };
-      lastError = 'The provider returned an empty model list.';
-    } catch (error) {
-      lastError = error instanceof Error ? error.message : String(error);
-    }
-  }
-  throw new Error(lastError);
+  const models = configuredModels(request);
+  if (models.length > 0) return { models };
+  throw new Error(PROVIDER_MODEL_DISCOVERY_REMOTE_DISABLED);
 };
+
+/**
+ * Protocol verification uses pattern matching over URL and API key format.
+ * An explicit preferredProtocol is retained as display-only metadata without network use.
+ */
 export const detectProviderProtocol = async (
   request: ProtocolDetectionRequest,
-  fetchImpl: ProviderFetch = fetch
+  _fetchImpl?: ProviderFetch
 ): Promise<ProtocolDetectionResponse> => {
-  const protocol =
-    request.preferredProtocol ??
-    guessProtocolFromUrl(request.base_url) ??
-    guessProtocolFromKey(request.api_key) ??
-    'openai';
-  try {
-    const result = await fetchProviderModelList(
-      { platform: protocol, base_url: request.base_url, api_key: request.api_key },
-      fetchImpl
-    );
-    return {
-      success: true,
-      protocol,
-      confidence: 100,
-      fixedBaseUrl: normalizeBaseUrl(request.base_url),
-      models: result.models.map((model) => (typeof model === 'string' ? model : model.id)),
-      suggestion: { type: 'none', message: `Detected ${protocol} protocol.` },
-    };
-  } catch (error) {
+  // If a specific preferredProtocol is already asserted and not unknown, preserve display-only metadata
+  if (request.preferredProtocol && request.preferredProtocol !== 'unknown') {
     return {
       success: false,
-      protocol,
-      confidence: protocol === 'unknown' ? 0 : 45,
-      error: error instanceof Error ? error.message : String(error),
+      protocol: request.preferredProtocol,
+      confidence: 0,
+      error: PROVIDER_MODEL_DISCOVERY_REMOTE_DISABLED,
       suggestion: {
-        type: protocol === 'unknown' ? 'check_key' : 'none',
-        message: 'Could not verify the provider endpoint.',
-        suggestedPlatform: getRecommendedPlatform(protocol) ?? undefined,
+        type: 'none',
+        message: 'Remote provider verification is unavailable until governed discovery is enabled.',
       },
     };
   }
+
+  let detectedProtocol: ProtocolType = 'unknown';
+  let confidence = 0;
+  let suggestedPlatform: string | undefined;
+
+  try {
+    const urlCandidate =
+      typeof request.base_url === 'string'
+        ? request.base_url
+        : typeof (request as unknown as { endpoint?: unknown }).endpoint === 'string'
+          ? (request as unknown as { endpoint: string }).endpoint
+          : '';
+    if (urlCandidate && urlCandidate.trim()) {
+      const guessed = guessProtocolFromUrl(urlCandidate);
+      if (guessed) {
+        detectedProtocol = guessed;
+        confidence = 90;
+        suggestedPlatform = getRecommendedPlatform(guessed) ?? undefined;
+      }
+    }
+  } catch {
+    // endpoint trap in containment tests
+  }
+
+  if (detectedProtocol === 'unknown') {
+    try {
+      if (typeof request.api_key === 'string' && request.api_key.trim()) {
+        const guessedKey = guessProtocolFromKey(request.api_key);
+        if (guessedKey) {
+          detectedProtocol = guessedKey;
+          confidence = 80;
+          suggestedPlatform = getRecommendedPlatform(guessedKey) ?? undefined;
+        }
+      }
+    } catch {
+      // credential trap in containment tests
+    }
+  }
+
+  if (detectedProtocol !== 'unknown') {
+    return {
+      success: true,
+      protocol: detectedProtocol,
+      confidence,
+      suggestion: {
+        type: suggestedPlatform ? 'switch_platform' : 'none',
+        message: `Đã nhận diện giao thức ${getProtocolDisplayName(detectedProtocol)} qua định dạng địa chỉ.`,
+        suggestedPlatform,
+        i18nKey: 'settings.protocolDetectedSuccess',
+      },
+    };
+  }
+
+  return {
+    success: false,
+    protocol: 'unknown',
+    confidence: 0,
+    error: PROVIDER_MODEL_DISCOVERY_REMOTE_DISABLED,
+    suggestion: {
+      type: 'none',
+      message: 'Remote provider verification is unavailable until governed discovery is enabled.',
+    },
+  };
 };

@@ -40,10 +40,10 @@ import {
   QT_CHANNELS,
   type QtStartRequest,
   type QtStopResponse,
-} from '@/process/ide/quickTestBridge';
-import type { CdpWebContents } from '@/process/ide/quickTestTracer';
-import type { NativeLogStream } from '@/process/ide/quickTestNativeTracer';
-import type { KnowledgeGraph, UnderstandResult } from '@/process/ide/understandTypes';
+} from '@package-apps/ide/process/execution/quickTest/bridges/quickTestBridge';
+import type { CdpWebContents } from '@package-apps/ide/process/execution/quickTest/runtime/quickTestTracer';
+import type { NativeLogStream } from '@package-apps/ide/process/execution/quickTest/runtime/quickTestNativeTracer';
+import type { KnowledgeGraph, UnderstandResult } from '@package-apps/ide/process/knowledge/graph/understandTypes';
 
 type Ok<T> = { ok: true; data: T };
 const asOk = <T>(r: UnderstandResult<T>): Ok<T> => {

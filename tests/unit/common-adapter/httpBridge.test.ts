@@ -31,16 +31,18 @@ describe('httpBridge', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.unstubAllGlobals();
+    (globalThis as { __backendPort?: number }).__backendPort = 12345;
   });
 
   afterEach(() => {
+    delete (globalThis as { __backendPort?: number }).__backendPort;
     vi.unstubAllGlobals();
   });
 
   describe('getBaseUrl', () => {
-    it('returns fallback URL in node environment with no globalThis.__backendPort', () => {
-      const result = getBaseUrl();
-      expect(result).toBe('http://127.0.0.1:13400');
+    it('throws when no backend port is available in node environment', () => {
+      delete (globalThis as { __backendPort?: number }).__backendPort;
+      expect(() => getBaseUrl()).toThrow('Backend port is unavailable');
     });
 
     it('reads port from globalThis.__backendPort when set', () => {
@@ -64,7 +66,24 @@ describe('httpBridge', () => {
       delete (globalThis as { __backendPort?: number }).__backendPort;
     });
 
+    it('reads dynamic port from window.electronAPI.getBackendPort() with highest priority', () => {
+      (globalThis as { __backendPort?: number }).__backendPort = 11111;
+      vi.stubGlobal('window', {
+        __backendPort: 34567,
+        electronAPI: {
+          getBackendPort: () => 45678,
+        },
+      });
+
+      const result = getBaseUrl();
+
+      expect(result).toBe('http://127.0.0.1:45678');
+
+      delete (globalThis as { __backendPort?: number }).__backendPort;
+    });
+
     it('returns empty string in WebUI mode (window + document, no __backendPort)', () => {
+      delete (globalThis as { __backendPort?: number }).__backendPort;
       vi.stubGlobal('window', {});
       vi.stubGlobal('document', {});
 

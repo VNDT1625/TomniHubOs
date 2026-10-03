@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import { runCommand, type CommandSpawn } from '@/process/ide/command/commandRunner';
+import { runCommand, type CommandSpawn } from '@package-apps/ide/process/coding/command/commandRunner';
 
 describe('commandRunner', () => {
   it('passes the command and defaults cwd to the repo root', async () => {

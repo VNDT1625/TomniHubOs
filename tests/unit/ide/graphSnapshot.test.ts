@@ -7,8 +7,8 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { changedNodeIds, diffGraphs, isEmptyDiff } from '@/process/ide/graphSnapshot';
-import type { KnowledgeGraph } from '@/process/ide/understandTypes';
+import { changedNodeIds, diffGraphs, isEmptyDiff } from '@package-apps/ide/process/knowledge/graph/graphSnapshot';
+import type { KnowledgeGraph } from '@package-apps/ide/process/knowledge/graph/understandTypes';
 
 /** Build a minimal KnowledgeGraph for testing. */
 const makeGraph = (overrides: Partial<KnowledgeGraph> = {}): KnowledgeGraph => ({

@@ -507,12 +507,6 @@ try {
   const { prepareTomnyRuntime } = require('../packages/shared-scripts/src/prepare-tomny-runtime.js');
   prepareTomnyRuntime({ projectRoot, platform: process.platform, arch: targetArch });
 
-  // Prepare the pinned, standalone model gateway for the packaged architecture.
-  execSync('node packages/shared-scripts/src/prepare-model-gateway.js', {
-    stdio: 'inherit',
-    env: { ...process.env, TOMNI_MODEL_GATEWAY_ARCH: targetArch },
-  });
-
   // 6. Prepare hub resources (index.json + extension zips for offline fallback)
   execSync('node scripts/prepareHubResources.js', { stdio: 'inherit', env: process.env });
 

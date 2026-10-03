@@ -8,8 +8,11 @@ import JSZip from 'jszip';
 import type { InstalledPackageRecord, PackageCatalogEntry, PackageManifest } from '@/common/packages';
 import {
   PACKAGE_APP_GROUP_NATIVE_CHANNELS,
+  PUBLISHER_SUBMISSION_NATIVE_CHANNELS,
   PACKAGE_MUTATION_NATIVE_CHANNELS,
   PACKAGE_RUNTIME_NATIVE_CHANNELS,
+  PACKAGE_SURFACE_AI_ACCESS_NATIVE_CHANNELS,
+  PACKAGE_SURFACE_AI_RUNTIME_NATIVE_CHANNELS,
 } from '@/common/types/platform/electron';
 import {
   createFirstPartyPackageCatalog,
@@ -20,13 +23,21 @@ import {
 import {
   computeArtifactIntegrity,
   createPackageManagerService,
+  createC4SurfaceAiOperationDispatcher,
   JsonPackageStateStore,
   createPackageRuntimeRegistry,
+  createElectronSurfaceAiRuntimeTransportEndpoint,
   registerTrustedPackageMutationIpcBridge,
   registerTrustedPackageRuntimeIpcBridge,
+  registerTrustedSurfaceAiRuntimePortHandoffIpcBridge,
+  registerTrustedSurfaceAiAccessIpcBridge,
+  listVerifiedSurfaceAiRuntimeBindings,
+  verifyInstalledPackageSurfaceRuntime,
+  registerTrustedPublisherSubmissionIpcBridge,
   type PackageMutationRuntime,
   type PackageStateStore,
 } from '@process/extensions/package-manager';
+import { createSurfaceAiRuntimeTransportRegistry } from '@process/resources/packageCapability/surfaceAiRuntimeTransport';
 import {
   createPackageAppGroupService,
   registerTrustedPackageAppGroupIpcBridge,
@@ -86,6 +97,67 @@ afterEach(async () => {
 });
 
 const appGroupMember = { packageId: 'com.tomni.ide', appId: 'ide', moduleId: 'ide', role: 'core' } as const;
+
+const runtimeOpenRequest = (
+  packageId: string,
+  runtimeId: string,
+  identity: Partial<Pick<PackageManifest, 'version' | 'publisherId'>> & { moduleId?: string } = {}
+) => ({
+  packageId,
+  runtimeId,
+  packageVersion: identity.version ?? '1.0.0',
+  publisherId: identity.publisherId ?? 'org.example',
+  moduleId: identity.moduleId ?? 'surface',
+});
+
+class TestMainMessagePort {
+  public readonly sent: unknown[] = [];
+  public closed = false;
+  public started = false;
+  private readonly listeners = new Map<string, Set<(event?: { data: unknown }) => void>>();
+
+  public start(): void {
+    this.started = true;
+  }
+
+  public postMessage(message: unknown): void {
+    this.sent.push(message);
+  }
+
+  public close(): void {
+    if (this.closed) return;
+    this.closed = true;
+    this.emit('close');
+  }
+
+  public on(event: string, listener: (event?: { data: unknown }) => void): this {
+    const entries = this.listeners.get(event) ?? new Set<(event?: { data: unknown }) => void>();
+    entries.add(listener);
+    this.listeners.set(event, entries);
+    return this;
+  }
+
+  public once(event: string, listener: (event?: { data: unknown }) => void): this {
+    const once = (value?: { data: unknown }): void => {
+      this.removeListener(event, once);
+      listener(value);
+    };
+    return this.on(event, once);
+  }
+
+  public removeListener(event: string, listener: (event?: { data: unknown }) => void): this {
+    this.listeners.get(event)?.delete(listener);
+    return this;
+  }
+
+  public emit(event: string, value?: { data: unknown }): void {
+    for (const listener of this.listeners.get(event) ?? []) listener(value);
+  }
+
+  public emitMessage(data: unknown): void {
+    this.emit('message', { data });
+  }
+}
 
 describe('package app group state', () => {
   it('keeps user and workspace group documents isolated after a durable reload', async () => {
@@ -337,28 +409,77 @@ const contributionCatalog = (hostApiVersion = '^1.0.0'): PackageCatalogEntry[] =
 describe('package manager service', () => {
   it('keeps a package active until every owner runtime has closed', () => {
     const registry = createPackageRuntimeRegistry();
-    registry.open('renderer-1', { packageId: 'org.example.app', runtimeId: 'runtime-1' });
-    registry.open('renderer-2', { packageId: 'org.example.app', runtimeId: 'runtime-2' });
+    registry.open('renderer-1', runtimeOpenRequest('org.example.app', 'runtime-1'));
+    registry.open('renderer-2', runtimeOpenRequest('org.example.app', 'runtime-2'));
 
     expect(registry.isRuntimeActive('org.example.app', 'runtime-1')).toBe(true);
     expect(registry.isRuntimeActive('org.example.app', 'runtime-missing')).toBe(false);
+    expect(registry.ownsRuntime('renderer-1', 'org.example.app', 'runtime-1')).toBe(true);
+    expect(registry.ownsRuntime('renderer-2', 'org.example.app', 'runtime-1')).toBe(false);
+    expect(registry.getRuntimeBinding('renderer-1', 'org.example.app', 'runtime-1')).toEqual({
+      ...runtimeOpenRequest('org.example.app', 'runtime-1'),
+      ownerId: 'renderer-1',
+    });
+    expect(registry.listRuntimeBindings('org.example.app')).toEqual([
+      { ...runtimeOpenRequest('org.example.app', 'runtime-1'), ownerId: 'renderer-1' },
+      { ...runtimeOpenRequest('org.example.app', 'runtime-2'), ownerId: 'renderer-2' },
+    ]);
+    expect(() => registry.open('renderer-1', runtimeOpenRequest('org.example.app', 'runtime-1'))).not.toThrow();
+    expect(() => registry.open('renderer-2', runtimeOpenRequest('org.example.app', 'runtime-1'))).toThrow(
+      'PACKAGE_RUNTIME_ID_CONFLICT'
+    );
     registry.close('renderer-1', { packageId: 'org.example.app', runtimeId: 'runtime-1' });
     expect(registry.isActive('org.example.app')).toBe(true);
     expect(registry.isRuntimeActive('org.example.app', 'runtime-1')).toBe(false);
+    expect(registry.ownsRuntime('renderer-1', 'org.example.app', 'runtime-1')).toBe(false);
     registry.close('renderer-2', { packageId: 'org.example.app', runtimeId: 'runtime-2' });
     expect(registry.isActive('org.example.app')).toBe(false);
   });
 
   it('revokes crashed renderer runtimes without closing another owner', () => {
     const registry = createPackageRuntimeRegistry();
-    registry.open('renderer-1', { packageId: 'org.example.app', runtimeId: 'runtime-1' });
-    registry.open('renderer-2', { packageId: 'org.example.app', runtimeId: 'runtime-2' });
+    registry.open('renderer-1', runtimeOpenRequest('org.example.app', 'runtime-1'));
+    registry.open('renderer-2', runtimeOpenRequest('org.example.app', 'runtime-2'));
 
     registry.revokeOwner('renderer-1');
     registry.close('renderer-1', { packageId: 'org.example.app', runtimeId: 'missing' });
     expect(registry.isActive('org.example.app')).toBe(true);
     registry.revokeOwner('renderer-2');
     expect(registry.isActive('org.example.app')).toBe(false);
+  });
+
+  it('invalidates every runtime for a Store-revoked Package App', () => {
+    const registry = createPackageRuntimeRegistry();
+    const invalidations: Array<{ runtimeId: string; reason: string }> = [];
+    registry.onInvalidated(({ runtimeId, reason }) => invalidations.push({ runtimeId, reason }));
+    registry.open('renderer-1', runtimeOpenRequest('org.example.app', 'runtime-1'));
+    registry.open('renderer-2', runtimeOpenRequest('org.example.app', 'runtime-2'));
+
+    registry.revokePackage('org.example.app');
+
+    expect(registry.isActive('org.example.app')).toBe(false);
+    expect(registry.isRuntimeActive('org.example.app', 'runtime-1')).toBe(false);
+    expect(registry.isRuntimeActive('org.example.app', 'runtime-2')).toBe(false);
+    expect(invalidations).toEqual([
+      { runtimeId: 'runtime-1', reason: 'package-revoked' },
+      { runtimeId: 'runtime-2', reason: 'package-revoked' },
+    ]);
+  });
+
+  it('emits exact owner-bound invalidation when a Surface runtime closes or its window becomes unavailable', () => {
+    const registry = createPackageRuntimeRegistry();
+    const invalidations: Array<{ packageId: string; runtimeId: string; ownerId: string; reason: string }> = [];
+    registry.onInvalidated((event) => invalidations.push(event));
+    registry.open('renderer-1', runtimeOpenRequest('org.example.app', 'runtime-1'));
+    registry.open('renderer-1', runtimeOpenRequest('org.example.app', 'runtime-2'));
+
+    registry.close('renderer-1', { packageId: 'org.example.app', runtimeId: 'runtime-1' });
+    registry.revokeOwner('renderer-1');
+
+    expect(invalidations).toEqual([
+      { packageId: 'org.example.app', runtimeId: 'runtime-1', ownerId: 'renderer-1', reason: 'runtime-closed' },
+      { packageId: 'org.example.app', runtimeId: 'runtime-2', ownerId: 'renderer-1', reason: 'owner-unavailable' },
+    ]);
   });
 
   it('cleans renderer runtime ownership when the IPC owner becomes unavailable', async () => {
@@ -383,8 +504,7 @@ describe('package manager service', () => {
     });
     const sender = { ownerId: 'renderer-1', trusted: true };
     await handlers.get(PACKAGE_RUNTIME_NATIVE_CHANNELS.open)!(sender, {
-      packageId: 'org.example.app',
-      runtimeId: 'runtime-1',
+      ...runtimeOpenRequest('org.example.app', 'runtime-1'),
     });
     expect(registry.isActive('org.example.app')).toBe(true);
 
@@ -394,20 +514,358 @@ describe('package manager service', () => {
     expect(handlers.size).toBe(0);
   });
 
+  it('hands a Main-owned port to one exact verified runtime and closes it when delivery fails', async () => {
+    type Sender = { trusted: boolean };
+    const handlers = new Map<string, (sender: Sender, payload: unknown) => Promise<void>>();
+    const transport = createSurfaceAiRuntimeTransportRegistry();
+    const port1 = new TestMainMessagePort();
+    const port2 = new TestMainMessagePort();
+    const claim = {
+      packageId: 'org.example.surface',
+      packageVersion: '1.0.0',
+      publisherId: 'org.example',
+      runtimeId: 'runtime-1',
+      moduleId: 'workspace',
+      artifactIntegrity: `sha256-${'d'.repeat(64)}`,
+    } as const;
+    const binding = {
+      surface: {
+        packageId: claim.packageId,
+        packageVersion: claim.packageVersion,
+        publisherId: claim.publisherId,
+      },
+      ownerId: 'electron:1',
+      runtimeId: claim.runtimeId,
+      moduleId: claim.moduleId,
+      artifactIntegrity: claim.artifactIntegrity,
+    } as const;
+    let delivered:
+      | { requestId: string; connectionId: string; binding: typeof binding; port: TestMainMessagePort }
+      | undefined;
+    const dispose = registerTrustedSurfaceAiRuntimePortHandoffIpcBridge({
+      host: {
+        handle: (channel, handler) => handlers.set(channel, handler),
+        removeHandler: (channel) => handlers.delete(channel),
+      },
+      transportRegistry: transport,
+      verifySender: (sender) => sender.trusted,
+      resolveBinding: async (_sender, receivedClaim) =>
+        JSON.stringify(receivedClaim) === JSON.stringify(claim) ? binding : undefined,
+      createChannel: () => ({ port1, port2 }),
+      toEndpoint: (port) => createElectronSurfaceAiRuntimeTransportEndpoint(port as never),
+      closePort: (port) => port.close(),
+      deliverPort: (_sender, handoff, port) => {
+        delivered = { ...handoff, port };
+      },
+      createConnectionId: () => 'connection-1',
+    });
+
+    await handlers.get(PACKAGE_SURFACE_AI_RUNTIME_NATIVE_CHANNELS.requestPortHandoff)!(
+      { trusted: true },
+      {
+        requestId: 'request-1',
+        binding: claim,
+      }
+    );
+
+    expect(port1.started).toBe(true);
+    expect(delivered).toEqual({ requestId: 'request-1', connectionId: 'connection-1', binding, port: port2 });
+    port1.emitMessage({ type: 'ready', schemaVersion: 1, sequence: 0, binding });
+    expect(transport.isActive(binding)).toBe(true);
+    transport.invalidate({ ownerId: binding.ownerId, runtimeId: binding.runtimeId });
+    expect(port1.closed).toBe(true);
+
+    await expect(
+      handlers.get(PACKAGE_SURFACE_AI_RUNTIME_NATIVE_CHANNELS.requestPortHandoff)!(
+        { trusted: true },
+        {
+          requestId: 'request-spoofed',
+          binding: { ...claim, moduleId: 'forged-module' },
+        }
+      )
+    ).rejects.toThrow('PACKAGE_SURFACE_AI_PORT_HANDOFF_RUNTIME_UNAVAILABLE');
+    expect(port2.sent).toEqual([]);
+
+    dispose();
+    expect(handlers.size).toBe(0);
+  });
+
+  it('records Surface AI access only through an exact account-owned consent challenge', async () => {
+    type Sender = { trusted: boolean; ownerId?: string };
+    const handlers = new Map<string, (sender: Sender, payload: unknown) => Promise<unknown>>();
+    const requestChallenge = vi.fn(async (ownerId: string, accountId: string, request: unknown) => {
+      expect(ownerId).toBe('electron:1');
+      expect(accountId).toBe('account-1');
+      expect(request).toEqual({ packageId: 'org.example.surface', operationId: 'workspace.write' });
+      return {
+        challengeId: 'challenge-1',
+        packageId: 'org.example.surface',
+        packageVersion: '1.0.0',
+        publisherId: 'org.example',
+        operationId: 'workspace.write',
+        capability: 'workspace.write',
+        dataClasses: ['workspace'],
+        destinationIds: ['local'],
+        secretUse: false,
+        expiresAt: '2026-08-20T00:00:00.000Z',
+      };
+    });
+    const confirmChallenge = vi.fn(async (_ownerId: string, _accountId: string, request: unknown) => {
+      expect(request).toEqual({ challengeId: 'challenge-1', approved: true });
+      return { approved: true, consentId: 'consent-1', expiresAt: '2026-08-20T01:00:00.000Z' };
+    });
+    const revokeConsent = vi.fn(async (accountId: string, consentId: string) => {
+      expect(accountId).toBe('account-1');
+      expect(consentId).toBe('consent-1');
+      return true;
+    });
+    const listConsents = vi.fn(async (accountId: string, packageId: string) => {
+      expect(accountId).toBe('account-1');
+      expect(packageId).toBe('org.example.surface');
+      return [
+        {
+          consentId: 'consent-1',
+          packageId,
+          packageVersion: '1.0.0',
+          operationId: 'workspace.write',
+          expiresAt: '2026-08-20T01:00:00.000Z',
+        },
+      ];
+    });
+    const dispose = registerTrustedSurfaceAiAccessIpcBridge({
+      host: {
+        handle: (channel, handler) => handlers.set(channel, handler),
+        removeHandler: (channel) => handlers.delete(channel),
+      },
+      verifySender: (sender) => sender.trusted,
+      identifyOwner: (sender) => sender.ownerId,
+      requireAuthenticatedAccount: () => ({ accountId: 'account-1' }),
+      runtime: { requestChallenge, confirmChallenge, revokeConsent, listConsents },
+    });
+    const sender = { trusted: true, ownerId: 'electron:1' };
+
+    await expect(
+      handlers.get(PACKAGE_SURFACE_AI_ACCESS_NATIVE_CHANNELS.requestChallenge)!(sender, {
+        packageId: 'org.example.surface',
+        operationId: 'workspace.write',
+      })
+    ).resolves.toMatchObject({ ok: true, challenge: { challengeId: 'challenge-1' } });
+    await expect(
+      handlers.get(PACKAGE_SURFACE_AI_ACCESS_NATIVE_CHANNELS.confirmChallenge)!(sender, {
+        challengeId: 'challenge-1',
+        approved: true,
+      })
+    ).resolves.toEqual({ ok: true, approved: true, consentId: 'consent-1', expiresAt: '2026-08-20T01:00:00.000Z' });
+    await expect(
+      handlers.get(PACKAGE_SURFACE_AI_ACCESS_NATIVE_CHANNELS.revokeConsent)!(sender, { consentId: 'consent-1' })
+    ).resolves.toEqual({ ok: true, revoked: true });
+    await expect(
+      handlers.get(PACKAGE_SURFACE_AI_ACCESS_NATIVE_CHANNELS.listConsents)!(sender, {
+        packageId: 'org.example.surface',
+      })
+    ).resolves.toEqual({
+      ok: true,
+      consents: [
+        {
+          consentId: 'consent-1',
+          packageId: 'org.example.surface',
+          packageVersion: '1.0.0',
+          operationId: 'workspace.write',
+          expiresAt: '2026-08-20T01:00:00.000Z',
+        },
+      ],
+    });
+    await expect(
+      handlers.get(PACKAGE_SURFACE_AI_ACCESS_NATIVE_CHANNELS.requestChallenge)!({ trusted: false }, {})
+    ).resolves.toEqual({ ok: false, code: 'PACKAGE_SURFACE_AI_ACCESS_SENDER_UNTRUSTED' });
+    await expect(
+      handlers.get(PACKAGE_SURFACE_AI_ACCESS_NATIVE_CHANNELS.requestChallenge)!(sender, {
+        packageId: 'org.example.surface',
+        operationId: 'workspace.write',
+        forged: true,
+      })
+    ).resolves.toEqual({ ok: false, code: 'PACKAGE_SURFACE_AI_ACCESS_REQUEST_INVALID' });
+    expect(requestChallenge).toHaveBeenCalledTimes(1);
+    expect(confirmChallenge).toHaveBeenCalledTimes(1);
+    expect(revokeConsent).toHaveBeenCalledTimes(1);
+    expect(listConsents).toHaveBeenCalledTimes(1);
+    dispose();
+    expect(handlers.size).toBe(0);
+  });
+
+  it('binds a sandbox runtime only to the exact current reviewed Surface identity', async () => {
+    const manifest: PackageManifest = {
+      schemaVersion: 1,
+      id: 'org.example.surface',
+      publisherId: 'org.example',
+      name: 'Reviewed Surface',
+      description: 'A reviewed local Surface.',
+      type: 'app',
+      bundleKind: 'single',
+      version: '1.0.0',
+      engines: { tomni: '>=1.0.0' },
+      modules: [
+        {
+          id: 'workspace',
+          title: 'Workspace',
+          surface: 'apps/workspace',
+          pinnable: true,
+          runtime: 'sandboxed-web',
+          entrypoint: 'index.html',
+        },
+      ],
+      permissions: [],
+      dependencies: [],
+      tags: ['workspace'],
+      artifact: {
+        integrity: `sha256-${'c'.repeat(64)}`,
+        sizeBytes: 123,
+        signature: { algorithm: 'ed25519', keyId: 'reviewed-key', value: 'signature' },
+      },
+    };
+    const review = {
+      schemaVersion: 1 as const,
+      disposition: 'auto-approved' as const,
+      fingerprint: 'review-1',
+      reviewedAt: '2030-01-01T00:00:00.000Z',
+    };
+    const listingFor = (overrides: Partial<PackageListing> = {}): PackageListing => ({
+      manifest: structuredClone(manifest),
+      delivery: 'downloaded-package',
+      trust: 'signed-store',
+      publicationReview: review,
+      state: 'installed',
+      installedVersion: manifest.version,
+      installedManifest: structuredClone(manifest),
+      installedTrust: 'signed-store',
+      installedPublicationReview: review,
+      updateAvailable: false,
+      compatible: true,
+      enabled: true,
+      ...overrides,
+    });
+    const runtimeService = (
+      listing: PackageListing,
+      moduleRegistered = true
+    ): Pick<PackageManagerService, 'status' | 'contributions'> => ({
+      status: async () => structuredClone(listing),
+      contributions: async () => ({
+        snapshot: {
+          revision: 1,
+          packageIds: [manifest.id],
+          apps: moduleRegistered
+            ? [
+                {
+                  id: 'workspace',
+                  title: 'Workspace',
+                  moduleId: 'workspace',
+                  key: `${manifest.id}/workspace`,
+                  packageId: manifest.id,
+                  packageVersion: manifest.version,
+                },
+              ]
+            : [],
+          activityGroups: [],
+          subtabs: [],
+          commands: [],
+          settings: [],
+        },
+        diagnostics: [],
+      }),
+    });
+    const request = runtimeOpenRequest(manifest.id, 'runtime-1', { ...manifest, moduleId: 'workspace' });
+
+    await expect(verifyInstalledPackageSurfaceRuntime(runtimeService(listingFor()), request)).resolves.toBeUndefined();
+    await expect(
+      verifyInstalledPackageSurfaceRuntime(runtimeService(listingFor()), { ...request, moduleId: 'forged-module' })
+    ).rejects.toThrow('PACKAGE_RUNTIME_SURFACE_MODULE_INVALID');
+    await expect(
+      verifyInstalledPackageSurfaceRuntime(runtimeService(listingFor()), { ...request, packageVersion: '2.0.0' })
+    ).rejects.toThrow('PACKAGE_RUNTIME_SURFACE_INACTIVE');
+    await expect(
+      verifyInstalledPackageSurfaceRuntime(runtimeService(listingFor({ enabled: false })), request)
+    ).rejects.toThrow('PACKAGE_RUNTIME_SURFACE_INACTIVE');
+    await expect(
+      verifyInstalledPackageSurfaceRuntime(runtimeService(listingFor({ state: 'available', enabled: false })), request)
+    ).rejects.toThrow('PACKAGE_RUNTIME_SURFACE_INACTIVE');
+    await expect(
+      verifyInstalledPackageSurfaceRuntime(runtimeService(listingFor({ revoked: true })), request)
+    ).rejects.toThrow('PACKAGE_RUNTIME_SURFACE_REVOKED');
+    await expect(verifyInstalledPackageSurfaceRuntime(runtimeService(listingFor()), request)).resolves.toBeUndefined();
+    const registry = createPackageRuntimeRegistry();
+    registry.open('renderer-1', request);
+    registry.open('renderer-2', { ...request, runtimeId: 'runtime-2' });
+    await expect(
+      listVerifiedSurfaceAiRuntimeBindings(runtimeService(listingFor()), registry, manifest.id)
+    ).resolves.toEqual([
+      {
+        surface: { packageId: manifest.id, packageVersion: manifest.version, publisherId: manifest.publisherId },
+        ownerId: 'renderer-1',
+        runtimeId: 'runtime-1',
+        moduleId: 'workspace',
+        artifactIntegrity: manifest.artifact?.integrity,
+      },
+      {
+        surface: { packageId: manifest.id, packageVersion: manifest.version, publisherId: manifest.publisherId },
+        ownerId: 'renderer-2',
+        runtimeId: 'runtime-2',
+        moduleId: 'workspace',
+        artifactIntegrity: manifest.artifact?.integrity,
+      },
+    ]);
+    await expect(
+      listVerifiedSurfaceAiRuntimeBindings(runtimeService(listingFor({ revoked: true })), registry, manifest.id)
+    ).resolves.toEqual([]);
+    await expect(verifyInstalledPackageSurfaceRuntime(runtimeService(listingFor(), false), request)).rejects.toThrow(
+      'PACKAGE_RUNTIME_SURFACE_UNREGISTERED'
+    );
+    await expect(
+      createC4SurfaceAiOperationDispatcher({
+        service: runtimeService(listingFor({ revoked: true })),
+        runtimeRegistry: registry,
+        transportRegistry: createSurfaceAiRuntimeTransportRegistry(),
+        consentStore: {} as never,
+        enabled: () => false,
+        kernel: {} as never,
+        trust: {} as never,
+        readiness: {
+          selection: {
+            surface: { packageId: manifest.id, packageVersion: manifest.version, publisherId: manifest.publisherId },
+            operation: {
+              id: 'workspace-write',
+              capability: 'workspace.write',
+              inputSchemaVersion: 1,
+              dataClasses: ['workspace'],
+              destinationIds: [],
+            },
+          },
+          consent: {} as never,
+          runtime: {
+            surface: { packageId: manifest.id, packageVersion: manifest.version, publisherId: manifest.publisherId },
+            ownerId: 'renderer-1',
+            runtimeId: 'runtime-1',
+            moduleId: 'workspace',
+            artifactIntegrity: manifest.artifact!.integrity,
+          },
+        },
+      })
+    ).rejects.toThrow('SURFACE_AI_ACCESS_SURFACE_UNAVAILABLE');
+  });
+
   it('atomically blocks runtime opens while a package mutation reservation is held', () => {
     const registry = createPackageRuntimeRegistry();
-    registry.open('renderer-1', { packageId: 'org.example.app', runtimeId: 'runtime-1' });
+    registry.open('renderer-1', runtimeOpenRequest('org.example.app', 'runtime-1'));
     expect(registry.reserveMutation('org.example.app')).toBeUndefined();
     registry.revokeOwner('renderer-1');
 
     const lease = registry.reserveMutation('org.example.app');
     expect(lease).toBeDefined();
-    expect(() => registry.open('renderer-2', { packageId: 'org.example.app', runtimeId: 'runtime-2' })).toThrow(
+    expect(() => registry.open('renderer-2', runtimeOpenRequest('org.example.app', 'runtime-2'))).toThrow(
       /mutation.*active/i
     );
 
     lease?.release();
-    registry.open('renderer-2', { packageId: 'org.example.app', runtimeId: 'runtime-2' });
+    registry.open('renderer-2', runtimeOpenRequest('org.example.app', 'runtime-2'));
     expect(registry.isActive('org.example.app')).toBe(true);
     lease?.release();
   });
@@ -464,11 +922,11 @@ describe('package manager service', () => {
 
     const uninstalling = service.uninstall(packageId);
     await removeStarted.promise;
-    expect(() => registry.open('renderer-1', { packageId, runtimeId: 'runtime-1' })).toThrow(/mutation.*active/i);
+    expect(() => registry.open('renderer-1', runtimeOpenRequest(packageId, 'runtime-1'))).toThrow(/mutation.*active/i);
 
     allowRemove.resolve();
     await expect(uninstalling).rejects.toThrow(/durable remove failed/i);
-    registry.open('renderer-1', { packageId, runtimeId: 'runtime-1' });
+    registry.open('renderer-1', runtimeOpenRequest(packageId, 'runtime-1'));
     expect(registry.isActive(packageId)).toBe(true);
   });
 
@@ -489,6 +947,89 @@ describe('package manager service', () => {
     expect((await service.status('com.tomni.studio')).state).toBe('available');
   });
 
+  it('prioritizes matching ready installed packages without returning unrelated installations', async () => {
+    const rootDir = await tempRoot();
+    const base = bundledCatalog()[0]!;
+    const installedIde: PackageCatalogEntry = {
+      ...base,
+      manifest: {
+        ...base.manifest,
+        id: 'org.example.zulu-ide',
+        name: 'Zulu IDE',
+        description: 'A development surface',
+        tags: ['development'],
+      },
+    };
+    const availableIde: PackageCatalogEntry = {
+      ...base,
+      manifest: {
+        ...base.manifest,
+        id: 'org.example.alpha-ide',
+        name: 'Alpha IDE',
+        description: 'A development surface',
+        tags: ['development'],
+      },
+    };
+    const unrelatedInstalled: PackageCatalogEntry = {
+      ...base,
+      manifest: {
+        ...base.manifest,
+        id: 'org.example.calendar',
+        name: 'Aardvark Calendar',
+        description: 'Schedule management',
+        modules: [{ id: 'calendar', title: 'Calendar', surface: 'apps/calendar', pinnable: true }],
+        tags: ['calendar'],
+      },
+    };
+    const service = createPackageManagerService({
+      rootDir,
+      appVersion: '1.2.0',
+      catalog: [installedIde, availableIde, unrelatedInstalled],
+    });
+    await service.initialize();
+    await service.install(installedIde.manifest.id);
+    await service.install(unrelatedInstalled.manifest.id);
+
+    expect((await service.search({ query: 'ide' })).map(({ manifest }) => manifest.id)).toEqual([
+      installedIde.manifest.id,
+      availableIde.manifest.id,
+    ]);
+  });
+
+  it('does not promote disabled installed packages above matching installable packages', async () => {
+    const rootDir = await tempRoot();
+    const base = bundledCatalog()[0]!;
+    const installedIde: PackageCatalogEntry = {
+      ...base,
+      manifest: {
+        ...base.manifest,
+        id: 'org.example.zulu-ide',
+        name: 'Zulu IDE',
+      },
+    };
+    const availableIde: PackageCatalogEntry = {
+      ...base,
+      manifest: {
+        ...base.manifest,
+        id: 'org.example.alpha-ide',
+        name: 'Alpha IDE',
+      },
+    };
+    const service = createPackageManagerService({
+      rootDir,
+      appVersion: '1.2.0',
+      catalog: [installedIde, availableIde],
+    });
+    await service.initialize();
+    await service.install(installedIde.manifest.id);
+    await service.disable(installedIde.manifest.id);
+
+    expect((await service.search({ query: 'ide' })).map(({ manifest }) => manifest.id)).toEqual([
+      availableIde.manifest.id,
+      installedIde.manifest.id,
+    ]);
+  });
+
   it('disables and re-enables an installed optional package without removing its durable installation', async () => {
     const rootDir = await tempRoot();
     const entry = bundledCatalog()[0]!;
@@ -505,6 +1046,187 @@ describe('package manager service', () => {
       enabled: true,
     });
     expect((await service.status(entry.manifest.id)).installedVersion).toBe(entry.manifest.version);
+  });
+
+  it('requires a live Store grant for paid package activation without changing free-package or technical trust paths', async () => {
+    const rootDir = await tempRoot();
+    const packageId = 'com.tomni.paid-workflow';
+    const baseManifest = bundledCatalog()[0]!.manifest;
+    const manifest: PackageManifest = {
+      ...baseManifest,
+      id: packageId,
+      name: 'Paid workflow',
+      version: '1.0.0',
+    };
+    const packageIdentity = {
+      packageId,
+      packageVersion: manifest.version,
+      publisherId: manifest.publisherId,
+    };
+    const paidLifecycle = (accountId = 'account-1') => ({
+      order: {
+        schemaVersion: 1,
+        orderId: 'order-1',
+        accountId,
+        offer: {
+          schemaVersion: 1,
+          offerId: 'offer-1',
+          productId: 'product-1',
+          package: packageIdentity,
+          sellerKind: 'first-party',
+          price: { currency: 'USD', amountMinor: 500 },
+          taxTreatment: 'exclusive',
+          revision: 'revision-1',
+          active: true,
+        },
+        state: 'paid',
+        idempotencyKey: `order-${accountId}`,
+        createdAt: '2030-01-01T00:00:00.000Z',
+        updatedAt: '2030-01-01T00:02:00.000Z',
+      },
+      paymentEvents: [
+        {
+          schemaVersion: 1,
+          paymentEventId: `authorized-${accountId}`,
+          orderId: 'order-1',
+          providerEventId: `provider-authorized-${accountId}`,
+          kind: 'authorized',
+          amount: { currency: 'USD', amountMinor: 500 },
+          idempotencyKey: `payment-authorized-${accountId}`,
+          occurredAt: '2030-01-01T00:01:00.000Z',
+        },
+        {
+          schemaVersion: 1,
+          paymentEventId: `captured-${accountId}`,
+          orderId: 'order-1',
+          providerEventId: `provider-captured-${accountId}`,
+          kind: 'captured',
+          amount: { currency: 'USD', amountMinor: 500 },
+          idempotencyKey: `payment-captured-${accountId}`,
+          occurredAt: '2030-01-01T00:02:00.000Z',
+        },
+      ],
+      refunds: [],
+      entitlement: {
+        schemaVersion: 1,
+        entitlementId: `entitlement-${accountId}`,
+        accountId,
+        offerId: 'offer-1',
+        package: packageIdentity,
+        state: 'active',
+        issuedAt: '2030-01-01T00:02:00.000Z',
+      },
+      activeGrant: {
+        schemaVersion: 1,
+        grantId: `grant-${accountId}`,
+        accountId,
+        offerId: 'offer-1',
+        package: packageIdentity,
+        entitlementId: `entitlement-${accountId}`,
+        policyVersion: 'store-policy-1',
+        expiresAt: '2031-01-01T00:00:00.000Z',
+      },
+    });
+    const refundedLifecycle = () => {
+      const lifecycle = paidLifecycle();
+      return {
+        ...lifecycle,
+        order: { ...lifecycle.order, state: 'refunded' as const, updatedAt: '2030-01-01T00:04:00.000Z' },
+        paymentEvents: [
+          ...lifecycle.paymentEvents,
+          {
+            schemaVersion: 1,
+            paymentEventId: 'refunded-payment-1',
+            orderId: 'order-1',
+            providerEventId: 'provider-refunded-1',
+            kind: 'refunded' as const,
+            amount: { currency: 'USD', amountMinor: 500 },
+            idempotencyKey: 'payment-refunded-1',
+            occurredAt: '2030-01-01T00:03:00.000Z',
+          },
+        ],
+        refunds: [
+          {
+            schemaVersion: 1,
+            refundId: 'refund-1',
+            orderId: 'order-1',
+            paymentEventId: 'captured-account-1',
+            amount: { currency: 'USD', amountMinor: 500 },
+            reasonCode: 'requested',
+            idempotencyKey: 'refund-request-1',
+            createdAt: '2030-01-01T00:04:00.000Z',
+          },
+        ],
+        entitlement: { ...lifecycle.entitlement, state: 'revoked' as const },
+        activeGrant: undefined,
+      };
+    };
+    const service = createPackageManagerService({
+      rootDir,
+      appVersion: '1.2.0',
+      catalog: [{ manifest, delivery: 'bundled-legacy', trust: 'trusted-first-party' }],
+      now: () => Date.parse('2029-01-01T00:00:00.000Z'),
+      paidPackageActivationRequirement: (entry) =>
+        entry.manifest.id === packageId ? { accountId: 'account-1', offerId: 'offer-1' } : undefined,
+    });
+    await service.initialize();
+
+    await expect(service.install(packageId)).rejects.toThrow(/acquisition grant/i);
+    await expect(service.install(packageId, { lifecycle: paidLifecycle('account-2') })).rejects.toThrow(
+      /acquisition grant/i
+    );
+    await expect(service.install(packageId, { lifecycle: refundedLifecycle() })).rejects.toThrow(/acquisition grant/i);
+    expect((await service.status(packageId)).state).toBe('available');
+
+    await expect(service.install(packageId, { lifecycle: paidLifecycle() })).resolves.toMatchObject({
+      state: 'installed',
+      enabled: true,
+      installedTrust: 'trusted-first-party',
+    });
+    await service.disable(packageId);
+    await expect(service.enable(packageId)).rejects.toThrow(/acquisition grant/i);
+    await expect(service.enable(packageId, { lifecycle: paidLifecycle() })).resolves.toMatchObject({ enabled: true });
+  });
+
+  it('fails closed when a signed paid catalog offer has no account-bound commercial authority', async () => {
+    const rootDir = await tempRoot();
+    const base = bundledCatalog()[0]!;
+    const entry: PackageCatalogEntry = {
+      ...base,
+      offer: {
+        schemaVersion: 1,
+        offerId: 'offer-paid-catalog-1',
+        productId: 'product-paid-catalog',
+        package: {
+          packageId: base.manifest.id,
+          packageVersion: base.manifest.version,
+          publisherId: base.manifest.publisherId,
+        },
+        sellerKind: 'first-party',
+        price: { currency: 'USD', amountMinor: 1 },
+        taxTreatment: 'exclusive',
+        revision: 'offer-revision-1',
+        active: true,
+      },
+    };
+    const service = createPackageManagerService({ rootDir, appVersion: '1.2.0', catalog: [entry] });
+    await service.initialize();
+
+    await expect(service.install(entry.manifest.id)).rejects.toThrow(/commercial authority/i);
+    await expect(service.status(entry.manifest.id)).resolves.toMatchObject({ offer: entry.offer, state: 'available' });
+
+    expect(() =>
+      createPackageManagerService({
+        rootDir: path.join(rootDir, 'mismatched-offer'),
+        appVersion: '1.2.0',
+        catalog: [
+          {
+            ...entry,
+            offer: { ...entry.offer!, package: { ...entry.offer!.package, packageVersion: '9.9.9' } },
+          },
+        ],
+      })
+    ).toThrow(/different package identity/i);
   });
 
   it('refuses to remove core packages or packages with an active sandbox', async () => {
@@ -716,6 +1438,112 @@ describe('package manager service', () => {
 
     await restarted.uninstall('org.example.wiki');
     expect((await restarted.contributions()).snapshot.subtabs).toEqual([]);
+  });
+
+  it('durably quarantines an exact Store-revoked Surface, removes it, and invalidates active sandbox runtimes', async () => {
+    const rootDir = await tempRoot();
+    const registry = createPackageRuntimeRegistry();
+    const baseEntry = contributionCatalog()[0]!;
+    const activeEntry: PackageCatalogEntry = {
+      ...baseEntry,
+      manifest: {
+        ...baseEntry.manifest,
+        modules: [{ ...baseEntry.manifest.modules[0]!, runtime: 'sandboxed-web', entrypoint: 'index.html' }],
+        artifact: {
+          integrity: `sha256-${'a'.repeat(64)}`,
+          sizeBytes: 0,
+          signature: { algorithm: 'ed25519', keyId: 'test-key', value: 'test-signature' },
+        },
+      },
+    };
+    let currentCatalog: PackageCatalogEntry[] = [activeEntry];
+    const createService = () =>
+      createPackageManagerService({
+        rootDir,
+        appVersion: '1.2.0',
+        catalog: currentCatalog,
+        catalogLoader: async () => currentCatalog,
+        isPackageSandboxActive: (packageId) => registry.isActive(packageId),
+        reservePackageSandboxMutation: (packageId) => registry.reserveMutation(packageId),
+        revokePackageSandbox: (packageId) => registry.revokePackage(packageId),
+      });
+    const service = createService();
+    await service.initialize();
+    await service.install(activeEntry.manifest.id);
+    expect((await service.contributions()).snapshot.apps).toEqual([
+      expect.objectContaining({ packageId: activeEntry.manifest.id, id: 'ide' }),
+    ]);
+    registry.open(
+      'renderer-1',
+      runtimeOpenRequest(activeEntry.manifest.id, 'ide-runtime', { ...activeEntry.manifest, moduleId: 'ide' })
+    );
+
+    currentCatalog = [
+      {
+        ...activeEntry,
+        revocation: {
+          schemaVersion: 1,
+          reasonCode: 'MALWARE_DETECTED',
+          revokedAt: '2030-01-01T00:00:00.000Z',
+        },
+      },
+    ];
+    await service.refreshCatalog();
+
+    await expect(service.status(activeEntry.manifest.id)).resolves.toMatchObject({
+      state: 'quarantined',
+      enabled: false,
+      lastError: 'PACKAGE_CATALOG_REVOKED',
+    });
+    expect((await service.contributions()).snapshot.apps).toEqual([]);
+    expect(registry.isActive(activeEntry.manifest.id)).toBe(false);
+    await expect(service.enable(activeEntry.manifest.id)).rejects.toThrow(/revoked by the Store catalog/i);
+
+    const restarted = createService();
+    await restarted.initialize();
+    await expect(restarted.status(activeEntry.manifest.id)).resolves.toMatchObject({
+      state: 'quarantined',
+      enabled: false,
+      lastError: 'PACKAGE_CATALOG_REVOKED',
+    });
+    expect((await restarted.contributions()).snapshot.apps).toEqual([]);
+  });
+
+  it('does not quarantine a different installed artifact that merely shares a revoked package identity and version', async () => {
+    const rootDir = await tempRoot();
+    const baseEntry = contributionCatalog()[0]!;
+    const installedEntry: PackageCatalogEntry = {
+      ...baseEntry,
+      manifest: { ...baseEntry.manifest, description: 'Installed artifact content.' },
+    };
+    const revokedCatalogEntry: PackageCatalogEntry = {
+      ...baseEntry,
+      revocation: {
+        schemaVersion: 1,
+        reasonCode: 'MALWARE_DETECTED',
+        revokedAt: '2030-01-01T00:00:00.000Z',
+      },
+    };
+    let currentCatalog = [installedEntry];
+    const service = createPackageManagerService({
+      rootDir,
+      appVersion: '1.2.0',
+      catalog: currentCatalog,
+      catalogLoader: async () => currentCatalog,
+    });
+    await service.initialize();
+    await service.install(installedEntry.manifest.id);
+
+    currentCatalog = [revokedCatalogEntry];
+    await service.refreshCatalog();
+
+    await expect(service.status(installedEntry.manifest.id)).resolves.toMatchObject({
+      state: 'installed',
+      enabled: true,
+    });
+    expect((await service.contributions()).snapshot.apps).toEqual([
+      expect.objectContaining({ packageId: installedEntry.manifest.id }),
+    ]);
   });
 
   it('isolates listener errors and sends immutable, non-sensitive lifecycle snapshots after durable commits', async () => {
@@ -1531,7 +2359,10 @@ describe('package manager service', () => {
     });
     await service.initialize();
     await service.install(sandboxVersionOne.manifest.id);
-    registry.open('renderer-1', { packageId: sandboxVersionOne.manifest.id, runtimeId: 'runtime-1' });
+    registry.open(
+      'renderer-1',
+      runtimeOpenRequest(sandboxVersionOne.manifest.id, 'runtime-1', { ...sandboxVersionOne.manifest, moduleId: 'ide' })
+    );
 
     remoteCatalog = [sandboxVersionTwo];
     await service.refreshCatalog();
@@ -1548,7 +2379,10 @@ describe('package manager service', () => {
       state: 'installed',
       installedVersion: '2.0.0',
     });
-    registry.open('renderer-1', { packageId: sandboxVersionOne.manifest.id, runtimeId: 'runtime-2' });
+    registry.open(
+      'renderer-1',
+      runtimeOpenRequest(sandboxVersionOne.manifest.id, 'runtime-2', { ...sandboxVersionOne.manifest, moduleId: 'ide' })
+    );
     expect(registry.isActive(sandboxVersionOne.manifest.id)).toBe(true);
   });
 
@@ -1565,7 +2399,9 @@ describe('package manager service', () => {
     const rootDir = await tempRoot();
     const sourceDirectory = await tempRoot();
     await mkdir(path.join(sourceDirectory, 'dist'), { recursive: true });
+    await mkdir(path.join(sourceDirectory, 'runtime'), { recursive: true });
     await writeFile(path.join(sourceDirectory, 'dist', 'main.js'), 'export const ready = true;\n');
+    await writeFile(path.join(sourceDirectory, 'runtime', 'sample.cjs'), 'process.exitCode = 0;\n');
     await writeFile(path.join(sourceDirectory, 'payload.bin'), Buffer.from([0xff, 0x00, 0x80]));
     await writeFile(path.join(sourceDirectory, 'index.html'), '<main>Sample</main>');
 
@@ -1648,6 +2484,8 @@ describe('package manager service', () => {
     let assetReadFileCalls = 0;
     let sandboxCheckReached = false;
     let releaseSandboxCheck: (() => void) | undefined;
+    let quiesceCalls = 0;
+    let releaseHeldRuntime: (() => void) | undefined;
     const service = createPackageManagerService({
       rootDir,
       appVersion: '1.2.0',
@@ -1681,9 +2519,28 @@ describe('package manager service', () => {
         return false;
       },
       reservePackageSandboxMutation: () => ({ release: () => undefined }),
+      quiescePackageRuntime: async () => {
+        quiesceCalls += 1;
+        releaseHeldRuntime?.();
+      },
     });
     await service.initialize();
     await service.install(manifest.id);
+
+    const runtimeLease = await service.acquireVerifiedRuntimeEntry(manifest.id, 'runtime/sample.cjs');
+    expect(runtimeLease.entryPath).toBe(
+      path.join(rootDir, 'packages', manifest.id, manifest.version, 'runtime', 'sample.cjs')
+    );
+    expect(runtimeLease.identity).toMatchObject({
+      packageId: manifest.id,
+      packageVersion: manifest.version,
+      publisherId: manifest.publisherId,
+      artifactIntegrity: manifest.artifact?.integrity,
+    });
+    await expect(service.acquireVerifiedRuntimeEntry(manifest.id, '../runtime/sample.cjs')).rejects.toThrow(
+      /path is invalid/i
+    );
+    runtimeLease.release();
 
     installedFile = path.join(rootDir, 'packages', manifest.id, manifest.version, 'dist', 'main.js');
     expect(await readFile(installedFile, 'utf8')).toContain('ready');
@@ -1729,6 +2586,9 @@ describe('package manager service', () => {
     await expect(service.readAsset(manifest.id, 'dist/main.js')).rejects.toThrow(/integrity/i);
     returnTamperedAssetAfterRestoringDisk = false;
     await service.install(manifest.id);
+    const heldRuntimeLease = await service.acquireVerifiedRuntimeEntry(manifest.id, 'runtime/sample.cjs');
+    releaseHeldRuntime = heldRuntimeLease.release;
+    const quiesceCallsBeforeUninstall = quiesceCalls;
     blockAssetRead = true;
     assetReadFileCalls = 0;
     const assetReadStarted = new Promise<void>((resolve) => {
@@ -1748,6 +2608,7 @@ describe('package manager service', () => {
     await expect(assetRead).resolves.toMatchObject({ content: expect.stringContaining('ready') });
     await expect(duplicateAssetRead).resolves.toMatchObject({ content: expect.stringContaining('ready') });
     await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(quiesceCalls).toBe(quiesceCallsBeforeUninstall + 1);
     expect(sandboxCheckReached).toBe(true);
     releaseSandboxCheck!();
     await expect(uninstall).resolves.toMatchObject({ state: 'available' });
@@ -2023,12 +2884,8 @@ describe('package manager service', () => {
 
   it('installs, opens, and fully removes every signed first-party application bundle', async () => {
     const rootDir = await tempRoot();
-    const packageIds = [
-      'com.tomni.design-studio',
-      'com.tomni.document-studio',
-      'com.tomni.ide',
-      'com.tomni.studio',
-    ] as const;
+    const packageIds = ['com.tomni.design-studio', 'com.tomni.document-studio', 'com.tomni.studio'] as const;
+
     const artifacts = new Map<string, Buffer>();
     for (const packageId of packageIds) {
       artifacts.set(
@@ -2078,10 +2935,10 @@ describe('package manager service', () => {
     }
   }, 60_000);
 
-  it('preserves the extracted IDE package through update, restart, disable, rollback, and uninstall', async () => {
+  it('preserves the extracted Document package through update, restart, disable, rollback, and uninstall', async () => {
     const rootDir = await tempRoot();
     const sourceBundle = JSON.parse(
-      await readFile(path.resolve('store-artifacts', 'com.tomni.ide-1.0.0.tomni-package.json'), 'utf8')
+      await readFile(path.resolve('store-artifacts', 'com.tomni.document-studio-1.0.0.tomni-package.json'), 'utf8')
     ) as {
       format: 'tomni-package-bundle-v1';
       manifest: PackageManifest;
@@ -2111,8 +2968,8 @@ describe('package manager service', () => {
       return Buffer.from(JSON.stringify({ ...sourceBundle, manifest }));
     };
     const artifacts = new Map([
-      ['/com.tomni.ide-1.0.0.tomni-package.json', artifactFor('1.0.0')],
-      ['/com.tomni.ide-1.1.0.tomni-package.json', artifactFor('1.1.0')],
+      ['/com.tomni.document-studio-1.0.0.tomni-package.json', artifactFor('1.0.0')],
+      ['/com.tomni.document-studio-1.1.0.tomni-package.json', artifactFor('1.1.0')],
     ]);
     const server = createServer((request, response) => {
       const artifact = artifacts.get(request.url ?? '');
@@ -2129,18 +2986,18 @@ describe('package manager service', () => {
     servers.push(server);
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
     const address = server.address();
-    if (!address || typeof address === 'string') throw new Error('IDE lifecycle package server did not start.');
+    if (!address || typeof address === 'string') throw new Error('Document lifecycle package server did not start.');
 
     let catalogVersion = '1.0.0';
     const catalogEntry = (): PackageCatalogEntry => {
       const manifest = JSON.parse(
-        artifacts.get(`/com.tomni.ide-${catalogVersion}.tomni-package.json`)!.toString('utf8')
+        artifacts.get(`/com.tomni.document-studio-${catalogVersion}.tomni-package.json`)!.toString('utf8')
       ).manifest as PackageManifest;
       return {
         manifest,
         delivery: 'downloaded-package',
         trust: 'signed-first-party',
-        artifactUrl: `http://127.0.0.1:${address.port}/com.tomni.ide-${catalogVersion}.tomni-package.json`,
+        artifactUrl: `http://127.0.0.1:${address.port}/com.tomni.document-studio-${catalogVersion}.tomni-package.json`,
       };
     };
     const createService = () =>
@@ -2155,8 +3012,11 @@ describe('package manager service', () => {
       });
     let service = createService();
     await service.initialize();
-    await expect(service.install('com.tomni.ide')).resolves.toMatchObject({ installedVersion: '1.0.0', enabled: true });
-    await expect(service.readAsset('com.tomni.ide', 'app.js')).resolves.toMatchObject({
+    await expect(service.install('com.tomni.document-studio')).resolves.toMatchObject({
+      installedVersion: '1.0.0',
+      enabled: true,
+    });
+    await expect(service.readAsset('com.tomni.document-studio', 'app.js')).resolves.toMatchObject({
       contentType: 'application/javascript',
     });
 
@@ -2164,21 +3024,23 @@ describe('package manager service', () => {
     await expect(service.refreshCatalog()).resolves.toEqual(
       expect.arrayContaining([expect.objectContaining({ installedVersion: '1.0.0', updateAvailable: true })])
     );
-    await expect(service.install('com.tomni.ide')).resolves.toMatchObject({
+    await expect(service.install('com.tomni.document-studio')).resolves.toMatchObject({
       installedVersion: '1.1.0',
       previousVersion: '1.0.0',
     });
     service = createService();
     await service.initialize();
-    await expect(service.disable('com.tomni.ide')).resolves.toMatchObject({ enabled: false });
-    await expect(service.enable('com.tomni.ide')).resolves.toMatchObject({ enabled: true });
-    await expect(service.rollback('com.tomni.ide')).resolves.toMatchObject({
+    await expect(service.disable('com.tomni.document-studio')).resolves.toMatchObject({ enabled: false });
+    await expect(service.enable('com.tomni.document-studio')).resolves.toMatchObject({ enabled: true });
+    await expect(service.rollback('com.tomni.document-studio')).resolves.toMatchObject({
       installedVersion: '1.0.0',
       previousVersion: '1.1.0',
     });
-    await expect(service.uninstall('com.tomni.ide')).resolves.toMatchObject({ state: 'available' });
-    await expect(service.readAsset('com.tomni.ide', 'app.js')).rejects.toThrow(/not installed/i);
-    await expect(access(path.join(rootDir, 'packages', 'com.tomni.ide'))).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(service.uninstall('com.tomni.document-studio')).resolves.toMatchObject({ state: 'available' });
+    await expect(service.readAsset('com.tomni.document-studio', 'app.js')).rejects.toThrow(/not installed/i);
+    await expect(access(path.join(rootDir, 'packages', 'com.tomni.document-studio'))).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
   }, 60_000);
 
   it('refuses to elevate a generic store-signed rollback payload into the protected Tomni namespace', async () => {
@@ -2598,7 +3460,7 @@ describe('package manager service', () => {
     await expect(readFile(outsideFile, 'utf8')).resolves.toBe('operator data');
   });
 
-  it('refuses to unlink a symlinked package root during uninstall', async () => {
+  it('quarantines a symlinked package root before uninstall can unlink it', async () => {
     const rootDir = await tempRoot();
     const outside = await tempRoot();
     const id = 'com.tomni.symlinked-package-root';
@@ -2648,10 +3510,14 @@ describe('package manager service', () => {
     });
     await service.initialize();
 
-    await expect(service.uninstall(id)).rejects.toThrow(/symbolic link/i);
+    await expect(service.uninstall(id)).resolves.toMatchObject({
+      state: 'quarantined',
+      enabled: false,
+      lastError: 'PACKAGE_PAYLOAD_INCONSISTENT',
+    });
 
     expect(record).toMatchObject({ state: 'quarantined', enabled: false });
-    await expect(access(packageRoot)).resolves.toBeUndefined();
+    await expect(access(packageRoot)).rejects.toMatchObject({ code: 'ENOENT' });
     await expect(readFile(outsideFile, 'utf8')).resolves.toBe('operator data');
   });
 
@@ -2944,5 +3810,134 @@ describe('package manager service', () => {
     await service.initialize();
 
     await expect(service.install('com.tomni.recursive')).rejects.toThrow(/outside the package installation root/i);
+  });
+
+  describe('publisher submission native bridge', () => {
+    type TestEvent = Readonly<{ id: string }>;
+    type TestHandler = (event: TestEvent, payload: unknown) => Promise<unknown>;
+
+    const createHarness = (
+      input: Readonly<{
+        trusted?: boolean;
+        account?: boolean;
+        available?: boolean;
+        choice?: Readonly<{ cancelled: boolean; filePath?: string }>;
+      }> = {}
+    ) => {
+      const handlers = new Map<string, TestHandler>();
+      const verifySender = vi.fn(() => input.trusted ?? true);
+      const requireAuthenticatedAccount = vi.fn(() => {
+        if (input.account === false) throw new Error('offline');
+      });
+      const isAvailable = vi.fn(() => input.available ?? true);
+      const chooseArchive = vi.fn(
+        async () => input.choice ?? { cancelled: false, filePath: 'C:\\MainOnly\\package.tomny' }
+      );
+      const staging = vi.fn(async (_filePath: string) => undefined);
+      const boundary = vi.fn(async (_idempotencyKey: string) => ({
+        submissionId: 'submission-1',
+        packageId: 'com.example.package',
+        version: '1.0.0',
+        status: 'human-review-required' as const,
+        submittedAt: '2026-08-20T00:00:00.000Z',
+      }));
+      const submit = vi.fn(async (request: Readonly<{ idempotencyKey: string; filePath: string }>) => {
+        await staging(request.filePath);
+        return boundary(request.idempotencyKey);
+      });
+      const dispose = registerTrustedPublisherSubmissionIpcBridge<TestEvent>({
+        host: {
+          handle: (channel, handler) => handlers.set(channel, handler),
+          removeHandler: (channel) => handlers.delete(channel),
+        },
+        verifySender,
+        requireAuthenticatedAccount,
+        isAvailable,
+        chooseArchive,
+        submit,
+      });
+      const handler = handlers.get(PUBLISHER_SUBMISSION_NATIVE_CHANNELS.pickAndSubmit);
+      if (!handler) throw new Error('publisher submission handler was not registered');
+      return {
+        handler,
+        verifySender,
+        requireAuthenticatedAccount,
+        isAvailable,
+        chooseArchive,
+        staging,
+        boundary,
+        submit,
+        dispose,
+      };
+    };
+
+    it('rejects renderer paths and untrusted/account/configured requests before the native picker', async () => {
+      const invalid = createHarness();
+      await expect(
+        invalid.handler({ id: 'renderer' }, { idempotencyKey: 'request-1', filePath: 'C:\\renderer\\package.tomny' })
+      ).resolves.toEqual({ ok: false, code: 'PUBLISHER_SUBMISSION_REQUEST_INVALID' });
+      expect(invalid.verifySender).not.toHaveBeenCalled();
+      expect(invalid.chooseArchive).not.toHaveBeenCalled();
+      invalid.dispose();
+
+      const untrusted = createHarness({ trusted: false });
+      await expect(untrusted.handler({ id: 'renderer' }, { idempotencyKey: 'request-1' })).resolves.toEqual({
+        ok: false,
+        code: 'PUBLISHER_SUBMISSION_SENDER_UNTRUSTED',
+      });
+      expect(untrusted.requireAuthenticatedAccount).not.toHaveBeenCalled();
+      expect(untrusted.chooseArchive).not.toHaveBeenCalled();
+      untrusted.dispose();
+
+      const noAccount = createHarness({ account: false });
+      await expect(noAccount.handler({ id: 'renderer' }, { idempotencyKey: 'request-1' })).resolves.toEqual({
+        ok: false,
+        code: 'PUBLISHER_SUBMISSION_ACCOUNT_REQUIRED',
+      });
+      expect(noAccount.isAvailable).not.toHaveBeenCalled();
+      expect(noAccount.chooseArchive).not.toHaveBeenCalled();
+      noAccount.dispose();
+
+      const unavailable = createHarness({ available: false });
+      await expect(unavailable.handler({ id: 'renderer' }, { idempotencyKey: 'request-1' })).resolves.toEqual({
+        ok: false,
+        code: 'PUBLISHER_SUBMISSION_UNAVAILABLE',
+      });
+      expect(unavailable.chooseArchive).not.toHaveBeenCalled();
+      unavailable.dispose();
+    });
+
+    it('uses Main-selected files for staging and the submission boundary, and keeps cancellation opaque', async () => {
+      const happy = createHarness();
+      await expect(happy.handler({ id: 'renderer' }, { idempotencyKey: 'request-1' })).resolves.toEqual({
+        ok: true,
+        receipt: {
+          submissionId: 'submission-1',
+          packageId: 'com.example.package',
+          version: '1.0.0',
+          status: 'human-review-required',
+          submittedAt: '2026-08-20T00:00:00.000Z',
+        },
+      });
+      expect(happy.staging).toHaveBeenCalledWith('C:\\MainOnly\\package.tomny');
+      expect(happy.boundary).toHaveBeenCalledWith('request-1');
+      happy.dispose();
+
+      const cancelled = createHarness({ choice: { cancelled: true } });
+      await expect(cancelled.handler({ id: 'renderer' }, { idempotencyKey: 'request-1' })).resolves.toEqual({
+        ok: false,
+        code: 'PUBLISHER_SUBMISSION_CANCELLED',
+      });
+      expect(cancelled.submit).not.toHaveBeenCalled();
+      cancelled.dispose();
+
+      const invalidChoice = createHarness({ choice: { cancelled: false, filePath: '' } });
+      await expect(invalidChoice.handler({ id: 'renderer' }, { idempotencyKey: 'request-1' })).resolves.toEqual({
+        ok: false,
+        code: 'PUBLISHER_SUBMISSION_FAILED',
+      });
+      expect(invalidChoice.submit).not.toHaveBeenCalled();
+      invalidChoice.dispose();
+    });
   });
 });

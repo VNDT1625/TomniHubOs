@@ -5,7 +5,13 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { findDeclarations, findReferences, isDeclarationLine, isIdentifier, wordAt } from '@/process/ide/nav/symbolNav';
+import {
+  findDeclarations,
+  findReferences,
+  isDeclarationLine,
+  isIdentifier,
+  wordAt,
+} from '@package-apps/ide/process/coding/nav/symbolNav';
 
 describe('isIdentifier', () => {
   it('accepts valid JS identifiers, rejects junk', () => {

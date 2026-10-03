@@ -2,6 +2,7 @@
   "pageTitle": "Omni - Đăng nhập",
   "brand": "Tomny",
   "subtitle": "Chào mừng trở lại, vui lòng đăng nhập vào tài khoản của bạn",
+
   "username": "Tên đăng nhập",
   "usernamePlaceholder": "Nhập tên đăng nhập",
   "password": "Mật khẩu",
@@ -21,6 +22,26 @@
     "tooManyAttempts": "Quá nhiều lần thử, vui lòng thử lại sau",
     "networkError": "Kết nối thất bại, vui lòng thử lại",
     "serverError": "Lỗi máy chủ, vui lòng thử lại sau",
-    "unknown": "Đăng nhập thất bại, vui lòng thử lại"
-  }
+    "unknown": "Đăng nhập thất bại, vui lòng thử lại",
+    "passwordMismatch": "Mật khẩu xác nhận không trùng khớp",
+    "usernameLength": "Tên đăng nhập phải có ít nhất 3 ký tự",
+    "passwordLength": "Mật khẩu phải có ít nhất 6 ký tự",
+    "userExists": "Tên đăng nhập đã tồn tại"
+  },
+  "tabLogin": "Đăng nhập",
+  "tabRegister": "Đăng ký",
+  "registerSubtitle": "Tạo tài khoản mới để bắt đầu trải nghiệm",
+  "confirmPassword": "Xác nhận mật khẩu",
+  "confirmPasswordPlaceholder": "Nhập lại mật khẩu",
+  "registerSubmit": "Đăng ký tài khoản",
+  "registerSubmitting": "Đang đăng ký...",
+  "registerSuccess": "Đăng ký thành công! Đang chuyển hướng...",
+  "switchToRegisterPrompt": "Chưa có tài khoản?",
+  "switchToRegister": "Đăng ký ngay",
+  "switchToLoginPrompt": "Đã có tài khoản?",
+  "switchToLogin": "Đăng nhập ngay",
+
+  "emailOrUsername": "Email hoặc Tên đăng nhập",
+  "emailOrUsernamePlaceholder": "Nhập email hoặc tên đăng nhập",
+  "supabaseBadge": "Xác thực Supabase Cloud"
 }

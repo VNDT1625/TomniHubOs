@@ -16,7 +16,7 @@ import {
   lineFromOffset,
   resolveCoverageUrl,
   type CoverageCdpSend,
-} from '@/process/ide/quickTestCoverage';
+} from '@package-apps/ide/process/execution/quickTest/analysis/quickTestCoverage';
 
 describe('resolveCoverageUrl', () => {
   it('keeps the user’s own source files as repo-relative paths', () => {

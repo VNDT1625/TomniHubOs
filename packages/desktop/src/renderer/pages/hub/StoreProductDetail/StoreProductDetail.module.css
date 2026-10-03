@@ -97,6 +97,51 @@
   gap: 8px;
 }
 
+.paymentNotice {
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.aiAccessList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.aiAccessOperation {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--surface-glass-border);
+  border-radius: 10px;
+  background: var(--surface-glass-subtle);
+}
+
+.aiAccessOperation > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.aiAccessOperation strong {
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.aiAccessOperation span {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .metrics {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

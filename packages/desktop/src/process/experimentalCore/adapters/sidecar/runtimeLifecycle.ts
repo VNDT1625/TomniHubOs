@@ -56,6 +56,9 @@ export class RustSidecarLifecycle {
   }
 
   async start(): Promise<boolean> {
+    // Account-scoped execution may suspend the shared process on sign-out. A
+    // subsequent verified session is allowed to start the same lifecycle again.
+    this.stopped = false;
     return (await this.getOrStartClient()) !== null;
   }
 
@@ -115,6 +118,9 @@ export class RustSidecarLifecycle {
   }
 
   async stop(): Promise<void> {
+    // This is a reversible suspension for the Main-owned singleton. The app
+    // disposal path also clears the singleton, while an account re-login calls
+    // start() to create a fresh client when needed.
     this.stopped = true;
     const client = this.client;
     this.client = null;

@@ -6,20 +6,26 @@ import {
   readQuickTestAssetState,
   writeQuickTestAssetState,
   type QuickTestAssetState,
-} from '../../ide/quickTestAssetBridge';
+} from '@package-apps/ide/process/execution/quickTest/bridges/quickTestAssetBridge';
 import {
   createReplayScenario,
   replayScenario,
   type ReplayPageAdapter,
   type ReplayRunResult,
   type ReplayScenario,
-} from '../../ide/quickTestReplay';
-import { createQuickTestTracer, type QuickTestTracer, type RuntimeTrace } from '../../ide/quickTestTracer';
-import { resolveRunPlanResponse, type RunPlanResponse } from '../../ide/runTarget/runTargetBridge';
-import type { RunService } from '../../ide/runTarget/runTargetPlanner';
+} from '@package-apps/ide/process/execution/quickTest/analysis/quickTestReplay';
+import {
+  createQuickTestTracer,
+  type QuickTestTracer,
+  type RuntimeTrace,
+} from '@package-apps/ide/process/execution/quickTest/runtime/quickTestTracer';
+import {
+  resolveRunPlanResponse,
+  type RunPlanResponse,
+} from '@package-apps/ide/process/execution/runTarget/runTargetBridge';
+import type { RunService } from '@package-apps/ide/process/execution/runTarget/runTargetPlanner';
 import { createAppLauncher, type RunningApp } from '../../testing/appLauncher';
 import type { AppUnderTest, ServiceSpec } from '../../testing/testingTypes';
-import type { ITerminalManager } from '../../terminal/terminalManager';
 
 export type QuickTestStartMode = 'frontend' | 'full' | 'services';
 
@@ -114,71 +120,6 @@ const serviceSpec = (rootPath: string, service: RunService): ServiceSpec => ({
   command: service.command,
   cwd: absoluteCwd(rootPath, service.cwd),
 });
-
-/** Launch repo commands in the shared IDE terminal manager so output remains visible and attachable. */
-export const createTerminalQuickTestLauncher = (
-  manager: ITerminalManager,
-  options: { probe?: (url: string) => Promise<boolean>; sleep?: (ms: number) => Promise<void> } = {}
-): QuickTestLifecycleLauncher => {
-  const probe =
-    options.probe ??
-    (async (url: string): Promise<boolean> => {
-      try {
-        await fetch(url, { signal: AbortSignal.timeout(2500) });
-        return true;
-      } catch {
-        return false;
-      }
-    });
-  const sleep = options.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
-
-  return {
-    start: async (app) => {
-      const commands = [
-        ...(app.services ?? []).map((service) => ({
-          name: service.name || 'Quick Test service',
-          command: service.command,
-          cwd: service.cwd,
-        })),
-        ...(app.command ? [{ name: 'Quick Test app', command: app.command, cwd: app.cwd }] : []),
-      ];
-      const terminalSessionIds: string[] = [];
-      const stopOwned = (): void => {
-        const known = new Set(manager.list().map((session) => session.id));
-        for (const id of terminalSessionIds) {
-          if (known.has(id)) manager.remove(id);
-        }
-      };
-      try {
-        for (const command of commands) {
-          const terminal = manager.create({ cwd: command.cwd, title: command.name });
-          terminalSessionIds.push(terminal.id);
-          manager.write(terminal.id, `${command.command}\r`);
-        }
-        const url = app.url?.trim() ?? '';
-        if (url) {
-          const deadline = Date.now() + (app.readyTimeoutMs ?? 60_000);
-          while (!(await probe(url))) {
-            if (Date.now() >= deadline) throw new Error(`The app did not become reachable at ${url}.`);
-            await sleep(500);
-          }
-        }
-        return {
-          url,
-          terminalSessionIds,
-          isRunning: () => {
-            const owned = new Set(terminalSessionIds);
-            return manager.list().some((session) => owned.has(session.id) && session.status === 'running');
-          },
-          stop: async () => stopOwned(),
-        };
-      } catch (error) {
-        stopOwned();
-        throw error;
-      }
-    },
-  };
-};
 
 const selectServices = (plan: RunPlanResponse, mode: QuickTestStartMode, serviceIds: string[]): RunService[] => {
   const services = plan.plan.services;

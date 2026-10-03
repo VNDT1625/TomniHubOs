@@ -11,8 +11,8 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import { delimiter, dirname } from 'node:path';
-import type { IPtyBackend, PtyProcess, PtySpawnOptions } from '@/process/terminal/ptyBackend';
-import { createTerminalManager, withMtuiPathEnv } from '@/process/terminal/terminalManager';
+import type { IPtyBackend, PtyProcess, PtySpawnOptions } from '@process/ideTerminal/ptyBackend';
+import { createTerminalManager, withMtuiPathEnv } from '@process/ideTerminal/terminalManager';
 
 /** A controllable fake PTY process the test can push data into / exit. */
 type FakeProc = PtyProcess & {

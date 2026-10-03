@@ -7,7 +7,7 @@
 import { ipcBridge } from '@/common';
 import type { AgentMetadata } from '@/renderer/utils/model/agentTypes';
 import { DETECTED_AGENTS_SWR_KEY, fetchDetectedAgents } from '@/renderer/utils/model/agentTypes';
-import useSWR, { mutate } from 'swr';
+import useSWR, { mutate, type SWRConfiguration } from 'swr';
 
 export type UseAgentsResult = {
   agents: AgentMetadata[];
@@ -19,6 +19,13 @@ export type UseAgentsResult = {
   refreshCustomAgents: () => Promise<void>;
 };
 
+export const AGENTS_SWR_OPTIONS: SWRConfiguration<AgentMetadata[], Error> = {
+  revalidateOnFocus: false,
+  revalidateOnReconnect: false,
+  dedupingInterval: 15_000,
+  shouldRetryOnError: false,
+};
+
 /**
  * Canonical React hook for reading detected agents. All components/hooks that
  * need `/api/agents` data must consume this instead of calling
@@ -27,7 +34,11 @@ export type UseAgentsResult = {
  * same `DETECTED_AGENTS_SWR_KEY`.
  */
 export const useAgents = (): UseAgentsResult => {
-  const { data, isLoading, error } = useSWR<AgentMetadata[]>(DETECTED_AGENTS_SWR_KEY, fetchDetectedAgents);
+  const { data, isLoading, error } = useSWR<AgentMetadata[]>(
+    DETECTED_AGENTS_SWR_KEY,
+    fetchDetectedAgents,
+    AGENTS_SWR_OPTIONS
+  );
 
   return {
     agents: data ?? [],

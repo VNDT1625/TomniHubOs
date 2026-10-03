@@ -1,4 +1,4 @@
-﻿import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   createWindowsCreatorSandboxExecutionLifecycle,
   type WindowsCreatorSandboxLifecycleEvent,
@@ -47,10 +47,7 @@ describe('Windows Creator Preview execution lifecycle', () => {
   it('terminates every active execution exactly once when the native process exits unexpectedly', async () => {
     const events: WindowsCreatorSandboxLifecycleEvent[] = [];
     const lifecycle = createWindowsCreatorSandboxExecutionLifecycle({
-      createExecutionId: vi
-        .fn()
-        .mockReturnValueOnce('execution-preview-1')
-        .mockReturnValueOnce('execution-preview-2'),
+      createExecutionId: vi.fn().mockReturnValueOnce('execution-preview-1').mockReturnValueOnce('execution-preview-2'),
       onEvent: (event) => events.push(event),
     });
     const firstSession = lifecycle.openSession({ sessionId: 'sandbox-preview-1', ownerId: 'owner-a' });

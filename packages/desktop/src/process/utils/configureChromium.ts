@@ -17,6 +17,15 @@ import { applyGpuRecoveryFlags } from './gpuRecovery';
 // Note: getPlatformServices() auto-registration also applies this as a safety net
 // in case Rollup loads initStorage's chunk before this module runs.
 // 开发模式下设置独立 app 名称，userData 目录将与正式版隔离，允许同时运行
+// Release verifier profiles must be isolated before any storage path is resolved.
+const cleanMachineProfile = process.env.TOMNY_CLEAN_MACHINE_PROFILE_DIR;
+if (process.env.TOMNY_CLEAN_MACHINE === '1' && cleanMachineProfile) {
+  if (!path.isAbsolute(cleanMachineProfile) || cleanMachineProfile.includes('\0')) {
+    throw new Error('TOMNY_CLEAN_MACHINE_PROFILE_DIR must be an absolute path.');
+  }
+  app.setPath('userData', path.resolve(cleanMachineProfile));
+}
+
 if (!app.isPackaged) {
   const devAppName = getDevAppName();
   app.setName(devAppName);

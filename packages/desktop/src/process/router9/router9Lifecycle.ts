@@ -9,8 +9,6 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { getManagedRouter9Service } from './managedRouter9';
-
 const JOURNAL_FILE = 'cli-config-recovery.json';
 const JOURNAL_SCHEMA_VERSION = 1;
 
@@ -276,9 +274,8 @@ type Router9ShutdownDeps = {
 
 const defaultShutdownDeps: Router9ShutdownDeps = {
   beginConfigShutdown: () => router9ConfigSession.beginShutdown(),
-  stopManagedGateway: async () => {
-    await getManagedRouter9Service().shutdown();
-  },
+  stopManagedGateway: async () => undefined,
+
   restoreConfigs: () => router9ConfigSession.restore(),
 };
 

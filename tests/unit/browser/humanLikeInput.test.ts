@@ -34,8 +34,8 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import type { InputSink, MouseButton, Point, Rng, Sleep } from '@/process/browser/humanLikeInput';
-import { createHumanLikeInput, createSeededRng, generateBezierPath } from '@/process/browser/humanLikeInput';
+import type { InputSink, MouseButton, Point, Rng, Sleep } from '@process/browser/humanLikeInput';
+import { createHumanLikeInput, createSeededRng, generateBezierPath } from '@process/browser/humanLikeInput';
 
 // --- Deterministic property-testing harness (no external deps) -------------
 

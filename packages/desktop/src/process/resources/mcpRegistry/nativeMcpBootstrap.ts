@@ -1,8 +1,7 @@
-import type { IMcpServer, IProvider } from '@/common/config/storage';
+import type { IMcpServer } from '@/common/config/storage';
 import { BUILTIN_IMAGE_GEN_NAME } from '@/common/config/storage';
-import { removeImageGenerationEnvKeys, resolveImageGenerationMcpEnv } from '@/common/config/imageGenerationMcpEnv';
-import { listReadyProviders } from '@process/services/tomnyProviderBridge';
-import { ProcessConfig, getBuiltinMcpScriptPath } from '@process/utils/initStorage';
+import { removeImageGenerationEnvKeys } from '@/common/config/imageGenerationMcpEnv';
+import { getBuiltinMcpScriptPath } from '@process/utils/initStorage';
 import { ensureLegacyMcpImported, getMcpRegistry } from './mcpRegistryBridge';
 
 const BUILTIN_CHROME_DEVTOOLS_NAME = 'chrome-devtools';
@@ -53,10 +52,6 @@ export const createCoreNativeMcpRegistrars = (): NativeMcpRegistrar[] => [
     run: async () => (await import('@process/system/registerSystemInfoMcp')).ensureSystemInfoMcpRegistered(),
   },
   {
-    name: 'automation',
-    run: async () => (await import('@process/automation/registerAutomationMcp')).ensureAutomationMcpRegistered(),
-  },
-  {
     name: 'realtime-knowledge',
     run: async () =>
       (await import('@process/knowledge/registerRealtimeKnowledgeMcp')).ensureRealtimeKnowledgeMcpRegistered(),
@@ -75,22 +70,23 @@ const chromeServer = (): Partial<IMcpServer> & Pick<IMcpServer, 'name' | 'transp
   };
 };
 
-const imageServer = async (
-  existing: IMcpServer | undefined,
-  providers: IProvider[]
-): Promise<Partial<IMcpServer> & Pick<IMcpServer, 'name' | 'transport'>> => {
-  const config = await ProcessConfig.get('tools.imageGenerationModel').catch((): undefined => undefined);
+/**
+ * A stdio child cannot receive a BYOK credential until it uses a Main-owned
+ * governed request protocol. Scrub legacy transport values and keep the route
+ * disabled rather than resolving a provider secret into the child environment.
+ */
+export const createDisabledNativeImageMcpServer = (
+  existing: IMcpServer | undefined
+): Partial<IMcpServer> & Pick<IMcpServer, 'name' | 'transport'> => {
   const existingEnv = existing?.transport.type === 'stdio' ? existing.transport.env : undefined;
-  const resolution = resolveImageGenerationMcpEnv(config, providers, existingEnv);
   const scriptPath = getBuiltinMcpScriptPath('builtin-mcp-image-gen');
-  const env = resolution.ok
-    ? { ...removeImageGenerationEnvKeys(existingEnv ?? {}), ...resolution.env }
-    : (existingEnv ?? {});
+  const env = removeImageGenerationEnvKeys(existingEnv ?? {});
   const transport = { type: 'stdio' as const, command: 'node', args: [scriptPath], env };
   return {
     name: BUILTIN_IMAGE_GEN_NAME,
-    description: 'Built-in image generation tool powered by AI models. Configure the model in Settings > Tools.',
-    enabled: existing?.enabled ?? (config?.switch === true && resolution.ok),
+    description:
+      'Built-in image generation is unavailable until its governed provider execution protocol is installed.',
+    enabled: false,
     builtin: true,
     transport,
     original_json: JSON.stringify(
@@ -110,8 +106,7 @@ export const ensureNativeDefaultMcpServers = async (): Promise<void> => {
   await ensureLegacyMcpImported(registry);
   const existing = await registry.list();
   const byName = new Map(existing.map((server) => [server.name, server]));
-  const providers = await listReadyProviders().catch((): IProvider[] => []);
-  const defaults = [chromeServer(), await imageServer(byName.get(BUILTIN_IMAGE_GEN_NAME), providers)];
+  const defaults = [chromeServer(), createDisabledNativeImageMcpServer(byName.get(BUILTIN_IMAGE_GEN_NAME))];
 
   for (const draft of defaults) {
     const current = byName.get(draft.name);
@@ -123,6 +118,7 @@ export const ensureNativeDefaultMcpServers = async (): Promise<void> => {
     }
     const needsRefresh =
       current.builtin !== true ||
+      current.enabled !== draft.enabled ||
       !sameTransport(current.transport, draft.transport) ||
       current.original_json !== draft.original_json;
     if (!needsRefresh) continue;
@@ -133,6 +129,11 @@ export const ensureNativeDefaultMcpServers = async (): Promise<void> => {
       original_json: draft.original_json,
       builtin: true,
     });
+    if (current.enabled !== draft.enabled) {
+      // The registry only exposes a bounded toggle for enabled state.
+      // eslint-disable-next-line no-await-in-loop
+      await registry.toggle(current.id);
+    }
   }
 };
 

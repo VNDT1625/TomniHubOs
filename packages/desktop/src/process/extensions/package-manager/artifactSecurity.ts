@@ -74,8 +74,7 @@ export const computeArtifactIntegrity = async (
   for (const file of files) {
     hash.update(file.relativePath);
     hash.update('\0');
-    const overriddenContent =
-      contentOverride?.relativePath === file.relativePath ? contentOverride.content : undefined;
+    const overriddenContent = contentOverride?.relativePath === file.relativePath ? contentOverride.content : undefined;
     if (overriddenContent !== undefined) hash.update(overriddenContent, 'utf8');
     else for await (const chunk of createReadStream(file.absolutePath)) hash.update(chunk);
     hash.update('\0');

@@ -5,9 +5,16 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import { createWorkflowEngine } from '@/process/automation/workflowEngine';
+import { createWorkflowEngine as createRawWorkflowEngine } from '@/process/automation/workflowEngine';
 import type { NodeExecutorMap } from '@/process/automation/nodeExecutors';
 import type { RunEvent, Workflow, WorkflowCheckpoint, WorkflowNode } from '@/process/automation/automationTypes';
+
+/** Existing interpreter tests exercise behavior after a Main-owned admission. */
+const createWorkflowEngine = (deps: Parameters<typeof createRawWorkflowEngine>[0]) =>
+  createRawWorkflowEngine({
+    egressAuthority: { authorizeExternalEgress: () => undefined },
+    ...deps,
+  });
 
 /** Build a workflow from a list of nodes. */
 const workflow = (nodes: WorkflowNode[]): Workflow => ({

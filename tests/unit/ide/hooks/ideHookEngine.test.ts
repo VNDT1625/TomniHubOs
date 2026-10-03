@@ -5,9 +5,9 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { computeHookFirings, isHookRunnable, manualFiring } from '@/process/ide/hooks/ideHookEngine';
-import type { IdeHook } from '@/process/ide/hooks/ideHookTypes';
-import type { RepoChangeEvent } from '@/process/ide/understandTypes';
+import { computeHookFirings, isHookRunnable, manualFiring } from '@package-apps/ide/process/coding/hooks/ideHookEngine';
+import type { IdeHook } from '@package-apps/ide/process/coding/hooks/ideHookTypes';
+import type { RepoChangeEvent } from '@package-apps/ide/process/knowledge/graph/understandTypes';
 
 const hook = (over: Partial<IdeHook>): IdeHook => ({
   id: over.id ?? 'h1',

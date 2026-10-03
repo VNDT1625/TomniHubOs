@@ -141,11 +141,11 @@ const buildFiles = (target: ConnectorTarget, endpoint: Router9Endpoint, baseUrl:
         content: json({
           models: {
             providers: {
-              '9router': {
+              tomni_gateway: {
                 baseUrl,
                 apiKey: endpoint.apiKey,
                 api: 'openai-completions',
-                models: [{ id: modelId, name: `9Router · ${modelId}` }],
+                models: [{ id: modelId, name: `Tomny Model Gateway · ${modelId}` }],
               },
             },
           },

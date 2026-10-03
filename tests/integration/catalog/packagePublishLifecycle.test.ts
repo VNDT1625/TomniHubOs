@@ -3,6 +3,7 @@ import { access, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promise
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
+import JSZip from 'jszip';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { PackageCatalogEntry } from '@/common/packages';
 import { createPackageManagerService } from '@process/extensions/package-manager';
@@ -14,11 +15,19 @@ import {
   signRemotePackageCatalog,
   type RemotePackageCatalogDocument,
 } from '@process/extensions/package-manager/remoteCatalog';
+import { decideAutomatedPackageReview } from '@process/extensions/package-manager/catalog-federation/validation';
 import { buildPackageProject, type PackageBuildResult } from '../../../scripts/package-apps/packageProject';
+import {
+  assertPackageArtifactApprovedForPublication,
+  assertPackageAppSurfaceForPublication,
+  createPublicationReviewRecord,
+  inspectPackageArtifactForAutomatedReview,
+} from '../../../scripts/package-apps/publish';
 import { loadPublishCatalog, mergePublishCatalog } from '../../../scripts/package-apps/publishCatalog';
 
 const roots: string[] = [];
 const servers: Server[] = [];
+const globalFetchRestorers: Array<() => void> = [];
 
 const closeServer = (server: Server): Promise<void> =>
   new Promise((resolve, reject) => {
@@ -26,6 +35,7 @@ const closeServer = (server: Server): Promise<void> =>
   });
 
 afterEach(async () => {
+  for (const restore of globalFetchRestorers.splice(0)) restore();
   await Promise.all(servers.splice(0).map(closeServer));
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
@@ -74,14 +84,23 @@ const startTestReleaseStore = async (): Promise<TestReleaseStore> => {
   const address = server.address();
   if (!address || typeof address === 'string') throw new Error('Test release store did not start.');
   const localOrigin = `http://127.0.0.1:${address.port}`;
+  const nativeFetch = globalThis.fetch;
   const resolveToLocalUrl = (url: string): string => {
     const remote = new URL(url);
     return new URL(`${remote.pathname}${remote.search}`, localOrigin).toString();
   };
   const fetcher: typeof fetch = async (input, init) => {
     const remote = typeof input === 'string' ? new URL(input) : input instanceof URL ? input : new URL(input.url);
-    return fetch(resolveToLocalUrl(remote.toString()), init);
+    const response = await nativeFetch(resolveToLocalUrl(remote.toString()), init);
+    // The loopback object store is a transport shim, not an HTTP redirect. Preserve
+    // the pinned logical endpoint so the catalog loader can still detect real redirects.
+    Object.defineProperty(response, 'url', { value: remote.toString() });
+    return response;
   };
+  globalThis.fetch = fetcher;
+  globalFetchRestorers.push(() => {
+    if (globalThis.fetch === fetcher) globalThis.fetch = nativeFetch;
+  });
   return {
     fetcher,
     resolveToLocalUrl,
@@ -114,6 +133,10 @@ const createPackageProject = async (root: string, id: string, name: string): Pro
           entrypoint: 'index.html',
         },
       ],
+      contributions: {
+        version: 1,
+        apps: [{ id: 'main', title: name, moduleId: 'main' }],
+      },
       permissions: [],
       dependencies: [],
       tags: ['e2e'],
@@ -142,6 +165,9 @@ type PublishedFixture = {
   catalogUrl: string;
   publicKey: string;
   target: PackageCatalogEntry;
+  targetArtifactPath: string;
+  privateKeyPath: string;
+  keyId: string;
 };
 
 const publishFixture = async (): Promise<PublishedFixture> => {
@@ -207,7 +233,24 @@ const publishFixture = async (): Promise<PublishedFixture> => {
   );
   parseRemotePackageCatalog(publishedDocument, trustedKeys);
   await store.fetcher(catalogUrl, { method: 'PUT', body: JSON.stringify(publishedDocument) });
-  return { root, store, catalogUrl, publicKey, target };
+  return {
+    root,
+    store,
+    catalogUrl,
+    publicKey,
+    target,
+    targetArtifactPath: targetResult.artifactPath,
+    privateKeyPath,
+    keyId,
+  };
+};
+
+const readReviewEntriesFromSignedArtifact = async (artifactPath: string) => {
+  const archive = await JSZip.loadAsync(await readFile(artifactPath));
+  const files = Object.values(archive.files)
+    .filter((entry) => !entry.dir && entry.name !== 'tomny-package.json')
+    .toSorted((left, right) => left.name.localeCompare(right.name));
+  return Promise.all(files.map(async (entry) => ({ name: entry.name, content: await entry.async('nodebuffer') })));
 };
 
 const createRemoteClient = async ({ root, store, catalogUrl, publicKey }: PublishedFixture) => {
@@ -236,29 +279,182 @@ const createRemoteClient = async ({ root, store, catalogUrl, publicKey }: Publis
 };
 
 describe('account-free Store publish lifecycle', () => {
-  it('builds and signs a package, merges it into the catalog, then lets another client install, read and remove it', async () => {
+  it('binds automated and reviewer approval to the exact signed artifact contents and manifest', async () => {
+    const fixture = await publishFixture();
+    const staticEntries = await readReviewEntriesFromSignedArtifact(fixture.targetArtifactPath);
+
+    expect(
+      assertPackageArtifactApprovedForPublication(fixture.target.manifest, staticEntries, undefined)
+    ).toMatchObject({
+      disposition: 'auto-approved',
+    });
+    expect(() =>
+      assertPackageAppSurfaceForPublication({
+        ...fixture.target.manifest,
+        contributions: { version: 1, apps: [] },
+      })
+    ).toThrow(/exactly one module-backed Surface/i);
+
+    const reviewedProjectDirectory = await createPackageProject(
+      fixture.root,
+      'com.example.reviewed',
+      'Reviewed package'
+    );
+    await writeFile(path.join(reviewedProjectDirectory, 'payload', 'index.js'), 'fetch("https://example.test")');
+    const reviewedArtifact = await buildPackageProject({
+      projectDirectory: reviewedProjectDirectory,
+      outputDirectory: path.join(fixture.root, 'review-output'),
+      privateKeyPath: fixture.privateKeyPath,
+      keyId: fixture.keyId,
+    });
+    const reviewEntries = await readReviewEntriesFromSignedArtifact(reviewedArtifact.artifactPath);
+    const decision = decideAutomatedPackageReview({
+      manifest: reviewedArtifact.manifest,
+      inspection: inspectPackageArtifactForAutomatedReview(reviewEntries),
+    });
+    expect(decision.disposition).toBe('human-review-required');
+
+    expect(() =>
+      assertPackageArtifactApprovedForPublication(reviewedArtifact.manifest, reviewEntries, undefined)
+    ).toThrow(decision.fingerprint);
+    expect(() =>
+      assertPackageArtifactApprovedForPublication(
+        reviewedArtifact.manifest,
+        reviewEntries,
+        `${decision.fingerprint}-changed`
+      )
+    ).toThrow(/REVIEW_FINGERPRINT_CHANGED/);
+    expect(
+      assertPackageArtifactApprovedForPublication(reviewedArtifact.manifest, reviewEntries, decision.fingerprint)
+    ).toMatchObject({ fingerprint: decision.fingerprint });
+    expect(() =>
+      createPublicationReviewRecord(
+        decision,
+        reviewedArtifact.manifest.artifact!.integrity,
+        '2030-01-01T00:00:00.000Z',
+        undefined
+      )
+    ).toThrow(/reviewer identity/i);
+    expect(
+      createPublicationReviewRecord(
+        decision,
+        reviewedArtifact.manifest.artifact!.integrity,
+        '2030-01-01T00:00:00.000Z',
+        'reviewer@example.com'
+      )
+    ).toEqual({
+      schemaVersion: 2,
+      disposition: 'human-approved',
+      fingerprint: decision.fingerprint,
+      artifactIntegrity: reviewedArtifact.manifest.artifact!.integrity,
+      reviewedAt: '2030-01-01T00:00:00.000Z',
+      reviewerId: 'reviewer@example.com',
+    });
+
+    await writeFile(
+      path.join(reviewedProjectDirectory, 'payload', 'index.js'),
+      'fetch("https://changed.example.test")'
+    );
+    const changedArtifact = await buildPackageProject({
+      projectDirectory: reviewedProjectDirectory,
+      outputDirectory: path.join(fixture.root, 'changed-review-output'),
+      privateKeyPath: fixture.privateKeyPath,
+      keyId: fixture.keyId,
+    });
+    const changedArtifactEntries = await readReviewEntriesFromSignedArtifact(changedArtifact.artifactPath);
+    const changedArtifactDecision = decideAutomatedPackageReview({
+      manifest: changedArtifact.manifest,
+      inspection: inspectPackageArtifactForAutomatedReview(changedArtifactEntries),
+    });
+    expect(changedArtifactDecision.fingerprint).not.toBe(decision.fingerprint);
+    expect(() =>
+      assertPackageArtifactApprovedForPublication(
+        changedArtifact.manifest,
+        changedArtifactEntries,
+        decision.fingerprint
+      )
+    ).toThrow(changedArtifactDecision.fingerprint);
+
+    const changedManifest = { ...reviewedArtifact.manifest, version: '1.0.1' };
+    const changedManifestDecision = decideAutomatedPackageReview({
+      manifest: changedManifest,
+      inspection: inspectPackageArtifactForAutomatedReview(reviewEntries),
+    });
+    expect(changedManifestDecision.fingerprint).not.toBe(decision.fingerprint);
+    expect(() =>
+      assertPackageArtifactApprovedForPublication(changedManifest, reviewEntries, decision.fingerprint)
+    ).toThrow(changedManifestDecision.fingerprint);
+  });
+
+  it('keeps a fresh package root Surface-free until signed install, then removes its artifact and Surface across restart recovery', async () => {
     const fixture = await publishFixture();
     const service = await createRemoteClient(fixture);
+    const packageId = fixture.target.manifest.id;
+    const packageDirectory = path.join(fixture.root, 'client', 'packages', 'packages', packageId);
+    const expectedSurface = {
+      id: 'main',
+      title: 'Published package',
+      moduleId: 'main',
+      key: `${packageId}/main`,
+      packageId,
+      packageVersion: '1.0.0',
+    };
 
-    expect((await service.search({ query: fixture.target.manifest.id })).map(({ manifest }) => manifest.id)).toEqual([
-      fixture.target.manifest.id,
-    ]);
+    expect((await service.search({ query: packageId })).map(({ manifest }) => manifest.id)).toEqual([packageId]);
     expect((await service.list()).map(({ manifest }) => manifest.id)).toEqual([
       'com.example.existing',
       fixture.target.manifest.id,
     ]);
+    await expect(service.status(packageId)).resolves.toMatchObject({ state: 'available' });
+    await expect(service.contributions()).resolves.toMatchObject({
+      diagnostics: [],
+      snapshot: { packageIds: [], apps: [] },
+    });
+    await expect(access(packageDirectory)).rejects.toMatchObject({ code: 'ENOENT' });
 
-    await service.install(fixture.target.manifest.id);
-    await expect(service.readAsset(fixture.target.manifest.id, 'index.html')).resolves.toMatchObject({
+    await service.install(packageId);
+    await expect(service.contributions()).resolves.toMatchObject({
+      diagnostics: [],
+      snapshot: { packageIds: [packageId], apps: [expectedSurface] },
+    });
+    await expect(service.readAsset(packageId, 'index.html')).resolves.toMatchObject({
       contentType: 'text/html',
       content: expect.stringContaining('<title>Published package</title>'),
     });
 
-    await service.uninstall(fixture.target.manifest.id);
-    await expect(service.readAsset(fixture.target.manifest.id, 'index.html')).rejects.toThrow(/not installed/i);
-    await expect(
-      access(path.join(fixture.root, 'client', 'packages', 'packages', fixture.target.manifest.id))
-    ).rejects.toMatchObject({ code: 'ENOENT' });
+    await service.disable(packageId);
+    await expect(service.contributions()).resolves.toMatchObject({
+      diagnostics: [],
+      snapshot: { packageIds: [], apps: [] },
+    });
+
+    const restartedAfterDisable = await createRemoteClient(fixture);
+    await expect(restartedAfterDisable.contributions()).resolves.toMatchObject({
+      diagnostics: [],
+      snapshot: { packageIds: [], apps: [] },
+    });
+
+    await restartedAfterDisable.enable(packageId);
+    await expect(restartedAfterDisable.contributions()).resolves.toMatchObject({
+      diagnostics: [],
+      snapshot: { packageIds: [packageId], apps: [expectedSurface] },
+    });
+
+    await restartedAfterDisable.uninstall(packageId);
+    await expect(restartedAfterDisable.contributions()).resolves.toMatchObject({
+      diagnostics: [],
+      snapshot: { packageIds: [], apps: [] },
+    });
+    await expect(restartedAfterDisable.readAsset(packageId, 'index.html')).rejects.toThrow(/not installed/i);
+    await expect(access(packageDirectory)).rejects.toMatchObject({ code: 'ENOENT' });
+
+    const restartedAfterUninstall = await createRemoteClient(fixture);
+    await expect(restartedAfterUninstall.contributions()).resolves.toMatchObject({
+      diagnostics: [],
+      snapshot: { packageIds: [], apps: [] },
+    });
+    await expect(restartedAfterUninstall.status(packageId)).resolves.toMatchObject({ state: 'available' });
+    await expect(access(packageDirectory)).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
   it('shows catalog metadata but fails closed when the published artifact is missing', async () => {

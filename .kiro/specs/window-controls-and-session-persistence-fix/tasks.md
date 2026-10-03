@@ -1,0 +1,112 @@
+# Implementation Plan - Window Controls and Session Persistence Fix
+
+- [x] 1. Write bug condition exploration test
+  - **Property 1: Bug Condition** - Window Controls Desktop Availability and Session Persistence Defect Exploration
+  - **CRITICAL**: This test MUST FAIL on unfixed code - failure confirms the bugs exist
+  - **DO NOT attempt to fix the test or the code when it fails**
+  - **NOTE**: This test encodes the expected behavior - it will validate the fix when it passes after implementation
+  - **GOAL**: Surface counterexamples that demonstrate the defects across window controls and session restoration
+  - **Scoped PBT Approach**: For deterministic bugs, scope the property to the concrete failing scenarios:
+    - Case A: `isElectronDesktop()` when `window.electronAPI` is present but `__backendPort` is undefined or `0` on Windows/Linux
+    - Case B: `AuthContext.refresh()` when stored Supabase session has expired access token (`expires_at <= Date.now()`) with valid `refresh_token`
+    - Case C: `accountSession.restore()` when persisted session has `issuer: 'tomny://local-account'` and `developmentLocalDemo: true` while `developmentLocalDemoEnabled` is `false`
+    - Case D: `LoginPage` mount when "Remember Me" credentials exist in `localStorage` with `status === 'unauthenticated'`
+  - Test implementation details from Bug Condition in design:
+    - Assert that `isElectronDesktop()` returns `true` regardless of `__backendPort`
+    - Assert that `AuthContext.refresh()` triggers `supabaseRefreshToken` and sets `status === 'authenticated'`
+    - Assert that `accountSession.restore()` admits sovereign local desktop sessions and maintains `authenticated` state
+    - Assert that `LoginPage` initiates auto-login and navigation without requiring manual form submission
+  - Run test on UNFIXED code
+  - **EXPECTED OUTCOME**: Test FAILS (this is correct - it proves the bugs exist: window controls hidden without port, expired Supabase session ignored, local session throws `ACCOUNT_SESSION_INVALID`, login screen stalls)
+  - Document counterexamples found to understand root causes
+  - Mark task complete when test is written, run, and failure is documented
+  - _Requirements: 1.1, 1.2, 1.3, 1.4, 2.1, 2.2, 2.3, 2.4_
+
+- [x] 2. Write preservation property tests (BEFORE implementing fix)
+  - **Property 2: Preservation** - Platform Invariants, Token Revocation, and Logout Preservation
+  - **IMPORTANT**: Follow observation-first methodology
+  - Observe behavior on UNFIXED code for non-buggy inputs:
+    - Observe: on macOS (`isMacOS() === true`), custom top-right window controls remain suppressed
+    - Observe: in browser/WebUI environments (`Boolean(window.electronAPI) === false`), desktop window controls remain hidden
+    - Observe: explicit `logout()` in `AuthContext` or `signOut()` in `accountSession` clears tokens and navigates to `/login`
+    - Observe: genuinely revoked or invalid tokens (e.g. 401 response from auth provider) transition to `unauthenticated` with error messaging
+    - Observe: clicking window control buttons dispatches corresponding IPC calls (`minimize`, `maximize`, `unmaximize`, `close`, `restart`)
+  - Write property-based tests capturing observed behavior patterns from Preservation Requirements:
+    - Property: For all non-desktop or macOS environments, custom window controls are not rendered
+    - Property: For all explicit logout calls, authenticated sessions are cleanly terminated
+    - Property: For all invalid credentials or revoked tokens, authentication fails gracefully
+  - Run tests on UNFIXED code
+  - **EXPECTED OUTCOME**: Tests PASS (this confirms baseline behavior to preserve)
+  - Mark task complete when tests are written, run, and passing on unfixed code
+  - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5_
+
+- [x] 3. Fix for window controls and session persistence defects
+  - [x] 3.1 Decouple `isElectronDesktop` from `__backendPort`
+    - Update `isElectronDesktop()` in `packages/desktop/src/renderer/utils/platform.ts` to check strictly `typeof window !== 'undefined' && Boolean(window.electronAPI)`
+    - Isolate `__backendPort` checks to backend communication utilities (e.g., `getBaseUrl()` in `httpBridge.ts`)
+    - Update `tests/unit/renderer/platform.test.ts` to reflect the decoupled definition
+    - _Bug_Condition: isBugCondition(input) where input.platform IN ['win32', 'linux'] AND input.hasElectronAPI = true AND (input.backendPort = undefined OR input.backendPort = 0)_
+    - _Expected_Behavior: expectedBehavior(result) where isElectronDesktop() returns true and window controls are available_
+    - _Preservation: Preservation Requirements 3.3, 3.4 (macOS suppresses controls, webUI hides controls)_
+    - _Requirements: 2.1, 3.3, 3.4_
+
+  - [x] 3.2 Fix `WindowControls` component and Titlebar visibility / suppression
+    - In `packages/desktop/src/renderer/components/layout/WindowControls.tsx`, simplify `isDesktop` state initialization and ensure controls are rendered only when `isDesktop && !isMacOS()`
+    - In `packages/desktop/src/renderer/components/layout/Titlebar/index.tsx`, verify `showWindowControls` evaluates to `true` on Windows and Linux and `false` on macOS
+    - In `packages/desktop/src/renderer/pages/guid/HubHome/index.tsx`, ensure window controls check `desktopRuntime && !isMacOS()`
+    - _Bug_Condition: isBugCondition(input) where window controls fail to render on frameless Windows/Linux windows_
+    - _Expected_Behavior: expectedBehavior(result) where custom window controls (Minimize, Maximize/Restore, Close, Restart) are visible and functional_
+    - _Preservation: Preservation Requirements 3.3, 3.4, 3.5 (macOS native controls, browser suppression, IPC event dispatch)_
+    - _Requirements: 2.1, 3.3, 3.4, 3.5_
+
+  - [x] 3.3 Implement `supabaseRefreshToken` and integrate into `AuthContext.refresh()`
+    - In `packages/desktop/src/renderer/services/supabaseAuth.ts`, implement `supabaseRefreshToken(refreshToken?: string): Promise<SupabaseAuthResult>` calling `POST /auth/v1/token?grant_type=refresh_token`
+    - Handle successful token renewal by saving new session via `saveSupabaseSession(session)`
+    - Handle 400/401 token revocation by calling `clearSupabaseSession()` and returning `{ success: false, source: 'supabase' }`
+    - Handle network errors gracefully by returning `{ success: false, source: 'network' }` without clearing session
+    - In `packages/desktop/src/renderer/hooks/context/AuthContext.tsx`, update `refresh()`: when stored Supabase session has expired access token (`expiresAtMs <= Date.now()`) and `refresh_token` is present, call `await supabaseRefreshToken(storedSupabase.refresh_token)` and transition to `authenticated` on success
+    - _Bug_Condition: isBugCondition(input) where input.authProvider = 'supabase' AND input.storedSession.expiresAt <= input.currentTime AND input.storedSession.refreshToken != null_
+    - _Expected_Behavior: expectedBehavior(result) where expired Supabase access tokens are refreshed automatically and session is restored_
+    - _Preservation: Preservation Requirements 3.1, 3.2 (explicit logout clears tokens, revoked tokens transition to unauthenticated)_
+    - _Requirements: 2.2, 3.1, 3.2_
+
+  - [x] 3.4 Fix local desktop session persistence across restarts
+    - In `packages/desktop/src/process/bridge/index.ts`, remove `developmentLocalDemo: true as const` from the `localSession` registration payload so sovereign local accounts are not flagged as demo sessions
+    - In `packages/desktop/src/process/services/security/accountSession/accountSessionService.ts`, ensure `recordVerifiedSession` and `restore` admit `session.issuer === 'tomny://local-account'` as a valid local session regardless of whether `developmentLocalDemoEnabled` is `true` or `false`
+    - _Bug_Condition: isBugCondition(input) where input.authProvider = 'local' AND input.persistedLocalSession.issuer = 'tomny://local-account' AND input.developmentLocalDemoEnabled = false_
+    - _Expected_Behavior: expectedBehavior(result) where local desktop sessions restore successfully across application restarts_
+    - _Preservation: Preservation Requirements 3.1, 3.2 (explicit logout clears local session, expired local sessions are invalidated)_
+    - _Requirements: 2.3, 3.1, 3.2_
+
+  - [x] 3.5 Implement Remember Me auto-authentication in login page
+    - In `packages/desktop/src/renderer/pages/login/index.tsx`, add an auto-login effect when `ready` and `status === 'unauthenticated'` and `REMEMBER_ME_KEY === 'true'`
+    - Retrieve and deobfuscate `storedUsername` and `storedPassword`, call `login({ username, password, remember: true })`, and on success navigate to `/guid`
+    - Ensure the "Remember Me" checkbox is available and functional in both desktop and browser environments
+    - _Bug_Condition: isBugCondition(input) where input.rememberMeEnabled = true AND input.storedUsername != null AND input.storedPassword != null AND input.currentRoute = '/login'_
+    - _Expected_Behavior: expectedBehavior(result) where valid remembered credentials automatically authenticate and transition to /guid_
+    - _Preservation: Preservation Requirements 3.1, 3.2 (unauthenticated state maintained if credentials fail, logout clears credentials if selected)_
+    - _Requirements: 2.4, 3.1, 3.2_
+
+  - [x] 3.6 Verify bug condition exploration test now passes
+    - **Property 1: Expected Behavior** - Window Controls and Session Persistence Resolution
+    - **IMPORTANT**: Re-run the SAME test from task 1 - do NOT write a new test
+    - The test from task 1 encodes the expected behavior
+    - When this test passes, it confirms the expected behavior is satisfied across all four defect scenarios
+    - Run bug condition exploration test from step 1
+    - **EXPECTED OUTCOME**: Test PASSES (confirms bugs are fixed)
+    - _Requirements: 2.1, 2.2, 2.3, 2.4_
+
+  - [x] 3.7 Verify preservation tests still pass
+    - **Property 2: Preservation** - Invariants and Non-Regression Verification
+    - **IMPORTANT**: Re-run the SAME tests from task 2 - do NOT write new tests
+    - Run preservation property tests from step 2
+    - **EXPECTED OUTCOME**: Tests PASS (confirms no regressions)
+    - Confirm all tests still pass after fix (no regressions)
+    - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5_
+
+- [~] 4. Checkpoint - Ensure all tests pass
+  - Run all relevant test suites:
+    - Unit tests: `bun run test tests/unit/renderer/platform.test.ts tests/unit/security/supabaseAuth.test.ts tests/unit/security/accountSessionService.test.ts`
+    - Exploration and preservation tests
+    - Repository gates: `bun run lint` and `bunx tsc --noEmit`
+  - Ensure all tests pass, ask the user if questions arise.

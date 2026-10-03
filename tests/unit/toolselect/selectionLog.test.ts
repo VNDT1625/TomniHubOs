@@ -53,14 +53,27 @@ describe('SelectionLog outcome-aware persistence', () => {
   it('summarizes outcomes and decays old verified signals', async () => {
     const memory = memoryFs();
     let now = 0;
-    const log = createSelectionLog({ filePath: 'C:\\selection.json', fs: memory.fs, now: () => now, decayHalfLifeMs: 100 });
+    const log = createSelectionLog({
+      filePath: 'C:\\selection.json',
+      fs: memory.fs,
+      now: () => now,
+      decayHalfLifeMs: 100,
+    });
     await log.record('old', ['a'], { outcome: 'verified', latencyMs: 10, cost: 2, fallbackCount: 1 });
     now = 100;
     await log.record('new', ['b'], { outcome: 'verified', latencyMs: 30, cost: 4 });
     await log.record('failure', ['c'], { outcome: 'failed' });
 
     const summary = await log.summary?.();
-    expect(summary).toMatchObject({ total: 3, verified: 2, failed: 1, successRate: 2 / 3, averageCost: 3, p95LatencyMs: 30, fallbackCount: 1 });
+    expect(summary).toMatchObject({
+      total: 3,
+      verified: 2,
+      failed: 1,
+      successRate: 2 / 3,
+      averageCost: 3,
+      p95LatencyMs: 30,
+      fallbackCount: 1,
+    });
     expect(summary?.decayedSuccessWeight).toBeCloseTo(1.5);
   });
 });

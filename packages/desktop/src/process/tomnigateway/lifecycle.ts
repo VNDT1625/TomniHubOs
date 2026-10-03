@@ -21,7 +21,7 @@ import {
   NativeMcpProbe,
 } from '@process/resources/nativePlatform';
 import { startTomniGateway, type TomniGatewayServer } from './server';
-import type { TomniGatewayEvent, TomniGatewayServices } from './types';
+import type { TomniGatewayEvent, TomniGatewayModelService, TomniGatewayServices } from './types';
 
 import { TomniWebAuth } from './webAuth';
 
@@ -37,6 +37,8 @@ export type ProductionTomniGatewayDeps = {
   dataDir: string;
   subscribe?: (listener: (event: TomniGatewayEvent) => void) => () => void;
   sessionToken?: string;
+  /** Main-owned isolated model ingress; omitted keeps model routes disabled. */
+  modelService?: TomniGatewayModelService;
   port?: number;
 };
 
@@ -49,6 +51,9 @@ export type TomniGatewayEndpoint = {
 
 let serverPromise: Promise<TomniGatewayServer> | undefined;
 let endpointPromise: Promise<TomniGatewayEndpoint> | undefined;
+let activeGatewayPort: number | undefined;
+
+export const getTomniGatewayPort = (): number | undefined => activeGatewayPort;
 
 const positiveInteger = (value: string | undefined, fallback: number, max: number): number => {
   const parsed = Number(value);
@@ -130,6 +135,7 @@ const servicePorts = (deps: ProductionTomniGatewayDeps): TomniGatewayServices =>
     speechTranscribe: (request) => transcribeSpeech(request),
 
     subscribe: deps.subscribe,
+    model: deps.modelService,
   };
 };
 
@@ -152,12 +158,16 @@ export const startProductionTomniGateway = (deps: ProductionTomniGatewayDeps): P
 
     webAuth: new TomniWebAuth(deps.dataDir),
   });
-  endpointPromise = serverPromise.then((server) => ({
-    url: server.url,
-    wsUrl: server.wsUrl,
-    port: server.port,
-    sessionToken,
-  }));
+  endpointPromise = serverPromise.then((server) => {
+    activeGatewayPort = server.port;
+    (globalThis as typeof globalThis & { __backendPort?: number }).__backendPort = server.port;
+    return {
+      url: server.url,
+      wsUrl: server.wsUrl,
+      port: server.port,
+      sessionToken,
+    };
+  });
   return endpointPromise;
 };
 
@@ -170,10 +180,12 @@ export const stopProductionTomniGateway = async (): Promise<void> => {
   const current = serverPromise;
   serverPromise = undefined;
   endpointPromise = undefined;
+  activeGatewayPort = undefined;
   if (current) await (await current).close();
 };
 
 export const resetProductionTomniGatewayForTests = (): void => {
   serverPromise = undefined;
   endpointPromise = undefined;
+  activeGatewayPort = undefined;
 };

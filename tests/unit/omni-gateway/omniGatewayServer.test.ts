@@ -19,7 +19,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { buildOmniIdeServer } from '@/process/omni-gateway/omniGatewayProfile';
 import { createOmniGatewayState } from '@/process/omni-gateway/omniGatewayState';
-import type { IdeMcpService, QuickTestScenarioAgentService } from '@/process/ide/mcp/ideServer';
+import type { IdeMcpService, QuickTestScenarioAgentService } from '@package-apps/ide/process/mcp/ideServer';
 
 import {
   OMNI_IDE_BASE_ALLOWLIST_NAMES,

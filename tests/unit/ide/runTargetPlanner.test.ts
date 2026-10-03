@@ -11,7 +11,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { planRunTargets, tracerPlatformFor } from '@/process/ide/runTarget/runTargetPlanner';
+import { planRunTargets, tracerPlatformFor } from '@package-apps/ide/process/execution/runTarget/runTargetPlanner';
 
 /** Build a files map with a single root package.json from a deps object. */
 const pkgFiles = (pkg: Record<string, unknown>, extra: Record<string, string> = {}): Map<string, string> => {

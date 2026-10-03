@@ -56,13 +56,17 @@ const TomnyAgenticModelSelector: React.FC<{
 
   const { providers, getAvailableModels, handleSelectModel, handleSelectReasoning } = selection;
   const isManagedGateway = current_model?.id === TOMNI_GATEWAY_PROVIDER_ID;
+  const isAutoModel = !current_model || current_model.use_model === 'auto' || current_model.id === 'auto';
+  const autoModelLabel = `${t('guid.hubHome.status.automatic', { defaultValue: 'Tự động (Auto)' })} (Laya Decision)`;
 
-  const label = getModelDisplayLabel({
-    selected_value: current_model?.use_model,
-    selectedLabel: current_model?.use_model || '',
-    defaultModelLabel,
-    fallbackLabel: t('conversation.welcome.selectModel'),
-  });
+  const label = isAutoModel
+    ? autoModelLabel
+    : getModelDisplayLabel({
+        selected_value: current_model?.use_model,
+        selectedLabel: current_model?.use_model || '',
+        defaultModelLabel,
+        fallbackLabel: t('conversation.welcome.selectModel'),
+      });
 
   const displayLabel =
     isManagedGateway && current_model?.reasoning_effort
@@ -76,7 +80,20 @@ const TomnyAgenticModelSelector: React.FC<{
       // Desktop: leave default container so click events reach Menu.Item normally.
       {...(isMobileHeaderCompact ? { getPopupContainer: () => document.body } : {})}
       droplist={
-        <Menu>
+        <Menu selectedKeys={isAutoModel ? ['auto'] : [current_model?.id + (current_model?.use_model || '')]}>
+          <Menu.Item
+            key='auto'
+            data-testid='tomnyagentic-model-option-auto'
+            className={isAutoModel ? '!bg-2' : ''}
+            onClick={() =>
+              void handleSelectModel({ id: 'auto', name: 'Auto', models: ['auto'], platform: 'auto' } as any, 'auto')
+            }
+          >
+            <div className='flex items-center gap-8px w-full font-medium'>
+              <div className='w-6px h-6px rounded-full shrink-0 bg-blue-500' />
+              <span>{autoModelLabel}</span>
+            </div>
+          </Menu.Item>
           {providers.map((provider) => {
             const models = getAvailableModels(provider);
             if (!models.length) return null;

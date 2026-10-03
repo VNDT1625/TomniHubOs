@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { ExecutionPlan } from '../../common/foundation/decisionTypes';
 import { validateExecutionPlan } from '../../common/foundation/decisionTypes';
 import type { IResourceCoordinator } from '../resource/resourceCoordinator';
@@ -8,6 +9,11 @@ export type ResourceLease = {
   taskId: string;
   kind: string;
   grantedAt: number;
+};
+
+const createLocalLeaseId = (plan: ExecutionPlan): string => {
+  const identity = createHash('sha256').update(`${plan.runId}\u0000${plan.taskId}`, 'utf8').digest('hex');
+  return `lease_${identity}_${Date.now()}`;
 };
 
 export class ResourceAdapter {
@@ -38,7 +44,7 @@ export class ResourceAdapter {
               owner: { processKind: 'main', serviceId: 'foundation-run-kernel', taskId: plan.taskId },
             })
           ).id
-        : `lease_${plan.runId}_${plan.taskId}_${Date.now()}`;
+        : createLocalLeaseId(plan);
       if (aborted) {
         this.coordinator?.releaseLease(leaseId);
         throw new Error('RESOURCE_LEASE_ABORTED');

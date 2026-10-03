@@ -28,7 +28,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { createMediaPipeline } from '@/process/browser/mediaPipeline';
+import { createMediaPipeline } from '@process/browser/mediaPipeline';
 import type {
   AudioArtifact,
   AudioExtractor,
@@ -41,9 +41,9 @@ import type {
   Translator,
   Tts,
   YouTubeSummarizer,
-} from '@/process/browser/mediaPipeline';
-import { createPagePerception } from '@/process/browser/pagePerception';
-import type { CapturedImage, IPagePerception, PageDriver } from '@/process/browser/pagePerception';
+} from '@process/browser/mediaPipeline';
+import { createPagePerception } from '@process/browser/pagePerception';
+import type { CapturedImage, IPagePerception, PageDriver } from '@process/browser/pagePerception';
 import type { Lease, LeaseRequest, TaskKind } from '@/process/resource/leaseTypes';
 
 // ---------------------------------------------------------------------------

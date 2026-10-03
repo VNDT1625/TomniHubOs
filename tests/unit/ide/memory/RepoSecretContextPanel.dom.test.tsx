@@ -26,9 +26,9 @@ vi.mock('react-i18next', () => ({
   }),
 }));
 
-vi.mock('@/renderer/pages/studio/ide/ideClient', () => ({ ideClient }));
+vi.mock('@package-apps/ide/renderer/services/ideClient', () => ({ ideClient }));
 
-import RepoSecretContextPanel from '@/renderer/pages/studio/ide/memory/RepoSecretContextPanel';
+import RepoSecretContextPanel from '@package-apps/ide/renderer/memory/RepoSecretContextPanel';
 
 describe('RepoSecretContextPanel', () => {
   beforeEach(() => {

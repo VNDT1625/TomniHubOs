@@ -1,0 +1,7 @@
+CREATE OR REPLACE FUNCTION tomni_reject_append_only_mutation() RETURNS trigger LANGUAGE plpgsql AS 'BEGIN RAISE EXCEPTION ''append-only table cannot be updated or deleted''; END';
+DROP TRIGGER IF EXISTS payment_events_append_only ON payment_events; CREATE TRIGGER payment_events_append_only BEFORE UPDATE OR DELETE ON payment_events FOR EACH ROW EXECUTE FUNCTION tomni_reject_append_only_mutation();
+DROP TRIGGER IF EXISTS webhook_events_append_only ON webhook_events; CREATE TRIGGER webhook_events_append_only BEFORE UPDATE OR DELETE ON webhook_events FOR EACH ROW EXECUTE FUNCTION tomni_reject_append_only_mutation();
+DROP TRIGGER IF EXISTS entitlement_events_append_only ON entitlement_events; CREATE TRIGGER entitlement_events_append_only BEFORE UPDATE OR DELETE ON entitlement_events FOR EACH ROW EXECUTE FUNCTION tomni_reject_append_only_mutation();
+DROP TRIGGER IF EXISTS audit_events_append_only ON audit_events; CREATE TRIGGER audit_events_append_only BEFORE UPDATE OR DELETE ON audit_events FOR EACH ROW EXECUTE FUNCTION tomni_reject_append_only_mutation();
+DROP TRIGGER IF EXISTS ledger_transactions_append_only ON ledger_transactions; CREATE TRIGGER ledger_transactions_append_only BEFORE UPDATE OR DELETE ON ledger_transactions FOR EACH ROW EXECUTE FUNCTION tomni_reject_append_only_mutation();
+DROP TRIGGER IF EXISTS ledger_entries_append_only ON ledger_entries; CREATE TRIGGER ledger_entries_append_only BEFORE UPDATE OR DELETE ON ledger_entries FOR EACH ROW EXECUTE FUNCTION tomni_reject_append_only_mutation();

@@ -8,10 +8,10 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import { createQuickTestService } from '@/process/ide/quickTestService';
-import type { CdpWebContents } from '@/process/ide/quickTestTracer';
-import type { NativeLogStream } from '@/process/ide/quickTestNativeTracer';
-import type { KnowledgeGraph } from '@/process/ide/understandTypes';
+import { createQuickTestService } from '@package-apps/ide/process/execution/quickTest/runtime/quickTestService';
+import type { CdpWebContents } from '@package-apps/ide/process/execution/quickTest/runtime/quickTestTracer';
+import type { NativeLogStream } from '@package-apps/ide/process/execution/quickTest/runtime/quickTestNativeTracer';
+import type { KnowledgeGraph } from '@package-apps/ide/process/knowledge/graph/understandTypes';
 
 /** A fake CDP WebContents whose debugger does nothing (no events recorded). */
 const makeFakeWc = (): CdpWebContents => ({

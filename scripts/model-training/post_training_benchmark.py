@@ -14,28 +14,24 @@ from pathlib import Path
 from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DOMAINS = ("security", "user-understanding", "orchestrator", "assistant")
+DOMAINS = ("security", "user-understanding", "semantic-analysis")
 CANDIDATE_IDS = {
     "security": "com.tomny.core.security",
     "user-understanding": "com.tomny.core.user-understanding",
-    "orchestrator": "com.tomny.core.orchestrator",
-    "assistant": "com.tomny.core.assistant",
+    "semantic-analysis": "com.tomny.core.semantic-analysis",
+
 }
 RECIPE_SHA256 = {
-    "security": "2f52e4f898a3fce33cde3654361ffea8e86d0fbf889e9009054e5737f4ef0375",
-    "user-understanding": "d01399b304a1c8833f13344069e60721f1ffe64b0da144289a8876ae3e85c0c2",
-    "orchestrator": "187f161c04e149e79907b17d4141a583966f521169cc1b1c25e5efda4a96f0b8",
-    "assistant": "7b354eb4e8c584f9a4c9a9901b309024a6c4b9489deab7c85908643b5dae46a7",
+    "security": "94a7a98596be2abe651830ef05e49a5ad6ab52744c7d531e31c00ecc5e9967f7",
+    "user-understanding": "3b3d158107c39c4117c3278b174a4ce6c2f2bd148021ae2d9572c208b7368db9",
+    "semantic-analysis": "78054fb777d1dc24661e1787942702f804dc7d96de7b9ce0a4100ba8b4226b47",
+
 }
 
-DATASET_SHA256 = '59f0cb64f23854abb6b0938f3af3205b9b0f77bf0230bd7f60aaae0b42013406'
+DATASET_SHA256 = '90611e83a5308caef481e589818c5631fdfda7d8acd24efd090982d0038646e4'
 PROVENANCE_SCHEMA = 'tomny.training-provenance.v2'
-BASES = {
-    "security": {"path": ".local-models/Qwen3.5-0.8B", "modelId": "Qwen/Qwen3.5-0.8B", "revision": "2fc06364715b967f1860aea9cf38778875588b17", "contentSha256": "ff3a07808a9e83627e69a07131fdec45c60973f23cc5617204d173461ec65fe6"},
-    "user-understanding": {"path": ".local-models/Qwen3.5-2B", "modelId": "Qwen/Qwen3.5-2B", "revision": "15852e8c16360a2fea060d615a32b45270f8a8fc", "contentSha256": "f6656ba07f0a996924643f29c971be830b87cfbeea8254d6029b0e98a2a1c8dd"},
-}
-BASES["orchestrator"] = BASES["user-understanding"]
-BASES["assistant"] = BASES["user-understanding"]
+BASE_BINDING = {"path": ".local-models/Qwen3.5-0.8B", "modelId": "Qwen/Qwen3.5-0.8B", "revision": "2fc06364715b967f1860aea9cf38778875588b17", "contentSha256": "ff3a07808a9e83627e69a07131fdec45c60973f23cc5617204d173461ec65fe6"}
+BASES = {purpose: BASE_BINDING for purpose in DOMAINS}
 SAFE_COMPONENT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 FORBIDDEN_PROMOTION_PARTS = {"active", "pilot", "production"}
 ALLOWED_COMPLETED_STATES = {'completed-candidate', 'skipped-completed'}
@@ -43,6 +39,14 @@ BENCHMARK_REPORT_SCHEMA = 'tomny.adapter-benchmark-report.v1'
 RUN_MANIFEST_SCHEMA = 'tomny.adapter-benchmark-run-manifest.v1'
 BENCHMARK_VARIANTS = ('clean', 'paraphrase', 'noisy', 'adversarial')
 SHA256_HEX = re.compile(r'^[0-9a-f]{64}$')
+SECURITY_V05_CANDIDATE_VERSION = '0.5.0-candidate.1'
+SECURITY_V05_PURPOSE = 'security'
+SECURITY_V05_CANDIDATE_ID = 'com.tomny.core.security'
+SECURITY_V05_RECIPE_SHA256 = '5d339fa2c222c0cae2a5ed09279c38dd703fdae35526eb73d73bd189b60526af'
+SECURITY_V05_HELDOUT_MANIFEST = REPO_ROOT / '.training-data-v5-security-pilot-heldout' / 'manifest.json'
+SECURITY_V05_HELDOUT_MANIFEST_SHA256 = '1e20b818a3f05cee5d8c9d99cfac0ca75e032c3819a13319aa0a7e23b3e9c2f9'
+SECURITY_V05_QUEUE_LATEST = REPO_ROOT / '.model-adapters' / 'candidates' / '_queue' / 'latest.json'
+SECURITY_V05_OUTPUT_ROOT = REPO_ROOT / '.model-benchmarks' / 'checkpoints' / 'security-v05'
 
 
 def parse_args() -> argparse.Namespace:
@@ -50,11 +54,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--candidate-version", default="0.1.0-candidate.1")
     parser.add_argument("--candidate-root", default=".model-adapters/candidates")
     parser.add_argument("--queue-latest", default=".model-adapters/candidates/_queue/latest.json")
-    parser.add_argument("--dataset-manifest", default=".training-data-v2/manifest.json")
+    parser.add_argument("--dataset-manifest", default=".training-data-v6-qwen08b-semantic-r4/manifest.json")
     parser.add_argument("--output-root", default=".model-benchmarks/candidates")
     parser.add_argument("--run-id")
     parser.add_argument("--dry-run", action="store_true", help="Verify/plan only; never invoke GPU benchmark or write reports.")
     parser.add_argument("--gate-fixture", help="Synthetic benchmark-report fixture, allowed only with --dry-run.")
+    parser.add_argument(
+        '--security-v05-single-domain',
+        action='store_true',
+        help='Benchmark only the completed Security 0.5 candidate through its trainer-selected finalized checkpoint.',
+    )
     return parser.parse_args()
 
 
@@ -206,7 +215,31 @@ def immutable_snapshot(manifest_path: Path) -> dict[str, Any]:
         if root not in path.parents or entry.get("immutable") is not True or entry.get("trainerReadable") is not False or sha256_file(path) != entry.get("sha256"):
             raise RuntimeError(f"{purpose}: immutable test provenance mismatch")
         tests[purpose] = {"path": str(path), "sha256": entry["sha256"], "rows": entry["rows"], "semanticGroups": entry["semanticGroups"]}
-    return {"manifestSha256": DATASET_SHA256, "tests": tests}
+    data_card = manifest.get("dataCard")
+    sources = data_card.get("sources") if isinstance(data_card, dict) else None
+    source_kinds = {
+        source.get("kind")
+        for source in sources
+        if isinstance(source, dict) and isinstance(source.get("kind"), str)
+    } if isinstance(sources, list) else set()
+    if (
+        not isinstance(manifest.get("datasetId"), str)
+        or not isinstance(manifest.get("datasetVersion"), str)
+        or not manifest["datasetId"].strip()
+        or not manifest["datasetVersion"].strip()
+        or len(source_kinds) != len(sources or [])
+        or not source_kinds <= {"synthetic-authored", "synthetic-authored-independent-events", "licensed"}
+    ):
+        raise RuntimeError("Dataset manifest is not a reproducible non-user benchmark corpus")
+    return {
+        "datasetId": manifest["datasetId"],
+        "datasetVersion": manifest["datasetVersion"],
+        "manifestSha256": DATASET_SHA256,
+        "manifestSchemaVersion": manifest.get("schemaVersion"),
+        "sourceKinds": sorted(source_kinds),
+        "containsUserData": False,
+        "tests": tests,
+    }
 
 
 def require_object(value: Any, label: str) -> dict[str, Any]:
@@ -249,7 +282,7 @@ def verify_benchmark_inputs_unchanged(
     verification = verify_candidates(paths, version)
     if verification != expected_verification:
         raise RuntimeError('Candidate artifacts or provenance changed during benchmark')
-    for name, purpose in (("qwen35-08b", "security"), ("qwen35-2b", "user-understanding")):
+    for name, purpose in (("qwen35-08b", "security"), ("qwen35-08b", "user-understanding")):
         base_path = (REPO_ROOT / BASES[purpose]["path"]).resolve()
         if sha256_tree(base_path) != expected_base_hashes.get(name):
             raise RuntimeError(f"{name}: base model changed during benchmark")
@@ -345,13 +378,8 @@ def validate_benchmark_evidence(
         raise RuntimeError('Benchmark data-independence evidence is incomplete')
     domains = require_object(report.get('domains'), 'Benchmark domains')
     if set(domains) != set(DOMAINS):
-        raise RuntimeError('Benchmark report must contain exactly four domains')
-    expected_model_ids = {
-        'security': 'qwen35-08b-candidate',
-        'user-understanding': 'qwen35-2b-candidate',
-        'orchestrator': 'qwen35-2b-candidate',
-        'assistant': 'qwen35-2b-candidate',
-    }
+        raise RuntimeError('Benchmark report must contain exactly three domains')
+    expected_model_ids = {purpose: 'qwen35-08b-candidate' for purpose in DOMAINS}
     for purpose in DOMAINS:
         domain = require_object(domains[purpose], f'{purpose} benchmark domain')
         expected_base = (REPO_ROOT / BASES[purpose]['path']).resolve()
@@ -360,7 +388,6 @@ def validate_benchmark_evidence(
         require_bound_path(domain.get('baseModel'), expected_base, f'{purpose} benchmark base model')
         require_bound_path(domain.get('adapterPath'), candidates[purpose], f'{purpose} benchmark adapter')
     return {
-        'schemaVersion': 'tomny.post-training-evidence-contract.v1',
         'verified': True,
         'runManifestSha256': sha256_file(manifest_path),
         'benchmarkReportSha256': sha256_file(report_path),
@@ -372,7 +399,7 @@ def validate_benchmark_evidence(
 def confidence_gate(report: dict[str, Any]) -> dict[str, Any]:
     domains = report.get('domains')
     if not isinstance(domains, dict) or set(domains) != set(DOMAINS):
-        raise RuntimeError('Benchmark report must contain exactly four domains')
+        raise RuntimeError('Benchmark report must contain exactly three domains')
     results: dict[str, Any] = {}
     any_evidence_shortfall = False
     for purpose in DOMAINS:
@@ -417,8 +444,225 @@ def confidence_gate(report: dict[str, Any]) -> dict[str, Any]:
         },
     }
 
+def require_exact_path(path: Path, expected: Path, label: str) -> Path:
+    resolved = path.resolve()
+    if resolved != expected.resolve():
+        raise RuntimeError(f'{label} is not the fixed Security v0.5 evidence path')
+    return resolved
+
+
+def security_v05_heldout_snapshot(manifest_path: Path) -> dict[str, Any]:
+    require_exact_path(manifest_path, SECURITY_V05_HELDOUT_MANIFEST, 'Security held-out manifest')
+    if sha256_file(manifest_path) != SECURITY_V05_HELDOUT_MANIFEST_SHA256:
+        raise RuntimeError('Security v0.5 held-out manifest SHA-256 mismatch')
+    manifest = read_json(manifest_path, 'Security held-out manifest')
+    domain = require_object(require_object(manifest.get('domains'), 'Security held-out domains').get('security'), 'Security held-out domain')
+    test = require_object(require_object(domain.get('splits'), 'Security held-out splits').get('test'), 'Security held-out test split')
+    test_path = (manifest_path.parent / str(test.get('path', ''))).resolve()
+    if (
+        manifest.get('schemaVersion') != 'tomny.dataset-manifest.v2'
+        or manifest.get('datasetId') != 'tomny-security-pilot-heldout'
+        or manifest.get('datasetVersion') != '2026-08-21.v1'
+        or domain.get('purpose') != SECURITY_V05_PURPOSE
+        or domain.get('trainerReadableSplits') != []
+        or test.get('immutable') is not True
+        or test.get('trainerReadable') is not False
+        or test.get('rows') != 120
+        or test.get('semanticGroups') != 30
+        or not test_path.is_file()
+        or sha256_file(test_path) != test.get('sha256')
+        or require_object(manifest.get('quality'), 'Security held-out quality').get('passed') is not True
+    ):
+        raise RuntimeError('Security v0.5 held-out evidence is incomplete or changed')
+    return {
+        'manifestPath': str(manifest_path.resolve()),
+        'manifestSha256': SECURITY_V05_HELDOUT_MANIFEST_SHA256,
+        'testPath': str(test_path),
+        'testSha256': test['sha256'],
+        'rows': 120,
+        'semanticGroups': 30,
+        'candidateOnly': True,
+        'promotionAllowed': False,
+    }
+
+
+def security_v05_candidate_evidence(candidate_root: Path) -> dict[str, Any]:
+    expected_root = (REPO_ROOT / '.model-adapters' / 'candidates').resolve()
+    require_exact_path(candidate_root, expected_root, 'Security candidate root')
+    candidate = (expected_root / SECURITY_V05_CANDIDATE_ID / SECURITY_V05_CANDIDATE_VERSION).resolve()
+    manifest_path = candidate / 'training_manifest.json'
+    report_path = candidate / 'verification-report.json'
+    manifest = read_json(manifest_path, 'Security training manifest')
+    verification = read_json(report_path, 'Security verification report')
+    finalization = require_object(manifest.get('finalization'), 'Security finalization')
+    checkpoint_value = finalization.get('sourceCheckpoint')
+    if not isinstance(checkpoint_value, str):
+        raise RuntimeError('Security finalization has no trainer-selected checkpoint')
+    checkpoint = Path(checkpoint_value).resolve()
+    if candidate not in checkpoint.parents or not re.fullmatch(r'checkpoint-[1-9][0-9]*', checkpoint.name):
+        raise RuntimeError('Security finalization checkpoint is outside the finalized candidate')
+    checkpoint_state = read_json(checkpoint / 'trainer_state.json', 'Security final checkpoint state')
+    expected_base = {key: BASES['security'][key] for key in ('modelId', 'revision', 'contentSha256')}
+    required_files = ('adapter_model.safetensors', 'adapter_config.json')
+    if (
+        manifest.get('schemaVersion') != PROVENANCE_SCHEMA
+        or manifest.get('completed') is not True
+        or manifest.get('status') != 'candidate'
+        or manifest.get('purpose') != SECURITY_V05_PURPOSE
+        or manifest.get('precision') != 'bf16'
+        or manifest.get('candidate') != {'id': SECURITY_V05_CANDIDATE_ID, 'version': SECURITY_V05_CANDIDATE_VERSION, 'path': str(candidate)}
+        or manifest.get('baseModel', {}).get('modelId') != expected_base['modelId']
+        or manifest.get('baseModel', {}).get('revision') != expected_base['revision']
+        or manifest.get('baseModel', {}).get('contentSha256') != expected_base['contentSha256']
+        or manifest.get('recipe', {}).get('sha256') != SECURITY_V05_RECIPE_SHA256
+        or finalization.get('mode') != 'checkpoint-eval-only'
+        or finalization.get('unsafeStateLoaded') is not False
+        or finalization.get('optimizerStepsExecuted') != 0
+        or finalization.get('sourceStep') != checkpoint_state.get('global_step')
+        or checkpoint_state.get('best_model_checkpoint') != str(checkpoint)
+        or verification.get('schemaVersion') != 'tomny.adapter-verification-report.v1'
+        or verification.get('verified') is not True
+        or verification.get('adapterCount') != 1
+        or not isinstance(verification.get('adapters'), list)
+        or len(verification['adapters']) != 1
+    ):
+        raise RuntimeError('Security v0.5 finalized candidate provenance mismatch')
+    adapter = verification['adapters'][0]
+    if not isinstance(adapter, dict) or adapter.get('path') != str(candidate) or adapter.get('purpose') != SECURITY_V05_PURPOSE:
+        raise RuntimeError('Security verification report targets a different adapter')
+    hashes: dict[str, str] = {}
+    for filename in required_files:
+        candidate_file = candidate / filename
+        checkpoint_file = checkpoint / filename
+        if not candidate_file.is_file() or not checkpoint_file.is_file() or sha256_file(candidate_file) != sha256_file(checkpoint_file):
+            raise RuntimeError('Security trainer-selected checkpoint does not match finalized adapter artifacts')
+        hashes[filename] = sha256_file(candidate_file)
+    if (
+        finalization.get('sourceAdapterSha256') != hashes['adapter_model.safetensors']
+        or finalization.get('trainerStateSha256') != sha256_file(checkpoint / 'trainer_state.json')
+        or adapter.get('manifestSha256') != sha256_file(manifest_path)
+        or adapter.get('weightSha256') != hashes['adapter_model.safetensors']
+        or adapter.get('adapterConfigSha256') != hashes['adapter_config.json']
+    ):
+        raise RuntimeError('Security final checkpoint hashes do not match the verification report')
+    return {
+        'candidate': str(candidate),
+        'manifest': str(manifest_path),
+        'manifestSha256': sha256_file(manifest_path),
+        'verificationReport': str(report_path),
+        'verificationReportSha256': sha256_file(report_path),
+        'checkpoint': str(checkpoint),
+        'checkpointWeightSha256': hashes['adapter_model.safetensors'],
+        'checkpointConfigSha256': hashes['adapter_config.json'],
+        'trainerStateSha256': sha256_file(checkpoint / 'trainer_state.json'),
+        'candidateOnly': True,
+        'promotionAllowed': False,
+    }
+
+
+def validate_security_v05_queue(latest_path: Path, candidate: Path) -> dict[str, Any]:
+    require_exact_path(latest_path, SECURITY_V05_QUEUE_LATEST, 'Security queue pointer')
+    latest = read_json(latest_path, 'Security latest queue pointer')
+    run_id = safe_component(str(latest.get('runId', '')), 'Security queue run id')
+    status_path = (latest_path.parent / run_id / 'status.json').resolve()
+    if Path(str(latest.get('statusPath', ''))).resolve() != status_path:
+        raise RuntimeError('Security latest queue status is not bound to its run id')
+    status = read_json(status_path, 'Security queue status')
+    adapters = status.get('adapters')
+    if (
+        latest.get('state') != 'completed-candidates'
+        or status.get('state') != 'completed-candidates'
+        or status.get('runId') != run_id
+        or status.get('candidateVersion') != SECURITY_V05_CANDIDATE_VERSION
+        or status.get('promotionAllowed') is not False
+        or not isinstance(adapters, list)
+        or len(adapters) != 1
+        or not isinstance(adapters[0], dict)
+    ):
+        raise RuntimeError('Security queue is not one completed candidate; benchmark fails closed')
+    adapter = adapters[0]
+    if (
+        adapter.get('purpose') != SECURITY_V05_PURPOSE
+        or adapter.get('candidateId') != SECURITY_V05_CANDIDATE_ID
+        or adapter.get('recipeSha256') != SECURITY_V05_RECIPE_SHA256
+        or adapter.get('baseModel') != {key: BASES['security'][key] for key in ('modelId', 'revision', 'contentSha256')}
+        or adapter.get('candidate') != str(candidate)
+        or adapter.get('state') != 'completed-candidate'
+    ):
+        raise RuntimeError('Security queue adapter identity or completion evidence mismatch')
+    return {'runId': run_id, 'statusPath': str(status_path), 'candidateOnly': True, 'promotionAllowed': False}
+
+
+def security_v05_benchmark_command(output: Path, evidence: dict[str, Any]) -> list[str]:
+    benchmark = Path(__file__).with_name('benchmark_adapters.py')
+    return [
+        sys.executable, str(benchmark), '--output', str(output), '--domains', SECURITY_V05_PURPOSE,
+        '--checkpoint-domain', SECURITY_V05_PURPOSE, '--checkpoint-adapter', evidence['checkpoint'],
+        '--checkpoint-verification-report', evidence['verificationReport'], '--base-model-08b',
+        str((REPO_ROOT / BASES['security']['path']).resolve()), '--immutable-test-manifest',
+        str(SECURITY_V05_HELDOUT_MANIFEST),
+    ]
+
+
+def run_security_v05_single_domain_benchmark(args: argparse.Namespace) -> None:
+    if args.candidate_version not in {'0.1.0-candidate.1', SECURITY_V05_CANDIDATE_VERSION}:
+        raise ValueError('Security v0.5 benchmark does not accept a different candidate version')
+    run_id = safe_component(args.run_id or datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ') + '-' + uuid.uuid4().hex[:8], 'Security benchmark run id')
+    output = (SECURITY_V05_OUTPUT_ROOT / SECURITY_V05_CANDIDATE_VERSION / run_id).resolve()
+    if output.exists():
+        raise FileExistsError(f'Immutable Security benchmark output already exists: {output}')
+    candidate = security_v05_candidate_evidence((REPO_ROOT / '.model-adapters' / 'candidates').resolve())
+    queue = validate_security_v05_queue(SECURITY_V05_QUEUE_LATEST, Path(candidate['candidate']))
+    heldout = security_v05_heldout_snapshot(SECURITY_V05_HELDOUT_MANIFEST)
+    command = security_v05_benchmark_command(output, candidate)
+    plan = {
+        'queue': queue, 'candidate': candidate, 'heldout': heldout, 'command': command,
+        'output': str(output), 'candidateOnly': True, 'promotionAllowed': False,
+    }
+    if args.dry_run:
+        print(json.dumps({'dryRun': True, 'plan': plan}, ensure_ascii=False, indent=2))
+        return
+    result = subprocess.run(command, cwd=REPO_ROOT, check=False)
+    if result.returncode != 0:
+        raise RuntimeError(f'Security benchmark exited with code {result.returncode}')
+    if security_v05_candidate_evidence((REPO_ROOT / '.model-adapters' / 'candidates').resolve()) != candidate:
+        raise RuntimeError('Security candidate changed during benchmark')
+    if security_v05_heldout_snapshot(SECURITY_V05_HELDOUT_MANIFEST) != heldout:
+        raise RuntimeError('Security held-out evidence changed during benchmark')
+    queue_after = validate_security_v05_queue(SECURITY_V05_QUEUE_LATEST, Path(candidate['candidate']))
+    if queue_after != queue:
+        raise RuntimeError('Security queue evidence changed during benchmark')
+    report = read_json(output / 'benchmark-report.json', 'Security benchmark report')
+    run_manifest = read_json(output / 'run-manifest.json', 'Security benchmark run manifest')
+    if (
+        report.get('candidateOnly') is not True
+        or report.get('promotionAllowed') is not False
+        or set(require_object(report.get('domains'), 'Security benchmark domains')) != {SECURITY_V05_PURPOSE}
+        or report['domains']['security'].get('adapterPath') != candidate['checkpoint']
+        or report['domains']['security'].get('baseModel') != str((REPO_ROOT / BASES['security']['path']).resolve())
+        or run_manifest.get('candidateOnly') is not True
+        or run_manifest.get('promotionAllowed') is not False
+        or require_object(run_manifest.get('verificationEvidence'), 'Security benchmark verification evidence').get('reportSha256') != candidate['verificationReportSha256']
+    ):
+        raise RuntimeError('Security benchmark output is not immutable candidate-only evidence')
+    receipt = {
+        'schemaVersion': 'tomny.security-v05-post-training-benchmark.v1', 'runId': run_id,
+        'candidateOnly': True, 'promotionAllowed': False, 'queue': queue, 'candidate': candidate,
+        'heldout': heldout, 'benchmarkReportSha256': sha256_file(output / 'benchmark-report.json'),
+        'runManifestSha256': sha256_file(output / 'run-manifest.json'),
+    }
+    receipt_path = output / 'security-v05-post-training-receipt.json'
+    write_new_text_atomic(receipt_path, json.dumps(receipt, ensure_ascii=False, indent=2) + '\n')
+    print(json.dumps({'completed': True, 'candidateOnly': True, 'promotionAllowed': False, 'receipt': str(receipt_path)}, ensure_ascii=False, indent=2))
+
+
 def main() -> None:
     args = parse_args()
+    if args.security_v05_single_domain:
+        if args.gate_fixture:
+            raise ValueError('--security-v05-single-domain cannot use --gate-fixture')
+        run_security_v05_single_domain_benchmark(args)
+        return
     if args.gate_fixture and not args.dry_run:
         raise ValueError("--gate-fixture is restricted to --dry-run")
     if args.gate_fixture:
@@ -438,14 +682,13 @@ def main() -> None:
     verification = verify_candidates(paths, version)
     tests_before = immutable_snapshot(dataset)
     base_hashes: dict[str, str] = {}
-    for name, purpose in (("qwen35-08b", "security"), ("qwen35-2b", "user-understanding")):
-        base_path = (REPO_ROOT / BASES[purpose]["path"]).resolve()
-        actual = sha256_tree(base_path)
-        if actual != BASES[purpose]["contentSha256"]:
-            raise RuntimeError(f"{name}: base tree hash mismatch")
-        base_hashes[name] = actual
+    base_path = (REPO_ROOT / BASE_BINDING["path"]).resolve()
+    actual = sha256_tree(base_path)
+    if actual != BASE_BINDING["contentSha256"]:
+        raise RuntimeError("qwen35-08b: base tree hash mismatch")
+    base_hashes["qwen35-08b"] = actual
     benchmark = Path(__file__).with_name("benchmark_adapters.py")
-    command = [sys.executable, str(benchmark), "--output", str(output), "--candidate-root", str(candidate_root), "--candidate-version", version, "--base-model-08b", str((REPO_ROOT / BASES["security"]["path"]).resolve()), "--base-model-2b", str((REPO_ROOT / BASES["user-understanding"]["path"]).resolve()), "--immutable-test-manifest", str(dataset)]
+    command = [sys.executable, str(benchmark), "--output", str(output), "--candidate-root", str(candidate_root), "--candidate-version", version, "--base-model-08b", str(base_path), "--immutable-test-manifest", str(dataset)]
     plan = {"queueRunId": queue["latest"]["runId"], "candidateVersion": version, "candidates": {key: str(value) for key, value in paths.items()}, "verification": verification, "baseTreeHashes": base_hashes, "immutableTests": tests_before, "command": command, "output": str(output), "candidateOnly": True, "promotionAllowed": False}
     if args.dry_run:
         print(json.dumps({"dryRun": True, "plan": plan}, ensure_ascii=False, indent=2))

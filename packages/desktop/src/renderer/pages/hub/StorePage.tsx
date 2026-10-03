@@ -52,7 +52,7 @@ const LegacyStudioRedirect: React.FC<LegacyStudioRedirectProps> = ({
               enabled,
               compatible,
             })),
-            redirectEnabled,
+            redirectEnabled
           )
         );
       })
@@ -65,12 +65,15 @@ const LegacyStudioRedirect: React.FC<LegacyStudioRedirectProps> = ({
   }, [redirectEnabled, source]);
 
   if (!decision) return null;
+  if (decision.kind === 'default-runtime') {
+    return <Navigate replace state={navigationState} to={`${decision.target.pathname}${navigationSearch}`} />;
+  }
   if (decision.kind === 'target-runtime') {
     return (
       <Navigate
         replace
         state={navigationState}
-        to={`/store/app/${encodeURIComponent(decision.target.packageId)}/${encodeURIComponent(decision.target.moduleId)}${navigationSearch}`}
+        to={`/apps/${encodeURIComponent(decision.target.packageId)}/${encodeURIComponent(decision.target.moduleId)}${navigationSearch}`}
       />
     );
   }
@@ -83,7 +86,7 @@ const LegacyStudioRedirect: React.FC<LegacyStudioRedirectProps> = ({
       />
     );
   }
-  return <HubWorkspacePage kind='store' packageId={packageId} moduleId={moduleId} />;
+  return <HubWorkspacePage kind='package-app' packageId={packageId} moduleId={moduleId} />;
 };
 
 const StorePage: React.FC = () => {
@@ -102,11 +105,23 @@ const StorePage: React.FC = () => {
     [legacySource, mode, moduleId, packageId]
   );
   const isLegacyStudio = packageId === LEGACY_STUDIO_PACKAGE_ID && moduleId === LEGACY_STUDIO_MODULE_ID;
-  if (!isLegacyStudio || !packageId || !moduleId) {
-    return <HubWorkspacePage kind='store' packageId={packageId} moduleId={moduleId} />;
+  if (!moduleId) {
+    return <HubWorkspacePage kind='store' packageId={packageId} />;
+  }
+  if (!packageId) {
+    return <HubWorkspacePage kind='store' />;
+  }
+  if (!isLegacyStudio) {
+    return (
+      <Navigate
+        replace
+        state={location.state}
+        to={`/apps/${encodeURIComponent(packageId)}/${encodeURIComponent(moduleId)}${location.search}`}
+      />
+    );
   }
   if (isStudioCompatibilityLegacyFallback(legacyFallback)) {
-    return <HubWorkspacePage kind='store' packageId={packageId} moduleId={moduleId} />;
+    return <HubWorkspacePage kind='package-app' packageId={packageId} moduleId={moduleId} />;
   }
   return (
     <LegacyStudioRedirect

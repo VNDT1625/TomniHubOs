@@ -11,18 +11,10 @@
  * ## Why an in-process HTTP/SSE host (not a stdio child)
  *
  * The Browser-Control tools operate on `WebContentsView` instances that only
- * exist **in the Main process**. So, unlike the stdio built-in servers
- * (image-gen / resource / company), this server cannot run in a separate `node`
- * child process. The Testing MCP already faced — and solved — exactly this:
- * host the `McpServer` in the Main process on a **loopback HTTP server** using
- * the MCP SDK's {@link SSEServerTransport}, then register it in the MCP catalog
- * as an `sse` server pointing at that loopback URL. tomnycore (the MCP client)
- * connects over SSE like any remote MCP server. This module mirrors
- * `process/testing/testingMcpHost.ts` 1:1.
- *
- * Each SSE connection gets its own transport + a fresh {@link McpServer} bound
- * to the **same** browser services, so concurrent agent connections are
- * isolated at the transport level while driving the one shared browser.
+ * exist in the Main process. The host therefore uses a loopback HTTP/SSE server
+ * and registers that endpoint in the MCP catalog. Each SSE connection has an
+ * isolated transport and server instance, while operating on the shared Browser
+ * service through its existing authority checks.
  *
  * Process boundary: Main-process (Node.js / Electron) module.
  */
@@ -34,7 +26,7 @@ import {
   createBrowserControlServer,
   BUILTIN_BROWSER_CONTROL_NAME,
   type BrowserControlDeps,
-} from '../resources/builtinMcp/browserControlServer';
+} from './browserControlServer';
 
 /** Path the SSE stream is established on (GET). */
 const SSE_PATH = '/sse';

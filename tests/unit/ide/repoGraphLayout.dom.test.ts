@@ -16,8 +16,8 @@ import {
   computeRepoLayout,
   PALETTE,
   styleRepoEdges,
-} from '@renderer/pages/studio/ide/components/repoGraphLayout';
-import type { RepoGraph } from '@/process/ide/repoGraph';
+} from '@package-apps/ide/renderer/components/repoGraphLayout';
+import type { RepoGraph } from '@package-apps/ide/process/knowledge/graph/repoGraph';
 
 /** Build a minimal RepoGraph for tests. */
 const makeGraph = (

@@ -44,6 +44,15 @@ export type TelegramChannelDeps = {
     model?: TProviderWithModel;
     agent?: { agent_type: string; backend?: string; id?: string; custom_agent_id?: string; name?: string };
   }>;
+  /** Main-only online-account gate. */
+  requireAuthenticatedAccount?: () => void;
+  /**
+   * Main-owned governed egress admission. Undefined is deny: a saved Telegram
+   * configuration must never resume polling merely because an account signed in.
+   */
+  isExternalAuthorityGranted?: () => boolean;
+  /** Main-owned revocation signal; it aborts an in-flight long poll. */
+  subscribeExternalAuthorityRevocation?: (listener: () => void) => () => void;
 };
 
 const emptyState = (): State => ({
@@ -84,6 +93,9 @@ export class TelegramChannelService {
   public constructor(private readonly deps: TelegramChannelDeps) {
     this.fetchImpl = deps.fetchImpl ?? fetch;
     this.ready = this.load();
+    deps.subscribeExternalAuthorityRevocation?.(() => {
+      void this.suspendPolling();
+    });
   }
 
   public async status(): Promise<IChannelPluginStatus> {
@@ -103,6 +115,7 @@ export class TelegramChannelService {
 
   public async test(token: string): Promise<{ success: boolean; bot_username?: string; error?: string }> {
     try {
+      this.requireExternalAuthority();
       const bot = await this.call<TelegramBot>(token.trim(), 'getMe');
       return { success: true, bot_username: bot.username };
     } catch (error) {
@@ -111,6 +124,8 @@ export class TelegramChannelService {
   }
 
   public async enable(token: string): Promise<void> {
+    this.requireExecutionAccess();
+    this.requireExternalAuthority();
     await this.ready;
     const normalizedToken = token.trim() || (await this.token());
     const bot = await this.call<TelegramBot>(normalizedToken, 'getMe');
@@ -137,7 +152,7 @@ export class TelegramChannelService {
   public async disable(): Promise<void> {
     await this.ready;
     this.state.enabled = false;
-    this.pollAbort?.abort();
+    await this.suspendPolling();
     await this.save();
     this.deps.events.statusChanged(await this.status());
   }
@@ -160,6 +175,7 @@ export class TelegramChannelService {
   }
 
   public async approve(code: string): Promise<void> {
+    this.requireExternalAuthority();
     await this.ready;
     const pairing = this.state.pairings.find((item) => item.code === code && item.expiresAt > Date.now());
     if (!pairing) throw new Error('Pairing code is invalid or expired.');
@@ -219,11 +235,26 @@ export class TelegramChannelService {
   }
 
   public async resume(): Promise<void> {
+    this.requireExecutionAccess();
     await this.ready;
-    if (this.state.enabled) this.startPolling();
+    if (this.state.enabled && this.isExternalAuthorityGranted()) this.startPolling();
+  }
+
+  /** Stops network polling without changing the user's enabled configuration. */
+  public async suspendPolling(): Promise<void> {
+    await this.ready;
+    const polling = this.pollPromise;
+    this.pollAbort?.abort();
+    await polling?.catch((_error: unknown): void => undefined);
   }
 
   public async forwardCompleted(payload: unknown): Promise<void> {
+    try {
+      this.requireExecutionAccess();
+      this.requireExternalAuthority();
+    } catch {
+      return;
+    }
     if (!payload || typeof payload !== 'object') return;
     const conversationId = (payload as { conversation_id?: unknown }).conversation_id;
     if (typeof conversationId !== 'string') return;
@@ -262,12 +293,25 @@ export class TelegramChannelService {
     return value.token;
   }
 
+  private requireExecutionAccess(): void {
+    this.deps.requireAuthenticatedAccount?.();
+  }
+
+  private isExternalAuthorityGranted(): boolean {
+    return this.deps.isExternalAuthorityGranted?.() === true;
+  }
+
+  private requireExternalAuthority(): void {
+    if (!this.isExternalAuthorityGranted()) throw new Error('TELEGRAM_EXTERNAL_AUTHORITY_REQUIRED');
+  }
+
   private async call<T>(
     token: string,
     method: string,
     body?: Record<string, unknown>,
     signal?: AbortSignal
   ): Promise<T> {
+    this.requireExternalAuthority();
     if (!token) throw new Error('Telegram bot token is required.');
     const response = await this.fetchImpl(`https://api.telegram.org/bot${token}/${method}`, {
       method: body ? 'POST' : 'GET',
@@ -283,10 +327,12 @@ export class TelegramChannelService {
   }
 
   private async sendTelegram(chatId: number, text: string): Promise<void> {
+    this.requireExternalAuthority();
     await this.call(await this.token(), 'sendMessage', { chat_id: chatId, text });
   }
 
   private startPolling(): void {
+    this.requireExternalAuthority();
     if (this.pollPromise) return;
     this.pollAbort = new AbortController();
     const signal = this.pollAbort.signal;
@@ -299,7 +345,9 @@ export class TelegramChannelService {
   private async poll(signal: AbortSignal): Promise<void> {
     let failures = 0;
     while (!signal.aborted && this.state.enabled) {
+      if (!this.isExternalAuthorityGranted()) return;
       try {
+        this.requireExternalAuthority();
         const updates = await this.call<TelegramUpdate[]>(
           await this.token(),
           'getUpdates',
@@ -347,6 +395,106 @@ export class TelegramChannelService {
       await this.sendTelegram(message.chat.id, `Pairing code: ${pairing.code}. Approve it in Tomny settings.`);
       return;
     }
+
+    const command = text.split(/\s+/)[0]?.toLowerCase();
+
+    if (command === '/start' || command === '/help') {
+      const helpMsg = [
+        '👋 Xin chào! Đây là Tomny Hub Bot điều khiển từ xa.',
+        '',
+        '📌 Danh sách lệnh khả dụng:',
+        '• /menu - Xem menu điều khiển & trạng thái hoạt động',
+        '• /agent - Xem thông tin AI Agent đang sử dụng',
+        '• /status - Xem trạng thái kết nối và môi trường',
+        '• /new hoặc /reset - Khởi tạo phiên trò chuyện mới',
+        '• /help - Xem lại hướng dẫn này',
+        '',
+        '💬 Hoặc gửi tin nhắn văn bản bất kỳ để Agent thực hiện nhiệm vụ.',
+      ].join('\n');
+      await this.sendTelegram(message.chat.id, helpMsg);
+      return;
+    }
+
+    if (command === '/menu') {
+      const settings = await this.deps.readSettings();
+      const agent = settings.agent;
+      const agentName = agent?.name || 'Tomny Agentic';
+      const modelName =
+        settings.model?.use_model || '⚠️ Chưa chọn Model (Vui lòng chọn Default Model trong Tomny Settings)';
+      const menuMsg = [
+        '📋 Tomny Hub Menu',
+        '────────────────────',
+        '🤖 Agent: ' + agentName,
+        '🧠 Model: ' + modelName,
+        '',
+        '⚡ Lệnh nhanh:',
+        '• /agent - Chi tiết Agent',
+        '• /status - Trạng thái hệ thống',
+        '• /new - Làm mới phiên chat',
+        '• /help - Trợ giúp',
+        '',
+        '👉 Bạn có thể nhắn tin trực tiếp để Agent làm việc.',
+      ].join('\n');
+      await this.sendTelegram(message.chat.id, menuMsg);
+      return;
+    }
+
+    if (command === '/agent') {
+      const settings = await this.deps.readSettings();
+      const agent = settings.agent;
+      const agentName = agent?.name || 'Tomny Agentic';
+      const backend = agent?.backend || agent?.agent_type || 'tomnyagentic';
+      const agentMsg = [
+        '🤖 Thông tin Agent điều khiển',
+        '────────────────────',
+        '• Tên: ' + agentName,
+        '• Backend: ' + backend,
+        '• Nền tảng: Tomny Hub Ecosystem',
+        '',
+        '💡 Để chọn Agent hoặc thay đổi Model, vui lòng mở Tomny Hub Desktop -> Settings -> Channels -> Telegram.',
+      ].join('\n');
+      await this.sendTelegram(message.chat.id, agentMsg);
+      return;
+    }
+
+    if (command === '/status') {
+      const settings = await this.deps.readSettings();
+      const recent = await this.deps.conversations.list(undefined, 20);
+      const workspace = recent.items
+        .map((item) => (typeof item.extra?.workspace === 'string' ? item.extra.workspace : ''))
+        .find(Boolean);
+      const statusMsg = [
+        '⚡ Trạng thái Tomny Hub Remote',
+        '────────────────────',
+        '• Người dùng: ' + (authorized.display_name || platformUserId),
+        '• Chat ID: ' + message.chat.id,
+        '• Trạng thái Bot: Hoạt động (Connected)',
+        '• Workspace: ' + (workspace ? path.basename(workspace) : 'Chưa có workspace nào mở'),
+        '• Agent: ' + (settings.agent?.name || 'Tomny Agentic'),
+        '• Model: ' + (settings.model?.use_model || '⚠️ Chưa chọn Model'),
+      ].join('\n');
+      await this.sendTelegram(message.chat.id, statusMsg);
+      return;
+    }
+
+    if (command === '/new' || command === '/reset') {
+      this.state.sessions = this.state.sessions.filter(
+        (item) => !(item.user_id === authorized.id && item.chatId === String(message.chat.id))
+      );
+      await this.save();
+      await this.sendTelegram(message.chat.id, '🔄 Đã làm mới phiên trò chuyện. Hãy gửi tin nhắn mới để bắt đầu!');
+      return;
+    }
+
+    const currentSettings = await this.deps.readSettings();
+    if (!currentSettings.model?.use_model) {
+      await this.sendTelegram(
+        message.chat.id,
+        'Chua chon Default Model cho Telegram trong Tomny Hub Settings. Vui long chon Default Model.'
+      );
+      return;
+    }
+
     let session = this.state.sessions.find(
       (item) => item.user_id === authorized.id && item.chatId === String(message.chat.id)
     );

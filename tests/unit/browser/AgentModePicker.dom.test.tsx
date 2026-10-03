@@ -49,7 +49,7 @@ vi.mock('@/renderer/hooks/agent/useAgents', () => ({
   }),
 }));
 
-import AgentModePicker from '@/renderer/pages/browser/components/AgentModePicker';
+import AgentModePicker from '@package-apps/browser/renderer/browser/components/AgentModePicker';
 
 const provider = (id: string): IProvider =>
   ({ id, name: id, platform: 'openai', base_url: '', api_key: '', models: [] }) as unknown as IProvider;

@@ -41,7 +41,7 @@
  * Process boundary: Main-process (Node.js) module — no DOM APIs.
  */
 
-import type { Lease, LeaseRequest, TaskKind } from '../../resource/leaseTypes';
+import type { Lease, LeaseRequest, TaskKind } from '@process/resource/leaseTypes';
 
 // ---------------------------------------------------------------------------
 // Injected collaborators

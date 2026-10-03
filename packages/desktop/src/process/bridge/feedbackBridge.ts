@@ -11,9 +11,12 @@
 
 import { ipcMain, app, BrowserWindow } from 'electron';
 import * as path from 'path';
+import { isTrustedDesktopRendererSender } from '@/common/adapter/main';
 import { collectFeedbackLogAttachment } from '../feedback/logs';
 
-ipcMain.handle('feedback:collect-logs', async () => {
+ipcMain.handle('feedback:collect-logs', async (event) => {
+  if (!isTrustedDesktopRendererSender(event)) return null;
+
   try {
     let logsDir: string;
     try {
@@ -37,6 +40,8 @@ ipcMain.handle('feedback:collect-logs', async () => {
 });
 
 ipcMain.handle('feedback:capture-screenshot', async (event) => {
+  if (!isTrustedDesktopRendererSender(event)) return null;
+
   try {
     const win = BrowserWindow.fromWebContents(event.sender);
     if (!win || win.isDestroyed()) {

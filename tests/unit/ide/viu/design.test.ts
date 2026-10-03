@@ -10,7 +10,7 @@ import {
   canonicalProjectJson,
   createPromptProject,
   projectDigest,
-} from '@/process/ide/viu/design';
+} from '@package-apps/design/process/viu/design';
 
 describe('Viu prompt design contract', () => {
   it('creates an editable visual hierarchy with design and interaction evidence', () => {

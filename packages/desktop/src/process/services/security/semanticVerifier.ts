@@ -39,7 +39,11 @@ export const verifySanitizedInspection = async (
     if (!['allow', 'sanitize', 'approval_required', 'block'].includes(result.recommendation)) {
       return { recommendation: 'block', confidence: 0, reasonCode: 'model_invalid_output' };
     }
-    return { recommendation: result.recommendation, confidence: result.confidence, reasonCode: result.reasonCodes[0] ?? 'model_reviewed' };
+    return {
+      recommendation: result.recommendation,
+      confidence: result.confidence,
+      reasonCode: result.reasonCodes[0] ?? 'model_reviewed',
+    };
   } catch {
     return { recommendation: 'block', confidence: 0, reasonCode: 'model_error' };
   }

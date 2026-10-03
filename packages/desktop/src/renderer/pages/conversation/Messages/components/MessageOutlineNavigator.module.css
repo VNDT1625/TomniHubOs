@@ -1,0 +1,169 @@
+/**
+ * @license
+ * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+.container {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  padding: 8px 4px;
+  pointer-events: auto;
+  user-select: none;
+}
+
+.railItem {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 4px 0;
+  cursor: pointer;
+}
+
+.dashL1 {
+  width: 16px;
+  height: 3px;
+  border-radius: 2px;
+  background-color: var(--color-fill-4);
+  transition: all 0.2s ease;
+}
+
+.dashL1Active {
+  width: 26px;
+  height: 4px;
+  background-color: var(--color-primary-6);
+}
+
+.railItem:hover .dashL1 {
+  background-color: var(--color-primary-5);
+  transform: scaleX(1.2);
+}
+
+.flyoutCard {
+  position: absolute;
+  right: 28px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 260px;
+  max-height: 340px;
+  overflow-y: auto;
+  background-color: var(--color-bg-popup, var(--bg-1));
+  border: 1px solid var(--color-border-2, var(--bg-3));
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.16);
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  z-index: 50;
+  animation: fadeIn 0.15s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-50%) translateX(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(-50%) translateX(0);
+  }
+}
+
+.turnHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-1, var(--text-primary));
+  padding: 4px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+.turnHeader:hover {
+  background-color: var(--color-fill-2, var(--bg-2));
+  color: var(--color-primary-6);
+}
+
+.turnBadge {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background-color: var(--color-fill-3, var(--bg-3));
+  color: var(--color-text-2, var(--text-secondary));
+}
+
+.turnTitle {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.headingList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 2px;
+  border-top: 1px dashed var(--color-border-2, var(--bg-3));
+  padding-top: 4px;
+}
+
+.headingItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--color-text-2, var(--text-secondary));
+  padding: 3px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.headingItem:hover {
+  background-color: var(--color-fill-2, var(--bg-2));
+  color: var(--color-primary-6);
+}
+
+.headingL2 {
+  margin-left: 8px;
+}
+
+.headingL3 {
+  margin-left: 18px;
+}
+
+.dashL2 {
+  width: 10px;
+  height: 2px;
+  border-radius: 1px;
+  background-color: var(--color-text-3);
+  flex-shrink: 0;
+}
+
+.dashL3 {
+  width: 6px;
+  height: 2px;
+  border-radius: 1px;
+  background-color: var(--color-text-4);
+  flex-shrink: 0;
+}
+
+.headingText {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

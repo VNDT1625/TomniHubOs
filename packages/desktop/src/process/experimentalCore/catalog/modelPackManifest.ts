@@ -27,7 +27,7 @@ const SEMVER_PATTERN =
   /^(?:0|[1-9]\d*)(?:\.(?:0|[1-9]\d*)){2}(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/u;
 const CONTRACT_PATTERN = /^[a-z0-9]+(?:[.-][a-z0-9]+)+$/u;
 const VERSION_RANGE_PATTERN = /^(?:[<>=~^]+\d+(?:\.\d+){0,2})(?:\s+(?:[<>=~^]+\d+(?:\.\d+){0,2}))*$/u;
-const PURPOSES = new Set<CoreModelPurpose>(['security', 'user-understanding', 'orchestrator', 'assistant']);
+const PURPOSES = new Set<CoreModelPurpose>(['security', 'user-understanding', 'semantic-analysis']);
 const ALLOWED_FILE_EXTENSIONS = new Set(['.json', '.jinja', '.txt', '.safetensors']);
 const REQUIRED_FILES = ['adapter_model.safetensors', 'adapter_config.json'] as const;
 const DEFAULT_MAX_FILE_SIZE_BYTES = 2 * 1024 * 1024 * 1024;
@@ -256,7 +256,9 @@ export const parseModelPackManifest = (
  * declaration changes while the adapter's own weight hash happens to stay the same.
  */
 export const modelPackManifestSha256 = (manifest: ModelPackManifest): string =>
-  createHash('sha256').update(JSON.stringify(parseModelPackManifest(manifest))).digest('hex');
+  createHash('sha256')
+    .update(JSON.stringify(parseModelPackManifest(manifest)))
+    .digest('hex');
 
 export const verifyModelPackArtifactContents = (
   manifest: ModelPackManifest,

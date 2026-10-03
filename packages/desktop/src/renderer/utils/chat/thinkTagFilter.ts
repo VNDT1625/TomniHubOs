@@ -5,10 +5,18 @@
  */
 
 /**
- * Frontend think tag filter
- * Filters think tags from message content before rendering
- * This handles historical messages that were saved before the filter was implemented
+ * Frontend think tag filter and extractor.
+ * Filters or extracts think tags from message content for rendering and streaming.
  */
+
+export interface ExtractedThinkingResult {
+  /** Extracted thinking content, stripped of <think> tags */
+  thinking: string;
+  /** Clean response content without thinking blocks */
+  content: string;
+  /** Whether the stream is currently inside an open <think> block */
+  isThinking: boolean;
+}
 
 /**
  * Strip think tags from content
@@ -40,6 +48,7 @@ export function stripThinkTags(content: string): string {
       .replace(/<\s*think(?:ing)?\s*>/gi, '')
       // Step 6: Collapse multiple newlines
       .replace(/\n{3,}/g, '\n\n')
+      .trim()
   );
 }
 
@@ -54,6 +63,55 @@ export function hasThinkTags(content: string): boolean {
     return false;
   }
   return /<\s*\/?\s*think(?:ing)?\s*>/i.test(content);
+}
+
+/**
+ * Extract thinking content and clean response content from raw text.
+ * Handles both complete blocks and actively streaming open blocks.
+ */
+export function extractThinkingAndContent(raw: string): ExtractedThinkingResult {
+  if (!raw || typeof raw !== 'string') {
+    return { thinking: '', content: raw ?? '', isThinking: false };
+  }
+
+  if (!hasThinkTags(raw)) {
+    return { thinking: '', content: raw, isThinking: false };
+  }
+
+  const thinkBlocks: string[] = [];
+
+  // Match complete <think>...</think> or <thinking>...</thinking> blocks
+  const completeRegex = /<\s*think(?:ing)?\s*>([\s\S]*?)<\s*\/\s*think(?:ing)?\s*>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = completeRegex.exec(raw)) !== null) {
+    if (match[1]?.trim()) {
+      thinkBlocks.push(match[1].trim());
+    }
+  }
+
+  // Check for actively streaming open <think> tag without closing tag
+  const openTagMatch = /<\s*think(?:ing)?\s*>([\s\S]*)$/i.exec(raw);
+  const isOpenStreaming = !!openTagMatch && !/<\s*\/\s*think(?:ing)?\s*>/i.test(openTagMatch[1]);
+  if (isOpenStreaming && openTagMatch && openTagMatch[1]?.trim()) {
+    thinkBlocks.push(openTagMatch[1].trim());
+  }
+
+  // Handle MiniMax-style format: orphaned </think> with text before it
+  if (thinkBlocks.length === 0) {
+    const orphanedMatch = /^([\s\S]*?)<\s*\/\s*think(?:ing)?\s*>/i.exec(raw);
+    if (orphanedMatch && orphanedMatch[1]?.trim()) {
+      thinkBlocks.push(orphanedMatch[1].trim());
+    }
+  }
+
+  const thinking = thinkBlocks.join('\n\n').trim();
+  const content = stripThinkTags(raw).trim();
+
+  return {
+    thinking,
+    content,
+    isThinking: isOpenStreaming,
+  };
 }
 
 /**

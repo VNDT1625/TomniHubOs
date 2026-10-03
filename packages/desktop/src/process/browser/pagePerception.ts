@@ -50,7 +50,7 @@ import sharp from 'sharp';
 import { redactSecretText } from '@process/agentRuntime/agentMesh/security';
 import type { BrowserTabId } from './browserViewManager';
 import type { IMediaPipeline, MediaSource, MediaSummary, TranscribeOptions, TranscriptResult } from './mediaPipeline';
-import type { Lease, LeaseRequest, TaskKind } from '../resource/leaseTypes';
+import type { Lease, LeaseRequest, TaskKind } from '@process/resource/leaseTypes';
 
 // ---------------------------------------------------------------------------
 // Injected collaborators (interfaces only — no Electron dependency)

@@ -7,46 +7,69 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  providers: new Map<string, ReturnType<typeof vi.fn>>(),
+  methods: new Map<string, ReturnType<typeof vi.fn>>(),
 }));
 
-vi.mock('@office-ai/platform', () => ({
-  bridge: {
-    buildProvider: (channel: string) => {
-      const invoke = vi.fn(async (request: unknown) => ({ ok: true, data: request }));
-      mocks.providers.set(channel, invoke);
-      return { invoke };
-    },
-  },
-}));
+import { viuClient } from '@package-apps/design/renderer/viu/viuClient';
 
-import { viuClient } from '@/renderer/pages/studio/ide/Viu/viuClient';
-
-const invocation = (channel: string): ReturnType<typeof vi.fn> => {
-  const provider = mocks.providers.get(channel);
-  if (!provider) throw new Error(`Missing mocked VIU provider for ${channel}`);
-  return provider;
+const invocation = (method: string): ReturnType<typeof vi.fn> => {
+  const invoke = mocks.methods.get(method);
+  if (!invoke) throw new Error(`Missing mocked Design VIU method for ${method}`);
+  return invoke;
 };
 
 beforeEach(() => {
-  for (const provider of mocks.providers.values()) provider.mockClear();
+  mocks.methods.clear();
+  const method = (name: string) => {
+    const invoke = vi.fn(async (request: unknown) => ({ ok: true as const, data: request }));
+    mocks.methods.set(name, invoke);
+    return invoke;
+  };
+  Object.defineProperty(globalThis, 'window', {
+    configurable: true,
+    value: {
+      electronAPI: {
+        designViu: {
+          create: method('create'),
+          capture: method('capture'),
+          analyzeImage: method('analyzeImage'),
+          persist: method('persist'),
+          inspect: method('inspect'),
+          preview: method('preview'),
+          commit: method('commit'),
+          validate: method('validate'),
+          grantAsset: method('grantAsset'),
+          listAssets: method('listAssets'),
+        },
+      },
+    },
+  });
 });
 
 describe('VIU renderer bridge client', () => {
-  it('forwards legacy creation inputs without changing source evidence', async () => {
+  it('denies legacy source and image operations without delegating them to Main', async () => {
     const create = { prompt: 'Build a product page', mode: 'professional' as const };
     const capture = { url: 'https://example.com', maxPages: 3 };
-    const image = { path: 'C:\\assets\\hero.png' };
+    const image = { assetRef: 'asset:sha256:hero' };
 
-    await Promise.all([viuClient.create(create), viuClient.capture(capture), viuClient.analyzeImage(image)]);
+    const results = await Promise.all([
+      viuClient.create(create),
+      viuClient.capture(capture),
+      viuClient.analyzeImage(image),
+    ]);
 
-    expect(invocation('ide.viu.create')).toHaveBeenCalledWith(create);
-    expect(invocation('ide.viu.capture')).toHaveBeenCalledWith(capture);
-    expect(invocation('ide.viu.analyze-image')).toHaveBeenCalledWith(image);
+    expect(results).toEqual([
+      { ok: false, error: 'DESIGN_VIU_OPERATION_DENIED' },
+      { ok: false, error: 'DESIGN_VIU_OPERATION_DENIED' },
+      { ok: false, error: 'DESIGN_VIU_OPERATION_DENIED' },
+    ]);
+    expect(invocation('create')).not.toHaveBeenCalled();
+    expect(invocation('capture')).not.toHaveBeenCalled();
+    expect(invocation('analyzeImage')).not.toHaveBeenCalled();
   });
 
-  it('forwards persistence and asset grants through their dedicated channels', async () => {
-    const persist = { rootPath: 'C:\\repo', project: {} } as never;
+  it('denies persistence and raw asset grants without delegating them to Main', async () => {
+    const persist = { workspaceKey: 'workspace-opaque', project: {} } as never;
     const grant = {
       workspaceKey: 'repo:C:\\repo',
       path: 'C:\\assets\\scene.glb',
@@ -54,10 +77,14 @@ describe('VIU renderer bridge client', () => {
       mimeType: 'model/gltf-binary',
     };
 
-    await Promise.all([viuClient.persist(persist), viuClient.grantAsset(grant)]);
+    const results = await Promise.all([viuClient.persist(persist), viuClient.grantAsset(grant)]);
 
-    expect(invocation('ide.viu.persist')).toHaveBeenCalledWith(persist);
-    expect(invocation('ide.viu.asset.grant')).toHaveBeenCalledWith(grant);
+    expect(results).toEqual([
+      { ok: false, error: 'DESIGN_VIU_OPERATION_DENIED' },
+      { ok: false, error: 'DESIGN_VIU_OPERATION_DENIED' },
+    ]);
+    expect(invocation('persist')).not.toHaveBeenCalled();
+    expect(invocation('grantAsset')).not.toHaveBeenCalled();
   });
 
   it('wraps workspace inspection requests while preserving full transaction envelopes', async () => {
@@ -72,10 +99,10 @@ describe('VIU renderer bridge client', () => {
       viuClient.commitV2(transactionRequest),
     ]);
 
-    expect(invocation('ide.viu.v2.inspect')).toHaveBeenCalledWith({ workspaceKey });
-    expect(invocation('ide.viu.asset.list')).toHaveBeenCalledWith({ workspaceKey });
-    expect(invocation('ide.viu.v2.validate')).toHaveBeenCalledWith({ workspaceKey });
-    expect(invocation('ide.viu.v2.preview')).toHaveBeenCalledWith(transactionRequest);
-    expect(invocation('ide.viu.v2.commit')).toHaveBeenCalledWith(transactionRequest);
+    expect(invocation('inspect')).toHaveBeenCalledWith({ workspaceKey });
+    expect(invocation('listAssets')).toHaveBeenCalledWith({ workspaceKey });
+    expect(invocation('validate')).toHaveBeenCalledWith({ workspaceKey });
+    expect(invocation('preview')).toHaveBeenCalledWith(transactionRequest);
+    expect(invocation('commit')).toHaveBeenCalledWith(transactionRequest);
   });
 });

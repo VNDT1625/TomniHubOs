@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { parseUnixLint } from '@/process/ide/lint/lintParse';
+import { parseUnixLint } from '@package-apps/ide/process/coding/lint/lintParse';
 
 describe('parseUnixLint', () => {
   it('parses a basic unix diagnostic line', () => {

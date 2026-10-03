@@ -35,6 +35,46 @@ import type { GitCommit, GitFileChange, GitRepoStatus } from './gitTypes';
 /** Resolved credential the runner uses for an authenticated remote op. */
 export type ResolvedCredential = { username: string; token: string };
 
+/** Remote operations that can cause Git to contact a configured origin. */
+export type GitRemoteOperation = 'clone' | 'push' | 'pull';
+
+/**
+ * Bounded repository facts supplied to the Main-only Git authority. This shape
+ * deliberately contains no credential ID, token, local path, or raw URL.
+ */
+export type GitRemoteRepositoryMetadata = {
+  id: string;
+  remoteOrigin: string | null;
+  branch: string;
+  credentialConfigured: boolean;
+};
+
+/** A remote Git admission request. Secret material never belongs to this contract. */
+export type GitRemoteOperationRequest = {
+  operation: GitRemoteOperation;
+  repository: GitRemoteRepositoryMetadata;
+};
+
+/**
+ * Main-only authority for remote Git egress. Absence or a thrown/rejected
+ * decision is a denial; it is intentionally not a generic network capability.
+ */
+export type GitRemoteAuthority = {
+  authorizeRemoteOperation(request: GitRemoteOperationRequest): Promise<boolean>;
+};
+
+/**
+ * Admission context passed from the Main bridge to the process-spawn seam.
+ * The runner rechecks it immediately before spawning as defence in depth.
+ */
+export type GitRemoteExecution = {
+  authority: GitRemoteAuthority;
+  request: GitRemoteOperationRequest;
+};
+
+/** Stable, redaction-safe result returned for every denied remote Git attempt. */
+export const GIT_REMOTE_OPERATION_DENIED = 'GIT_REMOTE_OPERATION_DENIED';
+
 /** Captured result of a raw git invocation. */
 type RawResult = { code: number; stdout: string; stderr: string };
 
@@ -65,6 +105,23 @@ const authArgs = (cred?: ResolvedCredential): string[] => {
   const basic = Buffer.from(`${cred.username}:${cred.token}`, 'utf-8').toString('base64');
   return ['-c', `http.extraheader=Authorization: Basic ${basic}`];
 };
+
+const isRemoteExecutionAuthorized = async (
+  execution: GitRemoteExecution | undefined,
+  operation: GitRemoteOperation
+): Promise<boolean> => {
+  if (!execution || execution.request.operation !== operation) return false;
+  try {
+    return (await execution.authority.authorizeRemoteOperation(execution.request)) === true;
+  } catch {
+    return false;
+  }
+};
+
+const deniedRemoteOperation = (): { ok: false; output: typeof GIT_REMOTE_OPERATION_DENIED } => ({
+  ok: false,
+  output: GIT_REMOTE_OPERATION_DENIED,
+});
 
 /** Injectable spawn seam so tests don't shell out to real git. */
 export type GitSpawn = (args: string[], cwd: string | undefined) => Promise<RawResult>;
@@ -103,7 +160,8 @@ export type IGitRunner = {
     remoteUrl: string,
     localPath: string,
     branch: string,
-    cred?: ResolvedCredential
+    cred?: ResolvedCredential,
+    execution?: GitRemoteExecution
   ): Promise<{ ok: boolean; output: string }>;
   /** Working-tree status summary (branch, change count, ahead/behind). */
   status(localPath: string): Promise<GitRepoStatus>;
@@ -118,9 +176,19 @@ export type IGitRunner = {
     author?: { name: string; email: string }
   ): Promise<{ ok: boolean; output: string }>;
   /** Push the repo's branch to origin, setting upstream when needed. */
-  push(localPath: string, branch: string, cred?: ResolvedCredential): Promise<{ ok: boolean; output: string }>;
+  push(
+    localPath: string,
+    branch: string,
+    cred?: ResolvedCredential,
+    execution?: GitRemoteExecution
+  ): Promise<{ ok: boolean; output: string }>;
   /** Pull (fetch + merge) the branch from origin. */
-  pull(localPath: string, branch: string, cred?: ResolvedCredential): Promise<{ ok: boolean; output: string }>;
+  pull(
+    localPath: string,
+    branch: string,
+    cred?: ResolvedCredential,
+    execution?: GitRemoteExecution
+  ): Promise<{ ok: boolean; output: string }>;
   /** Initialise a repo in `localPath` and set its origin remote. */
   initAndSetRemote(localPath: string, remoteUrl: string, branch: string): Promise<{ ok: boolean; output: string }>;
 };
@@ -159,12 +227,14 @@ export const createGitRunner = (options?: GitRunnerOptions): IGitRunner => {
   };
 
   return {
-    clone: (remoteUrl, localPath, branch, cred) =>
-      exec(
+    clone: async (remoteUrl, localPath, branch, cred, execution) => {
+      if (!(await isRemoteExecutionAuthorized(execution, 'clone'))) return deniedRemoteOperation();
+      return exec(
         [...authArgs(cred), 'clone', ...(branch ? ['--branch', branch] : []), '--', remoteUrl, localPath],
         undefined,
         cred?.token
-      ),
+      );
+    },
 
     status: async (localPath): Promise<GitRepoStatus> => {
       try {
@@ -242,11 +312,15 @@ export const createGitRunner = (options?: GitRunnerOptions): IGitRunner => {
       return exec([...cfg, 'commit', '-m', message], localPath);
     },
 
-    push: async (localPath, branch, cred) =>
-      exec([...authArgs(cred), 'push', '--set-upstream', 'origin', branch], localPath, cred?.token),
+    push: async (localPath, branch, cred, execution) => {
+      if (!(await isRemoteExecutionAuthorized(execution, 'push'))) return deniedRemoteOperation();
+      return exec([...authArgs(cred), 'push', '--set-upstream', 'origin', branch], localPath, cred?.token);
+    },
 
-    pull: async (localPath, branch, cred) =>
-      exec([...authArgs(cred), 'pull', '--no-rebase', 'origin', branch], localPath, cred?.token),
+    pull: async (localPath, branch, cred, execution) => {
+      if (!(await isRemoteExecutionAuthorized(execution, 'pull'))) return deniedRemoteOperation();
+      return exec([...authArgs(cred), 'pull', '--no-rebase', 'origin', branch], localPath, cred?.token);
+    },
 
     initAndSetRemote: async (localPath, remoteUrl, branch) => {
       const init = await exec(['init', '-b', branch], localPath);

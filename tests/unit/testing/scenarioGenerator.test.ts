@@ -12,11 +12,21 @@
  * mocked, so no network/model is touched.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const listReadyProviders = vi.fn();
+const mocks = vi.hoisted(() => ({
+  listReadyProviders: vi.fn(),
+  providerChat: vi.fn(),
+  runAgentChatMessages: vi.fn(),
+}));
+
 vi.mock('@process/services/tomnyProviderBridge', () => ({
-  listReadyProviders: (...args: unknown[]) => listReadyProviders(...args),
+  listReadyProviders: (...args: unknown[]) => mocks.listReadyProviders(...args),
+}));
+
+vi.mock('@process/services/agentChat', () => ({
+  createProviderChat: () => mocks.providerChat,
+  runAgentChatMessages: (...args: unknown[]) => mocks.runAgentChatMessages(...args),
 }));
 
 import { createScenarioGenerator } from '@/process/testing/scenarioGenerator';
@@ -29,25 +39,23 @@ const usableProvider = {
   models: ['gpt-test'],
 };
 
-/** Stub global fetch to return the given assistant message content. */
+/** Configure the Main-owned broker stub to return one assistant completion. */
 const stubModelReply = (content: string): void => {
-  vi.stubGlobal(
-    'fetch',
-    vi.fn(async () => ({
-      ok: true,
-      json: async () => ({ choices: [{ message: { content } }] }),
-      text: async () => '',
-    }))
-  );
+  mocks.providerChat.mockResolvedValue(content);
 };
 
 beforeEach(() => {
-  listReadyProviders.mockReset();
-  listReadyProviders.mockResolvedValue([usableProvider]);
-});
-
-afterEach(() => {
-  vi.unstubAllGlobals();
+  mocks.listReadyProviders.mockReset();
+  mocks.providerChat.mockReset();
+  mocks.runAgentChatMessages.mockReset();
+  mocks.listReadyProviders.mockResolvedValue([usableProvider]);
+  mocks.runAgentChatMessages.mockImplementation(
+    async (
+      providerRun: (model: string, messages: unknown[], signal?: AbortSignal) => Promise<string>,
+      model: string,
+      messages: unknown[]
+    ) => providerRun(model, messages)
+  );
 });
 
 describe('scenarioGenerator', () => {
@@ -86,7 +94,7 @@ describe('scenarioGenerator', () => {
   });
 
   it('throws a clear error when no usable model is configured', async () => {
-    listReadyProviders.mockResolvedValue([]); // no providers
+    mocks.listReadyProviders.mockResolvedValue([]); // no providers
     const gen = createScenarioGenerator();
     await expect(gen.generate({ description: 'x', platform: 'web' })).rejects.toThrow(/no usable model/i);
   });
@@ -100,11 +108,9 @@ describe('scenarioGenerator', () => {
   });
 
   it('rejects an empty description without calling the model', async () => {
-    const fetchSpy = vi.fn();
-    vi.stubGlobal('fetch', fetchSpy);
     const gen = createScenarioGenerator();
     await expect(gen.generate({ description: '   ', platform: 'web' })).rejects.toThrow(/describe/i);
-    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(mocks.providerChat).not.toHaveBeenCalled();
   });
 
   it('guides the user to a URL instead of fabricating one (needsUrl)', async () => {

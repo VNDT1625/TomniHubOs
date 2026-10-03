@@ -19,13 +19,12 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import { createBrowserSurfaceRunner } from '@/process/workspace/browserSurfaceRunner';
+import { createBrowserSurfaceRunner } from '@process/browser/browserSurfaceRunner';
 import { createWorkspaceOrchestrator } from '@/process/workspace/workspaceOrchestrator';
 import type { ISurfaceRunner, SurfaceSpec, WorkspaceEvent } from '@/process/workspace/surfaceTypes';
 import type { IResourceCoordinator } from '@/process/resource/resourceCoordinator';
 import type { Lease, LeaseRequest } from '@/process/resource/leaseTypes';
-import type { IBrowserViewManager } from '@/process/browser/browserViewManager';
-import type { IWebAgentRunner } from '@/process/browser/webAgentRunner';
+import type { BrowserSurfaceRunnerDeps } from '@process/browser/browserSurfaceRunner';
 
 // ---------------------------------------------------------------------------
 // Fakes
@@ -112,11 +111,11 @@ describe('workspaceOrchestrator', () => {
     const viewManager = {
       createTab: vi.fn(() => 'tab-1'),
       destroyTab: vi.fn(),
-    } as unknown as IBrowserViewManager;
+    } satisfies BrowserSurfaceRunnerDeps['viewManager'];
     const agentRunner = {
       run: vi.fn().mockResolvedValue({ answer: '', status: 'stopped', steps: 3 }),
       cancel: vi.fn(),
-    } as unknown as IWebAgentRunner;
+    } satisfies BrowserSurfaceRunnerDeps['agentRunner'];
     const runner = createBrowserSurfaceRunner({ viewManager, agentRunner });
     const controller = new AbortController();
     const spec = browserSpec();
@@ -156,6 +155,29 @@ describe('workspaceOrchestrator', () => {
     const created = events.filter((e) => e.type === 'surface-created');
     expect(created.length).toBeGreaterThanOrEqual(2);
     expect(events.at(-1)).toEqual({ type: 'run-complete', ok: true });
+  });
+
+  it('fails an unavailable optional Surface before it acquires a base resource lease', async () => {
+    const { coordinator, peak } = immediateCoordinator();
+    const calls: string[] = [];
+    const orchestrator = createWorkspaceOrchestrator({
+      runners: { editor: okRunner(calls) },
+      coordinator,
+      generateId: ids(),
+    });
+    const events: WorkspaceEvent[] = [];
+
+    const result = await orchestrator.run({ runId: 'missing-browser', surfaces: [browserSpec()] }, (event) => {
+      events.push(event);
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.surfaces[0]).toMatchObject({ status: 'error', error: expect.stringContaining('Package App') });
+    expect(events).toContainEqual(
+      expect.objectContaining({ type: 'surface-error', message: expect.stringContaining('Package App') })
+    );
+    expect(calls).toEqual([]);
+    expect(peak()).toBe(0);
   });
 
   it('releases a lease for every surface, even on failure', async () => {

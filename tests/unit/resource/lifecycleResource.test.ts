@@ -343,7 +343,9 @@ describe('ResourceCoordinator package/tab lifecycle', () => {
     await coordinator.deactivateLifecycleResource('reactivate');
     shouldFail = true;
 
-    await expect(coordinator.activateLifecycleResource('reactivate')).rejects.toBeInstanceOf(LifecycleOperationFailedError);
+    await expect(coordinator.activateLifecycleResource('reactivate')).rejects.toBeInstanceOf(
+      LifecycleOperationFailedError
+    );
     expect(coordinator.getLifecycleSnapshot().entries[0]).toMatchObject({ state: 'suspended', hasLease: false });
     expect(coordinator.getState().active).toHaveLength(0);
     expect(activations).toBe(2);
@@ -380,7 +382,9 @@ describe('ResourceCoordinator package/tab lifecycle', () => {
         throw new Error('cleanup failed');
       },
     });
-    await expect(coordinator.evictLifecycleResource('cleanup-error')).rejects.toBeInstanceOf(LifecycleOperationFailedError);
+    await expect(coordinator.evictLifecycleResource('cleanup-error')).rejects.toBeInstanceOf(
+      LifecycleOperationFailedError
+    );
     expect(coordinator.getLifecycleSnapshot().entries.find((entry) => entry.id === 'cleanup-error')).toMatchObject({
       state: 'evicted',
       hasLease: false,
@@ -404,7 +408,9 @@ describe('ResourceCoordinator package/tab lifecycle', () => {
       evict: () => events.push('evict'),
     });
 
-    await expect(coordinator.activateLifecycleResource('activation-cleanup')).rejects.toBeInstanceOf(LifecycleOperationFailedError);
+    await expect(coordinator.activateLifecycleResource('activation-cleanup')).rejects.toBeInstanceOf(
+      LifecycleOperationFailedError
+    );
     expect(events).toEqual(['prewarm:allocated', 'activate', 'suspend', 'evict']);
     expect(coordinator.getLifecycleSnapshot().entries[0]).toMatchObject({ state: 'cold', hasLease: false });
     expect(coordinator.getState().active).toHaveLength(0);
@@ -695,7 +701,9 @@ describe('ResourceCoordinator package/tab lifecycle', () => {
     await coordinator.activateLifecycleResource('evict-after-suspend-error');
     await coordinator.deactivateLifecycleResource('evict-after-suspend-error');
 
-    await expect(coordinator.evictLifecycleResource('evict-after-suspend-error')).rejects.toBeInstanceOf(LifecycleOperationFailedError);
+    await expect(coordinator.evictLifecycleResource('evict-after-suspend-error')).rejects.toBeInstanceOf(
+      LifecycleOperationFailedError
+    );
     expect(events).toEqual(['suspend', 'evict']);
     expect(coordinator.getLifecycleSnapshot().entries[0]).toMatchObject({ state: 'evicted', hasLease: false });
     expect(coordinator.getState().active).toHaveLength(0);
@@ -742,9 +750,9 @@ describe('ResourceCoordinator package/tab lifecycle', () => {
     expect(suspended).toEqual(['first', 'second']);
     expect(coordinator.getState().active).toHaveLength(0);
     expect(warn).toHaveBeenCalled();
-    expect(
-      warn.mock.calls.some((args) => args.some((arg) => String(arg).includes('pressure-hook-secret')))
-    ).toBe(false);
+    expect(warn.mock.calls.some((args) => args.some((arg) => String(arg).includes('pressure-hook-secret')))).toBe(
+      false
+    );
   });
 
   it('awaits suspend and evict hooks during asynchronous disposal', async () => {
@@ -813,7 +821,12 @@ describe('ResourceCoordinator package/tab lifecycle', () => {
     let finishSuspend: (() => void) | undefined;
     const released: string[] = [];
     const pool = new LifecycleResourcePool({
-      requestLease: async (request) => ({ id: 'lease-1', kind: request.kind, grantedAt: 0, estCostMB: request.estCostMB }),
+      requestLease: async (request) => ({
+        id: 'lease-1',
+        kind: request.kind,
+        grantedAt: 0,
+        estCostMB: request.estCostMB,
+      }),
       releaseLease: (id) => released.push(id),
       cancelQueuedRequest: () => false,
       maxResources: 2,
@@ -929,7 +942,12 @@ describe('ResourceCoordinator package/tab lifecycle', () => {
     let activationCalls = 0;
     let finishActivate: (() => void) | undefined;
     const pool = new LifecycleResourcePool({
-      requestLease: async (request) => ({ id: 'lease-1', kind: request.kind, grantedAt: 0, estCostMB: request.estCostMB }),
+      requestLease: async (request) => ({
+        id: 'lease-1',
+        kind: request.kind,
+        grantedAt: 0,
+        estCostMB: request.estCostMB,
+      }),
       releaseLease: (id) => released.push(id),
       cancelQueuedRequest: () => false,
       maxResources: 1,
@@ -1001,7 +1019,9 @@ describe('ResourceCoordinator package/tab lifecycle', () => {
     await coordinator.activateLifecycleResource('hook-error');
     await coordinator.deactivateLifecycleResource('hook-error');
 
-    await expect(coordinator.suspendLifecycleResource('hook-error')).rejects.toBeInstanceOf(LifecycleOperationFailedError);
+    await expect(coordinator.suspendLifecycleResource('hook-error')).rejects.toBeInstanceOf(
+      LifecycleOperationFailedError
+    );
     expect(coordinator.getState().active).toHaveLength(0);
     expect(coordinator.getLifecycleSnapshot().entries[0]).toMatchObject({ state: 'suspended', hasLease: false });
     expect(warn).toHaveBeenCalled();

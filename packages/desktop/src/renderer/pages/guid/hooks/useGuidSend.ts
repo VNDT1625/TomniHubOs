@@ -11,7 +11,11 @@ import { toSessionMcpServer } from '@/renderer/hooks/mcp/catalog';
 import { emitter } from '@/renderer/utils/emitter';
 import { buildDisplayMessage } from '@/renderer/utils/file/messageFiles';
 import { updateWorkspaceTime } from '@/renderer/utils/workspace/workspaceHistory';
-import { BROWSER_CONTROL_MCP_NAME, withSuperBrowserRules } from '@/renderer/pages/conversation/hooks/superGuidance';
+import {
+  BROWSER_CONTROL_MCP_NAME,
+  withSuperBrowserRules,
+  withIdeMemoryRules,
+} from '@/renderer/pages/conversation/hooks/superGuidance';
 import { Message } from '@arco-design/web-react';
 import { useCallback, useRef } from 'react';
 import { type TFunction } from 'i18next';
@@ -273,11 +277,10 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
 
     // TomnyAgentic path (direct selection or preset assistant with tomnyagentic as main agent)
     if (isTomnyAgentBackend(selectedAgent) || (is_preset && isTomnyAgentBackend(finalEffectiveAgentType))) {
-      if (!current_model) {
-        Message.warning(t('conversation.noModelConfigured'));
-        return;
-      }
+      // Allow conversation creation without model - the chat pipeline will handle model selection or prompt for connection
       try {
+        const tomnyMemId = crypto.randomUUID();
+        const tomnyBaseRules = withSuperRules(is_preset ? preset_rules : undefined);
         const conversation = await ipcBridge.conversation.create.invoke({
           type: 'tomnyagentic',
           name: input,
@@ -286,7 +289,7 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
             default_files: files,
             workspace: finalWorkspace,
             custom_workspace: isCustomWorkspace,
-            preset_rules: withSuperRules(is_preset ? preset_rules : undefined),
+            preset_rules: withIdeMemoryRules(tomnyMemId, tomnyBaseRules),
             preset_enabled_skills: enabled_skills_to_send,
             exclude_auto_inject_skills: excludeBuiltinSkills,
             selected_mcp_server_ids: selectedUserMcpServerIds,
@@ -296,6 +299,7 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
             selected_session_mcp_servers: selectedAllSessionMcpServers,
             preset_assistant_id,
             session_mode: selectedMode,
+            ide_memory_id: tomnyMemId,
           },
         });
 
@@ -346,6 +350,8 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
         console.warn(`${acpBackend} CLI not found, but proceeding to let conversation panel handle it.`);
       }
       const agentBackend = acpBackend || selectedAgent;
+      const acpMemId = crypto.randomUUID();
+      const acpBaseRules = withSuperRules(is_preset ? preset_rules : undefined);
       const agentConversationParams = buildAgentConversationParams({
         backend: agentBackend,
         name: input,
@@ -365,7 +371,7 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
         preset_resources:
           is_preset || superSelected
             ? {
-                rules: withSuperRules(is_preset ? preset_rules : undefined),
+                rules: withIdeMemoryRules(acpMemId, acpBaseRules),
                 enabled_skills,
                 exclude_auto_inject_skills: excludeBuiltinSkills,
               }
@@ -377,6 +383,7 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
           exclude_auto_inject_skills: excludeBuiltinSkills,
           selected_mcp_server_ids: selectedUserMcpServerIds,
           selected_session_mcp_servers: selectedSessionMcpServers,
+          ide_memory_id: acpMemId,
           // Non-preset agents still forward user-selected custom skills via the
           // shared backend slot. For preset assistants this is already wired
           // through `preset_resources.enabled_skills` above.

@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import './adapter/bridgeErrorWrapper';
 export * as ipcBridge from './adapter/ipcBridge';
 export { conversation } from './adapter/ipcBridge';
 export type {
@@ -11,3 +12,4 @@ export type {
   TomnyAgenticContextResult,
   TomnyAgenticContextSnapshot,
 } from './adapter/ipcBridge';
+export * from './types/pipeline';

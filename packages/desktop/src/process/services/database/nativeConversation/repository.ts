@@ -134,6 +134,12 @@ export class NativeConversationRepository {
         messages: Array.isArray(value.messages) ? value.messages : [],
         ...(value.migrations ? { migrations: value.migrations } : {}),
       };
+      for (const conversation of this.snapshot.conversations) {
+        if (conversation.status === 'running') {
+          conversation.status = 'finished';
+          shouldFlush = true;
+        }
+      }
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
       this.snapshot = clone(EMPTY_SNAPSHOT);

@@ -34,7 +34,7 @@ const baseSha = 'a'.repeat(64);
 const urls = {
   metadata: 'https://catalog.example.com/metadata.json',
   catalog: 'https://catalog.example.com/catalog.json',
-  artifact: 'https://cdn.example.com/assistant.zip',
+  artifact: 'https://cdn.example.com/security.zip',
 };
 const weights = Buffer.from('adapter weights');
 const config = Buffer.from('{r:8,lora_alpha:16}');
@@ -43,11 +43,11 @@ const digest = (bytes: Uint8Array): string => createHash('sha256').update(bytes)
 const manifest = (): ModelPackManifest => ({
   schemaVersion: 1,
   kind: 'model-adapter',
-  id: 'com.tomny.core.assistant',
+  id: 'com.tomny.core.security',
   version: '0.1.0',
-  purpose: 'assistant',
+  purpose: 'security',
   format: 'peft-lora-safetensors',
-  baseModel: { id: 'Qwen/Qwen3.5-2B', revision: 'immutable-r1', sha256: baseSha },
+  baseModel: { id: 'Qwen/Qwen3.5-0.8B', revision: 'immutable-r1', sha256: baseSha },
   runtime: {
     engine: 'transformers-peft',
     peft: '>=0.18.1 <0.19.0',
@@ -55,8 +55,8 @@ const manifest = (): ModelPackManifest => ({
     minTomnyVersion: '0.0.0',
   },
   contracts: {
-    inputSchema: 'tomny.assistant.input.v1',
-    outputSchema: 'tomny.assistant.output.v1',
+    inputSchema: 'tomny.security.input.v1',
+    outputSchema: 'tomny.security.output.v1',
     policyVersion: 'core-policy-v1',
   },
   files: [
@@ -74,10 +74,7 @@ const manifest = (): ModelPackManifest => ({
   createdAt: '2026-07-25T10:00:00Z',
 });
 
-const promotionReceipt = (
-  candidate: ModelPackManifest,
-  target: ModelPromotionTarget
-): ModelPromotionGateReceipt => ({
+const promotionReceipt = (candidate: ModelPackManifest, target: ModelPromotionTarget): ModelPromotionGateReceipt => ({
   schemaVersion: 1,
   target,
   candidate: {
@@ -204,7 +201,7 @@ const createHarness = async (options: HarnessOptions = {}) => {
     onAuditError: () => {
       auditErrors += 1;
     },
-    expectedBases: { assistant: manifest().baseModel },
+    expectedBases: { security: manifest().baseModel },
     availableDiskBytes: async () => options.diskBytes ?? 10n * 1024n * 1024n * 1024n,
     maxExtractedBytes: options.maxExtractedBytes,
     maxTransactionQuarantineEntries: options.maxTransactionQuarantineEntries,
@@ -232,8 +229,8 @@ describe('Model Pack installation service', () => {
   it('deduplicates concurrent installation and registers one immutable candidate', async () => {
     const harness = await createHarness();
     const [first, second] = await Promise.all([
-      harness.service.install('com.tomny.core.assistant', '0.1.0'),
-      harness.service.install('com.tomny.core.assistant', '0.1.0'),
+      harness.service.install('com.tomny.core.security', '0.1.0'),
+      harness.service.install('com.tomny.core.security', '0.1.0'),
     ]);
     expect(first.key).toBe(second.key);
     expect(harness.artifactRequests()).toBe(1);
@@ -256,7 +253,7 @@ describe('Model Pack installation service', () => {
       },
     });
 
-    const installation = harness.service.install('com.tomny.core.assistant', '0.1.0');
+    const installation = harness.service.install('com.tomny.core.security', '0.1.0');
     await artifactStarted;
     const removal = harness.service.uninstall(modelPackKey(manifest()));
     await new Promise((resolve) => setTimeout(resolve, 25));
@@ -270,7 +267,7 @@ describe('Model Pack installation service', () => {
 
   it('coalesces concurrent removals of the same installed pack', async () => {
     const harness = await createHarness();
-    const installed = await harness.service.install('com.tomny.core.assistant', '0.1.0');
+    const installed = await harness.service.install('com.tomny.core.security', '0.1.0');
 
     await Promise.all([harness.service.uninstall(installed.key), harness.service.uninstall(installed.key)]);
 
@@ -286,7 +283,7 @@ describe('Model Pack installation service', () => {
         return tampered;
       },
     });
-    await expect(harness.service.install('com.tomny.core.assistant', '0.1.0')).rejects.toMatchObject({
+    await expect(harness.service.install('com.tomny.core.security', '0.1.0')).rejects.toMatchObject({
       code: 'artifact-tampered',
     });
     expect(Object.keys((await harness.registry.read()).records)).toHaveLength(0);
@@ -305,7 +302,7 @@ describe('Model Pack installation service', () => {
 
   it('quarantines an installed adapter whose bytes change after registration', async () => {
     const harness = await createHarness();
-    const installed = await harness.service.install('com.tomny.core.assistant', '0.1.0');
+    const installed = await harness.service.install('com.tomny.core.security', '0.1.0');
     const tampered = Buffer.from(weights);
     tampered[0] ^= 1;
     await writeFile(path.join(installed.installedPath!, 'adapter_model.safetensors'), tampered);
@@ -320,7 +317,7 @@ describe('Model Pack installation service', () => {
 
   it('does not briefly reactivate a known-invalid rollback model during reconciliation', async () => {
     const harness = await createHarness();
-    const first = await harness.service.install('com.tomny.core.assistant', '0.1.0');
+    const first = await harness.service.install('com.tomny.core.security', '0.1.0');
     let snapshot = await harness.registry.read();
     snapshot = await harness.registry.promote(
       first.key,
@@ -362,14 +359,14 @@ describe('Model Pack installation service', () => {
       snapshot.revision,
       promotionReceipt(secondManifest, 'active')
     );
-    await harness.registry.rollback('assistant', snapshot.revision);
+    await harness.registry.rollback('security', snapshot.revision);
     await writeFile(path.join(first.installedPath!, 'adapter_model.safetensors'), Buffer.from('corrupt'));
     const originalQuarantine = harness.registry.quarantine.bind(harness.registry);
     let invalidRollbackWasExposed = false;
     vi.spyOn(harness.registry, 'quarantine').mockImplementation(async (key, reason, expectedRevision) => {
       const updated = await originalQuarantine(key, reason, expectedRevision);
       if (key === first.key) {
-        invalidRollbackWasExposed = (await harness.registry.getActive('assistant'))?.key === secondKey;
+        invalidRollbackWasExposed = (await harness.registry.getActive('security'))?.key === secondKey;
       }
       return updated;
     });
@@ -377,7 +374,7 @@ describe('Model Pack installation service', () => {
     await harness.service.initialize();
 
     expect(invalidRollbackWasExposed).toBe(false);
-    expect(await harness.registry.getActive('assistant')).toBeUndefined();
+    expect(await harness.registry.getActive('security')).toBeUndefined();
     expect((await harness.registry.read()).records[first.key].status).toBe('quarantined');
     expect((await harness.registry.read()).records[secondKey].status).toBe('quarantined');
   });
@@ -387,7 +384,7 @@ describe('Model Pack installation service', () => {
       artifactTransform: (bytes) => bytes.subarray(0, bytes.byteLength - 1),
       artifactContentLength: 1,
     });
-    await expect(harness.service.install('com.tomny.core.assistant', '0.1.0')).rejects.toMatchObject({
+    await expect(harness.service.install('com.tomny.core.security', '0.1.0')).rejects.toMatchObject({
       code: 'partial-download',
     });
     expect(await readdir(path.join(harness.root, 'model-packs', '.staging'))).toHaveLength(0);
@@ -398,7 +395,7 @@ describe('Model Pack installation service', () => {
     const modelRoot = path.join(harness.root, 'model-packs');
     await writeFile(path.join(modelRoot, '.transactions', `${'7'.repeat(64)}.json`), '{');
 
-    const installed = await harness.service.install('com.tomny.core.assistant', '0.1.0');
+    const installed = await harness.service.install('com.tomny.core.security', '0.1.0');
 
     expect((await harness.registry.read()).records[installed.key].status).toBe('candidate');
     expect(await readdir(path.join(modelRoot, '.transactions'))).toHaveLength(0);
@@ -407,7 +404,7 @@ describe('Model Pack installation service', () => {
 
   it('fails before extraction when available disk cannot hold archive, payload and reserve', async () => {
     const harness = await createHarness({ diskBytes: 1n });
-    await expect(harness.service.install('com.tomny.core.assistant', '0.1.0')).rejects.toMatchObject({
+    await expect(harness.service.install('com.tomny.core.security', '0.1.0')).rejects.toMatchObject({
       code: 'disk-full',
     });
     expect(Object.keys((await harness.registry.read()).records)).toHaveLength(0);
@@ -415,14 +412,14 @@ describe('Model Pack installation service', () => {
 
   it('rejects an extra executable file even when the archive hash is catalog-bound', async () => {
     const harness = await createHarness({ extraFile: true });
-    await expect(harness.service.install('com.tomny.core.assistant', '0.1.0')).rejects.toMatchObject({
+    await expect(harness.service.install('com.tomny.core.security', '0.1.0')).rejects.toMatchObject({
       code: 'unsafe-entry',
     });
   });
 
   it('rejects a declared payload over the extraction cap before downloading', async () => {
     const harness = await createHarness({ maxExtractedBytes: 1 });
-    await expect(harness.service.install('com.tomny.core.assistant', '0.1.0')).rejects.toMatchObject({
+    await expect(harness.service.install('com.tomny.core.security', '0.1.0')).rejects.toMatchObject({
       code: 'payload-too-large',
     });
     expect(harness.artifactRequests()).toBe(0);
@@ -430,14 +427,14 @@ describe('Model Pack installation service', () => {
 
   it('keeps a committed install successful when the audit sink is unavailable', async () => {
     const harness = await createHarness({ auditFails: true });
-    const installed = await harness.service.install('com.tomny.core.assistant', '0.1.0');
+    const installed = await harness.service.install('com.tomny.core.security', '0.1.0');
     expect((await harness.registry.read()).records[installed.key].status).toBe('candidate');
     expect(harness.auditErrors()).toBeGreaterThanOrEqual(3);
   });
 
   it('recovers an uninstall interrupted after moving installed bytes to trash', async () => {
     const harness = await createHarness();
-    const installed = await harness.service.install('com.tomny.core.assistant', '0.1.0');
+    const installed = await harness.service.install('com.tomny.core.security', '0.1.0');
     const modelRoot = path.join(harness.root, 'model-packs');
     const trashName = 'b'.repeat(64);
     const trashPath = path.join(modelRoot, '.trash', trashName);
@@ -463,7 +460,7 @@ describe('Model Pack installation service', () => {
 
   it('quarantines truncated and traversal journals without changing valid or outside data', async () => {
     const harness = await createHarness();
-    const installed = await harness.service.install('com.tomny.core.assistant', '0.1.0');
+    const installed = await harness.service.install('com.tomny.core.security', '0.1.0');
     const modelRoot = path.join(harness.root, 'model-packs');
     const outside = path.join(harness.root, 'outside-sentinel');
     await writeFile(outside, 'keep');
@@ -473,7 +470,7 @@ describe('Model Pack installation service', () => {
       JSON.stringify({
         schemaVersion: 1,
         operation: 'install',
-        key: 'com.tomny.core.assistant@9.9.9',
+        key: 'com.tomny.core.security@9.9.9',
         destinationName: '../outside-sentinel',
       })
     );
@@ -487,9 +484,9 @@ describe('Model Pack installation service', () => {
 
   it('quarantines an oversized journal without loading or applying it', async () => {
     const harness = await createHarness();
-    const installed = await harness.service.install('com.tomny.core.assistant', '0.1.0');
+    const installed = await harness.service.install('com.tomny.core.security', '0.1.0');
     const modelRoot = path.join(harness.root, 'model-packs');
-    const oversizedKey = `com.tomny.core.assistant@${'x'.repeat(20 * 1024)}`;
+    const oversizedKey = `com.tomny.core.security@${'x'.repeat(20 * 1024)}`;
     await writeFile(
       path.join(modelRoot, '.transactions', `${'3'.repeat(64)}.json`),
       JSON.stringify({
@@ -508,7 +505,7 @@ describe('Model Pack installation service', () => {
 
   it('fails closed when transaction quarantine reaches its entry quota', async () => {
     const harness = await createHarness({ maxTransactionQuarantineEntries: 1 });
-    const installed = await harness.service.install('com.tomny.core.assistant', '0.1.0');
+    const installed = await harness.service.install('com.tomny.core.security', '0.1.0');
     const modelRoot = path.join(harness.root, 'model-packs');
     await writeFile(path.join(modelRoot, '.transactions', `${'4'.repeat(64)}.json`), '{');
     await writeFile(path.join(modelRoot, '.transactions', `${'5'.repeat(64)}.json`), '{');
@@ -521,7 +518,7 @@ describe('Model Pack installation service', () => {
 
   it('quarantines an installed tree containing an undeclared directory', async () => {
     const harness = await createHarness();
-    const installed = await harness.service.install('com.tomny.core.assistant', '0.1.0');
+    const installed = await harness.service.install('com.tomny.core.security', '0.1.0');
     await mkdir(path.join(installed.installedPath!, 'undeclared-empty'));
 
     await harness.service.initialize();
@@ -534,7 +531,7 @@ describe('Model Pack installation service', () => {
 
   it('quarantines an unbound cleanup journal without deleting a valid installed pack', async () => {
     const harness = await createHarness();
-    const installed = await harness.service.install('com.tomny.core.assistant', '0.1.0');
+    const installed = await harness.service.install('com.tomny.core.security', '0.1.0');
     const modelRoot = path.join(harness.root, 'model-packs');
     const transactionPath = path.join(modelRoot, '.transactions', `${'f'.repeat(64)}.json`);
     await writeFile(
@@ -542,7 +539,7 @@ describe('Model Pack installation service', () => {
       JSON.stringify({
         schemaVersion: 1,
         operation: 'install',
-        key: 'com.tomny.core.assistant@9.9.9',
+        key: 'com.tomny.core.security@9.9.9',
         destinationName: path.basename(installed.installedPath!),
       })
     );
@@ -557,7 +554,7 @@ describe('Model Pack installation service', () => {
   it('removes an orphan destination left by an install interrupted before registry commit', async () => {
     const harness = await createHarness();
     const modelRoot = path.join(harness.root, 'model-packs');
-    const transactionKey = 'com.tomny.core.assistant@9.9.9';
+    const transactionKey = 'com.tomny.core.security@9.9.9';
     const destinationName = digest(Buffer.from(transactionKey));
     const destination = path.join(modelRoot, 'installed', destinationName);
     const transactionPath = path.join(modelRoot, '.transactions', `${'e'.repeat(64)}.json`);
@@ -580,7 +577,7 @@ describe('Model Pack installation service', () => {
 
   it('serializes recovery behind an in-flight uninstall commit', async () => {
     const harness = await createHarness();
-    const installed = await harness.service.install('com.tomny.core.assistant', '0.1.0');
+    const installed = await harness.service.install('com.tomny.core.security', '0.1.0');
     const originalUnregister = harness.registry.unregister.bind(harness.registry);
     let markUnregisterStarted = (): void => undefined;
     let releaseUnregister = (): void => undefined;
@@ -610,7 +607,7 @@ describe('Model Pack installation service', () => {
 
   it('refuses to uninstall an active pack and preserves its installed bytes', async () => {
     const harness = await createHarness();
-    const installed = await harness.service.install('com.tomny.core.assistant', '0.1.0');
+    const installed = await harness.service.install('com.tomny.core.security', '0.1.0');
     let snapshot = await harness.registry.read();
     snapshot = await harness.registry.promote(
       installed.key,
@@ -636,7 +633,7 @@ describe('Model Pack installation service', () => {
 
   it('uninstalls a non-active candidate and removes registry and bytes', async () => {
     const harness = await createHarness();
-    const installed = await harness.service.install('com.tomny.core.assistant', '0.1.0');
+    const installed = await harness.service.install('com.tomny.core.security', '0.1.0');
     await harness.service.uninstall(installed.key);
     expect((await harness.registry.read()).records[installed.key]).toBeUndefined();
     await expect(access(installed.installedPath!)).rejects.toBeDefined();

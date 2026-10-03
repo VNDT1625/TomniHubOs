@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createNativeQuickTestReplayAdapter } from '@/process/testing/engines/nativeQuickTestReplayAdapter';
 
 import { createWindowsQuickTestAdapter } from '@/process/testing/engines/windowsQuickTestAdapter';
-import type { ReplayScenario } from '@/process/ide/quickTestReplay';
+import type { ReplayScenario } from '@package-apps/ide/process/execution/quickTest/analysis/quickTestReplay';
 
 const scenario = (platform: ReplayScenario['platform'], target?: string): ReplayScenario => ({
   version: 1,

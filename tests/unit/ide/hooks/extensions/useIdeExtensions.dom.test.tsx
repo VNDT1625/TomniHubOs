@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   type IdeExtensionsClient,
   useIdeExtensions,
-} from '@/renderer/pages/studio/ide/hooks/extensions/useIdeExtensions';
+} from '@package-apps/ide/renderer/hooks/extensions/useIdeExtensions';
 
 const state = (revision: number, packageIds: string[] = []): PackageContributionState => ({
   snapshot: {

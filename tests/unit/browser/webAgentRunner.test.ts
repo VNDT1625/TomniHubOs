@@ -17,10 +17,10 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import type { AgentChat, AgentEvent, WebAgentRunnerDeps } from '@/process/browser/webAgentRunner';
-import { createWebAgentRunner } from '@/process/browser/webAgentRunner';
-import type { IBrowserViewManager } from '@/process/browser/browserViewManager';
-import type { IHumanLikeInput, InputSink } from '@/process/browser/humanLikeInput';
+import type { AgentChat, AgentEvent, WebAgentRunnerDeps } from '@process/browser/webAgentRunner';
+import { createWebAgentRunner } from '@process/browser/webAgentRunner';
+import type { IBrowserViewManager } from '@process/browser/browserViewManager';
+import type { IHumanLikeInput, InputSink } from '@process/browser/humanLikeInput';
 
 // ---------------------------------------------------------------------------
 // Stubs

@@ -40,7 +40,10 @@ describe('inspectOutboundText', () => {
   });
 
   it('requires explicit approval when policy requires it', async () => {
-    const result = await inspectOutboundText(request('token: ghp_123456789012345678901234567890123456'), context({ requireApprovalForFindings: true }));
+    const result = await inspectOutboundText(
+      request('token: ghp_123456789012345678901234567890123456'),
+      context({ requireApprovalForFindings: true })
+    );
     expect(result.decision).toBe('approval_required');
     expect(result.requiresUserDecision).toBe(true);
   });
@@ -49,7 +52,10 @@ describe('inspectOutboundText', () => {
     const malformed = await inspectOutboundText({ ...request('hello'), schemaVersion: 2 } as never, context());
     expect(malformed.decision).toBe('failed_closed');
 
-    const denied = await inspectOutboundText(request('hello'), context({ authorize: vi.fn().mockResolvedValue(false) }));
+    const denied = await inspectOutboundText(
+      request('hello'),
+      context({ authorize: vi.fn().mockResolvedValue(false) })
+    );
     expect(denied.decision).toBe('block');
     expect(denied.reasonCode).toBe('permission_denied');
   });
@@ -67,11 +73,7 @@ describe('inspectOutboundText', () => {
 
   it('executes exactly once with sanitized parts', async () => {
     const effect = vi.fn().mockResolvedValue('sent');
-    const result = await executeAfterOutboundInspection(
-      request('password = secret-value-123'),
-      context(),
-      effect
-    );
+    const result = await executeAfterOutboundInspection(request('password = secret-value-123'), context(), effect);
     expect(result.value).toBe('sent');
     expect(effect).toHaveBeenCalledTimes(1);
     expect(effect.mock.calls[0]?.[0][0]?.text).not.toContain('secret-value-123');

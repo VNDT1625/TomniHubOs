@@ -20,8 +20,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ConfigProvider } from '@arco-design/web-react';
-import type { BrowserTabInfo } from '@/renderer/pages/browser/browserBridgeClient';
-import { AGENT_MODEL_STORAGE_KEY } from '@/renderer/pages/browser/constants';
+import type { BrowserTabInfo } from '@package-apps/browser/renderer/browser/browserBridgeClient';
+import { AGENT_MODEL_STORAGE_KEY } from '@package-apps/browser/renderer/browser/constants';
 
 // --- i18n: identity translator so assertions can use the raw key strings -----
 vi.mock('react-i18next', () => ({
@@ -80,13 +80,15 @@ const bridgeMocks = vi.hoisted(() => ({
   onTabUpdated: vi.fn(),
   getPersona: vi.fn(),
   setPersona: vi.fn(),
+  getDefaultBrowserStatus: vi.fn(),
+  setAsDefaultBrowser: vi.fn(),
 }));
 
-vi.mock('@/renderer/pages/browser/browserBridgeClient', () => ({
+vi.mock('@package-apps/browser/renderer/browser/browserBridgeClient', () => ({
   browserClient: bridgeMocks,
 }));
 
-import BrowserPage from '@/renderer/pages/browser/BrowserPage';
+import BrowserPage from '@package-apps/browser/renderer/browser/BrowserPage';
 
 const buildTab = (overrides: Partial<BrowserTabInfo> = {}): BrowserTabInfo => ({
   id: 'tab-1',
@@ -142,6 +144,8 @@ describe('BrowserPage — perception layers + agent mode (Requirement 1, criteri
     bridgeMocks.setBounds.mockResolvedValue(undefined);
     bridgeMocks.onAgentEvent.mockReturnValue(() => {});
     bridgeMocks.onTabUpdated.mockReturnValue(() => {});
+    bridgeMocks.getDefaultBrowserStatus.mockResolvedValue({ supported: false, isDefault: false, platform: 'test' });
+    bridgeMocks.setAsDefaultBrowser.mockResolvedValue({ supported: false, isDefault: false, platform: 'test' });
     window.localStorage.clear();
   });
 
@@ -165,6 +169,17 @@ describe('BrowserPage — perception layers + agent mode (Requirement 1, criteri
     // Agent-mode picker (label + the toggle itself).
     expect(screen.getByText('browser.agent.label')).toBeInTheDocument();
     expect(screen.getByRole('switch', { name: 'browser.agent.label' })).toBeInTheDocument();
+  });
+
+  it('keeps browser-specific link and default-browser controls inside the Browser package', async () => {
+    primeReadyBridge();
+    bridgeMocks.getDefaultBrowserStatus.mockResolvedValue({ supported: true, isDefault: false, platform: 'win32' });
+    const user = userEvent.setup();
+    renderPage();
+
+    expect(await screen.findByText('browser.openLinksInApp.description')).toBeInTheDocument();
+    await user.click(await screen.findByRole('button', { name: 'browser.defaultBrowser.action' }));
+    await waitFor(() => expect(bridgeMocks.setAsDefaultBrowser).toHaveBeenCalledTimes(1));
   });
 
   it('reloads the active tab through the reload bridge instead of navigating to the URL again', async () => {

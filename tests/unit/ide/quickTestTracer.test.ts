@@ -8,7 +8,11 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import { createQuickTestTracer, type CdpWebContents, type TraceEvent } from '@/process/ide/quickTestTracer';
+import {
+  createQuickTestTracer,
+  type CdpWebContents,
+  type TraceEvent,
+} from '@package-apps/ide/process/execution/quickTest/runtime/quickTestTracer';
 
 /** Build a fake CdpWebContents that captures CDP commands + fires events. */
 const makeFakeWc = () => {

@@ -10,7 +10,6 @@ import {
   Earth,
   GraphicDesign,
   MusicOne,
-  Terminal,
 } from '@icon-park/react';
 
 export type HubCategoryId = 'communication' | 'creative' | 'developer' | 'productivity';
@@ -22,7 +21,6 @@ export type HubAppId =
   | 'music'
   | 'realtime'
   | 'ide'
-  | 'terminal'
   | 'git'
   | 'manager'
   | 'automation'
@@ -118,28 +116,19 @@ export const HUB_APPS: readonly HubAppDefinition[] = [
     category: 'creative',
     labelKey: 'guid.hubHome.apps.studio.title',
     descriptionKey: 'guid.hubHome.apps.studio.description',
-    path: '/store/app/com.tomni.studio/studio',
+    path: '/apps/com.tomni.studio/studio',
     packageId: 'com.tomni.studio',
     moduleId: 'studio',
     Icon: GraphicDesign,
     tone: 'danger',
   },
   {
-    id: 'music',
+    id: 'automation',
     category: 'creative',
-    labelKey: 'guid.hubHome.apps.music.title',
-    descriptionKey: 'guid.hubHome.apps.music.description',
-    path: '/music',
-    Icon: MusicOne,
-    tone: 'primary',
-  },
-  {
-    id: 'realtime',
-    category: 'creative',
-    labelKey: 'guid.hubHome.apps.realtime.title',
-    descriptionKey: 'guid.hubHome.apps.realtime.description',
-    path: '/realtime',
-    Icon: Earth,
+    labelKey: 'guid.hubHome.apps.automation.title',
+    descriptionKey: 'guid.hubHome.apps.automation.description',
+    path: '/scheduled',
+    Icon: Calendar,
     tone: 'warning',
   },
   {
@@ -147,20 +136,9 @@ export const HUB_APPS: readonly HubAppDefinition[] = [
     category: 'developer',
     labelKey: 'guid.hubHome.apps.ide.title',
     descriptionKey: 'guid.hubHome.apps.ide.description',
-    path: '/store/app/com.tomni.ide/ide',
-    packageId: 'com.tomni.ide',
-    moduleId: 'ide',
+    path: '/ide',
     Icon: Code,
     tone: 'info',
-  },
-  {
-    id: 'terminal',
-    category: 'developer',
-    labelKey: 'guid.hubHome.apps.terminal.title',
-    descriptionKey: 'guid.hubHome.apps.terminal.description',
-    path: '/terminal',
-    Icon: Terminal,
-    tone: 'primary',
   },
   {
     id: 'git',
@@ -179,24 +157,6 @@ export const HUB_APPS: readonly HubAppDefinition[] = [
     path: '/manager',
     Icon: DashboardOne,
     tone: 'primary',
-  },
-  {
-    id: 'automation',
-    category: 'productivity',
-    labelKey: 'guid.hubHome.apps.automation.title',
-    descriptionKey: 'guid.hubHome.apps.automation.description',
-    path: '/scheduled',
-    Icon: Calendar,
-    tone: 'warning',
-  },
-  {
-    id: 'knowledge',
-    category: 'productivity',
-    labelKey: 'guid.hubHome.apps.knowledge.title',
-    descriptionKey: 'guid.hubHome.apps.knowledge.description',
-    path: '/knowledge',
-    Icon: Book,
-    tone: 'success',
   },
 ];
 

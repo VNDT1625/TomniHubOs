@@ -1,0 +1,193 @@
+/* ==========================================================================
+   TomniHubOS Glassmorphism Design System
+   High-precision translucent frosted glass with adaptive lighting
+   ========================================================================== */
+
+.tomni-glass-panel {
+  background: rgba(13, 19, 33, 0.85) !important;
+  backdrop-filter: blur(24px) saturate(190%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(190%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 14px !important;
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(255, 255, 255, 0.05) inset !important;
+  color: #f1f5f9;
+  overflow: hidden;
+  user-select: none;
+}
+
+[data-theme='light'] .tomni-glass-panel {
+  background: rgba(255, 255, 255, 0.88) !important;
+  backdrop-filter: blur(24px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
+  border: 1px solid rgba(0, 0, 0, 0.08) !important;
+  box-shadow:
+    0 20px 48px rgba(0, 0, 0, 0.12),
+    0 0 0 1px rgba(255, 255, 255, 0.8) inset !important;
+  color: #0f172a;
+}
+
+/* Glass Menu Item */
+.tomni-glass-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 8px 12px;
+  box-sizing: border-box;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  color: #cbd5e1;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+  text-decoration: none;
+}
+
+.tomni-glass-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+  transform: translateX(2px);
+}
+
+[data-theme='light'] .tomni-glass-item {
+  color: #334155;
+}
+
+[data-theme='light'] .tomni-glass-item:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: #0284c7;
+}
+
+.tomni-glass-item-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.tomni-glass-item-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  color: #94a3b8;
+  transition: color 0.18s;
+}
+
+.tomni-glass-item:hover .tomni-glass-item-icon {
+  color: #38bdf8;
+}
+
+[data-theme='light'] .tomni-glass-item:hover .tomni-glass-item-icon {
+  color: #0284c7;
+}
+
+/* Glass Divider */
+.tomni-glass-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 6px 0;
+}
+
+[data-theme='light'] .tomni-glass-divider {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+/* Glass Header / Profile Card */
+.tomni-glass-header {
+  padding: 12px 14px 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+[data-theme='light'] .tomni-glass-header {
+  background: rgba(0, 0, 0, 0.02);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.tomni-glass-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 14px;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35);
+  flex-shrink: 0;
+}
+
+.tomni-glass-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+  flex: 1;
+}
+
+.tomni-glass-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #f8fafc;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+[data-theme='light'] .tomni-glass-name {
+  color: #0f172a;
+}
+
+.tomni-glass-badge-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tomni-glass-tier-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(56, 189, 248, 0.15);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  color: #38bdf8;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.tomni-glass-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 6px #10b981;
+}
+
+/* Glass Arco Popover Override */
+.arco-popover-content.tomni-glass-popover-content {
+  background: transparent !important;
+  padding: 0 !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.arco-popover-content.tomni-glass-popover-content .arco-popover-inner {
+  background: transparent !important;
+  padding: 0 !important;
+  border: none !important;
+  box-shadow: none !important;
+}

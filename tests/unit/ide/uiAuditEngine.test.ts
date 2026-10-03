@@ -5,8 +5,8 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import { runUiAudit, type UiAuditReport } from '@/process/ide/uiAuditEngine';
-import type { CdpWebContents } from '@/process/ide/quickTestTracer';
+import { runUiAudit, type UiAuditReport } from '@package-apps/ide/process/execution/inspection/uiAuditEngine';
+import type { CdpWebContents } from '@package-apps/ide/process/execution/quickTest/runtime/quickTestTracer';
 
 describe('runUiAudit', () => {
   it('executes the deterministic page audit and returns its report', async () => {

@@ -10,7 +10,7 @@ import {
   isRelativeSpecifier,
   relationsFor,
   resolveImport,
-} from '@/renderer/pages/studio/ide/codeRelations';
+} from '@package-apps/ide/renderer/services/codeRelations';
 
 describe('isRelativeSpecifier', () => {
   it('accepts relative, rejects bare/package specifiers', () => {

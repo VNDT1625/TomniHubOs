@@ -13,7 +13,29 @@
  * to e2e. This is recorded in N4c-final.md Deviations.
  */
 
-import { describe, it, expect } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+
+// This suite only proves the module's export surface. jsdom intentionally has
+// no canvas renderer, so preserve its no-renderer result without emitting the
+// "not implemented" virtual-console error when an imported UI dependency
+// performs an optional canvas capability check.
+const originalGetContext = HTMLCanvasElement.prototype.getContext;
+
+beforeAll(() => {
+  Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
+    configurable: true,
+    value: () => null,
+    writable: true,
+  });
+});
+
+afterAll(() => {
+  Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
+    configurable: true,
+    value: originalGetContext,
+    writable: true,
+  });
+});
 
 describe('usePreviewHistory module shape', () => {
   it('module loads and exposes usePreviewHistory', async () => {

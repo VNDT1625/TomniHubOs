@@ -12,7 +12,7 @@ import {
   TEAM_PEER_IDLE_TTL_MS,
   teamPeerCan,
   touchTeamPeer,
-} from '@/process/studio/collabServer';
+} from '@package-apps/shared/process/collaboration/collabServer';
 
 describe('teamCollabClient - renderer IPC contract', () => {
   afterEach(() => {
@@ -32,7 +32,7 @@ describe('teamCollabClient - renderer IPC contract', () => {
       },
     }));
 
-    const { teamCollabClient } = await import('@renderer/pages/studio/ide/teamEdit/teamCollabClient');
+    const { teamCollabClient } = await import('@package-apps/ide/renderer/teamEdit/teamCollabClient');
     await teamCollabClient.publish('/repo', 'secret', true, false, true);
     await teamCollabClient.unpublish('/repo');
     await teamCollabClient.status();
@@ -90,7 +90,7 @@ describe('teamCollabClient - renderer IPC contract', () => {
     }));
 
     const { TeamCollabTimeoutError, teamCollabClient } =
-      await import('@renderer/pages/studio/ide/teamEdit/teamCollabClient');
+      await import('@package-apps/ide/renderer/teamEdit/teamCollabClient');
     invoke.mockRejectedValueOnce(new Error('preload unavailable'));
     await expect(teamCollabClient.status()).rejects.toThrow('preload unavailable');
 
@@ -104,19 +104,19 @@ describe('teamCollabClient - renderer IPC contract', () => {
 describe('teamCollabBridge - authenticated Main IPC forwarding', () => {
   const mockedModules = [
     '@office-ai/platform',
-    '@process/studio/collabServer',
-    '@process/studio/onlyOfficeServer',
-    '@process/studio/collabDiscovery',
-    '@process/studio/cloudflareTunnel',
-    '@process/ide/db/dbWiring',
-    '@process/ide/quickTestBridgeHelpers',
-    '@process/ide/kgRefresh',
-    '@process/ide/wiki/wikiBuildBridge',
-    '@process/ide/teamEdit/teamEditService',
-    '@process/ide/teamEdit/teamSessionHost',
-    '@process/ide/teamEdit/teamHttpRoutes',
-    '@process/ide/teamEdit/remoteIdeMcp',
-    '@process/ide/teamEdit/teamRemoteClient',
+    '@package-apps/shared/process/collaboration/collabServer',
+    '@package-apps/shared/process/collaboration/onlyOfficeServer',
+    '@package-apps/shared/process/collaboration/collabDiscovery',
+    '@process/services/remoteGateway/cloudflareTunnel',
+    '@package-apps/ide/process/data/db/dbWiring',
+    '@package-apps/ide/process/execution/quickTest/bridges/quickTestBridgeHelpers',
+    '@package-apps/ide/process/knowledge/graph/kgRefresh',
+    '@package-apps/ide/process/knowledge/wiki/wikiBuildBridge',
+    '@package-apps/ide/process/collaboration/teamEdit/teamEditService',
+    '@package-apps/ide/process/collaboration/teamEdit/teamSessionHost',
+    '@package-apps/ide/process/collaboration/teamEdit/teamHttpRoutes',
+    '@package-apps/ide/process/collaboration/teamEdit/remoteIdeMcp',
+    '@package-apps/ide/process/collaboration/teamEdit/teamRemoteClient',
   ];
 
   afterEach(() => {
@@ -166,58 +166,63 @@ describe('teamCollabBridge - authenticated Main IPC forwarding', () => {
         }),
       },
     }));
-    vi.doMock('@process/studio/collabServer', () => ({
+    vi.doMock('@package-apps/shared/process/collaboration/collabServer', () => ({
       buildTeamPublishInfo: () => ({ shareId: 'share-1', joinCode: 'ABC123', lanIps: ['127.0.0.1'] }),
       getPrimaryTeamSession: () => session,
       hasTeamSessions: () => true,
       publishTeamSession: () => session,
       unpublishTeamSession: vi.fn(),
     }));
-    vi.doMock('@process/studio/onlyOfficeServer', () => ({
+    vi.doMock('@package-apps/shared/process/collaboration/onlyOfficeServer', () => ({
       addServerKeepAlive: vi.fn(),
       ensureTeamHostServer: vi.fn(async () => undefined),
       getServerPort: () => 45123,
       registerExtraRoute,
       releaseServerKeepAlive: vi.fn(),
     }));
-    vi.doMock('@process/studio/collabDiscovery', () => ({
+    vi.doMock('@package-apps/shared/process/collaboration/collabDiscovery', () => ({
       startBeacon: vi.fn(),
       stopBeacon: vi.fn(),
     }));
-    vi.doMock('@process/studio/cloudflareTunnel', () => ({
+    vi.doMock('@process/services/remoteGateway/cloudflareTunnel', () => ({
       ensureCloudflared: vi.fn(async () => ({ ok: true })),
       startTunnel: vi.fn(async () => ({ ok: true, url: 'https://team.test' })),
       stopTunnel: vi.fn(),
     }));
-    vi.doMock('@process/ide/db/dbWiring', () => ({
+    vi.doMock('@package-apps/ide/process/data/db/dbWiring', () => ({
       getDbService: () => ({
         listConnections: vi.fn(async () => []),
         connect: vi.fn(async () => undefined),
         query: vi.fn(async () => ({ columns: [], rows: [] })),
       }),
     }));
-    vi.doMock('@process/ide/quickTestBridgeHelpers', () => ({ loadGraph: vi.fn() }));
-    vi.doMock('@process/ide/kgRefresh', () => ({ refreshGraphFileOnDisk: vi.fn() }));
-    vi.doMock('@process/ide/wiki/wikiBuildBridge', () => ({ loadWikiForRoot: vi.fn() }));
-    vi.doMock('@process/ide/teamEdit/teamEditService', () => ({
+    vi.doMock('@package-apps/ide/process/execution/quickTest/bridges/quickTestBridgeHelpers', () => ({
+      loadGraph: vi.fn(),
+    }));
+    vi.doMock('@package-apps/ide/process/knowledge/graph/kgRefresh', () => ({ refreshGraphFileOnDisk: vi.fn() }));
+    vi.doMock('@package-apps/ide/process/knowledge/wiki/wikiBuildBridge', () => ({ loadWikiForRoot: vi.fn() }));
+    vi.doMock('@package-apps/ide/process/collaboration/teamEdit/teamEditService', () => ({
       getTeamEditService: () => ({ join: joinPresence, reset: resetPresence }),
     }));
-    vi.doMock('@process/ide/teamEdit/teamSessionHost', () => ({
+    vi.doMock('@package-apps/ide/process/collaboration/teamEdit/teamSessionHost', () => ({
       createTeamSessionHost: () => ({}),
     }));
-    vi.doMock('@process/ide/teamEdit/teamHttpRoutes', () => ({ handleTeamRequest: vi.fn() }));
-    vi.doMock('@process/ide/teamEdit/remoteIdeMcp', () => ({
+    vi.doMock('@package-apps/ide/process/collaboration/teamEdit/teamHttpRoutes', () => ({
+      handleTeamRequest: vi.fn(),
+    }));
+    vi.doMock('@package-apps/ide/process/collaboration/teamEdit/remoteIdeMcp', () => ({
       ensureRemoteIdeMcpRegistered: vi.fn(async () => ({
         workspacePath: '/remote/repo',
         server: { id: 'remote-team' },
       })),
       clearRemoteIdeMcpSession: vi.fn(),
     }));
-    vi.doMock('@process/ide/teamEdit/teamRemoteClient', () => ({
+    vi.doMock('@package-apps/ide/process/collaboration/teamEdit/teamRemoteClient', () => ({
       teamRemoteClient: remote,
     }));
 
-    const { registerTeamCollabBridge } = await import('@/process/ide/teamEdit/teamCollabBridge');
+    const { registerTeamCollabBridge } =
+      await import('@package-apps/ide/process/collaboration/teamEdit/teamCollabBridge');
     registerTeamCollabBridge();
 
     await expect(
@@ -292,36 +297,48 @@ describe('teamCollabBridge - authenticated Main IPC forwarding', () => {
         }),
       },
     }));
-    vi.doMock('@process/studio/collabServer', () => ({
+    vi.doMock('@package-apps/shared/process/collaboration/collabServer', () => ({
       buildTeamPublishInfo: vi.fn(),
       getPrimaryTeamSession: vi.fn(),
       hasTeamSessions: vi.fn(() => false),
       publishTeamSession: vi.fn(),
       unpublishTeamSession: vi.fn(),
     }));
-    vi.doMock('@process/studio/collabDiscovery', () => ({ startBeacon: vi.fn(), stopBeacon: vi.fn() }));
-    vi.doMock('@process/studio/cloudflareTunnel', () => ({
+    vi.doMock('@package-apps/shared/process/collaboration/collabDiscovery', () => ({
+      startBeacon: vi.fn(),
+      stopBeacon: vi.fn(),
+    }));
+    vi.doMock('@process/services/remoteGateway/cloudflareTunnel', () => ({
       ensureCloudflared: vi.fn(),
       startTunnel: vi.fn(),
       stopTunnel: vi.fn(),
     }));
-    vi.doMock('@process/ide/db/dbWiring', () => ({ getDbService: () => ({}) }));
-    vi.doMock('@process/ide/quickTestBridgeHelpers', () => ({ loadGraph: vi.fn() }));
-    vi.doMock('@process/ide/kgRefresh', () => ({ refreshGraphFileOnDisk: vi.fn() }));
-    vi.doMock('@process/ide/wiki/wikiBuildBridge', () => ({ loadWikiForRoot: vi.fn() }));
-    vi.doMock('@process/ide/teamEdit/teamEditService', () => ({ getTeamEditService: () => ({}) }));
-    vi.doMock('@process/ide/teamEdit/teamSessionHost', () => ({ createTeamSessionHost: () => ({}) }));
-    vi.doMock('@process/studio/onlyOfficeServer', () => ({ registerExtraRoute: vi.fn() }));
-    vi.doMock('@process/ide/teamEdit/teamHttpRoutes', () => ({ handleTeamRequest: vi.fn() }));
-    vi.doMock('@process/ide/teamEdit/remoteIdeMcp', () => ({
+    vi.doMock('@package-apps/ide/process/data/db/dbWiring', () => ({ getDbService: () => ({}) }));
+    vi.doMock('@package-apps/ide/process/execution/quickTest/bridges/quickTestBridgeHelpers', () => ({
+      loadGraph: vi.fn(),
+    }));
+    vi.doMock('@package-apps/ide/process/knowledge/graph/kgRefresh', () => ({ refreshGraphFileOnDisk: vi.fn() }));
+    vi.doMock('@package-apps/ide/process/knowledge/wiki/wikiBuildBridge', () => ({ loadWikiForRoot: vi.fn() }));
+    vi.doMock('@package-apps/ide/process/collaboration/teamEdit/teamEditService', () => ({
+      getTeamEditService: () => ({}),
+    }));
+    vi.doMock('@package-apps/ide/process/collaboration/teamEdit/teamSessionHost', () => ({
+      createTeamSessionHost: () => ({}),
+    }));
+    vi.doMock('@package-apps/shared/process/collaboration/onlyOfficeServer', () => ({ registerExtraRoute: vi.fn() }));
+    vi.doMock('@package-apps/ide/process/collaboration/teamEdit/teamHttpRoutes', () => ({
+      handleTeamRequest: vi.fn(),
+    }));
+    vi.doMock('@package-apps/ide/process/collaboration/teamEdit/remoteIdeMcp', () => ({
       ensureRemoteIdeMcpRegistered: vi.fn(),
       clearRemoteIdeMcpSession: vi.fn(),
     }));
-    vi.doMock('@process/ide/teamEdit/teamRemoteClient', () => ({
+    vi.doMock('@package-apps/ide/process/collaboration/teamEdit/teamRemoteClient', () => ({
       teamRemoteClient: { preview },
     }));
 
-    const { registerTeamCollabBridge } = await import('@/process/ide/teamEdit/teamCollabBridge');
+    const { registerTeamCollabBridge } =
+      await import('@package-apps/ide/process/collaboration/teamEdit/teamCollabBridge');
     registerTeamCollabBridge();
     const handler = providers.get('ide.team-collab-remote-preview');
     const request = { baseUrl: 'https://team.test', token: 'bearer-token', packageId: 'package-1' };

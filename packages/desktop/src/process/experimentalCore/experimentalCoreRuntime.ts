@@ -187,6 +187,13 @@ export type ExperimentalCoreContextIdentity = {
   savedMemoryContext?: string;
   mcpServers?: CoreMcpServer[];
   superMode?: boolean;
+  /** Main-only bounded derivation mode: no profile, MCP, or tool context. */
+  sterile?: boolean;
+  /**
+   * Main-only C4 mode: suppresses all personal/conversation/Save context and
+   * built-in tools while retaining only an explicitly injected operation host.
+   */
+  suppressPersonalContext?: boolean;
 };
 
 const MAX_CONVERSATION_CONTEXT_CHARS = 24_000;
@@ -207,19 +214,29 @@ const normalizeSavedMemoryContext = (value?: string): string => {
 
 const normalizeContextIdentity = (
   identity?: ExperimentalCoreContextIdentity
-): Required<ExperimentalCoreContextIdentity> => ({
-  surface: identity?.surface?.trim() || 'chat',
-  agentId: identity?.agentId?.trim() || 'tomny',
-  personalId: identity?.personalId?.trim() || 'default',
-  permissionScopes: [...(identity?.permissionScopes ?? [])],
-  capabilityGrants: [...(identity?.capabilityGrants ?? [])],
-  availableCapabilities: [...new Set([...BUILTIN_AVAILABLE_CAPABILITIES, ...(identity?.availableCapabilities ?? [])])],
-  modelCapabilities: [...(identity?.modelCapabilities ?? [])],
-  conversationContext: identity?.conversationContext?.trim().slice(0, MAX_CONVERSATION_CONTEXT_CHARS) ?? '',
-  savedMemoryContext: normalizeSavedMemoryContext(identity?.savedMemoryContext),
-  mcpServers: [...(identity?.mcpServers ?? [])],
-  superMode: identity?.superMode === true,
-});
+): Required<ExperimentalCoreContextIdentity> => {
+  const sterile = identity?.sterile === true;
+  const suppressPersonalContext = sterile || identity?.suppressPersonalContext === true;
+  return {
+    surface: identity?.surface?.trim() || 'chat',
+    agentId: identity?.agentId?.trim() || 'tomny',
+    personalId: suppressPersonalContext ? 'sterile' : identity?.personalId?.trim() || 'default',
+    permissionScopes: suppressPersonalContext ? [] : [...(identity?.permissionScopes ?? [])],
+    capabilityGrants: sterile ? [] : [...(identity?.capabilityGrants ?? [])],
+    availableCapabilities: suppressPersonalContext
+      ? []
+      : [...new Set([...BUILTIN_AVAILABLE_CAPABILITIES, ...(identity?.availableCapabilities ?? [])])],
+    modelCapabilities: suppressPersonalContext ? [] : [...(identity?.modelCapabilities ?? [])],
+    conversationContext: suppressPersonalContext
+      ? ''
+      : (identity?.conversationContext?.trim().slice(0, MAX_CONVERSATION_CONTEXT_CHARS) ?? ''),
+    savedMemoryContext: suppressPersonalContext ? '' : normalizeSavedMemoryContext(identity?.savedMemoryContext),
+    mcpServers: sterile ? [] : [...(identity?.mcpServers ?? [])],
+    superMode: suppressPersonalContext ? false : identity?.superMode === true,
+    sterile,
+    suppressPersonalContext,
+  };
+};
 
 const toolMatchesPattern = (tool: string, pattern: string): boolean =>
   pattern === '*' || tool === pattern || (pattern.endsWith('*') && tool.startsWith(pattern.slice(0, -1)));
@@ -587,6 +604,16 @@ export class ExperimentalCoreRuntime {
   /** Resolve the concrete network destination for the selected model before Foundation grants cloud execution. */
   public async resolveNetworkHost(targetId: string, modelKey?: string): Promise<string | undefined> {
     if (this.targets.length === 0) this.targets = await this.deps.detectTargets();
+    if (targetId === EXPERIMENTAL_COMPANY_TARGET_ID) {
+      const companyModel = decodeCompanyModelKey(modelKey);
+      const transportTargetId = companyModel?.targetId ?? this.targets.find((candidate) => candidate.available)?.id;
+      if (!transportTargetId) return undefined;
+      const target = this.targets.find((candidate) => candidate.id === transportTargetId);
+      if (!target) return undefined;
+      if (target.networkHost) return target.networkHost;
+      const adapter = this.deps.adapters.find((candidate) => candidate.protocol === target.protocol);
+      return adapter?.networkHostForModel?.(companyModel?.modelKey ?? modelKey);
+    }
     const target = this.targets.find((candidate) => candidate.id === targetId);
     if (!target) throw new Error(`Core target is not registered: ${targetId}`);
     if (target.networkHost) return target.networkHost;
@@ -720,7 +747,7 @@ export class ExperimentalCoreRuntime {
         startedAt: active.startedAt,
 
         partialText: active.partialText,
-        events: [...(this.runEvents.get(requestId) ?? [])],
+        events: [...(this.runEvents.get(requestId) ?? [])].filter((event) => event.type !== 'delta'),
         pendingPermissionIds: [...this.permissions.entries()]
           .filter(([, pending]) => pending.requestId === requestId)
           .map(([permissionId]) => permissionId),
@@ -798,22 +825,30 @@ export class ExperimentalCoreRuntime {
     }
     const resolvedSurface = surfaceResolution?.ok ? surfaceResolution.value : undefined;
     const surfaceId = resolvedSurface?.manifest.id ?? contextIdentity.surface;
-    const toolCatalog = resolveCoreToolCatalogPolicy(resolvedSurface, contextIdentity.superMode);
-    const mcpServerNames = resolveCoreCapabilityServerNames(
-      resolvedSurface,
-      this.deps.surfaceRegistry,
-      contextIdentity.superMode,
-      this.deps.availableCapabilityHostNames?.()
-    );
+    const toolCatalog =
+      contextIdentity.sterile || contextIdentity.suppressPersonalContext
+        ? { mode: 'surface' as const, patterns: [] }
+        : resolveCoreToolCatalogPolicy(resolvedSurface, contextIdentity.superMode);
+    const mcpServerNames =
+      contextIdentity.sterile || contextIdentity.suppressPersonalContext
+        ? []
+        : resolveCoreCapabilityServerNames(
+            resolvedSurface,
+            this.deps.surfaceRegistry,
+            contextIdentity.superMode,
+            this.deps.availableCapabilityHostNames?.()
+          );
     const capabilityHostContext: CoreCapabilityHostContext = Object.freeze({
       sessionId: input.sessionId,
       workspace,
       surface: surfaceId,
       permissionMode: childPermissionForParent(permissionMode),
     });
-    const mcpServers = this.deps.resolveCapabilityHosts
-      ? await this.deps.resolveCapabilityHosts(mcpServerNames, contextIdentity.mcpServers, capabilityHostContext)
-      : contextIdentity.mcpServers;
+    const mcpServers = contextIdentity.sterile
+      ? []
+      : this.deps.resolveCapabilityHosts
+        ? await this.deps.resolveCapabilityHosts(mcpServerNames, contextIdentity.mcpServers, capabilityHostContext)
+        : contextIdentity.mcpServers;
     const trustedSecretContextHost = attestSecretContextHost(
       resolvedSurface,
       Boolean(this.deps.resolveCapabilityHosts),
@@ -833,12 +868,13 @@ export class ExperimentalCoreRuntime {
           toolCatalog,
         })
       ),
-      this.deps.contextComposer?.inspectContext
+      this.deps.contextComposer?.inspectContext && !contextIdentity.suppressPersonalContext
         ? this.deps.contextComposer
             .inspectContext({
               agentId: contextIdentity.agentId,
               personalId: contextIdentity.personalId,
               surface: surfaceId,
+              workspace,
               secretContextPolicy: secretContextPolicyFor(resolvedSurface, trustedSecretContextHost),
             })
             .catch((error) => {
@@ -1568,12 +1604,36 @@ export class ExperimentalCoreRuntime {
     });
   }
 
-  private async withAgentLease<T>(run: () => Promise<T>): Promise<T> {
-    const lease = await this.deps.coordinator?.requestLease({ kind: 'agent', estCostMB: 96 });
+  private async withAgentLease<T>(run: () => Promise<T>, signal?: AbortSignal): Promise<T> {
+    if (!this.deps.coordinator) return run();
+    let lease: { id: string } | undefined;
     try {
+      lease = await Promise.race([
+        this.deps.coordinator.requestLease({ kind: 'agent', estCostMB: 96 }),
+        new Promise<undefined>((resolve) => {
+          const timer = setTimeout(resolve, 1500);
+          signal?.addEventListener(
+            'abort',
+            () => {
+              clearTimeout(timer);
+              resolve(undefined);
+            },
+            { once: true }
+          );
+        }),
+      ]).catch((err): undefined => {
+        console.warn('[TomnyCore] Resource lease bypassed or timed out:', err);
+        return undefined;
+      });
       return await run();
     } finally {
-      if (lease) this.deps.coordinator?.releaseLease(lease.id);
+      if (lease?.id) {
+        try {
+          this.deps.coordinator.releaseLease(lease.id);
+        } catch {
+          /* ignore */
+        }
+      }
     }
   }
 
@@ -1639,19 +1699,25 @@ export class ExperimentalCoreRuntime {
       }
       const resolvedSurface = surfaceResolution?.ok ? surfaceResolution.value : undefined;
       const resolvedSurfaceId = resolvedSurface?.manifest.id ?? contextIdentity.surface;
-      const toolCatalog = resolveCoreToolCatalogPolicy(resolvedSurface, contextIdentity.superMode);
+      const toolCatalog =
+        contextIdentity.sterile || contextIdentity.suppressPersonalContext
+          ? { mode: 'surface' as const, patterns: [] }
+          : resolveCoreToolCatalogPolicy(resolvedSurface, contextIdentity.superMode);
       let trustedSecretContextHost = false;
       const permissionIdentity = (tool: string): PermissionIdentity => ({
         ...permissionIdentityFor(contextIdentity, resolvedSurfaceId, resolvedSurface, tool),
         trustedSecretContextHost,
       });
 
-      const mcpServerNames = resolveCoreCapabilityServerNames(
-        resolvedSurface,
-        this.deps.surfaceRegistry,
-        contextIdentity.superMode,
-        this.deps.availableCapabilityHostNames?.()
-      );
+      const mcpServerNames =
+        contextIdentity.sterile || contextIdentity.suppressPersonalContext
+          ? []
+          : resolveCoreCapabilityServerNames(
+              resolvedSurface,
+              this.deps.surfaceRegistry,
+              contextIdentity.superMode,
+              this.deps.availableCapabilityHostNames?.()
+            );
       const capabilityHostContext: CoreCapabilityHostContext = Object.freeze({
         sessionId,
         workspace: normalizedWorkspace,
@@ -1660,9 +1726,11 @@ export class ExperimentalCoreRuntime {
         requestPermission: (request) =>
           this.requestPermission(requestId, sessionId, targetId, request, permissionIdentity(request.tool)),
       });
-      const mcpServers = this.deps.resolveCapabilityHosts
-        ? await this.deps.resolveCapabilityHosts(mcpServerNames, contextIdentity.mcpServers, capabilityHostContext)
-        : contextIdentity.mcpServers;
+      const mcpServers = contextIdentity.sterile
+        ? []
+        : this.deps.resolveCapabilityHosts
+          ? await this.deps.resolveCapabilityHosts(mcpServerNames, contextIdentity.mcpServers, capabilityHostContext)
+          : contextIdentity.mcpServers;
       trustedSecretContextHost = attestSecretContextHost(
         resolvedSurface,
         Boolean(this.deps.resolveCapabilityHosts),
@@ -1772,12 +1840,13 @@ export class ExperimentalCoreRuntime {
         .filter(Boolean)
         .join('\n\n');
       let effectivePrompt = surfacePrelude ? `${surfacePrelude}\n\n${normalizedPrompt}` : normalizedPrompt;
-      if (this.deps.contextComposer) {
+      if (this.deps.contextComposer && !contextIdentity.suppressPersonalContext) {
         try {
           effectivePrompt = await this.deps.contextComposer.composePrompt({
             agentId: contextIdentity.agentId,
             personalId: contextIdentity.personalId,
             surface: resolvedSurfaceId,
+            workspace: normalizedWorkspace,
             secretContextPolicy: secretContextPolicyFor(resolvedSurface, trustedSecretContextHost),
             prompt: effectivePrompt,
           });
@@ -1855,34 +1924,39 @@ export class ExperimentalCoreRuntime {
         this.push({ requestId, sessionId, targetId, type: 'delta', text: assistantText, mode: 'replace' });
       } else {
         let candidateResponse = '';
-        await this.withAgentLease(() =>
-          adapter.run({
-            sessionId,
-            target,
-            prompt: shouldOfferOrchestration(normalizedPrompt)
-              ? [ORCHESTRATION_CAPABILITY_PROMPT, `User request:\n${effectivePrompt}`].join('\n\n')
-              : effectivePrompt,
-            workspace: normalizedWorkspace,
-            modelKey,
-            permissionMode,
-            surface: resolvedSurfaceId,
-            mcpServers,
-            toolCatalog,
-            signal,
-            emit: (event) => {
-              this.observeAdapterTelemetry(requestId, event);
-              if (event.type === 'delta') {
-                candidateResponse = event.mode === 'replace' ? event.text : candidateResponse + event.text;
+        await this.withAgentLease(
+          () =>
+            adapter.run({
+              sessionId,
+              target,
+              prompt: shouldOfferOrchestration(normalizedPrompt)
+                ? [ORCHESTRATION_CAPABILITY_PROMPT, `User request:\n${effectivePrompt}`].join('\n\n')
+                : effectivePrompt,
+              workspace: normalizedWorkspace,
+              modelKey,
+              permissionMode,
+              surface: resolvedSurfaceId,
+              mcpServers,
+              toolCatalog,
+              signal,
+              emit: (event) => {
+                this.observeAdapterTelemetry(requestId, event);
+                if (event.type === 'delta') {
+                  candidateResponse = event.mode === 'replace' ? event.text : candidateResponse + event.text;
 
-                const active = this.active.get(requestId);
-                if (active) active.partialText = candidateResponse;
-                return;
-              }
-              this.pushAdapterEvent({ requestId, sessionId, targetId, workspace: normalizedWorkspace, event });
-            },
-            requestPermission: (request) =>
-              this.requestPermission(requestId, sessionId, targetId, request, permissionIdentity(request.tool)),
-          })
+                  const active = this.active.get(requestId);
+                  if (active) active.partialText = candidateResponse;
+                  if (!shouldOfferOrchestration(normalizedPrompt) || !candidateResponse.trimStart().startsWith('{')) {
+                    this.pushAdapterEvent({ requestId, sessionId, targetId, workspace: normalizedWorkspace, event });
+                  }
+                  return;
+                }
+                this.pushAdapterEvent({ requestId, sessionId, targetId, workspace: normalizedWorkspace, event });
+              },
+              requestPermission: (request) =>
+                this.requestPermission(requestId, sessionId, targetId, request, permissionIdentity(request.tool)),
+            }),
+          signal
         );
         const proposal = parseOrchestrationProposal(candidateResponse);
         if (!proposal) {
@@ -1923,6 +1997,11 @@ export class ExperimentalCoreRuntime {
             assistantText = `The ${proposal.kind} proposal was declined. No agents or company were created.`;
           }
         }
+        this.push({ requestId, sessionId, targetId, type: 'delta', text: assistantText, mode: 'replace' });
+      }
+      if (!assistantText.trim() && !signal.aborted) {
+        assistantText =
+          'The model completed the turn without generating any output. Please verify your model selection and provider status in Settings.';
         this.push({ requestId, sessionId, targetId, type: 'delta', text: assistantText, mode: 'replace' });
       }
       const activeState = this.active.get(requestId);

@@ -46,7 +46,7 @@
  * concrete implementations.
  */
 
-import type { Lease, LeaseRequest, TaskKind } from '../resource/leaseTypes';
+import type { Lease, LeaseRequest, TaskKind } from '@process/resource/leaseTypes';
 
 // ---------------------------------------------------------------------------
 // Public data models

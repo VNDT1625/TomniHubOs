@@ -20,8 +20,8 @@ import {
   createTeamPreviewFilePersistence,
   getTeamEditService,
   setTeamEditChangeListener,
-} from '@/process/ide/teamEdit/teamEditService';
-import type { MtuiResponse } from '@/process/terminal/mtuiBridge';
+} from '@package-apps/ide/process/collaboration/teamEdit/teamEditService';
+import type { MtuiResponse } from '@/process/resources/nativeFile/mtuiBridge';
 
 const ROOT = '/repo';
 
@@ -418,7 +418,7 @@ describe('teamEditService — immutable VIU preview packages', () => {
   });
 
   it('creates only opaque local references without paths or credentials', async () => {
-    const { createViuLocalTestReference } = await import('@renderer/pages/studio/ide/teamEdit/teamEditClient');
+    const { createViuLocalTestReference } = await import('@package-apps/ide/renderer/teamEdit/teamEditClient');
     const reference = createViuLocalTestReference('preview-home_01');
 
     expect(reference).toBe('viu-preview://team-test/preview-home_01');
@@ -458,7 +458,7 @@ describe('teamEditService — shared singleton (UI + agent plane)', () => {
 describe('teamEditBridge - Main IPC envelopes', () => {
   afterEach(() => {
     vi.doUnmock('@office-ai/platform');
-    vi.doUnmock('@/process/ide/teamEdit/teamEditService');
+    vi.doUnmock('@package-apps/ide/process/collaboration/teamEdit/teamEditService');
     vi.resetModules();
   });
 
@@ -495,14 +495,14 @@ describe('teamEditBridge - Main IPC envelopes', () => {
         buildEmitter: () => ({ emit }),
       },
     }));
-    vi.doMock('@/process/ide/teamEdit/teamEditService', () => ({
+    vi.doMock('@package-apps/ide/process/collaboration/teamEdit/teamEditService', () => ({
       getTeamEditService: () => service,
       setTeamEditChangeListener: (listener: (snapshot: unknown) => void) => {
         changeListener = listener;
       },
     }));
 
-    const { registerTeamEditBridge } = await import('@/process/ide/teamEdit/teamEditBridge');
+    const { registerTeamEditBridge } = await import('@package-apps/ide/process/collaboration/teamEdit/teamEditBridge');
     registerTeamEditBridge();
 
     const requests: Record<string, unknown> = {
@@ -576,12 +576,12 @@ describe('teamEditBridge - Main IPC envelopes', () => {
         buildEmitter: () => ({ emit: vi.fn() }),
       },
     }));
-    vi.doMock('@/process/ide/teamEdit/teamEditService', () => ({
+    vi.doMock('@package-apps/ide/process/collaboration/teamEdit/teamEditService', () => ({
       getTeamEditService: () => service,
       setTeamEditChangeListener: vi.fn(),
     }));
 
-    const { registerTeamEditBridge } = await import('@/process/ide/teamEdit/teamEditBridge');
+    const { registerTeamEditBridge } = await import('@package-apps/ide/process/collaboration/teamEdit/teamEditBridge');
     registerTeamEditBridge();
 
     const request = {
@@ -641,7 +641,7 @@ describe('teamEditClient - renderer IPC contract', () => {
       },
     }));
 
-    const { teamEditClient } = await import('@renderer/pages/studio/ide/teamEdit/teamEditClient');
+    const { teamEditClient } = await import('@package-apps/ide/renderer/teamEdit/teamEditClient');
     const task = { id: 'task-1', title: 'Review checkout' };
     const group = { id: 'group-1', name: 'Frontend' };
     const state = { projectId: 'project-1' };
@@ -714,7 +714,7 @@ describe('teamEditClient - renderer IPC contract', () => {
       },
     }));
 
-    const { TeamEditTimeoutError, teamEditClient } = await import('@renderer/pages/studio/ide/teamEdit/teamEditClient');
+    const { TeamEditTimeoutError, teamEditClient } = await import('@package-apps/ide/renderer/teamEdit/teamEditClient');
     invoke.mockRejectedValueOnce('bridge failed');
     await expect(teamEditClient.snapshot(ROOT)).rejects.toThrow('bridge failed');
 

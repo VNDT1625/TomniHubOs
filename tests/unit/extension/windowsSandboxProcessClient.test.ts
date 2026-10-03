@@ -100,7 +100,11 @@ describe('Windows Creator Preview process-tree cleanup', () => {
 
   it('fails closed when a stale client tries to restart after disposal', async () => {
     const fixture = createClient();
-    const client = bindWindowsProcessTreeCleanup(fixture.client, () => runningProcess(), vi.fn(async () => undefined));
+    const client = bindWindowsProcessTreeCleanup(
+      fixture.client,
+      () => runningProcess(),
+      vi.fn(async () => undefined)
+    );
 
     await client.stop();
 
@@ -118,7 +122,11 @@ describe('Windows Creator Preview process-tree cleanup', () => {
         onExit = listener;
       }),
     };
-    const client = bindWindowsProcessTreeCleanup(fixture.client, () => process, vi.fn(async () => undefined));
+    const client = bindWindowsProcessTreeCleanup(
+      fixture.client,
+      () => process,
+      vi.fn(async () => undefined)
+    );
     const onUnexpectedExit = vi.fn();
 
     const unsubscribe = client.subscribeUnexpectedExit(onUnexpectedExit);

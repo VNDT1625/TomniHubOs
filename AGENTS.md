@@ -7,10 +7,10 @@ These rules apply to every human or AI contributor in this repository.
 Optimize work in this order:
 
 1. Make the **Hub Agent OS** run lifecycle coherent and production-safe.
-2. Complete **Trust and User Intelligence**: permissions, secret handling, egress control, audit, private context, preferences, and user control.
-3. Make local and cloud AI adapters provider-neutral and governed by the same contracts.
-4. Make the Store/package boundary real and remove optional applications from the base bundle.
-5. Improve optional packages only when doing so advances one of the first four goals.
+2. Complete **Trust and User Intelligence**: permissions, secret handling, egress control, audit, causal private context, preferences, and user control.
+3. Advance the **Store/package ecosystem** as a parallel launch track and remove optional applications from the base bundle.
+4. Make local and cloud-model adapters provider-neutral; add managed AI/cloud only through independently gated billing and resource contracts.
+5. Improve optional applications only when doing so advances one of the first four goals.
 
 IDE, Browser, Studio, Office, media, monitoring, testing studios, and similar domain surfaces are downloadable packages. Do not add their implementation to the base application. Studio is a package group or compatibility redirect, not a required base module.
 
@@ -41,6 +41,15 @@ mtui --json map folder <path>
 Use MTUI context or compass operations to narrow the source set. Every repository file creation, edit, patch, rename, or deletion must go through an MTUI write command. Review the MTUI diff before handoff. Do not bypass MTUI with shell redirection or ad-hoc scripts.
 
 Preserve unrelated work in a dirty worktree. Inspect git status before and after work. Never rewrite or delete user changes outside the assigned scope.
+
+## 3a. File placement and cleanup
+
+- Keep executable source, package manifests, and build configuration at their established canonical paths; do not create ad hoc root files.
+- Put maintained documentation under `docs/` in the owning topic directory; keep only `README.md`, `AGENTS.md`, `CONTRIBUTING.md`, `CHANGELOG.md`, `LICENSE`, and required tool configuration at the repository root.
+- Put temporary logs, diagnostics, patches, exports, screenshots, and one-off scripts under `.tmp/<task>/` or an explicitly generated output directory. Name the task and date when practical.
+- Before creating a file, search for an existing owner and confirm the destination is ignored or intentionally tracked.
+- When a temporary artifact is no longer needed, delete it through MTUI after checking it is not referenced. Preserve user data, source documents, backups, and recovery evidence; move them instead of deleting when ownership is uncertain.
+- After cleanup, inspect `mtui --json diff --last` and `git status --short`; report unrelated dirty paths and do not rewrite them.
 
 ## 4. Architecture invariants
 
@@ -111,16 +120,19 @@ node scripts/check-i18n.js
 
 Security, IPC, package, database, and run-lifecycle changes require contract or integration tests, not only unit tests. Package extraction also requires a clean-machine absence/install/uninstall proof. See [docs/engineering/testing-and-release.md](docs/engineering/testing-and-release.md).
 
+Release work follows checkpoints C0-C6 and declares whether it targets the Core plus Store candidate or the Full managed-usage MVP. A disabled managed switch is not evidence for the Full managed-usage gate; progress is passing current-revision acceptance atoms, not files, commits, or log volume.
+
 ## 8. Multi-agent execution
 
-For work spanning independent domains, follow the [autonomous multi-agent master plan](docs/execution/mvp-plan.md):
+For work spanning independent domains, follow the [C0-C6 autonomous multi-agent master plan](docs/execution/mvp-plan.md):
 
-- one integrator owns shared contracts and final merge;
-- each subagent receives an explicit file allowlist, acceptance evidence, and no-overlap rule;
-- parallelize independent adapters, tests, and package migrations;
-- serialize shared contract, bootstrap, IPC, and schema changes;
-- subagents do not commit unless the integrator explicitly delegates commit ownership;
-- handoffs include changed files, tests run, remaining risks, and observed conflicts.
+- the Integrator occupies one of four total slots and owns shared contracts, bootstrap, preload/IPC registration, schemas and migrations, generated registries, base routing, final integration, canonical status, and release decisions;
+- all three subagent slots receive bounded, non-overlapping acceptance atoms at every active checkpoint; a waiting lane takes another approved ready or independent-verification atom instead of editing an Integrator-owned file;
+- at least one subagent advances or verifies the Store/package track until its release gate passes;
+- each task states an exact allowlist, forbidden shared files, starting revision, acceptance evidence, migration/rollback/kill behavior, and commit ownership;
+- one production file and one table or migration have one owner in one checkpoint;
+- subagents do not commit unless the Integrator explicitly delegates commit ownership;
+- handoffs occur after each acceptance-sized atom and include changed files, commands and exit codes, evidence status, remaining risks, rollback, conflicts, and unrelated dirty paths.
 
 ## 9. Git and review
 

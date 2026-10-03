@@ -8,9 +8,9 @@ import { ipcBridge } from '@/common';
 import type { AgentMetadata } from '@/renderer/utils/model/agentTypes';
 import TomnyModal from '@/renderer/components/base/TomnyModal';
 import { useAgents } from '@/renderer/hooks/agent/useAgents';
-import { Button, Typography } from '@arco-design/web-react';
+import { Button, Spin, Typography } from '@arco-design/web-react';
 import { Home, Plus } from '@icon-park/react';
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import AgentCard from './AgentCard';
@@ -26,9 +26,15 @@ const LocalAgents: React.FC = () => {
   const hubScope = searchParams.get('scope') === 'all' ? 'all' : 'agents';
 
   // Single fetch for all agents; both detected and custom lists are derived from it.
-  const { agents: allAgents, revalidate: mutateAgents } = useAgents();
+  const { agents: allAgents, isLoading, revalidate: mutateAgents } = useAgents();
 
-  const detectedAgents = allAgents.filter((a) => a.agent_type !== 'remote' && a.agent_source !== 'custom');
+  useEffect(() => {
+    void mutateAgents();
+  }, [mutateAgents]);
+
+  const detectedAgents = allAgents.filter(
+    (a) => a.agent_type !== 'remote' && a.agent_source !== 'custom' && a.available !== false
+  );
 
   const customAgents: AgentMetadata[] = allAgents.filter((a) => a.agent_source === 'custom');
 
@@ -162,27 +168,35 @@ const LocalAgents: React.FC = () => {
           {t('settings.agentManagement.detected')}
         </Typography.Text>
       </div>
-      <div className='grid grid-cols-2 gap-10px px-16px md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5'>
-        {tomnyagenticAgent && (
-          <AgentCard
-            type='detected'
-            agent={tomnyagenticAgent}
-            onGoToChat={() => goToChatWithAgent(tomnyagenticAgent)}
-          />
-        )}
-        {otherDetected.map((agent) => (
-          <AgentCard
-            key={agent.backend || agent.agent_type}
-            type='detected'
-            agent={agent}
-            onGoToChat={() => goToChatWithAgent(agent)}
-          />
-        ))}
-      </div>
-      {(!detectedAgents || detectedAgents.length === 0) && (
-        <Typography.Text type='secondary' className='block px-16px py-16px text-center text-12px'>
-          {t('settings.agentManagement.localAgentsEmpty')}
-        </Typography.Text>
+      {isLoading && (!allAgents || allAgents.length === 0) ? (
+        <div className='flex items-center justify-center py-32px'>
+          <Spin size={20} />
+        </div>
+      ) : (
+        <>
+          <div className='grid grid-cols-2 gap-10px px-16px md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5'>
+            {tomnyagenticAgent && (
+              <AgentCard
+                type='detected'
+                agent={tomnyagenticAgent}
+                onGoToChat={() => goToChatWithAgent(tomnyagenticAgent)}
+              />
+            )}
+            {otherDetected.map((agent) => (
+              <AgentCard
+                key={agent.backend || agent.agent_type}
+                type='detected'
+                agent={agent}
+                onGoToChat={() => goToChatWithAgent(agent)}
+              />
+            ))}
+          </div>
+          {(!detectedAgents || detectedAgents.length === 0) && (
+            <Typography.Text type='secondary' className='block px-16px py-16px text-center text-12px'>
+              {t('settings.agentManagement.localAgentsEmpty')}
+            </Typography.Text>
+          )}
+        </>
       )}
 
       {/* Custom Agents section */}

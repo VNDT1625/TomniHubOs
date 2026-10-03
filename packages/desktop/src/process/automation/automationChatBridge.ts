@@ -32,13 +32,12 @@
  */
 
 import { bridge } from '@office-ai/platform';
-import { listReadyProviders } from '@process/services/tomnyProviderBridge';
-import type { IProvider } from '@/common/config/storage';
-import { runAgentChatMessages } from '@process/services/agentChat';
+import { createProviderChat, runAgentChatMessages } from '@process/services/agentChat';
 import type { ChatMessageInput } from '@process/services/agentChat';
 import type { IAutomationStore } from './automationStore';
 import type { Workflow } from './automationTypes';
 import { getSharedAutomationServices } from './automationBridge';
+import { type AutomationEgressAuthority, type AutomationExternalEgressRequest } from './workflowEngine';
 
 // ---------------------------------------------------------------------------
 // Channel names (renderer-safe contract)
@@ -48,6 +47,11 @@ import { getSharedAutomationServices } from './automationBridge';
 export const AUTOMATION_CHAT_CHANNELS = {
   chat: 'automation.chat',
 } as const;
+
+/** Stable, non-sensitive denial returned before automation chat can use a provider. */
+export const AUTOMATION_CHAT_ACCOUNT_REQUIRED = 'AUTOMATION_CHAT_ACCOUNT_REQUIRED';
+/** Stable, non-sensitive denial when no Main-owned egress authority admits chat. */
+export const AUTOMATION_CHAT_EGRESS_DENIED = 'AUTOMATION_CHAT_EGRESS_DENIED';
 
 // ---------------------------------------------------------------------------
 // Request / result types
@@ -252,74 +256,18 @@ type WorkflowNode = {
 };
 
 // ---------------------------------------------------------------------------
-// Provider chat (mirrors studioChatBridge pattern)
+// Provider chat
 // ---------------------------------------------------------------------------
 
-/** Whether a model id is enabled for a provider (defaults to enabled). */
-const isModelEnabled = (provider: IProvider, model: string): boolean => provider.model_enabled?.[model] !== false;
-
-/** A provider configured enough to issue a chat call. */
-const isUsable = (p: IProvider): boolean =>
-  p.enabled !== false && Boolean(p.api_key) && Boolean(p.base_url) && Array.isArray(p.models) && p.models.length > 0;
-
-/** Resolve the OpenAI-compatible chat endpoint for a provider (honours "Full URL"). */
-const resolveChatUrl = (provider: IProvider): string => {
-  const base = provider.base_url.replace(/\/+$/, '');
-  return provider.is_full_url ? base : `${base}/chat/completions`;
-};
-
-/** First non-empty API key (the field may hold several, comma/newline-separated). */
-const firstApiKey = (apiKeys: string): string =>
-  apiKeys
-    .split(/[,\n]/)
-    .map((k) => k.trim())
-    .find((k) => k.length > 0) ?? '';
-
-/** Find the provider owning `model` (preferring enabled); else any usable provider/model. */
-const pickForModel = (providers: IProvider[], model: string): { provider: IProvider; model: string } | null => {
-  const usable = providers.filter(isUsable);
-  const owner = usable.find((p) => p.models.includes(model) && isModelEnabled(p, model));
-  if (owner) return { provider: owner, model };
-  for (const provider of usable) {
-    const fallback = provider.models.find((m) => isModelEnabled(provider, m)) ?? provider.models[0];
-    if (fallback) return { provider, model: fallback };
-  }
-  return null;
-};
-
 /**
- * Issue one non-streaming completion against the user's configured provider.
- * Resolves the provider lazily so a model added after startup is picked up
- * without a restart. Throws on failure; the caller wraps it into a result.
+ * Automation Chat is a Main-owned surface but must not own provider credentials
+ * or network destinations. The shared broker rechecks account, destination, and
+ * final egress policy before executing a configured provider.
  */
-const runProviderChat = async (model: string, messages: ChatMessageInput[]): Promise<string> => {
-  const providers = (await listReadyProviders().catch(() => [] as IProvider[])) || [];
-  const selected = pickForModel(providers, model);
-  if (!selected) {
-    throw new Error('No usable model is configured. Open Settings → Model and add a provider/model, then try again.');
-  }
+const brokeredProviderChat = createProviderChat();
 
-  const url = resolveChatUrl(selected.provider);
-  const apiKey = firstApiKey(selected.provider.api_key);
-
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({ model: selected.model, messages, stream: false }),
-  });
-
-  if (!response.ok) {
-    const detail = await response.text().catch(() => '');
-    throw new Error(`Model request failed (HTTP ${response.status}). ${detail.slice(0, 300)}`);
-  }
-
-  const json = (await response.json()) as { choices?: Array<{ message?: { content?: string | null } }> };
-  const content = json.choices?.[0]?.message?.content;
-  if (typeof content !== 'string' || content.length === 0) {
-    throw new Error('The model returned an empty response.');
-  }
-  return content;
-};
+const runProviderChat = (model: string, messages: ChatMessageInput[], signal?: AbortSignal): Promise<string> =>
+  brokeredProviderChat({ model, messages, signal });
 
 // ---------------------------------------------------------------------------
 // JSON workflow extraction + store upsert
@@ -378,7 +326,7 @@ const runAutomationChat = async (req: AutomationChatRequest, store: IAutomationS
       : [{ role: 'system', content: systemPrompt }, ...(req.messages as ChatMessageInput[])];
 
   const reply = await runAgentChatMessages(
-    (model, msgs) => runProviderChat(model, msgs as ChatMessageInput[]),
+    (model, msgs, signal) => runProviderChat(model, msgs as ChatMessageInput[], signal),
     req.model,
     messages,
     undefined,
@@ -423,6 +371,17 @@ const getSharedStore = (): IAutomationStore => getSharedAutomationServices().sto
 export type RegisterAutomationChatBridgeOptions = {
   /** Override the store (tests / advanced bootstrap). */
   store?: IAutomationStore;
+  /**
+   * Main-owned online-account authority. It must run before this bridge builds
+   * prompt context, selects a provider, reconstructs credentials, or makes a
+   * provider request.
+   */
+  requireAuthenticatedAccount: () => void;
+  /**
+   * Main-owned, run-bound egress admission. Until TrustBroker supplies it,
+   * Automation Chat is contained before provider selection or credential use.
+   */
+  egressAuthority?: AutomationEgressAuthority;
 };
 
 /**
@@ -430,12 +389,26 @@ export type RegisterAutomationChatBridgeOptions = {
  * replaces the bound handler). Intended to be called once during Main-process
  * bootstrap.
  *
- * @param options Injected store (defaults to the shared production store).
+ * @param options Injected Main-only account authority and optional store.
  */
-export function registerAutomationChatBridge(options: RegisterAutomationChatBridgeOptions = {}): void {
+export function registerAutomationChatBridge(options: RegisterAutomationChatBridgeOptions): void {
   const store = options.store ?? getSharedStore();
 
   automationChatChannels.chat.provider(async (req): Promise<AutomationChatResult<AutomationChatReply>> => {
+    try {
+      options.requireAuthenticatedAccount();
+    } catch {
+      return { ok: false, error: AUTOMATION_CHAT_ACCOUNT_REQUIRED, code: 'error' };
+    }
+
+    const egressRequest: AutomationExternalEgressRequest = { kind: 'automation-chat', model: req.model };
+    try {
+      if (!options.egressAuthority) throw new Error(AUTOMATION_CHAT_EGRESS_DENIED);
+      await options.egressAuthority.authorizeExternalEgress(egressRequest);
+    } catch {
+      return { ok: false, error: AUTOMATION_CHAT_EGRESS_DENIED, code: 'error' };
+    }
+
     try {
       const data = await runAutomationChat(req, store);
       return { ok: true, data };

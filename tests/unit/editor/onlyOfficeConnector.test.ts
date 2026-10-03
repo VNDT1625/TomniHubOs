@@ -13,7 +13,7 @@ import {
   runOfficeScript,
   unregisterConnector,
   type OnlyOfficeConnector,
-} from '@/renderer/pages/editor/adapters/onlyOfficeConnector';
+} from '@package-apps/document-studio/renderer/adapters/office/onlyOfficeConnector';
 
 const filePath = '/tmp/stalled.docx';
 

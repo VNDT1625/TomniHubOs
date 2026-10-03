@@ -7,7 +7,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { parseDbUrl } from '@/process/ide/db/dbUrl';
+import { parseDbUrl } from '@package-apps/ide/process/data/db/dbUrl';
 
 describe('parseDbUrl', () => {
   it('parses a full postgres URL with credentials, port, db, and sslmode', () => {

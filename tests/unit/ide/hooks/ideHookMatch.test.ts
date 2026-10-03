@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { matchesAnyPattern, matchesGlob, normaliseRelPath } from '@/process/ide/hooks/ideHookMatch';
+import { matchesAnyPattern, matchesGlob, normaliseRelPath } from '@package-apps/ide/process/coding/hooks/ideHookMatch';
 
 describe('normaliseRelPath', () => {
   it('forward-slashes, lowercases, strips leading ./ and /', () => {

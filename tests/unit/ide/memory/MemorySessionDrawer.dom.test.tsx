@@ -29,19 +29,19 @@ let hookValue: {
   clear: typeof clearSpy;
 };
 
-vi.mock('@/renderer/pages/studio/ide/memory/useIdeMemory', () => ({
+vi.mock('@package-apps/ide/renderer/memory/useIdeMemory', () => ({
   useIdeMemory: () => hookValue,
 }));
 
-vi.mock('@/renderer/pages/studio/ide/memory/TomnyAgenticContextPanel', () => ({
+vi.mock('@package-apps/ide/renderer/memory/TomnyAgenticContextPanel', () => ({
   default: () => <div data-testid='tomnyagentic-context-panel'>context panel</div>,
 }));
 
-vi.mock('@/renderer/pages/studio/ide/memory/RepoSecretContextPanel', () => ({
+vi.mock('@package-apps/ide/renderer/memory/RepoSecretContextPanel', () => ({
   default: () => <div data-testid='repo-secret-context-panel'>secret panel</div>,
 }));
 
-import MemorySessionDrawer from '@/renderer/pages/studio/ide/memory/MemorySessionDrawer';
+import MemorySessionDrawer from '@package-apps/ide/renderer/memory/MemorySessionDrawer';
 
 const snapshot = (overrides: Partial<SuperMemorySnapshot> = {}): SuperMemorySnapshot => ({
   sessionId: 's1',

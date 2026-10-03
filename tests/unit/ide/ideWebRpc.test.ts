@@ -8,7 +8,7 @@ import { mkdir, mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createIdeWebRpc } from '@process/ide/mcp/ideWebRpc';
+import { createIdeWebRpc } from '@package-apps/ide/process/mcp/ideWebRpc';
 
 type RpcResult<T> = {
   ok: true;

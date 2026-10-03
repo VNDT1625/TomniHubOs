@@ -15,8 +15,8 @@ import {
   isWatchedFile,
   type RawWatchEventType,
   type RepoWatcherDeps,
-} from '@/process/ide/repoWatcher';
-import type { RepoChangeEvent } from '@/process/ide/understandTypes';
+} from '@package-apps/ide/process/knowledge/graph/repoWatcher';
+import type { RepoChangeEvent } from '@package-apps/ide/process/knowledge/graph/understandTypes';
 
 describe('isIgnoredPath / isWatchedFile', () => {
   it('ignores vendor/build dirs', () => {

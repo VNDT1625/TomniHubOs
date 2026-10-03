@@ -5,6 +5,8 @@ import type { AgentStreamErrorInfo } from '@/common/chat/chatLib';
 import { isSideQuestionSupported } from '@/common/chat/sideQuestion';
 import { parseError, uuid } from '@/common/utils';
 import AgentModeSelector from '@/renderer/components/agent/AgentModeSelector';
+import ContextUsageIndicator from '@/renderer/components/agent/ContextUsageIndicator';
+import { getModelContextLimit } from '@/renderer/utils/model/modelContextLimits';
 import CommandQueuePanel from '@/renderer/components/chat/CommandQueuePanel';
 import MobileActionSheet, {
   type MobileActionSheetEntry,
@@ -26,26 +28,20 @@ import { useConversationContextSafe } from '@/renderer/hooks/context/Conversatio
 import { useLayoutContext } from '@/renderer/hooks/context/LayoutContext';
 import { useOpenFileSelector } from '@/renderer/hooks/file/useOpenFileSelector';
 import { useLatestRef } from '@/renderer/hooks/ui/useLatestRef';
-import {
-  useAddOrUpdateMessage,
-  useMessageList,
-  useMessageListLoading,
-} from '@/renderer/pages/conversation/Messages/hooks';
+import { useAddOrUpdateMessage } from '@/renderer/pages/conversation/Messages/hooks';
 import {
   shouldEnqueueConversationCommand,
   useConversationCommandQueue,
   type ConversationCommandQueueItem,
 } from '@/renderer/pages/conversation/platforms/useConversationCommandQueue';
 import { usePreviewContext } from '@/renderer/pages/conversation/Preview';
-import { coreIdeClient } from '@/renderer/services/coreIdeClient';
-import { buildPlanningGuard } from '@/renderer/services/planningGuard';
 import { expandGoalCommand, isGoalOffCommand, parseGoalCommand } from '@/common/chat/slash/goalCommand';
 import { expandBuild0Command } from '@/common/chat/slash/build0Command';
 import { clearGoalMode, setGoalMode, withGoalSteeringDirective } from '@/renderer/utils/chat/goalMode';
 import { withResponseLanguageDirective } from '@/renderer/services/i18n/responseLanguage';
 import { warmupConversation } from '@/renderer/pages/conversation/utils/warmupConversation';
 import { useTeamPermission } from '@/renderer/pages/team/hooks/TeamPermissionContext';
-import { buildTeamTaskContextIntent, withTeamTaskDirective } from '@/renderer/pages/team/taskContext';
+import { withTeamTaskDirective } from '@/renderer/pages/team/taskContext';
 import { allSupportedExts } from '@/renderer/services/FileService';
 import { iconColors } from '@/renderer/styles/colors';
 import { emitter, useAddEventListener } from '@/renderer/utils/emitter';
@@ -139,6 +135,7 @@ const AcpSendBox: React.FC<{
     hasThinkingMessage,
     slashCommands,
     fetchSlashCommands,
+    tokenUsage,
   } = messageState;
   const { t } = useTranslation();
   const teamPermission = useTeamPermission();
@@ -164,6 +161,11 @@ const AcpSendBox: React.FC<{
   // Drive the mobile sheet's model entry off the same source AcpModelSelector uses
   const { model_info, canSwitch: canSwitchModel, selectModel } = useAcpModelInfo({ conversation_id, backend });
   const availableAgentModes = useAgentModesForBackend(backend);
+
+  const contextLimit = useMemo(
+    () => getModelContextLimit(model_info?.current_model_id),
+    [model_info?.current_model_id]
+  );
 
   // Mirror AgentModeSelector's getMode sync so the sheet shows the live mode label.
   useEffect(() => {
@@ -227,8 +229,6 @@ const AcpSendBox: React.FC<{
   const atPathRef = useLatestRef(atPath);
 
   const addOrUpdateMessage = useAddOrUpdateMessage(); // Move this here so it's available in useEffect
-  const messages = useMessageList();
-  const messageListLoading = useMessageListLoading();
   const addOrUpdateMessageRef = useLatestRef(addOrUpdateMessage);
 
   // Shared file handling logic
@@ -287,46 +287,9 @@ const AcpSendBox: React.FC<{
 
       try {
         void checkAndUpdateTitle(conversation_id, input);
+        // IDE context and planning are package-owned. The base chat does not
+        // import or request optional IDE implementations before a Surface is used.
         let outgoingMessage = modelBase;
-        if (workspacePath && !messageListLoading && messages.length === 0) {
-          const contextIntent = buildTeamTaskContextIntent(input, conversation_id);
-          const contextResult = await coreIdeClient
-            .kgContext(workspacePath, contextIntent, [], true)
-            .catch((): null => null);
-          const pack = contextResult?.ok ? contextResult.data : null;
-          if (pack && pack.slices.length > 0) {
-            outgoingMessage = `${pack.renderedContext}\n\n${modelBase}`;
-            addOrUpdateMessageRef.current(
-              {
-                id: uuid(),
-                msg_id: uuid(),
-                type: 'tips',
-                position: 'center',
-                conversation_id,
-                created_at: Date.now(),
-                content: {
-                  type: 'success',
-                  content: t('conversation.contextPack.loaded', { count: pack.sliceCount }),
-                  kind: 'context_pack',
-                  contextPack: {
-                    sliceCount: pack.sliceCount,
-                    truncated: pack.truncated,
-                    files: pack.slices.map((slice) => ({
-                      path: slice.path,
-                      reason: slice.reason,
-                      layer: slice.layer,
-                      score: slice.score,
-                    })),
-                  },
-                },
-              },
-              true
-            );
-          }
-        }
-        if (workspacePath) {
-          outgoingMessage = await buildPlanningGuard(workspacePath, outgoingMessage);
-        }
         // A pinned Team task is a real execution contract, not only a visual label.
         outgoingMessage = withTeamTaskDirective(outgoingMessage, conversation_id);
         // Goal Mode steering: bind every ordinary turn to the mandatory pipeline.
@@ -420,16 +383,7 @@ Please check your local CLI tool authentication status`,
         emitter.emit('acp.workspace.refresh');
       }
     },
-    [
-      backend,
-      checkAndUpdateTitle,
-      conversation_id,
-      messageListLoading,
-      messages.length,
-      setAiProcessing,
-      t,
-      workspacePath,
-    ]
+    [backend, checkAndUpdateTitle, conversation_id, setAiProcessing, t, workspacePath]
   );
 
   const {
@@ -701,19 +655,22 @@ Please check your local CLI tool authentication status`,
           />
         }
         rightTools={
-          showModeSelector ? (
-            <AgentModeSelector
-              backend={backend}
-              conversation_id={conversation_id}
-              compact
-              initialMode={session_mode}
-              compactLeadingIcon={<Shield theme='outline' size='14' fill={iconColors.secondary} />}
-              modeLabelFormatter={(mode) => t(`agentMode.${mode.value}`, { defaultValue: mode.label })}
-              compactLabelPrefix={t('agentMode.permission')}
-              hideCompactLabelPrefixOnMobile
-              onModeChanged={isLeaderInTeam ? teamPermission?.propagateMode : undefined}
-            />
-          ) : undefined
+          <div className='flex items-center gap-8px'>
+            <ContextUsageIndicator tokenUsage={tokenUsage} context_limit={contextLimit} size={22} />
+            {showModeSelector ? (
+              <AgentModeSelector
+                backend={backend}
+                conversation_id={conversation_id}
+                compact
+                initialMode={session_mode}
+                compactLeadingIcon={<Shield theme='outline' size='14' fill={iconColors.secondary} />}
+                modeLabelFormatter={(mode) => t(`agentMode.${mode.value}`, { defaultValue: mode.label })}
+                compactLabelPrefix={t('agentMode.permission')}
+                hideCompactLabelPrefixOnMobile
+                onModeChanged={isLeaderInTeam ? teamPermission?.propagateMode : undefined}
+              />
+            ) : null}
+          </div>
         }
         prefix={
           <>

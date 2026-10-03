@@ -1,0 +1,52 @@
+{
+  "schemaVersion": "tomny.security-ontology.v1",
+  "ontologyVersion": "1.0.0",
+  "riskTypes": [
+    "none",
+    "credential_exposure",
+    "private_data_egress",
+    "prompt_injection",
+    "destructive_action",
+    "uncertain"
+  ],
+  "reasonCodes": [
+    "NO_SEMANTIC_RISK",
+    "PUBLIC_LOW_RISK_INPUT",
+    "BENIGN_SECURITY_DISCUSSION",
+    "CREDENTIAL_EXPOSURE",
+    "PRIVATE_DATA_EXPOSURE",
+    "PRIVATE_DOCUMENT_EXPOSURE",
+    "LINKED_IDENTITY_EXPOSURE",
+    "PROMPT_INJECTION",
+    "DESTRUCTIVE_INTENT",
+    "DESTRUCTIVE_SCOPE_UNCLEAR",
+    "INSUFFICIENT_EVIDENCE",
+    "UNRESOLVED_ATTACHMENT_CONTENT"
+  ],
+  "reasonCodeRiskType": {
+    "NO_SEMANTIC_RISK": "none",
+    "PUBLIC_LOW_RISK_INPUT": "none",
+    "BENIGN_SECURITY_DISCUSSION": "none",
+    "CREDENTIAL_EXPOSURE": "credential_exposure",
+    "PRIVATE_DATA_EXPOSURE": "private_data_egress",
+    "PRIVATE_DOCUMENT_EXPOSURE": "private_data_egress",
+    "LINKED_IDENTITY_EXPOSURE": "private_data_egress",
+    "PROMPT_INJECTION": "prompt_injection",
+    "DESTRUCTIVE_INTENT": "destructive_action",
+    "DESTRUCTIVE_SCOPE_UNCLEAR": "destructive_action",
+    "INSUFFICIENT_EVIDENCE": "uncertain",
+    "UNRESOLVED_ATTACHMENT_CONTENT": "uncertain"
+  },
+  "actions": ["allow", "ask", "local_only", "block"],
+  "requiresBackendValidation": true,
+  "nonModelClasses": [
+    "NON_MODEL_DETERMINISTIC_STATE",
+    "NON_MODEL_POLICY_STATE",
+    "NON_MODEL_OPERATIONAL_STATE",
+    "NON_MODEL_MITIGATION_STATE",
+    "NON_MODEL_AUDIT_STATE",
+    "PROVENANCE_ONLY"
+  ],
+  "redactions": { "allowedValues": ["credential", "private_fields"], "ordering": "UNORDERED_CANONICAL" },
+  "source": "External planner approved Security Ontology v1"
+}

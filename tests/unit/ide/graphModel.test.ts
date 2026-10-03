@@ -9,8 +9,8 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { computeImpact, deriveC4, liftChangedToView } from '@/renderer/pages/studio/ide/graphModel';
-import type { KnowledgeGraph } from '@/process/ide/understandTypes';
+import { computeImpact, deriveC4, liftChangedToView } from '@package-apps/ide/renderer/services/graphModel';
+import type { KnowledgeGraph } from '@package-apps/ide/process/knowledge/graph/understandTypes';
 
 /** A small but representative graph spanning two top folders + externals. */
 const graph: KnowledgeGraph = {

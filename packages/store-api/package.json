@@ -1,0 +1,17 @@
+{
+  "name": "@tomni/store-api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun run src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "lint": "bunx oxlint src test",
+    "format:check": "bunx oxfmt --check src test migrations package.json",
+    "migrate": "bun run src/migrate.ts",
+    "backup": "bun run src/runBackup.ts"
+  },
+  "dependencies": {
+    "pg": "^8.21.0"
+  }
+}

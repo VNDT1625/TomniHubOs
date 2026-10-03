@@ -36,7 +36,7 @@ export type AttemptRef = {
   idempotencyKey: string;
 };
 
-const NON_EMPTY = /^[^\s].*$/;
+const NON_EMPTY = /^[^\s][\s\S]*$/;
 
 export const assertRunIntent = (intent: RunIntent): RunIntent => {
   const required = [

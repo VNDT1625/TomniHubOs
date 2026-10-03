@@ -398,7 +398,9 @@ describe('ResourceCoordinator correctness', () => {
     const before = coordinator.getState();
 
     expect(() => coordinator.setMode('automatic' as never)).toThrow('mode must be detailed or suggest');
-    expect(() => coordinator.applyPreset('unlimited' as never)).toThrow('preset must be saver, balanced, or performance');
+    expect(() => coordinator.applyPreset('unlimited' as never)).toThrow(
+      'preset must be saver, balanced, or performance'
+    );
     expect(() => coordinator.setBudget({ maxConcurrent: { unsupported: 1 } as never })).toThrow(
       'maxConcurrent.unsupported is not supported'
     );
@@ -503,12 +505,12 @@ describe('ResourceCoordinator correctness', () => {
     await expect(
       coordinator.requestLease({ kind: 'agent', estCostMB: 1, requestId: 'x'.repeat(1025) })
     ).rejects.toThrow('character limit');
-    await expect(
-      coordinator.requestLease({ kind: 'agent', estCostMB: 1, requestId: 'line\nbreak' })
-    ).rejects.toThrow('control characters');
-    await expect(
-      coordinator.requestLease({ kind: 'agent', estCostMB: 1, requestId: 42 as never })
-    ).rejects.toThrow('requestId must be a string');
+    await expect(coordinator.requestLease({ kind: 'agent', estCostMB: 1, requestId: 'line\nbreak' })).rejects.toThrow(
+      'control characters'
+    );
+    await expect(coordinator.requestLease({ kind: 'agent', estCostMB: 1, requestId: 42 as never })).rejects.toThrow(
+      'requestId must be a string'
+    );
     expect(coordinator.getState().queued).toHaveLength(0);
 
     const held = await coordinator.requestLease({ kind: 'agent', estCostMB: 1 });
@@ -567,7 +569,9 @@ describe('ResourceCoordinator correctness', () => {
     expect(charged.estCostMB).toBe(1);
     expect(zeroCost.estCostMB).toBe(0);
     expect(coordinator.getState().active).toHaveLength(2);
-    expect(coordinator.getState().queued).toContainEqual(expect.objectContaining({ requestId: 'memory-edge', estCostMB: 1 }));
+    expect(coordinator.getState().queued).toContainEqual(
+      expect.objectContaining({ requestId: 'memory-edge', estCostMB: 1 })
+    );
 
     coordinator.releaseLease(charged.id);
     await expect(blocked).resolves.toMatchObject({ estCostMB: 1 });

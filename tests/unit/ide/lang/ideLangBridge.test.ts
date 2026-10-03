@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { parseAnalyzeType } from '../../../../packages/desktop/src/process/ide/lang/ideLangBridge';
+import { parseAnalyzeType } from '@package-apps/ide/process/coding/lang/ideLangBridge';
 
 describe('parseAnalyzeType', () => {
   it('parses a well-formed analyze-type payload', () => {

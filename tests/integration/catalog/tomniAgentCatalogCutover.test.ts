@@ -188,4 +188,27 @@ describe('Tomny assistant and agent catalog cutover', () => {
     expect(boundary).toContain('readLegacyCatalog');
     expect(boundary).toContain('discoverLegacyDatabasePaths');
   });
+
+  it('removes the generic provider-health route and makes Model Modal use only native saved-provider discovery', async () => {
+    const [agentChannels, catalogBridge, modal, discoveryClient] = await Promise.all([
+      readFile(path.join(process.cwd(), 'packages/desktop/src/common/types/agent/agentChannels.ts'), 'utf8'),
+      readFile(path.join(process.cwd(), 'packages/desktop/src/process/resources/agentCatalogBridge.ts'), 'utf8'),
+      readFile(
+        path.join(
+          process.cwd(),
+          'packages/desktop/src/renderer/components/settings/SettingsModal/contents/ModelModalContent.tsx'
+        ),
+        'utf8'
+      ),
+      readFile(path.join(process.cwd(), 'packages/desktop/src/renderer/hooks/agent/useModeModeList.ts'), 'utf8'),
+    ]);
+
+    expect(agentChannels).not.toContain('tomni-agent.provider-health');
+    expect(catalogBridge).not.toContain('checkProviderHealth');
+    expect(catalogBridge).not.toContain('fetchProviderModelList');
+    expect(modal).toContain('checkSavedProviderModelHealth(platform.id, modelName)');
+    expect(modal).not.toContain('checkProviderHealth.invoke');
+    expect(discoveryClient).toContain('providerDiscovery.fetchModels({ providerId })');
+    expect(discoveryClient).not.toContain('import { ipcBridge }');
+  });
 });

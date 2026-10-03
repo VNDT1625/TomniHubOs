@@ -9,7 +9,7 @@ import {
   startRegisteredTomniRemoteGateway,
   stopRegisteredTomniRemoteGateway,
 } from '@process/services/remoteGateway/registry';
-import { startTunnel, stopTunnel, type TunnelResult } from '@process/studio/cloudflareTunnel';
+import { startTunnel, stopTunnel, type TunnelResult } from '@process/services/remoteGateway/cloudflareTunnel';
 
 const TUNNEL_KEY = 'telegram-remote';
 const SECRET_ENV = 'TOMNI_TELEGRAM_REMOTE_SECRET';
@@ -17,6 +17,8 @@ const LEGACY_SECRET_ENV = 'TOMNY_TELEGRAM_REMOTE_SECRET';
 let startPromise: Promise<TunnelResult> | undefined;
 let activePublicUrl: string | undefined;
 let appLanguage = 'en-US';
+
+export type TelegramRemoteTunnelResult = TunnelResult | { ok: false; reason: 'external-authority-required' };
 
 /** Returns the per-process bearer used by remote clients and the local gateway. */
 export function prepareTelegramRemoteSecret(): string {
@@ -30,8 +32,16 @@ export function prepareTelegramRemoteSecret(): string {
   return secret;
 }
 
-/** Starts the Tomny gateway and exposes that gateway through the quick tunnel. */
-export async function startTelegramRemoteTunnel(language = 'en-US'): Promise<TunnelResult> {
+/**
+ * Starts the Tomny gateway and exposes it through the quick tunnel only after a
+ * Main-owned governed authority admits public egress. This gate precedes secret
+ * creation, gateway startup, and child-process tunnel spawn.
+ */
+export async function startTelegramRemoteTunnel(
+  language = 'en-US',
+  isExternalAuthorityGranted?: () => boolean
+): Promise<TelegramRemoteTunnelResult> {
+  if (isExternalAuthorityGranted?.() !== true) return { ok: false, reason: 'external-authority-required' };
   appLanguage = language;
   const gateway = await startRegisteredTomniRemoteGateway({
     secret: prepareTelegramRemoteSecret(),

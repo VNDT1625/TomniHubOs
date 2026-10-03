@@ -11,6 +11,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import JSZip from 'jszip';
 import { loadPublishCatalogDocument, mergePublishCatalog } from './publishCatalog.js';
 import {
@@ -32,6 +33,7 @@ import {
   parsePackageManifest,
   type PackageCatalogEntry,
   type PackageManifest,
+  type PackagePublicationReview,
 } from '../../packages/desktop/src/common/packages/index.js';
 import { verifyArtifactSignature } from '../../packages/desktop/src/process/extensions/package-manager/artifactSecurity.js';
 import {
@@ -39,13 +41,19 @@ import {
   signRemotePackageCatalog,
   type RemotePackageCatalogDocument,
 } from '../../packages/desktop/src/process/extensions/package-manager/remoteCatalog.js';
+import {
+  decideAutomatedPackageReview,
+  type AutomatedPackageReviewDecision,
+} from '../../packages/desktop/src/process/extensions/package-manager/catalog-federation/validation.js';
 
-const args = process.argv.slice(2);
+const isPublishEntrypoint =
+  process.argv[1] !== undefined && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url));
+const args = isPublishEntrypoint ? process.argv.slice(2) : [];
 const artifactArgument = args.find((value) => !value.startsWith('--'));
 const bootstrap = args.includes('--bootstrap');
-if (!artifactArgument) throw new Error('Usage: bun run store:publish -- <artifact.tomny>');
+if (isPublishEntrypoint && !artifactArgument) throw new Error('Usage: bun run store:publish -- <artifact.tomny>');
 
-const repository = process.env.TOMNI_STORE_REPOSITORY ?? 'VNDT1625/OmniAgent';
+const repository = process.env.TOMNI_STORE_REPOSITORY ?? 'VNDT1625/tomni-hub-agent-os';
 const releaseTag = process.env.TOMNI_STORE_RELEASE_TAG ?? 'tomni-store-v1';
 if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)) {
   throw new Error('TOMNI_STORE_REPOSITORY must be an owner/repository identifier.');
@@ -54,8 +62,9 @@ if (!/^[A-Za-z0-9_.-]{1,128}$/.test(releaseTag)) {
   throw new Error('TOMNI_STORE_RELEASE_TAG must be a safe release tag.');
 }
 const releaseBaseUrl = `https://github.com/${repository}/releases/download/${releaseTag}`;
-const artifactPath = path.resolve(artifactArgument);
-if (!path.basename(artifactPath).endsWith('.tomny')) throw new Error('Store publisher expects a .tomny artifact.');
+const artifactPath = artifactArgument ? path.resolve(artifactArgument) : '';
+if (isPublishEntrypoint && !path.basename(artifactPath).endsWith('.tomny'))
+  throw new Error('Store publisher expects a .tomny artifact.');
 
 const runGh = (commandArgs: string[]): Promise<void> =>
   new Promise((resolve, reject) => {
@@ -86,6 +95,111 @@ const runGhOutput = (commandArgs: string[]): Promise<string> =>
 type VerifiedArtifact = {
   manifest: PackageManifest;
   releaseAsset: { digest: string; size: number };
+  reviewEntries: readonly PackageReviewArchiveEntry[];
+};
+
+type PackageReviewArchiveEntry = Readonly<{
+  name: string;
+  content: Uint8Array;
+}>;
+
+const STATIC_PAYLOAD_FILE = /\.(?:css|html?|ico|jpe?g|png|webp|gif|svg|woff2?|txt|md|json)$/i;
+const TEXT_STATIC_PAYLOAD_FILE = /\.(?:css|html?|svg|txt|md|json)$/i;
+const DYNAMIC_OR_EGRESS_STATIC_CONTENT =
+  /(?:<\s*(?:script|form|iframe|object|embed|link)\b|@import\b|url\s*\(|\b(?:https?|wss?|data|javascript|file):|["']\s*\/\/)/i;
+
+/**
+ * The publication command auto-approves only a deliberately tiny, statically
+ * inspectable package subset. Anything not proven static is sent to review.
+ */
+export const inspectPackageArtifactForAutomatedReview = (
+  entries: readonly PackageReviewArchiveEntry[]
+): Readonly<{
+  hasNativeCode: boolean | 'unknown';
+  aiOperations: readonly string[] | 'unknown';
+  destinations: readonly string[] | 'unknown';
+}> => {
+  for (const entry of entries) {
+    if (!STATIC_PAYLOAD_FILE.test(entry.name)) {
+      return { hasNativeCode: 'unknown', aiOperations: 'unknown', destinations: 'unknown' };
+    }
+    if (
+      TEXT_STATIC_PAYLOAD_FILE.test(entry.name) &&
+      DYNAMIC_OR_EGRESS_STATIC_CONTENT.test(Buffer.from(entry.content).toString('utf8'))
+    ) {
+      return { hasNativeCode: false, aiOperations: 'unknown', destinations: 'unknown' };
+    }
+  }
+  return { hasNativeCode: false, aiOperations: [], destinations: [] };
+};
+
+/**
+ * A human review override is accepted only when the reviewer supplied the
+ * exact immutable decision fingerprint for this artifact.
+ */
+export const assertPackageAppSurfaceForPublication = (manifest: PackageManifest): void => {
+  if (manifest.type !== 'app') return;
+  const surfaces = manifest.contributions?.apps ?? [];
+  if (surfaces.length !== 1 || !manifest.modules.some((module) => module.id === surfaces[0]?.moduleId)) {
+    throw new Error('A Package App publication must declare exactly one module-backed Surface.');
+  }
+};
+
+export const assertPackageArtifactApprovedForPublication = (
+  manifest: PackageManifest,
+  entries: readonly PackageReviewArchiveEntry[],
+  reviewerApprovalFingerprint: string | undefined
+): AutomatedPackageReviewDecision => {
+  assertPackageAppSurfaceForPublication(manifest);
+  const decision = decideAutomatedPackageReview({
+    manifest,
+    inspection: inspectPackageArtifactForAutomatedReview(entries),
+    priorApprovalFingerprint: reviewerApprovalFingerprint,
+  });
+  if (decision.disposition === 'auto-approved' || reviewerApprovalFingerprint === decision.fingerprint) return decision;
+
+  const reasons = decision.reasons.join(', ') || 'NO_AUTOMATED_APPROVAL';
+  throw new Error(
+    `Store publication requires automated approval or an explicit reviewer approval for fingerprint ${decision.fingerprint}. Reasons: ${reasons}.`
+  );
+};
+
+/**
+ * The catalog signer attests to this record together with the exact manifest
+ * and review fingerprint. A human identity is mandatory whenever automated
+ * review did not approve the artifact.
+ */
+export const createPublicationReviewRecord = (
+  decision: AutomatedPackageReviewDecision,
+  artifactIntegrity: string,
+  reviewedAt: string,
+  reviewerId: string | undefined
+): PackagePublicationReview => {
+  if (!Number.isFinite(Date.parse(reviewedAt))) throw new Error('Store publication review time is invalid.');
+  if (!/^sha256-[a-f0-9]{64}$/.test(artifactIntegrity)) {
+    throw new Error('Store publication review needs the exact artifact integrity.');
+  }
+  if (decision.disposition === 'auto-approved') {
+    return {
+      schemaVersion: 2,
+      disposition: 'auto-approved',
+      fingerprint: decision.fingerprint,
+      artifactIntegrity,
+      reviewedAt,
+    };
+  }
+  const normalizedReviewerId = reviewerId?.trim();
+  if (!normalizedReviewerId || !/^[A-Za-z0-9][A-Za-z0-9._:@/-]{2,127}$/.test(normalizedReviewerId)) {
+    throw new Error('Human Store publication review requires a valid reviewer identity.');
+  }
+  return {
+    schemaVersion: 2,
+    disposition: 'human-approved',
+    fingerprint: decision.fingerprint,
+    artifactIntegrity,
+    reviewedAt,
+    reviewerId: normalizedReviewerId,
+  };
 };
 
 const readAndVerifyArtifact = async (): Promise<VerifiedArtifact> => {
@@ -101,6 +215,7 @@ const readAndVerifyArtifact = async (): Promise<VerifiedArtifact> => {
     .toSorted((left, right) => left.name.localeCompare(right.name));
   const payloadHash = createHash('sha256');
   let sizeBytes = 0;
+  const reviewEntries: PackageReviewArchiveEntry[] = [];
   for (const entry of files) {
     const content = await entry.async('nodebuffer');
     payloadHash.update(entry.name);
@@ -108,6 +223,7 @@ const readAndVerifyArtifact = async (): Promise<VerifiedArtifact> => {
     payloadHash.update(content);
     payloadHash.update('\0');
     sizeBytes += content.byteLength;
+    reviewEntries.push({ name: entry.name, content });
   }
   if (
     manifest.artifact?.sizeBytes !== sizeBytes ||
@@ -121,6 +237,7 @@ const readAndVerifyArtifact = async (): Promise<VerifiedArtifact> => {
       digest: `sha256:${createHash('sha256').update(artifactBytes).digest('hex')}`,
       size: artifactBytes.byteLength,
     },
+    reviewEntries,
   };
 };
 
@@ -200,7 +317,18 @@ const catalogMatches = (
 
 const main = async (): Promise<void> => {
   const verifiedArtifact = await readAndVerifyArtifact();
-  const { manifest, releaseAsset } = verifiedArtifact;
+  const { manifest, releaseAsset, reviewEntries } = verifiedArtifact;
+  const reviewDecision = assertPackageArtifactApprovedForPublication(
+    manifest,
+    reviewEntries,
+    process.env.TOMNI_STORE_REVIEWER_APPROVAL_FINGERPRINT?.trim() || undefined
+  );
+  const publicationReview = createPublicationReviewRecord(
+    reviewDecision,
+    manifest.artifact?.integrity ?? '',
+    new Date().toISOString(),
+    process.env.TOMNI_STORE_REVIEWER_ID
+  );
   assertPublicStoreVisibility(process.env.TOMNI_STORE_VISIBILITY);
   const artifactName = `${manifest.id}-${manifest.version}.tomny`;
   if (path.basename(artifactPath) !== artifactName) {
@@ -246,6 +374,7 @@ const main = async (): Promise<void> => {
           trust: manifest.publisherId === 'com.tomni' ? 'signed-first-party' : 'signed-store',
           artifactUrl: `${releaseBaseUrl}/${encodeURIComponent(artifactName)}`,
           manifest,
+          publicationReview,
         };
         const issuedAt = new Date();
         const document = signRemotePackageCatalog(
@@ -314,7 +443,9 @@ const main = async (): Promise<void> => {
   console.log(`Catalog: ${catalogUrl}`);
 };
 
-void main().catch((error: unknown) => {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exitCode = 1;
-});
+if (isPublishEntrypoint) {
+  void main().catch((error: unknown) => {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exitCode = 1;
+  });
+}

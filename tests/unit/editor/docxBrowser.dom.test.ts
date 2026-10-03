@@ -10,7 +10,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { Document, Packer, Paragraph, TextRun } from 'docx';
-import { docxToText } from '@/renderer/pages/editor/adapters/docxCodec';
+import { docxToText } from '@package-apps/document-studio/renderer/adapters/formats/docxCodec';
 
 describe('docx browser decode (repro)', () => {
   it('decodes a real .docx built by docx lib via the renderer path', async () => {

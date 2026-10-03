@@ -79,6 +79,11 @@
   },
   "noAgentsAvailable": "Không có tác nhân nào khả dụng",
   "noModelConfigured": "Chưa cấu hình mô hình. Vui lòng cấu hình trong cài đặt.",
+  "modelConnection": {
+    "title": "Yêu Cầu Mô Hình Cho Tác Vụ Này",
+    "description": "Yêu cầu này cần mô hình AI để suy luận hoặc lập kế hoạch. Vui lòng kết nối một mô hình (OpenAI, Claude, Gemini, v.v.) để tiếp tục.",
+    "connect": "Kết Nối Mô Hình"
+  },
   "createFailed": "Tạo cuộc trò chuyện thất bại",
   "workspace": {
     "title": "Dự án",

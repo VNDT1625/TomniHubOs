@@ -23,6 +23,7 @@ const buildModelKey = (providerId?: string, modelName?: string) => {
  * Check if a model key still exists in the provider list.
  */
 const isModelKeyAvailable = (key: string | null, providers?: IProvider[]) => {
+  if (key === 'auto:auto') return true;
   if (!key || !providers || providers.length === 0) return false;
   return providers.some((provider) => {
     if (!provider.id || !provider.models?.length) return false;
@@ -110,6 +111,15 @@ export const useGuidModelSelection = (agentKey: ProviderAgentKey = 'tomnyagentic
 
       if (isNewFormat) {
         const { id, use_model } = savedModel;
+        if (id === 'auto' || use_model === 'auto') {
+          _setCurrentModel({
+            id: 'auto',
+            name: 'Auto (Laya Decision)',
+            use_model: 'auto',
+            platform: 'auto',
+          } as any);
+          return;
+        }
         const exactMatch = modelList.find((m) => m.id === id);
         if (exactMatch && exactMatch.models.includes(use_model)) {
           defaultModel = exactMatch;

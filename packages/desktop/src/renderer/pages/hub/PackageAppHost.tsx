@@ -5,6 +5,10 @@
  */
 
 import type { PackageAsset, PackageListing, PackageManifest, PackageModuleContribution } from '@/common/packages';
+import type {
+  PackageSurfaceAiRuntimePortBindingClaim,
+  PackageSurfaceAiRuntimePortHandoff,
+} from '@/common/types/platform/electron';
 import { Button, Card, Tag } from '@arco-design/web-react';
 import { Shield } from '@icon-park/react';
 import React, { useEffect, useRef, useState } from 'react';
@@ -44,6 +48,7 @@ const IFRAME_PERMISSIONS = [
 ].join('; ');
 const PACKAGE_CAPABILITY_INVOKE_MESSAGE = 'tomni.capability.invoke';
 const PACKAGE_CAPABILITY_RESULT_MESSAGE = 'tomni.capability.result';
+const PACKAGE_SURFACE_AI_PORT_MESSAGE = 'tomni.surface-ai.port';
 
 type SandboxedWebModule = PackageModuleContribution & {
   runtime: 'sandboxed-web';
@@ -157,10 +162,25 @@ type PackageAppHostState =
   | { status: 'failed' }
   | ReadyPackageHostState;
 
+type ActiveSandboxRuntime = {
+  runtimeId: string;
+  packageVersion: string;
+  publisherId: string;
+  moduleId: string;
+  artifactIntegrity?: string;
+};
+
+type PendingSurfaceAiPortHandoff = {
+  requestId: string;
+  claim: PackageSurfaceAiRuntimePortBindingClaim;
+  delivered: boolean;
+};
+
 type PackageAppMountOptions = {
   locale: string;
   onBack: () => void;
   openPackageModule: (packageId: string, moduleId: string) => void;
+  openDefaultSurface: (surface: 'ide') => void;
 };
 
 type PackageAppUnmountResult = void | (() => void) | { unmount: () => void };
@@ -227,7 +247,10 @@ const TrustedPackageModuleHost: React.FC<{
           locale,
           onBack,
           openPackageModule: (packageId, moduleId) => {
-            window.location.hash = `/store/app/${encodeURIComponent(packageId)}/${encodeURIComponent(moduleId)}`;
+            window.location.hash = `/apps/${encodeURIComponent(packageId)}/${encodeURIComponent(moduleId)}`;
+          },
+          openDefaultSurface: (surface) => {
+            window.location.hash = `/${surface}`;
           },
         });
       })
@@ -256,29 +279,52 @@ export const PackageAppHost: React.FC<PackageAppHostProps> = ({
   const { t, i18n } = useTranslation();
   const [hostState, setHostState] = useState<PackageAppHostState>({ status: 'loading' });
   const sandboxFrameRef = useRef<HTMLIFrameElement>(null);
+  const activeSandboxRuntimeRef = useRef<ActiveSandboxRuntime | undefined>(undefined);
+  const pendingSurfaceAiPortHandoffRef = useRef<PendingSurfaceAiPortHandoff | undefined>(undefined);
+  const iframeLoadHandlerRef = useRef<() => void>(() => undefined);
 
   useEffect(() => {
     let disposed = false;
     let syncing = false;
     let loadedRuntimeKey = '';
-    let activeSandboxRuntimeId: string | undefined;
-
     const closeSandboxRuntime = async (): Promise<void> => {
-      const runtimeId = activeSandboxRuntimeId;
-      if (!runtimeId) return;
+      const runtime = activeSandboxRuntimeRef.current;
+      if (!runtime) return;
       try {
-        await packageClient.closeRuntime(packageId, runtimeId);
+        await packageClient.closeRuntime(packageId, runtime.runtimeId);
       } catch {
-        await packageClient.closeRuntime(packageId, runtimeId);
+        await packageClient.closeRuntime(packageId, runtime.runtimeId);
       }
-      if (activeSandboxRuntimeId === runtimeId) activeSandboxRuntimeId = undefined;
+      if (activeSandboxRuntimeRef.current === runtime) activeSandboxRuntimeRef.current = undefined;
+      pendingSurfaceAiPortHandoffRef.current = undefined;
     };
 
-    const ensureSandboxRuntimeOpen = async (): Promise<boolean> => {
-      if (activeSandboxRuntimeId) return true;
+    const ensureSandboxRuntimeOpen = async (
+      manifest: PackageManifest,
+      module: SandboxedWebModule
+    ): Promise<boolean> => {
+      const surface = {
+        packageVersion: manifest.version,
+        publisherId: manifest.publisherId,
+        moduleId: module.id,
+      };
+      if (
+        activeSandboxRuntimeRef.current &&
+        activeSandboxRuntimeRef.current.packageVersion === surface.packageVersion &&
+        activeSandboxRuntimeRef.current.publisherId === surface.publisherId &&
+        activeSandboxRuntimeRef.current.moduleId === surface.moduleId
+      ) {
+        return true;
+      }
+      await closeSandboxRuntime();
       const runtimeId = globalThis.crypto.randomUUID();
-      await packageClient.openRuntime(packageId, runtimeId);
-      activeSandboxRuntimeId = runtimeId;
+      const runtime: ActiveSandboxRuntime = {
+        runtimeId,
+        ...surface,
+        ...(manifest.artifact ? { artifactIntegrity: manifest.artifact.integrity } : {}),
+      };
+      await packageClient.openRuntime(packageId, runtimeId, surface);
+      activeSandboxRuntimeRef.current = runtime;
       if (disposed) {
         await closeSandboxRuntime();
         return false;
@@ -310,8 +356,7 @@ export const PackageAppHost: React.FC<PackageAppHostProps> = ({
         }
 
         if (isSandboxedWebModule(module)) {
-          if (activeSandboxRuntimeId) await packageClient.openRuntime(packageId, activeSandboxRuntimeId);
-          else if (!(await ensureSandboxRuntimeOpen())) return;
+          if (!(await ensureSandboxRuntimeOpen(installedManifest, module))) return;
         } else {
           await closeSandboxRuntime();
         }
@@ -361,7 +406,7 @@ export const PackageAppHost: React.FC<PackageAppHostProps> = ({
         !isSandboxCapabilityInvokeMessage(event.data)
       )
         return;
-      const runtimeId = activeSandboxRuntimeId;
+      const runtimeId = activeSandboxRuntimeRef.current?.runtimeId;
       if (!runtimeId) {
         frame.contentWindow.postMessage(
           {
@@ -413,6 +458,81 @@ export const PackageAppHost: React.FC<PackageAppHostProps> = ({
       }
     };
 
+    const acceptSurfaceAiPortHandoff = (handoff: PackageSurfaceAiRuntimePortHandoff): boolean => {
+      const frame = sandboxFrameRef.current;
+      const runtime = activeSandboxRuntimeRef.current;
+      const pending = pendingSurfaceAiPortHandoffRef.current;
+      if (
+        disposed ||
+        !frame?.contentWindow ||
+        !runtime ||
+        !pending ||
+        pending.delivered ||
+        handoff.requestId !== pending.requestId ||
+        handoff.binding.surface.packageId !== pending.claim.packageId ||
+        handoff.binding.surface.packageVersion !== pending.claim.packageVersion ||
+        handoff.binding.surface.publisherId !== pending.claim.publisherId ||
+        handoff.binding.runtimeId !== pending.claim.runtimeId ||
+        handoff.binding.moduleId !== pending.claim.moduleId ||
+        handoff.binding.artifactIntegrity !== pending.claim.artifactIntegrity ||
+        handoff.binding.runtimeId !== runtime.runtimeId
+      ) {
+        return false;
+      }
+      try {
+        frame.contentWindow.postMessage(
+          {
+            type: PACKAGE_SURFACE_AI_PORT_MESSAGE,
+            schemaVersion: 1,
+            requestId: handoff.requestId,
+            connectionId: handoff.connectionId,
+            binding: handoff.binding,
+          },
+          '*',
+          [handoff.port]
+        );
+        pending.delivered = true;
+        return true;
+      } catch {
+        return false;
+      }
+    };
+
+    const removeSurfaceAiPortHandoff =
+      window.electronAPI?.packageSurfaceAiRuntime?.onPortHandoff(acceptSurfaceAiPortHandoff);
+    iframeLoadHandlerRef.current = (): void => {
+      const frame = sandboxFrameRef.current;
+      const runtime = activeSandboxRuntimeRef.current;
+      const api = window.electronAPI?.packageSurfaceAiRuntime;
+      if (!frame?.contentWindow || !runtime || !api || !runtime.artifactIntegrity) return;
+
+      const existing = pendingSurfaceAiPortHandoffRef.current;
+      if (existing?.delivered) {
+        // A sandbox document reload invalidates its transferred port. Close the
+        // Main runtime binding rather than ever handing the same authority to it.
+        void closeSandboxRuntime().catch((): undefined => undefined);
+        setHostState({ status: 'failed' });
+        return;
+      }
+      if (existing) return;
+
+      const requestId = globalThis.crypto.randomUUID();
+      const claim: PackageSurfaceAiRuntimePortBindingClaim = {
+        packageId,
+        packageVersion: runtime.packageVersion,
+        publisherId: runtime.publisherId,
+        runtimeId: runtime.runtimeId,
+        moduleId: runtime.moduleId,
+        artifactIntegrity: runtime.artifactIntegrity,
+      };
+      const pending: PendingSurfaceAiPortHandoff = { requestId, claim, delivered: false };
+      pendingSurfaceAiPortHandoffRef.current = pending;
+      void api.requestPortHandoff({ requestId, binding: claim }).catch((): undefined => {
+        if (pendingSurfaceAiPortHandoffRef.current === pending) pendingSurfaceAiPortHandoffRef.current = undefined;
+        return undefined;
+      });
+    };
+
     void synchronize();
     const interval = window.setInterval((): void => {
       void synchronize();
@@ -426,6 +546,8 @@ export const PackageAppHost: React.FC<PackageAppHostProps> = ({
       window.removeEventListener('focus', synchronizeWhenVisible);
       document.removeEventListener('visibilitychange', synchronizeWhenVisible);
       window.removeEventListener('message', invokeSandboxCapability);
+      removeSurfaceAiPortHandoff?.();
+      iframeLoadHandlerRef.current = (): void => undefined;
       void closeSandboxRuntime().catch((): undefined => undefined);
     };
   }, [allowSandboxedWeb, moduleId, packageId]);
@@ -477,6 +599,7 @@ export const PackageAppHost: React.FC<PackageAppHostProps> = ({
             allow={IFRAME_PERMISSIONS}
             referrerPolicy='no-referrer'
             ref={sandboxFrameRef}
+            onLoad={() => iframeLoadHandlerRef.current()}
             srcDoc={hostState.sourceContent}
           />
         ) : (

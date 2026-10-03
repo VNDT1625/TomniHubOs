@@ -169,10 +169,14 @@ export class AcpCoreAdapter implements CoreAdapter {
     this.captureModels(input.target.id, created.models);
     const providerSessionId = created.sessionId;
     if (input.modelKey) {
-      await runtime.connection.unstable_setSessionModel({
-        sessionId: providerSessionId,
-        modelId: input.modelKey,
-      });
+      try {
+        await runtime.connection.unstable_setSessionModel({
+          sessionId: providerSessionId,
+          modelId: input.modelKey,
+        });
+      } catch (error) {
+        console.warn(`[AcpCoreAdapter] setSessionModel failed or not supported for ${input.target.name}:`, error);
+      }
     }
 
     throwIfAborted(input.signal);
@@ -246,6 +250,7 @@ export class AcpCoreAdapter implements CoreAdapter {
     child.stderr.setEncoding('utf8');
     child.stderr.on('data', (chunk: string) => {
       runtime.stderrTail = `${runtime.stderrTail}${chunk}`.slice(-4000);
+      console.warn(`[AcpCoreAdapter:${target.id}] stderr:`, chunk.trim());
     });
 
     const client: Client = {
@@ -308,6 +313,7 @@ export class AcpCoreAdapter implements CoreAdapter {
     const exited = new Promise<never>((_resolve, reject) => {
       child.once('error', reject);
       child.once('exit', (code) => {
+        console.warn(`[AcpCoreAdapter:${target.id}] process exited with code ${String(code)}`);
         const suffix = runtime.stderrTail.trim() ? `\n${runtime.stderrTail.trim()}` : '';
         reject(new Error(`${formatSpawnLabel(target)} exited with code ${String(code)}.${suffix}`));
       });

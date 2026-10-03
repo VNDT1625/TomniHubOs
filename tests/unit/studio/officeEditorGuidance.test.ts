@@ -14,7 +14,7 @@ import {
   OFFICE_EDITOR_MCP_NAME,
   buildOfficeEditorRules,
   withOfficeEditorRules,
-} from '@/renderer/pages/studio/hooks/officeEditorGuidance';
+} from '@package-apps/document-studio/renderer/studio/hooks/officeEditorGuidance';
 
 describe('officeEditorGuidance', () => {
   it('exposes the canonical Office-editor server name', () => {

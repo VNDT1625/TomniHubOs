@@ -2,11 +2,13 @@ import { describe, expect, it } from 'vitest';
 
 import {
   createBuiltinSurfaceManifests,
+  createPackageSurfaceRegistrySynchronizer,
   createSurfaceRegistry,
   SurfaceManifestValidationError,
   validateSurfaceManifest,
   type SurfaceManifest,
 } from '@/process/agentRuntime/surfaceRegistry';
+import type { PackageContributionState, PackageListing } from '@/common/packages';
 
 const customManifest = (overrides: Partial<SurfaceManifest> = {}): SurfaceManifest => ({
   schemaVersion: 1,
@@ -362,5 +364,166 @@ describe('surface resolution and fallback', () => {
     expect(() => registry.register({ ...customManifest(), source: { kind: 'plugin' } })).toThrow(
       SurfaceManifestValidationError
     );
+  });
+
+  it('mirrors only active, exact-reviewed Package App contributions and removes them on lifecycle change', async () => {
+    const registry = createSurfaceRegistry({ manifests: [customManifest({ id: 'chat' })], defaultSurfaceId: 'chat' });
+    let contributionState: PackageContributionState = {
+      snapshot: {
+        revision: 7,
+        packageIds: ['com.example.writer'],
+        apps: [
+          {
+            key: 'com.example.writer/writer',
+            packageId: 'com.example.writer',
+            packageVersion: '1.2.3',
+            id: 'writer',
+            title: 'Writer',
+            moduleId: 'writer',
+          },
+        ],
+        activityGroups: [],
+        subtabs: [],
+        commands: [],
+        settings: [],
+      },
+      diagnostics: [],
+    };
+    let listing: PackageListing = {
+      manifest: {
+        schemaVersion: 1,
+        id: 'com.example.writer',
+        publisherId: 'com.example',
+        name: 'Writer',
+        description: 'A reviewed writing Surface.',
+        type: 'app',
+        bundleKind: 'single',
+        version: '1.2.3',
+        engines: { tomni: '>=0.0.0' },
+        modules: [{ id: 'writer', title: 'Writer', surface: 'apps/writer', pinnable: true, runtime: 'sandboxed-web' }],
+        permissions: [],
+        dependencies: [],
+        tags: [],
+      },
+      delivery: 'downloaded-package',
+      trust: 'signed-third-party',
+      state: 'installed',
+      installedVersion: '1.2.3',
+      installedManifest: {
+        schemaVersion: 1,
+        id: 'com.example.writer',
+        publisherId: 'com.example',
+        name: 'Writer',
+        description: 'A reviewed writing Surface.',
+        type: 'app',
+        bundleKind: 'single',
+        version: '1.2.3',
+        engines: { tomni: '>=0.0.0' },
+        modules: [{ id: 'writer', title: 'Writer', surface: 'apps/writer', pinnable: true, runtime: 'sandboxed-web' }],
+        permissions: [],
+        dependencies: [],
+        tags: [],
+      },
+      installedTrust: 'signed-third-party',
+      installedPublicationReview: {
+        schemaVersion: 1,
+        artifactIntegrity: 'sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        reviewFingerprint: 'sha256-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+        reviewedAt: 1,
+        decision: 'approved',
+      },
+      updateAvailable: false,
+      compatible: true,
+      enabled: true,
+    };
+    let listener: (() => void) | undefined;
+    const synchronizer = createPackageSurfaceRegistrySynchronizer(registry, {
+      listInstalledApps: async () => [listing],
+      contributions: async () => contributionState,
+      onContributionsChanged: (next) => {
+        listener = next;
+        return () => {
+          listener = undefined;
+        };
+      },
+    });
+
+    await synchronizer.start();
+    expect(registry.get('com.example.writer')).toMatchObject({
+      source: { kind: 'package', id: 'com.example.writer', version: '1.2.3' },
+      capabilities: [],
+    });
+
+    listing = { ...listing, enabled: false };
+    contributionState = {
+      ...contributionState,
+      snapshot: { ...contributionState.snapshot, revision: 8, apps: [], packageIds: [] },
+    };
+    listener?.();
+    await synchronizer.sync();
+    expect(registry.get('com.example.writer')).toBeUndefined();
+    synchronizer.dispose();
+  });
+
+  it('fails closed when a contribution lacks exact installed review evidence', async () => {
+    const registry = createSurfaceRegistry();
+    const synchronizer = createPackageSurfaceRegistrySynchronizer(registry, {
+      listInstalledApps: async () => [
+        {
+          manifest: customManifest() as never,
+          delivery: 'downloaded-package',
+          trust: 'signed-third-party',
+          state: 'installed',
+          installedVersion: '1.0.0',
+          installedManifest: {
+            schemaVersion: 1,
+            id: 'com.example.unsafe',
+            publisherId: 'com.example',
+            name: 'Unsafe',
+            description: 'No review evidence.',
+            type: 'app',
+            bundleKind: 'single',
+            version: '1.0.0',
+            engines: { tomni: '>=0.0.0' },
+            modules: [
+              { id: 'unsafe', title: 'Unsafe', surface: 'apps/unsafe', pinnable: true, runtime: 'sandboxed-web' },
+            ],
+            permissions: [],
+            dependencies: [],
+            tags: [],
+          },
+          installedTrust: 'signed-third-party',
+          updateAvailable: false,
+          compatible: true,
+          enabled: true,
+        },
+      ],
+      contributions: async () => ({
+        snapshot: {
+          revision: 1,
+          packageIds: ['com.example.unsafe'],
+          apps: [
+            {
+              key: 'com.example.unsafe/unsafe',
+              packageId: 'com.example.unsafe',
+              packageVersion: '1.0.0',
+              id: 'unsafe',
+              title: 'Unsafe',
+              moduleId: 'unsafe',
+            },
+          ],
+          activityGroups: [],
+          subtabs: [],
+          commands: [],
+          settings: [],
+        },
+        diagnostics: [],
+      }),
+      onContributionsChanged: () => () => {},
+    });
+
+    const result = await synchronizer.start();
+    expect(result.rejectedPackageIds).toEqual(['com.example.unsafe']);
+    expect(registry.get('com.example.unsafe')).toBeUndefined();
   });
 });

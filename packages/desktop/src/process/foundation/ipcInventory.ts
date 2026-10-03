@@ -20,6 +20,7 @@ export type PreloadApiMethod = {
 
 export type BaseIpcInventory = {
   handlers: readonly IpcChannelUse[];
+  mainToRendererChannels: readonly IpcChannelUse[];
   preloadApis: readonly { file: string; line: number; name: string }[];
   preloadMethods: readonly PreloadApiMethod[];
   rendererChannels: readonly IpcChannelUse[];
@@ -29,7 +30,7 @@ export type IpcInventoryViolation = {
   channel: string;
   file: string;
   line: number;
-  reason: 'unregistered-renderer-channel';
+  reason: 'unregistered-renderer-channel' | 'unobserved-main-to-renderer-channel';
 };
 
 /** Scans the base Electron boundary without importing Electron or application code. */
@@ -45,6 +46,7 @@ export function scanBaseIpcInventory(repositoryRoot: string): BaseIpcInventory {
 /** Scans supplied sources so contract tests can exercise invalid boundary fixtures. */
 export function scanIpcInventoryFromSources(sources: IpcInventorySource): BaseIpcInventory {
   const handlers: IpcChannelUse[] = [];
+  const mainToRendererChannels: IpcChannelUse[] = [];
   const preloadApis: { file: string; line: number; name: string }[] = [];
   const preloadMethods: PreloadApiMethod[] = [];
   const rendererChannels: IpcChannelUse[] = [];
@@ -55,22 +57,30 @@ export function scanIpcInventoryFromSources(sources: IpcInventorySource): BaseIp
       preloadApis.push(...findPreloadApis(file, source));
       preloadMethods.push(...findPreloadMethods(file, source));
       rendererChannels.push(...findIpcUses(file, source, 'ipcRenderer', false));
+      rendererChannels.push(...findStaticPreloadLoopListeners(file, source));
     }
     handlers.push(...findIpcUses(file, source, 'ipcMain', true));
+    mainToRendererChannels.push(...findWebContentsSends(file, source));
   }
 
   return {
     handlers: sortUses(handlers),
+    mainToRendererChannels: sortUses(mainToRendererChannels),
     preloadApis: preloadApis.toSorted(compareLocationThenName),
     preloadMethods: preloadMethods.toSorted(compareMethod),
     rendererChannels: sortUses(rendererChannels),
   };
 }
 
-/** Returns static renderer-to-main calls with no static main registration. */
+/** Returns static IPC calls that lack a static registration or preload listener. */
 export function findIpcInventoryViolations(inventory: BaseIpcInventory): readonly IpcInventoryViolation[] {
   const registered = new Set(inventory.handlers.filter((entry) => entry.staticChannel).map((entry) => entry.channel));
-  return inventory.rendererChannels
+  const preloadListeners = new Set(
+    inventory.rendererChannels
+      .filter((entry) => entry.staticChannel && entry.kind === 'on')
+      .map((entry) => entry.channel)
+  );
+  const rendererToMainViolations = inventory.rendererChannels
     .filter(
       (entry) =>
         entry.staticChannel &&
@@ -83,6 +93,16 @@ export function findIpcInventoryViolations(inventory: BaseIpcInventory): readonl
       line: entry.line,
       reason: 'unregistered-renderer-channel' as const,
     }));
+  const mainToRendererViolations = inventory.mainToRendererChannels
+    .filter((entry) => entry.staticChannel && !preloadListeners.has(entry.channel))
+    .map((entry) => ({
+      channel: entry.channel,
+      file: entry.file,
+      line: entry.line,
+      reason: 'unobserved-main-to-renderer-channel' as const,
+    }));
+
+  return [...rendererToMainViolations, ...mainToRendererViolations].toSorted(compareViolation);
 }
 
 function readTypeScriptSources(repositoryRoot: string, directory: string): IpcInventorySource {
@@ -155,6 +175,62 @@ function findIpcUses(
     });
   }
   return uses;
+}
+
+function findWebContentsSends(file: string, source: string): IpcChannelUse[] {
+  const sends: IpcChannelUse[] = [];
+  const pattern = /\b[A-Za-z_$][\w$]*(?:\s*(?:\.|\?\.)\s*)webContents(?:\s*(?:\.|\?\.)\s*)send\s*\(/g;
+  for (const match of source.matchAll(pattern)) {
+    const argument = readFirstArgument(source, (match.index ?? 0) + match[0].length);
+    sends.push({
+      channel: argument.value,
+      file,
+      kind: 'send',
+      line: lineAt(source, match.index ?? 0),
+      staticChannel: argument.staticValue,
+    });
+  }
+  return sends;
+}
+
+/** Resolves only local literal arrays passed directly to a preload listener loop. */
+function findStaticPreloadLoopListeners(file: string, source: string): IpcChannelUse[] {
+  const arrays = findStaticStringArrays(source);
+  const listeners: IpcChannelUse[] = [];
+  const loopPattern =
+    /for\s*\(\s*(?:const|let)\s+([A-Za-z_$][\w$]*)\s+of\s+([A-Za-z_$][\w$]*)\s*\)\s*\{?\s*ipcRenderer\s*\.\s*on\s*\(\s*\1\b/g;
+  for (const match of source.matchAll(loopPattern)) {
+    const channels = arrays.get(match[2]);
+    if (!channels) continue;
+    const listenerOffset = (match.index ?? 0) + match[0].lastIndexOf('ipcRenderer');
+    for (const channel of channels) {
+      listeners.push({ channel, file, kind: 'on', line: lineAt(source, listenerOffset), staticChannel: true });
+    }
+  }
+  return listeners;
+}
+
+function findStaticStringArrays(source: string): ReadonlyMap<string, readonly string[]> {
+  const arrays = new Map<string, readonly string[]>();
+  const pattern = /\b(?:const|let)\s+([A-Za-z_$][\w$]*)\s*=\s*\[([^\]]*)\]\s*(?:as\s+const)?\s*;/g;
+  for (const match of source.matchAll(pattern)) {
+    const values = readStaticStringArray(match[2]);
+    if (values) arrays.set(match[1], values);
+  }
+  return arrays;
+}
+
+function readStaticStringArray(value: string): readonly string[] | undefined {
+  const channels: string[] = [];
+  const itemPattern = /(['"])([^'"\r\n]*)\1/g;
+  let cursor = 0;
+  for (const match of value.matchAll(itemPattern)) {
+    const start = match.index ?? 0;
+    if (!/^[\s,]*$/.test(value.slice(cursor, start))) return undefined;
+    channels.push(match[2]);
+    cursor = start + match[0].length;
+  }
+  return /^[\s,]*$/.test(value.slice(cursor)) ? channels : undefined;
 }
 
 function readFirstArgument(source: string, start: number): { staticValue: boolean; value: string } {
@@ -235,6 +311,10 @@ function lineAt(source: string, index: number): number {
 
 function sortUses(entries: IpcChannelUse[]): IpcChannelUse[] {
   return entries.toSorted((left, right) => compareLocationThenName(left, right) || left.kind.localeCompare(right.kind));
+}
+
+function compareViolation(left: IpcInventoryViolation, right: IpcInventoryViolation): number {
+  return left.file.localeCompare(right.file) || left.line - right.line || left.channel.localeCompare(right.channel);
 }
 
 function compareLocationThenName(

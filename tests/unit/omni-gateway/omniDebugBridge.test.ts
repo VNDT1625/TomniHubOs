@@ -16,7 +16,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { createOmniDebugBridge } from '@/process/omni-gateway/omniGatewayDebugBridge';
 import { createOmniGatewayState } from '@/process/omni-gateway/omniGatewayState';
 import { createOmniGatewayTokenStore } from '@/process/omni-gateway/omniGatewayExternalToken';
-import type { IdeMcpService } from '@/process/ide/mcp/ideServer';
+import type { IdeMcpService } from '@package-apps/ide/process/mcp/ideServer';
 
 const fakeIde = (overrides?: Partial<IdeMcpService>): IdeMcpService => ({
   listDir: vi.fn(async () => []),

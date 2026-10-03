@@ -14,6 +14,7 @@ import {
   resetProductionTomniGatewayForTests,
   startProductionTomniGateway,
   stopProductionTomniGateway,
+  type TomniGatewayModelService,
 } from '@process/tomnigateway';
 import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
@@ -21,9 +22,10 @@ import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const TOKEN = 'production-test-session-token';
+const MODEL_CREDENTIAL = 'production-model-consumer-token';
 const tempDirectories: string[] = [];
 
-const dependencies = async () => {
+const dependencies = async (modelService?: TomniGatewayModelService) => {
   const dataDir = await mkdtemp(path.join(os.tmpdir(), 'tomni-gateway-native-'));
   tempDirectories.push(dataDir);
   const conversation = {
@@ -47,7 +49,7 @@ const dependencies = async () => {
   const mcp = {
     list: vi.fn(async () => [{ id: 'mcp-1', name: 'Native MCP' }]),
   } as unknown as McpRegistry;
-  return { conversation, teams, companies, cron, mcp, dataDir, sessionToken: TOKEN };
+  return { conversation, teams, companies, cron, mcp, dataDir, sessionToken: TOKEN, modelService };
 };
 
 afterEach(async () => {
@@ -69,5 +71,42 @@ describe('production Tomny gateway lifecycle', () => {
 
     await stopProductionTomniGateway();
     await expect(fetch(`${endpoint.url}/api/v1/health`)).rejects.toThrow();
+  });
+
+  it('keeps model ingress disabled when no Main-owned model service is injected', async () => {
+    const endpoint = await startProductionTomniGateway(await dependencies());
+
+    const response = await fetch(`${endpoint.url}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${MODEL_CREDENTIAL}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'model-1', messages: [{ role: 'user', content: 'hello' }] }),
+    });
+
+    expect(response.status).toBe(401);
+  });
+
+  it('forwards an explicitly injected Main-owned model service without sharing the session token', async () => {
+    const modelService: TomniGatewayModelService = {
+      authorize: vi.fn(async ({ credential }) =>
+        credential === MODEL_CREDENTIAL ? { consumerId: 'consumer-1' } : undefined
+      ),
+      chatCompletions: vi.fn(async ({ model }) => ({ model, content: 'native answer' })),
+    };
+    const endpoint = await startProductionTomniGateway(await dependencies(modelService));
+
+    const response = await fetch(`${endpoint.url}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${MODEL_CREDENTIAL}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'model-1', messages: [{ role: 'user', content: 'hello' }] }),
+    });
+
+    expect(response.status).toBe(200);
+    expect((await response.json()).choices[0].message.content).toBe('native answer');
+    expect(modelService.authorize).toHaveBeenCalledWith({
+      credential: MODEL_CREDENTIAL,
+      origin: undefined,
+      path: '/v1/chat/completions',
+    });
+    expect(modelService.authorize).not.toHaveBeenCalledWith(expect.objectContaining({ credential: TOKEN }));
   });
 });

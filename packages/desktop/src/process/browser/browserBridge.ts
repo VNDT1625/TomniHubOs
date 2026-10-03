@@ -46,18 +46,46 @@
  */
 
 import { bridge } from '@office-ai/platform';
+import {
+  BROWSER_HOST_CHANNELS as BROWSER_CHANNELS,
+  type AgentEventEnvelope,
+  type AgentModeState,
+  type BrowserTabIdRequest,
+  type BrowserTabInfo,
+  type DefaultBrowserStatus,
+  type NavigateRequest,
+  type OpenTabRequest,
+  type OpenTabResult,
+  type RunAgentBridgeRequest,
+  type RunAgentBridgeResult,
+  type SetAgentModeRequest,
+  type SetBoundsRequest,
+  type SetVisibleRequest,
+  type SetZoomRequest,
+  type TabUpdate,
+} from '@/common/packages/browserHost';
 import type { BrowserWindow } from 'electron';
 import { session } from 'electron';
 import { createBrowserViewManager } from './browserViewManager';
-import type {
-  BrowserTabId,
-  BrowserTabInfo,
-  CreateTabOptions,
-  IBrowserViewManager,
-  TabBounds,
-  TabUpdate,
-} from './browserViewManager';
+import type { BrowserTabId, IBrowserViewManager } from './browserViewManager';
 import type { AgentEvent, AgentHistoryMessage, IWebAgentRunner } from './webAgentRunner';
+
+export { BROWSER_HOST_CHANNELS as BROWSER_CHANNELS } from '@/common/packages/browserHost';
+export type {
+  AgentEventEnvelope,
+  AgentModeState,
+  BrowserTabIdRequest,
+  DefaultBrowserStatus,
+  NavigateRequest,
+  OpenTabRequest,
+  OpenTabResult,
+  RunAgentBridgeRequest,
+  RunAgentBridgeResult,
+  SetAgentModeRequest,
+  SetBoundsRequest,
+  SetVisibleRequest,
+  SetZoomRequest,
+} from '@/common/packages/browserHost';
 import { createWebAgentRunner } from './webAgentRunner';
 import { createProviderChat } from './providerChat';
 import { withCliAgent } from '@process/services/agentChat/cliAgentChat';
@@ -71,148 +99,7 @@ import { createYoutubeTranscript } from './research/youtubeTranscript';
 import { createContentExtractService } from '@process/services/contentExtract';
 import { createYtDlpTranscript, writeYoutubeCookieFile } from '@process/services/contentExtract';
 import { createPagePerception, redactAgentVisibleText } from './pagePerception';
-
-// ---------------------------------------------------------------------------
-// Channel names (renderer-safe contract — the Browser UI builds invokers here)
-// ---------------------------------------------------------------------------
-
-/** IPC channel names for the browser surface. Safe to import from the renderer. */
-export const BROWSER_CHANNELS = {
-  openTab: 'browser.open-tab',
-  navigate: 'browser.navigate',
-  goBack: 'browser.go-back',
-  goForward: 'browser.go-forward',
-
-  reload: 'browser.reload',
-  setBounds: 'browser.set-bounds',
-  setZoom: 'browser.set-zoom',
-  show: 'browser.show',
-  setVisible: 'browser.set-visible',
-  hide: 'browser.hide',
-  hideAll: 'browser.hide-all',
-  listTabs: 'browser.list-tabs',
-  destroyTab: 'browser.destroy-tab',
-  getAgentMode: 'browser.get-agent-mode',
-  setAgentMode: 'browser.set-agent-mode',
-  runAgent: 'browser.run-agent',
-  cancelAgent: 'browser.cancel-agent',
-  agentEvent: 'browser.agent-event',
-  tabUpdated: 'browser.tab-updated',
-  getPersona: 'browser.get-persona',
-  setPersona: 'browser.set-persona',
-} as const;
-
-// ---------------------------------------------------------------------------
-// Request / response payloads
-// ---------------------------------------------------------------------------
-
-/**
- * Request for {@link BROWSER_CHANNELS.openTab}. Mirrors the view manager's
- * {@link CreateTabOptions} so the renderer can request an initial URL, bounds and
- * visibility in one call.
- */
-export type OpenTabRequest = CreateTabOptions;
-
-/** Result of {@link BROWSER_CHANNELS.openTab}: the stable id of the new tab. */
-export type OpenTabResult = {
-  /** Stable identifier of the freshly created tab. */
-  id: BrowserTabId;
-};
-
-/** Request addressing a single tab by id (show / hide / destroy / get agent-mode). */
-export type BrowserTabIdRequest = {
-  /** Stable identifier of the target tab. */
-  id: BrowserTabId;
-};
-
-/** Request for {@link BROWSER_CHANNELS.navigate}. */
-export type NavigateRequest = {
-  /** Stable identifier of the tab to navigate. */
-  id: BrowserTabId;
-  /** Absolute URL to load in the tab (criterion 1.1). */
-  url: string;
-};
-
-/** Request for {@link BROWSER_CHANNELS.setBounds}. */
-export type SetBoundsRequest = {
-  /** Stable identifier of the tab to reposition/resize. */
-  id: BrowserTabId;
-  /** New on-screen rectangle, in the main window's content coordinates. */
-  bounds: TabBounds;
-};
-
-/** Request for {@link BROWSER_CHANNELS.setZoom}. */
-export type SetZoomRequest = {
-  /** Stable identifier of the tab to zoom. */
-  id: BrowserTabId;
-  /** Zoom factor (1 = 100%). Clamped to [0.25, 5] by the manager. */
-  factor: number;
-};
-
-/** Request for {@link BROWSER_CHANNELS.setVisible}: non-exclusive visibility. */
-export type SetVisibleRequest = {
-  /** Stable identifier of the tab to show/hide. */
-  id: BrowserTabId;
-  /** Whether the tab's view should paint. Other tabs are unaffected. */
-  visible: boolean;
-};
-
-/** Request for {@link BROWSER_CHANNELS.runAgent}: run one web-agent turn on a tab. */
-export type RunAgentBridgeRequest = {
-  /** Tab the agent operates on. */
-  id: BrowserTabId;
-  /** Model id the user picked to drive the agent (criterion 1.2). */
-  model: string;
-  /** The user instruction for this turn. */
-  instruction: string;
-  /** Prior chat turns for context (most-recent last). */
-  history?: AgentHistoryMessage[];
-  /**
-   * Whether the user granted the agent control of the VISIBLE tab this turn
-   * (scroll/click/type/navigate…). Defaults to `false` — invisible mode.
-   */
-  interactive?: boolean;
-};
-
-/** Result of {@link BROWSER_CHANNELS.runAgent}. */
-export type RunAgentBridgeResult = {
-  /** The final assistant answer (empty when stopped/errored). */
-  answer: string;
-  /** How the turn ended. */
-  status: 'done' | 'stopped' | 'error' | 'max-steps';
-  /** Number of tool steps executed. */
-  steps: number;
-};
-
-/**
- * Envelope wrapping a streamed {@link AgentEvent} for the `agentEvent` emitter.
- *
- * The platform `buildEmitter<Params>` types `emit` as a conditional over the
- * naked `Params`; passing a discriminated union directly makes that conditional
- * distribute and collapse the `emit` parameter to `never`. Boxing the union in a
- * single-property object keeps `Params` non-distributive so `emit`/`on` type
- * correctly.
- */
-export type AgentEventEnvelope = {
-  /** The streamed agent step/result event. */
-  event: AgentEvent;
-};
-
-/** Request for {@link BROWSER_CHANNELS.setAgentMode}. */
-export type SetAgentModeRequest = {
-  /** Stable identifier of the tab to toggle. */
-  id: BrowserTabId;
-  /** `true` to turn the tab into a controllable web agent, `false` to turn it off (criterion 1.2). */
-  enabled: boolean;
-};
-
-/** Current agent-mode state of a tab, returned by get/set agent-mode. */
-export type AgentModeState = {
-  /** Stable identifier of the tab. */
-  id: BrowserTabId;
-  /** Whether agent mode is currently on for this tab. */
-  enabled: boolean;
-};
+import { getDefaultBrowserStatus, setAsDefaultBrowser } from '@process/bridge/defaultBrowser';
 
 // ---------------------------------------------------------------------------
 // Typed channels (declared here because ipcBridge.ts has no browser namespace)
@@ -244,6 +131,8 @@ export const browserChannels = {
   tabUpdated: bridge.buildEmitter<TabUpdate>(BROWSER_CHANNELS.tabUpdated),
   getPersona: bridge.buildProvider<string, void>(BROWSER_CHANNELS.getPersona),
   setPersona: bridge.buildProvider<void, { persona: string }>(BROWSER_CHANNELS.setPersona),
+  getDefaultBrowserStatus: bridge.buildProvider<DefaultBrowserStatus, void>(BROWSER_CHANNELS.getDefaultBrowserStatus),
+  setAsDefaultBrowser: bridge.buildProvider<DefaultBrowserStatus, void>(BROWSER_CHANNELS.setAsDefaultBrowser),
 };
 
 // ---------------------------------------------------------------------------
@@ -298,6 +187,25 @@ const createAgentModeStore = (): Pick<BrowserServices, 'isAgentMode' | 'setAgent
 
 /** Lazily-built default services, shared across repeated registrations. */
 let defaultServices: BrowserServices | undefined;
+
+/** Browser commands fail closed whenever its reviewed package is not active. */
+let browserBridgeActive = false;
+
+const requireActiveBrowserPackage = (): void => {
+  if (!browserBridgeActive) throw new Error('BROWSER_PACKAGE_INACTIVE');
+};
+
+const guardBrowserRuntime = <T extends object>(value: T): T =>
+  new Proxy(value, {
+    get: (target, property, receiver): unknown => {
+      const member = Reflect.get(target, property, receiver);
+      if (typeof member !== 'function') return member;
+      return (...args: unknown[]): unknown => {
+        requireActiveBrowserPackage();
+        return Reflect.apply(member, target, args);
+      };
+    },
+  });
 
 /**
  * Resolve the shared {@link BrowserServices}, constructing the default
@@ -545,8 +453,9 @@ const resolveServices = (options: RegisterBrowserBridgeOptions): BrowserServices
  *   {@link RegisterBrowserBridgeOptions}).
  */
 export function registerBrowserBridge(options: RegisterBrowserBridgeOptions = {}): void {
-  const services = resolveServices(options);
-  const { viewManager } = services;
+  browserBridgeActive = true;
+  const services = guardBrowserRuntime(resolveServices(options));
+  const viewManager = guardBrowserRuntime(services.viewManager);
 
   // Open a new embedded browser tab and return its stable id (criterion 1.1).
   browserChannels.openTab.provider((request) => Promise.resolve({ id: viewManager.createTab(request) }));
@@ -648,6 +557,14 @@ export function registerBrowserBridge(options: RegisterBrowserBridgeOptions = {}
   browserChannels.setPersona.provider(async ({ persona }) => {
     await services.memory?.setPersona(persona);
   });
+  browserChannels.getDefaultBrowserStatus.provider(() => {
+    requireActiveBrowserPackage();
+    return Promise.resolve(getDefaultBrowserStatus());
+  });
+  browserChannels.setAsDefaultBrowser.provider(() => {
+    requireActiveBrowserPackage();
+    return setAsDefaultBrowser();
+  });
 }
 
 /**
@@ -655,6 +572,7 @@ export function registerBrowserBridge(options: RegisterBrowserBridgeOptions = {}
  * (tests, hot-reload); registered providers remain bound to their channels.
  */
 export function disposeBrowserBridge(): void {
+  browserBridgeActive = false;
   defaultServices?.viewManager.dispose();
   defaultServices = undefined;
 }

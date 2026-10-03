@@ -13,3 +13,4 @@ export * from './PackageManagerService';
 export * from './packageBridge';
 export * from './remoteCatalog';
 export * from './packageStore';
+export * from './repoPackager';

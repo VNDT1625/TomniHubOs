@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { mergeText3 } from '@process/ide/teamEdit/cloud/cloudReplicaMerge';
+import { mergeText3 } from '@package-apps/ide/process/collaboration/teamEdit/cloud/cloudReplicaMerge';
 
 describe('cloud replica three-way merge', () => {
   it('keeps one-sided local edits', () => {

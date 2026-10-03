@@ -1,22 +1,73 @@
 import type { IProvider } from '@/common/config/storage';
 import ModalHOC from '@/renderer/utils/ui/ModalHOC';
-import { Form, Input, Message, Select, Tag } from '@arco-design/web-react';
-import React, { useEffect, useMemo } from 'react';
+import { Form, Input, Select, Tag } from '@arco-design/web-react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import TomnyModal from '@/renderer/components/base/TomnyModal';
 import { LinkCloud } from '@icon-park/react';
-import { ipcBridge } from '@/common';
 import useModeModeList from '@renderer/hooks/agent/useModeModeList';
 import { getProviderLogo } from '@/renderer/utils/model/modelPlatforms';
 
+const PLATFORM_BADGE_COLORS: Record<string, { bg: string; color: string; label: string }> = {
+  gemini: { bg: '#4285F4', color: '#ffffff', label: 'G' },
+  'gemini-vertex-ai': { bg: '#4285F4', color: '#ffffff', label: 'G' },
+  openai: { bg: '#10A37F', color: '#ffffff', label: 'O' },
+  anthropic: { bg: '#D97757', color: '#ffffff', label: 'A' },
+  'new-api': { bg: '#0284C7', color: '#ffffff', label: 'N' },
+  bedrock: { bg: '#FF9900', color: '#ffffff', label: 'B' },
+  'aws-bedrock': { bg: '#FF9900', color: '#ffffff', label: 'B' },
+  deepseek: { bg: '#4D6BFE', color: '#ffffff', label: 'D' },
+};
+
 /**
  * 供应商 Logo 组件
- * Provider Logo Component
+ * Provider Logo Component with fallback to branded badge when image is unavailable
  */
-const ProviderLogo: React.FC<{ logo: string | null; name: string; size?: number }> = ({ logo, name, size = 20 }) => {
-  if (logo) {
-    return <img src={logo} alt={name} className='object-contain shrink-0' style={{ width: size, height: size }} />;
+const ProviderLogo: React.FC<{ logo: string | null; name: string; size?: number; platform?: string }> = ({
+  logo,
+  name,
+  size = 20,
+  platform,
+}) => {
+  const [loadFailed, setLoadFailed] = useState(false);
+
+  useEffect(() => {
+    setLoadFailed(false);
+  }, [logo]);
+
+  if (logo && !loadFailed) {
+    return (
+      <img
+        src={logo}
+        alt={name}
+        className='object-contain shrink-0'
+        style={{ width: size, height: size }}
+        onError={() => setLoadFailed(true)}
+      />
+    );
   }
+
+  const key = (platform || name || '').toLowerCase();
+  const badge = PLATFORM_BADGE_COLORS[key] || Object.entries(PLATFORM_BADGE_COLORS).find(([k]) => key.includes(k))?.[1];
+
+  if (badge) {
+    return (
+      <div
+        className='flex items-center justify-center font-bold shrink-0 rounded-4px shadow-xs'
+        style={{
+          width: size,
+          height: size,
+          backgroundColor: badge.bg,
+          color: badge.color,
+          fontSize: Math.max(9, Math.round(size * 0.55)),
+          lineHeight: 1,
+        }}
+      >
+        {badge.label}
+      </div>
+    );
+  }
+
   return <LinkCloud theme='outline' size={size} className='text-t-secondary flex shrink-0' />;
 };
 
@@ -25,7 +76,6 @@ const EditModeModal = ModalHOC<{ data?: IProvider; onChange(data: IProvider): vo
     const { t } = useTranslation();
     const { data } = props;
     const [form] = Form.useForm();
-    const [message, messageContext] = Message.useMessage();
 
     // Watch bedrockAuthMethod only for UI conditional rendering (not for auto-refresh)
     const bedrockAuthMethod = Form.useWatch('bedrockAuthMethod', form);
@@ -38,15 +88,10 @@ const EditModeModal = ModalHOC<{ data?: IProvider; onChange(data: IProvider): vo
 
     const isFullUrl = data?.is_full_url ?? false;
 
-    // For Bedrock, don't pass bedrock_config to avoid auto-refresh on input changes
-    // We'll build it dynamically in onFocus
-    // When is_full_url, pass empty base_url to prevent auto-fetch with the full endpoint URL
-    const modelListState = useModeModeList(
-      data?.platform || 'gemini',
-      isFullUrl ? '' : data?.base_url,
-      isFullUrl ? '' : data?.api_key,
-      true,
-      undefined
+    const modelListState = useModeModeList(data?.id);
+    const modelOptions = useMemo(
+      () => (isFullUrl ? [] : (modelListState.data?.models.map((option) => Object.assign({}, option)) ?? [])),
+      [isFullUrl, modelListState.data?.models]
     );
 
     useEffect(() => {
@@ -115,14 +160,13 @@ const EditModeModal = ModalHOC<{ data?: IProvider; onChange(data: IProvider): vo
         okText={t('common.save')}
         cancelText={t('common.cancel')}
       >
-        {messageContext}
         <div className='py-20px'>
           <Form form={form} layout='vertical'>
             {/* 模型供应商名称（可编辑，带 Logo）/ Model Provider name (editable, with Logo) */}
             <Form.Item
               label={
                 <div className='flex items-center gap-6px'>
-                  <ProviderLogo logo={providerLogo} name={data?.name || ''} size={16} />
+                  <ProviderLogo logo={providerLogo} name={data?.name || ''} platform={data?.platform} size={16} />
                   <span>{t('settings.modelProvider')}</span>
                 </div>
               }
@@ -241,76 +285,18 @@ const EditModeModal = ModalHOC<{ data?: IProvider; onChange(data: IProvider): vo
               required
               rules={[{ required: true }]}
               validateStatus={!isFullUrl && modelListState.error ? 'error' : undefined}
-              help={
-                !isFullUrl && modelListState.error instanceof Error
-                  ? modelListState.error.message
-                  : !isFullUrl && modelListState.error
-                    ? String(modelListState.error)
-                    : undefined
-              }
+              help={!isFullUrl && modelListState.error ? t('common.failed') : undefined}
             >
               <Select
                 loading={!isFullUrl && modelListState.isLoading}
                 showSearch
                 allowCreate
                 mode={data?.models && data.models.length > 1 ? 'multiple' : undefined}
-                onFocus={async () => {
+                onFocus={() => {
                   if (isFullUrl) return;
-                  // For Bedrock, build bedrock_config from current form values and fetch models
-                  if (isBedrock) {
-                    const values = form.getFields();
-                    if (!values.bedrockAuthMethod || !values.bedrockRegion) {
-                      message.error(t('settings.bedrock.fillRequiredFields'));
-                      return;
-                    }
-                    if (
-                      values.bedrockAuthMethod === 'accessKey' &&
-                      (!values.bedrockAccessKeyId || !values.bedrockSecretAccessKey)
-                    ) {
-                      message.error(t('settings.bedrock.fillRequiredFields'));
-                      return;
-                    }
-                    if (values.bedrockAuthMethod === 'profile' && !values.bedrockProfile) {
-                      message.error(t('settings.bedrock.fillRequiredFields'));
-                      return;
-                    }
-                    // Build bedrock_config and fetch models manually
-                    const bedrock_config = {
-                      auth_method: values.bedrockAuthMethod,
-                      region: values.bedrockRegion,
-                      ...(values.bedrockAuthMethod === 'accessKey'
-                        ? {
-                            access_key_id: values.bedrockAccessKeyId,
-                            secret_access_key: values.bedrockSecretAccessKey,
-                          }
-                        : {
-                            profile: values.bedrockProfile,
-                          }),
-                    };
-                    try {
-                      const res = await ipcBridge.mode.fetchModelList.invoke({
-                        platform: data?.platform || 'bedrock',
-                        api_key: '',
-                        bedrock_config,
-                      });
-                      const models =
-                        res.models.map((v) => {
-                          if (typeof v === 'string') {
-                            return { label: v, value: v };
-                          } else {
-                            return { label: v.name, value: v.id };
-                          }
-                        }) || [];
-                      // Update the model list state manually
-                      void modelListState.mutate({ models }, false);
-                    } catch (error: any) {
-                      message.error(error.message || 'Failed to fetch models');
-                    }
-                    return;
-                  }
                   void modelListState.mutate();
                 }}
-                options={isFullUrl ? [] : modelListState.data?.models || []}
+                options={modelOptions}
               />
             </Form.Item>
           </Form>

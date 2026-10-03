@@ -17,6 +17,68 @@ pub struct MtuiConfig {
 
     #[serde(default)]
     pub ignore: IgnoreConfig,
+
+    #[serde(default)]
+    pub backup: BackupConfig,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[allow(dead_code)]
+pub struct BackupConfig {
+    #[serde(default = "default_backup_enabled")]
+    pub enabled: bool,
+
+    #[serde(default = "default_storage_mode")]
+    pub storage_mode: String,
+
+    #[serde(default = "default_max_storage_mb")]
+    pub max_storage_mb: u64,
+
+    #[serde(default = "default_retention_days")]
+    pub retention_days: u32,
+
+    #[serde(default = "default_max_operations")]
+    pub max_operations: usize,
+
+    #[serde(default = "default_auto_gc")]
+    pub auto_gc_on_run: bool,
+}
+
+fn default_backup_enabled() -> bool {
+    true
+}
+
+fn default_storage_mode() -> String {
+    "delta".to_string()
+}
+
+fn default_max_storage_mb() -> u64 {
+    100
+}
+
+fn default_retention_days() -> u32 {
+    7
+}
+
+fn default_max_operations() -> usize {
+    200
+}
+
+fn default_auto_gc() -> bool {
+    true
+}
+
+impl Default for BackupConfig {
+    fn default() -> Self {
+        BackupConfig {
+            enabled: default_backup_enabled(),
+            storage_mode: default_storage_mode(),
+            max_storage_mb: default_max_storage_mb(),
+            retention_days: default_retention_days(),
+            max_operations: default_max_operations(),
+            auto_gc_on_run: default_auto_gc(),
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -55,6 +117,7 @@ impl Default for MtuiConfig {
             allow_outside_project: false,
             default_json: false,
             ignore: IgnoreConfig::default(),
+            backup: BackupConfig::default(),
         }
     }
 }

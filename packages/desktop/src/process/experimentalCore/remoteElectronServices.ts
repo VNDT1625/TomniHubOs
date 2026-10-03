@@ -11,6 +11,7 @@ import {
   createRemoteCoreTarget,
   RemoteCoreAdapter,
   type DetectedCoreTarget,
+  type RemoteAdapterOptions,
   type RemoteCredentialProvider,
   type RemoteTargetConnection,
   type RemoteTargetResolver,
@@ -25,6 +26,25 @@ export type ElectronRemoteCoreTarget = {
   allowInsecureLoopback?: boolean;
   workspaceMappings: Array<{ localRoot: string; remoteRoot: string }>;
 };
+
+/**
+ * Main-owned admission for a configured Remote Core target. This does not
+ * expose a credential handle or workspace mappings to the authority.
+ */
+export type RemoteCoreTargetAuthority = Readonly<{
+  admitRemoteCoreTarget(
+    target: Readonly<{
+      targetId: string;
+      endpoint: string;
+      allowInsecureLoopback: boolean;
+    }>
+  ): Promise<boolean>;
+}>;
+
+export type ElectronRemoteCoreServicesOptions = Readonly<{
+  authority?: RemoteCoreTargetAuthority;
+  adapterOptions?: RemoteAdapterOptions;
+}>;
 
 type RemoteCoreConfiguration = { version: 1; targets: ElectronRemoteCoreTarget[] };
 
@@ -74,7 +94,8 @@ const mapWorkspace = (workspace: string, mappings: ElectronRemoteCoreTarget['wor
 /** Main-process-only Remote wiring. Configuration stores opaque handles, never credential values. */
 export const createElectronRemoteCoreServices = (
   vault: SecretVault,
-  configPath: string
+  configPath: string,
+  options: ElectronRemoteCoreServicesOptions = {}
 ): {
   adapter: RemoteCoreAdapter;
   detectTargets: () => Promise<DetectedCoreTarget[]>;
@@ -87,10 +108,28 @@ export const createElectronRemoteCoreServices = (
       throw error;
     }
   };
+  const isAdmitted = async (target: ElectronRemoteCoreTarget): Promise<boolean> => {
+    if (target.enabled === false || !options.authority) return false;
+    try {
+      return await options.authority.admitRemoteCoreTarget({
+        targetId: target.id,
+        endpoint: target.endpoint,
+        allowInsecureLoopback: target.allowInsecureLoopback === true,
+      });
+    } catch {
+      return false;
+    }
+  };
   const targetFor = async (id: string): Promise<ElectronRemoteCoreTarget> => {
     const target = (await load()).targets.find((item) => item.id.trim() === id);
-    if (!target || target.enabled === false) throw new Error('Remote core target is unavailable.');
+    if (!target || !(await isAdmitted(target))) throw new Error('Remote core target is unavailable.');
     return target;
+  };
+  const executionAuthority = {
+    authorizeRemoteCoreTarget: async (target: DetectedCoreTarget): Promise<boolean> => {
+      const configured = (await load()).targets.find((item) => item.id.trim() === target.id);
+      return configured ? isAdmitted(configured) : false;
+    },
   };
   const resolver: RemoteTargetResolver = {
     async resolve(target): Promise<RemoteTargetConnection> {
@@ -116,22 +155,28 @@ export const createElectronRemoteCoreServices = (
     },
   };
   return {
-    adapter: new RemoteCoreAdapter(resolver, credentials),
-    detectTargets: async () =>
-      (await load()).targets.map((target) =>
-        createRemoteCoreTarget({
-          id: target.id,
-          name: target.name,
-          available: target.enabled !== false,
-          detail: 'Remote Tomny Core gateway (opaque credential)',
-          networkHost: (() => {
-            try {
-              return new URL(target.endpoint).hostname;
-            } catch {
-              return undefined;
-            }
-          })(),
-        })
-      ),
+    adapter: new RemoteCoreAdapter(resolver, credentials, options.adapterOptions, executionAuthority),
+    detectTargets: async () => {
+      const targets = await Promise.all(
+        (await load()).targets.map(async (target) => ({ target, admitted: await isAdmitted(target) }))
+      );
+      return targets
+        .filter(({ admitted }) => admitted)
+        .map(({ target }) =>
+          createRemoteCoreTarget({
+            id: target.id,
+            name: target.name,
+            available: true,
+            detail: 'Remote Tomny Core gateway (opaque credential)',
+            networkHost: (() => {
+              try {
+                return new URL(target.endpoint).hostname;
+              } catch {
+                return undefined;
+              }
+            })(),
+          })
+        );
+    },
   };
 };

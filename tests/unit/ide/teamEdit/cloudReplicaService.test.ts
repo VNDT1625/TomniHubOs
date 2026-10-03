@@ -18,8 +18,8 @@ import {
 import {
   createCloudWorkspaceReplica,
   type CloudWorkspaceReplica,
-} from '@process/ide/teamEdit/cloud/cloudReplicaService';
-import type { CloudWorkspaceRelayClient } from '@process/ide/teamEdit/cloud/cloudWorkspaceRelay';
+} from '@package-apps/ide/process/collaboration/teamEdit/cloud/cloudReplicaService';
+import type { CloudWorkspaceRelayClient } from '@package-apps/ide/process/collaboration/teamEdit/cloud/cloudWorkspaceRelay';
 
 type OperationDraft = Parameters<CloudWorkspaceRelayClient['appendOperation']>[0];
 

@@ -5,6 +5,7 @@
  */
 
 import { bridge, logger } from '@office-ai/platform';
+import './bridgeErrorWrapper';
 import { WEBUI_DEFAULT_PORT } from '@/common/config/constants';
 import type { ElectronBridgeAPI } from '@/common/types/platform/electron';
 
@@ -21,7 +22,7 @@ const win = window as CustomWindow;
 /**
  * 适配electron的API到浏览器中,建立renderer和main的通信桥梁, 与preload.ts中的注入对应
  * */
-if (win.electronAPI && typeof win.__backendPort === 'number') {
+if (win.electronAPI) {
   // Electron 环境 - 使用 IPC 通信
   bridge.adapter({
     emit(name, data) {
@@ -216,6 +217,46 @@ if (win.electronAPI && typeof win.__backendPort === 'number') {
 
   bridge.adapter({
     emit(name, data) {
+      // Demo WebUI fallback: settings calls stay usable when the proxy cannot splice WS frames.
+      if (!win.electronAPI && (name.startsWith('subscribe-tomny-provider.') || name === 'subscribe-tomni-agent.list')) {
+        const request = data as { id?: string; data?: unknown } | undefined;
+        const channel = name.slice('subscribe-'.length);
+        const endpoint =
+          channel === 'tomny-provider.list'
+            ? '/api/providers'
+            : channel === 'tomni-agent.list'
+              ? '/api/agents'
+              : channel === 'tomny-provider.detect-protocol'
+                ? '/api/providers/detect-protocol'
+                : channel === 'tomny-provider.fetch-model-list'
+                  ? '/api/providers/fetch-models'
+                  : channel === 'tomny-provider.fetch-models'
+                    ? '/api/providers/demo-openai/models'
+                    : null;
+        if (!endpoint) return;
+        const method = endpoint === '/api/providers' || endpoint === '/api/agents' ? 'GET' : 'POST';
+        void fetch(endpoint, {
+          method,
+          headers: { 'content-type': 'application/json' },
+          body: method === 'POST' ? JSON.stringify(request?.data ?? {}) : undefined,
+        })
+          .then((response) => {
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            return response.json() as Promise<unknown>;
+          })
+          .then((payload) => {
+            emitterRef?.emit(`subscribe.callback-${name.slice('subscribe-'.length)}${request?.id ?? ''}`, payload);
+          })
+          .catch(() => {
+            // Keep the WebSocket path as the fallback for real Core deployments.
+            const message: QueuedMessage = { name, data };
+            ensureSocket();
+            if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
+            else messageQueue.push(message);
+          });
+        return;
+      }
+
       const message: QueuedMessage = { name, data };
 
       ensureSocket();

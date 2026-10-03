@@ -5,10 +5,10 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { buildPlanningGuard } from '@/renderer/services/planningGuard';
-import { coreIdeClient } from '@/renderer/services/coreIdeClient';
+import { buildPlanningGuard } from '../../../packages/package-apps/ide/src/planningGuard';
+import { coreIdeClient } from '../../../packages/package-apps/ide/src/coreIdeClient';
 
-vi.mock('@/renderer/services/coreIdeClient', () => ({
+vi.mock('../../../packages/package-apps/ide/src/coreIdeClient', () => ({
   coreIdeClient: {
     specStatus: vi.fn(),
     specTaskList: vi.fn(),

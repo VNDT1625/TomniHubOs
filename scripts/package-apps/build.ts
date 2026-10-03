@@ -23,7 +23,7 @@ import { loadPackageSigningKey, type PackageSigningKey } from './signing';
 const REPO_ROOT = path.resolve(__dirname, '../..');
 const OUTPUT_ROOT = path.resolve(process.env.TOMNI_PACKAGE_OUTPUT_ROOT ?? path.join(REPO_ROOT, 'store-artifacts'));
 const BUILD_ROOT = path.join(OUTPUT_ROOT, '.package-build');
-const RELEASE_BASE_URL = 'https://github.com/VNDT1625/OmniAgent/releases/download/tomni-store-v1';
+const RELEASE_BASE_URL = 'https://github.com/VNDT1625/tomni-hub-agent-os/releases/download/tomni-store-v1';
 
 type StaticPackageFile = {
   relativePath: string;
@@ -35,12 +35,20 @@ type PackageArtifactFormat = 'json-bundle' | 'tomny-zip';
 type PackageDefinition = {
   id:
     | 'com.tomni.automation-studio'
+    | 'com.tomni.company'
+    | 'com.tomni.knowledge'
+    | 'com.tomni.pet'
     | 'com.tomni.design-studio'
     | 'com.tomni.document-studio'
-    | 'com.tomni.ide'
     | 'com.tomni.runtime-pilot'
     | 'com.tomni.studio';
   entry?: string;
+  /**
+   * Build-time-only fixed Main process source. It is selected by Core's reviewed
+   * registry, never serialized as a manifest path or package-supplied launch request.
+   */
+  runtimeEntry?: string;
+  runtimeOutput?: string;
   staticFiles?: StaticPackageFile[];
   artifactFormat?: PackageArtifactFormat;
   name: string;
@@ -49,6 +57,15 @@ type PackageDefinition = {
   permissions: string[];
   tags: string[];
   modules: PackageModuleContribution[];
+  /**
+   * Optional signed declaration of the narrow operations that a governed AI
+   * may request. It is never an execution grant by itself.
+   */
+  aiAccess?: PackageManifest['aiAccess'];
+  /** The sole user-facing Surface exposed by this Package App. */
+  surfaceModuleId: string;
+  /** Fixed, inert Main wiring admission data included in the artifact signature. */
+  mainContributions?: PackageManifest['mainContributions'];
 
   enginesTomni?: string;
 };
@@ -74,6 +91,7 @@ const definitions: PackageDefinition[] = [
     ],
     tags: ['automation', 'workflows', 'agents', 'scheduling'],
     enginesTomni: '>=1.0.0',
+    surfaceModuleId: 'automation',
     modules: [
       {
         id: 'automation',
@@ -86,14 +104,72 @@ const definitions: PackageDefinition[] = [
     ],
   },
   {
+    id: 'com.tomni.company',
+    entry: 'packages/package-apps/company/src/renderer/company/CompanyPage.tsx',
+    name: 'Company',
+    description: 'A signed multi-agent company workspace installed as a package.',
+    bundleKind: 'single',
+    permissions: ['agent.invoke', 'model.invoke'],
+    tags: ['company', 'agents', 'orchestration'],
+    enginesTomni: '>=1.0.0',
+    surfaceModuleId: 'company',
+    modules: [
+      {
+        id: 'company',
+        title: 'Company',
+        surface: 'apps/company',
+        pinnable: true,
+        runtime: 'trusted-react',
+        entrypoint: 'app.js',
+      },
+    ],
+  },
+  {
+    id: 'com.tomni.knowledge',
+    entry: 'packages/package-apps/knowledge/src/renderer/knowledge/RealtimeKnowledgePage.tsx',
+    name: 'Knowledge',
+    description: 'A signed realtime knowledge inspector installed as a package.',
+    bundleKind: 'single',
+    permissions: ['knowledge.read'],
+    tags: ['knowledge', 'facts', 'research'],
+    enginesTomni: '>=1.0.0',
+    surfaceModuleId: 'knowledge',
+    modules: [
+      {
+        id: 'knowledge',
+        title: 'Knowledge',
+        surface: 'apps/knowledge',
+        pinnable: true,
+        runtime: 'trusted-react',
+        entrypoint: 'app.js',
+      },
+    ],
+  },
+
+  {
+    id: 'com.tomni.pet',
+    entry: 'packages/package-apps/pet/src/renderer/PetPage.tsx',
+    name: 'Pet',
+    description: 'A signed desktop companion controls package.',
+    bundleKind: 'single',
+    permissions: ['desktop.pet.control'],
+    tags: ['pet', 'desktop', 'companion'],
+    enginesTomni: '>=1.0.0',
+    surfaceModuleId: 'pet',
+    modules: [
+      { id: 'pet', title: 'Pet', surface: 'apps/pet', pinnable: true, runtime: 'trusted-react', entrypoint: 'app.js' },
+    ],
+  },
+  {
     id: 'com.tomni.document-studio',
-    entry: 'packages/desktop/src/renderer/package-apps/documentStudio.tsx',
+    entry: 'packages/package-apps/document-studio/src/renderer/entry.tsx',
     name: 'Document Studio',
     description: 'An independently downloaded workspace for files, Office documents and live collaboration.',
     bundleKind: 'single',
     permissions: ['workspace.read', 'workspace.write'],
     tags: ['documents', 'office', 'files', 'collaboration'],
     enginesTomni: '>=1.0.0',
+    surfaceModuleId: 'document',
     modules: [
       {
         id: 'document',
@@ -107,37 +183,22 @@ const definitions: PackageDefinition[] = [
   },
   {
     id: 'com.tomni.design-studio',
-    entry: 'packages/desktop/src/renderer/package-apps/design/index.tsx',
+    entry: 'packages/package-apps/design/src/renderer/index.tsx',
+    runtimeEntry: 'packages/package-apps/design/src/process/viuMcpProcess.ts',
+    runtimeOutput: 'runtime/design-viu-v1.cjs',
     name: 'Design Studio',
     description: 'An independently downloaded visual authoring and interactive presentation workspace powered by VIU.',
     bundleKind: 'single',
     permissions: ['workspace.read', 'workspace.write'],
     tags: ['design', 'visual-authoring', 'prototype', 'viu'],
     enginesTomni: '>=1.0.0',
+    surfaceModuleId: 'design',
+    mainContributions: [{ schemaVersion: 1, id: 'design-viu-v1' }],
     modules: [
       {
         id: 'design',
         title: 'Design Studio',
         surface: 'apps/design-studio',
-        pinnable: true,
-        runtime: 'trusted-react',
-        entrypoint: 'app.js',
-      },
-    ],
-  },
-  {
-    id: 'com.tomni.ide',
-    entry: 'packages/desktop/src/renderer/package-apps/ide.tsx',
-    name: 'IDE',
-    description: 'A full agentic development workspace downloaded and installed as a signed Tomny app package.',
-    bundleKind: 'single',
-    permissions: ['workspace.read', 'workspace.write', 'model.invoke', 'terminal.execute'],
-    tags: ['ide', 'development', 'code', 'agentic'],
-    modules: [
-      {
-        id: 'ide',
-        title: 'IDE & App Builder',
-        surface: 'apps/ide',
         pinnable: true,
         runtime: 'trusted-react',
         entrypoint: 'app.js',
@@ -152,6 +213,19 @@ const definitions: PackageDefinition[] = [
     bundleKind: 'single',
     permissions: ['host.ipc'],
     tags: ['runtime', 'security', 'capability', 'pilot'],
+    aiAccess: {
+      schemaVersion: 1,
+      operations: [
+        {
+          id: 'apply-instruction',
+          capability: 'surface.ai.runtime-pilot.apply-instruction',
+          inputSchemaVersion: 1,
+          dataClasses: ['conversation'],
+          destinationIds: [],
+        },
+      ],
+    },
+    surfaceModuleId: 'runtime-pilot',
     modules: [
       {
         id: 'runtime-pilot',
@@ -173,11 +247,84 @@ const definitions: PackageDefinition[] = [
     <script>
       (() => {
         const requestId = 'runtime-info';
+        const surfaceAiPortMessage = 'tomni.surface-ai.port';
+        const maxInstructionBytes = 12 * 1024;
+        let surfaceAiPort;
+        let surfaceAiBinding;
+        let inboundSequence = 0;
+        let outboundSequence = 0;
+        let activeInvocation;
+
+        const isPlainRecord = (value) => {
+          if (typeof value !== 'object' || value === null) return false;
+          const prototype = Object.getPrototypeOf(value);
+          return prototype === null || prototype === Object.prototype ||
+            (Object.getPrototypeOf(prototype) === null && prototype.constructor?.name === 'Object');
+        };
+        const isIdentifier = (value) => typeof value === 'string' && /^[A-Za-z0-9._:@/-]{1,256}$/.test(value);
+        const validBinding = (value) =>
+          isPlainRecord(value) && isPlainRecord(value.surface) &&
+          isIdentifier(value.surface.packageId) && isIdentifier(value.surface.packageVersion) &&
+          isIdentifier(value.surface.publisherId) && isIdentifier(value.ownerId) &&
+          isIdentifier(value.runtimeId) && isIdentifier(value.moduleId) &&
+          typeof value.artifactIntegrity === 'string' && /^sha256-[a-f0-9]{64}$/.test(value.artifactIntegrity);
+        const validInstruction = (value) =>
+          isPlainRecord(value) && Object.keys(value).length === 2 && value.schemaVersion === 1 &&
+          typeof value.instruction === 'string' && value.instruction.trim().length > 0 &&
+          new TextEncoder().encode(value.instruction).byteLength <= maxInstructionBytes;
+        const post = (message) => surfaceAiPort?.postMessage(message);
+
         window.parent.postMessage({ type: 'tomni.capability.invoke', requestId, capability: 'host.runtime.info' }, '*');
         window.addEventListener('message', (event) => {
           const message = event.data;
-          if (!message || message.type !== 'tomni.capability.result' || message.requestId !== requestId) return;
-          document.querySelector('#status').textContent = message.result?.ok ? 'Runtime ABI verified' : 'Runtime ABI unavailable';
+          if (message?.type === 'tomni.capability.result' && message.requestId === requestId) {
+            document.querySelector('#status').textContent = message.result?.ok ? 'Runtime ABI verified' : 'Runtime ABI unavailable';
+            return;
+          }
+          if (
+            event.source !== window.parent || message?.type !== surfaceAiPortMessage ||
+            message.schemaVersion !== 1 || !isIdentifier(message.requestId) || !isIdentifier(message.connectionId) ||
+            !validBinding(message.binding) || event.ports.length !== 1 || surfaceAiPort
+          ) return;
+          surfaceAiPort = event.ports[0];
+          surfaceAiBinding = message.binding;
+          surfaceAiPort.onmessage = (portEvent) => {
+            const envelope = portEvent.data;
+            if (!isPlainRecord(envelope) || envelope.schemaVersion !== 1 ||
+              !Number.isSafeInteger(envelope.sequence) || envelope.sequence !== inboundSequence + 1 ||
+              !isIdentifier(envelope.invocationId) || !isIdentifier(envelope.runId) ||
+              !isIdentifier(envelope.operationId) || envelope.operationSchemaVersion !== 1) return;
+            inboundSequence = envelope.sequence;
+            if (envelope.type === 'cancel') {
+              if (activeInvocation?.invocationId === envelope.invocationId) activeInvocation = undefined;
+              return;
+            }
+            if (
+              envelope.type !== 'invoke' || !isIdentifier(envelope.operationLeaseId) ||
+              envelope.operationId !== 'apply-instruction' || !validInstruction(envelope.input) ||
+              !Number.isSafeInteger(envelope.timeoutMs) || envelope.timeoutMs < 1
+            ) return;
+            activeInvocation = envelope;
+            post({
+              type: 'progress', schemaVersion: 1, sequence: ++outboundSequence,
+              invocationId: envelope.invocationId, runId: envelope.runId,
+              operationId: envelope.operationId, operationSchemaVersion: 1,
+              phase: 'instruction-applied', completed: 1, total: 1,
+            });
+            queueMicrotask(() => {
+              if (activeInvocation !== envelope) return;
+              activeInvocation = undefined;
+              post({
+                type: 'result', schemaVersion: 1, sequence: ++outboundSequence,
+                invocationId: envelope.invocationId, runId: envelope.runId,
+                operationId: envelope.operationId, operationSchemaVersion: 1,
+                artifactRefs: [], evidenceRefs: ['runtime-pilot:instruction-applied'],
+              });
+              document.querySelector('#status').textContent = 'Governed instruction applied';
+            });
+          };
+          surfaceAiPort.start?.();
+          post({ type: 'ready', schemaVersion: 1, sequence: 0, binding: surfaceAiBinding });
         });
       })();
     </script>
@@ -195,6 +342,7 @@ const definitions: PackageDefinition[] = [
     bundleKind: 'suite',
     permissions: ['workspace.read', 'workspace.write', 'model.invoke'],
     tags: ['studio', 'design', 'media', 'automation', 'documents'],
+    surfaceModuleId: 'studio',
     modules: [
       {
         id: 'studio',
@@ -301,6 +449,15 @@ const buildPackage = async (
   version: string
 ): Promise<BuiltPackage> => {
   const outputDirectory = path.join(BUILD_ROOT, definition.id);
+  if ((definition.runtimeEntry === undefined) !== (definition.runtimeOutput === undefined)) {
+    throw new Error(`${definition.id} must declare both runtime entry source and output.`);
+  }
+  if (
+    definition.runtimeOutput !== undefined &&
+    !/^runtime\/[A-Za-z0-9][A-Za-z0-9_.-]{0,159}\.(?:cjs|mjs|js)$/.test(definition.runtimeOutput)
+  ) {
+    throw new Error(`${definition.id} declares an invalid fixed runtime output path.`);
+  }
   if (process.env.TOMNI_PACKAGE_SKIP_BUILD !== '1') {
     if (definition.staticFiles) {
       if (definition.entry) throw new Error(`${definition.id} cannot declare both an entry and static files.`);
@@ -339,6 +496,11 @@ const buildPackage = async (
         plugins: [UnoCSS(unoConfig), sourceClosurePlugin],
         resolve: {
           alias: {
+            '@package-apps/ide': path.join(REPO_ROOT, 'packages/package-apps/ide/src'),
+            '@package-apps/design': path.join(REPO_ROOT, 'packages/package-apps/design/src'),
+            '@package-apps/document-studio': path.join(REPO_ROOT, 'packages/package-apps/document-studio/src'),
+            '@package-apps/browser': path.join(REPO_ROOT, 'packages/package-apps/browser/src'),
+            '@package-apps/shared': path.join(REPO_ROOT, 'packages/package-apps/shared'),
             '@': path.join(REPO_ROOT, 'packages/desktop/src'),
             '@common': path.join(REPO_ROOT, 'packages/desktop/src/common'),
             '@renderer': path.join(REPO_ROOT, 'packages/desktop/src/renderer'),
@@ -381,6 +543,51 @@ const buildPackage = async (
           },
         },
       });
+      if (definition.runtimeEntry && definition.runtimeOutput) {
+        await build({
+          configFile: false,
+          root: REPO_ROOT,
+          publicDir: false,
+          mode: 'production',
+          resolve: {
+            alias: {
+              '@package-apps/ide': path.join(REPO_ROOT, 'packages/package-apps/ide/src'),
+              '@package-apps/design': path.join(REPO_ROOT, 'packages/package-apps/design/src'),
+              '@package-apps/document-studio': path.join(REPO_ROOT, 'packages/package-apps/document-studio/src'),
+              '@package-apps/browser': path.join(REPO_ROOT, 'packages/package-apps/browser/src'),
+
+              '@package-apps/shared': path.join(REPO_ROOT, 'packages/package-apps/shared'),
+              '@': path.join(REPO_ROOT, 'packages/desktop/src'),
+              '@common': path.join(REPO_ROOT, 'packages/desktop/src/common'),
+              '@renderer': path.join(REPO_ROOT, 'packages/desktop/src/renderer'),
+              '@process': path.join(REPO_ROOT, 'packages/desktop/src/process'),
+              '@worker': path.join(REPO_ROOT, 'packages/desktop/src/process/worker'),
+              streamdown: path.join(REPO_ROOT, 'node_modules/streamdown/dist/index.js'),
+            },
+            extensions: ['.ts', '.tsx', '.js', '.jsx', '.css'],
+          },
+          ssr: { noExternal: true },
+          build: {
+            target: 'es2022',
+            ssr: path.join(REPO_ROOT, definition.runtimeEntry),
+            outDir: outputDirectory,
+            emptyOutDir: false,
+            minify: true,
+            sourcemap: false,
+            reportCompressedSize: false,
+            rollupOptions: {
+              output: {
+                format: 'cjs',
+                entryFileNames: definition.runtimeOutput,
+                inlineDynamicImports: true,
+              },
+              onwarn(warning, warn) {
+                if (warning.code !== 'EVAL') warn(warning);
+              },
+            },
+          },
+        });
+      }
     }
   }
   const files = await collectFiles(outputDirectory);
@@ -388,6 +595,13 @@ const buildPackage = async (
     const javascript = files.find((file) => file.relativePath === 'app.js')?.content.toString('utf8') ?? '';
     if (!javascript || /(?:from|import\()\s*["'](?:node:|crypto["'])/.test(javascript)) {
       throw new Error(`${definition.id} emitted an invalid browser package entrypoint.`);
+    }
+  }
+  if (definition.runtimeOutput) {
+    const runtime =
+      files.find((file) => file.relativePath === definition.runtimeOutput)?.content.toString('utf8') ?? '';
+    if (!runtime || runtime.includes('@process/')) {
+      throw new Error(`${definition.id} emitted an invalid fixed runtime entrypoint.`);
     }
   }
   for (const module of definition.modules) {
@@ -399,6 +613,8 @@ const buildPackage = async (
   const modules = definition.modules.map((module) =>
     module.runtime === 'trusted-react' && hasStyle ? { ...module, styleEntrypoint: 'style.css' } : module
   );
+  const surfaceModule = modules.find((module) => module.id === definition.surfaceModuleId);
+  if (!surfaceModule) throw new Error(`${definition.id} declares an unknown Surface module.`);
   const integrity = integrityFor(files);
   const unsignedManifest: PackageManifest = {
     schemaVersion: 1,
@@ -411,8 +627,14 @@ const buildPackage = async (
     version,
     engines: { tomni: definition.enginesTomni ?? '>=0.0.0' },
     modules,
+    contributions: {
+      version: 1,
+      apps: [{ id: surfaceModule.id, title: definition.name, moduleId: surfaceModule.id }],
+    },
     permissions: definition.permissions,
     dependencies: [],
+    ...(definition.aiAccess ? { aiAccess: definition.aiAccess } : {}),
+    ...(definition.mainContributions ? { mainContributions: definition.mainContributions } : {}),
     tags: definition.tags,
     artifact: {
       ...integrity,
@@ -513,7 +735,12 @@ const main = async (): Promise<void> => {
   console.log(JSON.stringify({ ok: true, keyId: signingKey.keyId, production: signingKey.production, sizes }, null, 2));
 };
 
-void main().catch((error: unknown) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+void main().then(
+  () => {
+    process.exit(0);
+  },
+  (error: unknown) => {
+    console.error(error);
+    process.exit(1);
+  }
+);
