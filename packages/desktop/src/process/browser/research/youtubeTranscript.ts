@@ -112,7 +112,7 @@ const BROWSER_HEADERS: Record<string, string> = {
 };
 
 /** Publicly-known InnerTube key (extracted from the page when available). */
-const DEFAULT_INNERTUBE_KEY = 'AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8';
+const DEFAULT_INNERTUBE_KEY = process.env.YOUTUBE_INNERTUBE_KEY?.trim() ?? '';
 
 /** ANDROID InnerTube client context — far less gated than the web client. */
 const ANDROID_CONTEXT = {

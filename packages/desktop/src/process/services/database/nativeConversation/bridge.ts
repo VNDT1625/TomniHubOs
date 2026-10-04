@@ -341,12 +341,20 @@ export const registerNativeConversationBridge = (input: {
       }
 
       const effectiveInput = pipelineResult.finalQuery;
+      // When the pipeline rewrites the user input (e.g. Laya credential redaction),
+      // sync model_input to use the rewritten text so secrets don't leak to the LLM.
+      const effectiveModelInput =
+        params.model_input === undefined
+          ? undefined
+          : pipelineResult.finalQuery !== params.input
+            ? params.model_input.replace(params.input, pipelineResult.finalQuery)
+            : params.model_input;
       const requestId = `conversation:${params.conversation_id}:${crypto.randomUUID()}`;
       const parts = [
         { id: 'input', text: effectiveInput, role: 'user' as const, source: 'user' as const },
-        ...(params.model_input === undefined
+        ...(effectiveModelInput === undefined
           ? []
-          : [{ id: 'model-input', text: params.model_input, role: 'user' as const, source: 'generated' as const }]),
+          : [{ id: 'model-input', text: effectiveModelInput, role: 'user' as const, source: 'generated' as const }]),
       ];
       const result = await executeAfterOutboundInspection(
         {

@@ -771,7 +771,16 @@ export const createFoundationRunLifecycle = (
       )
         .then((result): NativeConversationStartTerminal | undefined => {
           if (coreExecutionStarted || result.receipt.status === 'verified') return undefined;
-          console.error('[FoundationConv] Run ended before core started:', result.receipt.status, requestId);
+          console.error(
+            '[FoundationConv] Run ended before core started:',
+            result.receipt.status,
+            requestId,
+            JSON.stringify(
+              (result.receipt as Record<string, unknown>).failureReason ??
+                (result.receipt as Record<string, unknown>).reason ??
+                ''
+            )
+          );
           return {
             type: controller.signal.aborted ? 'cancelled' : 'error',
             text: `Foundation run ${result.receipt.status}.`,

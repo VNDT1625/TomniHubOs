@@ -232,6 +232,9 @@ export class RunKernel {
     eventType: Extract<FoundationEvent['eventType'], 'outcome.verified' | 'run.failed' | 'run.cancelled'>,
     payload: FoundationEvent['payload']
   ): Promise<OutcomeReceipt> {
+    if (eventType === 'run.failed') {
+      console.error('[RunKernel] run.failed:', JSON.stringify(payload), 'runId:', intent.runId);
+    }
     const ownerAccountDigest = createOwnerAccountDigest(intent.userId);
     const projection = projectionFromTerminalEvent({
       eventId: 'projection',
@@ -317,6 +320,7 @@ export class RunKernel {
     // A sanitizer result is not an authorization to forward the original goal.
     // Fail closed before projecting it into a prompt or invoking any execution target.
     if (redactSecretText(intent.goal).redacted) {
+      console.error('[RunKernel] SENSITIVE_GOAL_DENIED: goal contains unredacted secrets. runId:', intent.runId);
       return this.terminal(
         intent,
         {

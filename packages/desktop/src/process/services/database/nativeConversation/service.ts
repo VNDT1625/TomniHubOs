@@ -1203,22 +1203,34 @@ export class NativeConversationService {
     event: ExperimentalCoreEvent,
     state: IConversationTurnCompletedEvent['state']
   ): Promise<void> {
-    if (active.assistantText) {
-      await this.repository.saveMessage(
-        textMessage(
-          active.assistantMessageId,
-          active.conversationId,
-          active.assistantText,
-          'left',
-          event.timestamp,
-          state === 'error' ? 'error' : 'finish'
-        )
-      );
+    // Best-effort persistence -- never block the critical cleanup path.
+    try {
+      if (active.assistantText) {
+        await this.repository.saveMessage(
+          textMessage(
+            active.assistantMessageId,
+            active.conversationId,
+            active.assistantText,
+            'left',
+            event.timestamp,
+            state === 'error' ? 'error' : 'finish'
+          )
+        );
+      }
+      await this.persistActionCapsule(active, event, state);
+    } catch (persistError) {
+      console.error('[NativeConversation] finish: persistence failed (continuing cleanup):', persistError);
     }
-    await this.persistActionCapsule(active, event, state);
+    // Critical cleanup -- must run even if persistence threw.
     this.activeByConversation.delete(active.conversationId);
     this.activeByRequest.delete(active.requestId);
-    await this.update(active.conversationId, { status: 'finished' } as Partial<TChatConversation>);
+    // Best-effort DB status update -- UI events are emitted regardless.
+    try {
+      await this.update(active.conversationId, { status: 'finished' } as Partial<TChatConversation>);
+    } catch (updateError) {
+      console.error('[NativeConversation] finish: status update failed (continuing events):', updateError);
+    }
+    // UI unlock -- must always fire so the renderer exits the processing state.
     this.events.response({
       type: 'finish',
       data: { state },
@@ -1226,28 +1238,33 @@ export class NativeConversationService {
       conversation_id: active.conversationId,
       created_at: event.timestamp,
     });
-    const conversation = await this.repository.getConversation(active.conversationId);
-    this.events.turnCompleted({
-      session_id: active.conversationId,
-      status: 'finished',
-      state,
-      detail: event.text ?? '',
-      can_send_message: true,
-      runtime: { has_task: false, is_processing: false, pending_confirmations: 0, db_status: 'finished' },
-      workspace: conversation ? workspaceFor(conversation) : '',
-      model: {
-        platform: providerModel(conversation as TChatConversation)?.platform ?? '',
-        name: providerModel(conversation as TChatConversation)?.name ?? '',
-        use_model: providerModel(conversation as TChatConversation)?.use_model ?? '',
-      },
-      last_message: {
-        id: active.assistantMessageId,
-        type: 'text',
-        content: { content: active.assistantText },
-        status: state === 'error' ? 'error' : 'finish',
-        created_at: event.timestamp,
-      },
-    });
+    // Best-effort turnCompleted -- failure here must not suppress the finish event above.
+    try {
+      const conversation = await this.repository.getConversation(active.conversationId);
+      this.events.turnCompleted({
+        session_id: active.conversationId,
+        status: 'finished',
+        state,
+        detail: event.text ?? '',
+        can_send_message: true,
+        runtime: { has_task: false, is_processing: false, pending_confirmations: 0, db_status: 'finished' },
+        workspace: conversation ? workspaceFor(conversation) : '',
+        model: {
+          platform: providerModel(conversation as TChatConversation)?.platform ?? '',
+          name: providerModel(conversation as TChatConversation)?.name ?? '',
+          use_model: providerModel(conversation as TChatConversation)?.use_model ?? '',
+        },
+        last_message: {
+          id: active.assistantMessageId,
+          type: 'text',
+          content: { content: active.assistantText },
+          status: state === 'error' ? 'error' : 'finish',
+          created_at: event.timestamp,
+        },
+      });
+    } catch (turnError) {
+      console.error('[NativeConversation] finish: turnCompleted failed:', turnError);
+    }
   }
 
   /** Close the bounded StartAction journal into a compact, queryable Save capsule. */
