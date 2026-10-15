@@ -80,7 +80,7 @@ export const bindScheduledCoreRuntime = (
   subscribe,
 });
 
-const scopeAllowsTool = (scopes: readonly string[], tool: string): boolean =>
+export const scopeAllowsTool = (scopes: readonly string[], tool: string): boolean =>
   scopes.some(
     (scope) => scope === '*' || scope === tool || (scope.endsWith('.*') && tool.startsWith(scope.slice(0, -1)))
   );

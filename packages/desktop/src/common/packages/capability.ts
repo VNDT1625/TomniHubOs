@@ -10,9 +10,45 @@ import type {
 
 export const PACKAGE_CAPABILITY_ABI_VERSION = 1;
 
-export const PACKAGE_NATIVE_CAPABILITIES = ['host.runtime.info'] as const;
+export const PACKAGE_NATIVE_CAPABILITIES = [
+  'host.runtime.info',
+  'notifications.post',
+  'sessions.report',
+  'model.invoke',
+] as const;
 
 export type PackageNativeCapability = (typeof PACKAGE_NATIVE_CAPABILITIES)[number];
+
+/**
+ * Arguments of the `notifications.post` syscall. The hub ranks the post itself;
+ * a package can at most suggest `important`, never urgent, and only https links
+ * are kept.
+ */
+export type PackageNotificationPost = Readonly<{
+  title: string;
+  body?: string;
+  url?: string;
+  /** Package-side id; the same id is stored once. */
+  id?: string;
+  importance?: 'normal' | 'important';
+}>;
+
+/**
+ * Arguments of the `sessions.report` syscall: the tabs/sessions the package keeps alive, shown under
+ * Active in the sidebar. The list replaces the previous one; Main bounds and sanitises it.
+ */
+export type PackageSessionsReport = Readonly<{ sessions: unknown; actions?: unknown }>;
+
+/**
+ * Arguments of the `model.invoke` syscall: narrow local-model inference for AI Challenge.
+ */
+export type PackageModelInvokeArgs = Readonly<{
+  contract: 'ai-challenge.turn.v1';
+  prompt: string;
+  systemPrompt?: string;
+  temperature?: number;
+  maxTokens?: number;
+}>;
 
 export type PackageCapabilityLeaseRequest = Readonly<{
   version: typeof PACKAGE_CAPABILITY_ABI_VERSION;
@@ -35,7 +71,9 @@ export type PackageCapabilitySyscall = Readonly<{
   leaseId: string;
   packageId: string;
   runtimeId: string;
-  name: 'host.runtime.info';
+  name: PackageNativeCapability;
+  /** Present for `notifications.post`, `sessions.report`, and `model.invoke`. */
+  args?: PackageNotificationPost | PackageSessionsReport | PackageModelInvokeArgs;
 }>;
 
 export type PackageCapabilityReceipt = Readonly<{
@@ -51,7 +89,18 @@ export type PackageCapabilityReceipt = Readonly<{
 export type PackageCapabilityResult =
   | Readonly<{
       ok: true;
-      data: { abiVersion: typeof PACKAGE_CAPABILITY_ABI_VERSION; packageId: string };
+      data: {
+        abiVersion: typeof PACKAGE_CAPABILITY_ABI_VERSION;
+        packageId: string;
+        accepted?: boolean;
+        modelResponse?: {
+          schemaVersion: 1;
+          contract: 'ai-challenge.turn.v1';
+          text: string;
+          elapsedMs: number;
+          model?: string;
+        };
+      };
       receipt: PackageCapabilityReceipt;
     }>
   | Readonly<{ ok: false; code: PackageCapabilityErrorCode; receipt?: PackageCapabilityReceipt }>;
@@ -63,7 +112,11 @@ export type PackageCapabilityErrorCode =
   | 'PACKAGE_CAPABILITY_LEASE_UNAVAILABLE'
   | 'PACKAGE_CAPABILITY_LEASE_EXPIRED'
   | 'PACKAGE_CAPABILITY_LEASE_REVOKED'
-  | 'PACKAGE_CAPABILITY_SYSCALL_DENIED';
+  | 'PACKAGE_CAPABILITY_SYSCALL_DENIED'
+  | 'PACKAGE_CAPABILITY_MODEL_UNAVAILABLE'
+  | 'PACKAGE_CAPABILITY_MODEL_TIMEOUT'
+  | 'PACKAGE_CAPABILITY_MODEL_BUSY'
+  | 'PACKAGE_CAPABILITY_MODEL_INVALID';
 
 export const CAPABILITY_RESOLUTION_REASON = {
   CAPABILITY_MISMATCH: 'CAPABILITY_MISMATCH',

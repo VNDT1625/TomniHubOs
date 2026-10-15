@@ -4,17 +4,25 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { PackageAsset, PackageListing, PackageManifest, PackageModuleContribution } from '@/common/packages';
+import type {
+  PackageAsset,
+  PackageListing,
+  PackageManifest,
+  PackageModelInvokeArgs,
+  PackageModuleContribution,
+  PackageNotificationPost,
+} from '@/common/packages';
 import type {
   PackageSurfaceAiRuntimePortBindingClaim,
   PackageSurfaceAiRuntimePortHandoff,
 } from '@/common/types/platform/electron';
 import { Button, Card, Tag } from '@arco-design/web-react';
 import { Shield } from '@icon-park/react';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import styles from './HubWorkspacePage.module.css';
 import { packageClient } from './packageClient';
+import { onPackageSessionAction } from './packageSessionActions';
 
 const PACKAGE_APP_SYNC_INTERVAL_MS = 1_500;
 const PACKAGE_APP_CSP = [
@@ -47,8 +55,12 @@ const IFRAME_PERMISSIONS = [
   "usb 'none'",
 ].join('; ');
 const PACKAGE_CAPABILITY_INVOKE_MESSAGE = 'tomni.capability.invoke';
+const PACKAGE_CAPABILITY_CANCEL_MESSAGE = 'tomni.capability.cancel';
 const PACKAGE_CAPABILITY_RESULT_MESSAGE = 'tomni.capability.result';
 const PACKAGE_SURFACE_AI_PORT_MESSAGE = 'tomni.surface-ai.port';
+const PACKAGE_SESSION_FOCUS_MESSAGE = 'tomni.sessions.focus';
+const PACKAGE_SESSION_CREATE_MESSAGE = 'tomni.sessions.create';
+const PACKAGE_SESSION_CLOSE_MESSAGE = 'tomni.sessions.close';
 
 type SandboxedWebModule = PackageModuleContribution & {
   runtime: 'sandboxed-web';
@@ -93,15 +105,19 @@ const isTrustedReactModule = (
 export const getInstalledPackageManifest = (listing: PackageListing): PackageManifest | undefined =>
   listing.state === 'installed' ? listing.installedManifest : undefined;
 
-export const getFirstRunnablePackageModule = (listing: PackageListing): RunnablePackageModule | undefined => {
-  if (listing.delivery === 'bundled-legacy' || listing.state !== 'installed' || !listing.enabled) return undefined;
+export const getRunnablePackageModules = (listing: PackageListing): readonly RunnablePackageModule[] => {
+    if (listing.delivery === 'bundled-legacy' || listing.state !== 'installed' || !listing.enabled ||
+    !listing.compatible || listing.revoked || listing.installedTrust === 'unsigned-revoked') return [];
   const manifest = getInstalledPackageManifest(listing);
-  if (!manifest) return undefined;
-  return manifest.modules.find(
+  if (!manifest) return [];
+  return manifest.modules.filter(
     (module): module is RunnablePackageModule =>
       isInstalledSandboxedWebModule(listing, module) || isTrustedReactModule(listing, module)
   );
 };
+
+export const getFirstRunnablePackageModule = (listing: PackageListing): RunnablePackageModule | undefined =>
+  getRunnablePackageModules(listing)[0];
 
 /**
  * Rebuild untrusted package HTML with a host-owned CSP as the first head element.
@@ -145,6 +161,10 @@ type PackageAppHostProps = {
   moduleId: string;
   onBack: () => void;
   allowSandboxedWeb?: boolean;
+  /** A session id the sidebar asked the package to bring forward; delivered to a sandboxed package as a message. */
+  focusSession?: string;
+  /** Changes on every request, so asking for the same session twice delivers the message twice. */
+  focusNonce?: string;
 };
 
 type ReadyPackageHostState = {
@@ -185,21 +205,71 @@ type PackageAppMountOptions = {
 
 type PackageAppUnmountResult = void | (() => void) | { unmount: () => void };
 
-type SandboxCapabilityInvokeMessage = {
-  type: typeof PACKAGE_CAPABILITY_INVOKE_MESSAGE;
+type SandboxCapabilityInvokeMessage =
+  | {
+      type: typeof PACKAGE_CAPABILITY_INVOKE_MESSAGE;
+      requestId: string;
+      capability: 'host.runtime.info' | 'notifications.post' | 'sessions.report';
+      /** `notifications.post` and `sessions.report` only; Main validates and bounds it. */
+      args?: unknown;
+    }
+  | {
+      type: typeof PACKAGE_CAPABILITY_INVOKE_MESSAGE;
+      requestId: string;
+      capability: 'model.invoke';
+      args: PackageModelInvokeArgs;
+    };
+
+type SandboxCapabilityCancelMessage = {
+  type: typeof PACKAGE_CAPABILITY_CANCEL_MESSAGE;
   requestId: string;
-  capability: 'host.runtime.info';
 };
 
 const isSandboxCapabilityInvokeMessage = (value: unknown): value is SandboxCapabilityInvokeMessage => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const message = value as Record<string, unknown>;
+  if (
+    message.type !== PACKAGE_CAPABILITY_INVOKE_MESSAGE ||
+    typeof message.requestId !== 'string' ||
+    message.requestId.length === 0 ||
+    message.requestId.length > 128
+  ) {
+    return false;
+  }
+  if (
+    message.capability === 'host.runtime.info' ||
+    message.capability === 'notifications.post' ||
+    message.capability === 'sessions.report'
+  ) {
+    return true;
+  }
+  if (message.capability === 'model.invoke') {
+    if (!message.args || typeof message.args !== 'object' || Array.isArray(message.args)) return false;
+    const args = message.args as Record<string, unknown>;
+    return (
+      args.contract === 'ai-challenge.turn.v1' &&
+      typeof args.prompt === 'string' &&
+      args.prompt.trim().length > 0 &&
+      args.prompt.length <= 16_384 &&
+      (args.systemPrompt === undefined ||
+        (typeof args.systemPrompt === 'string' && args.systemPrompt.length <= 4_096)) &&
+      (args.temperature === undefined ||
+        (typeof args.temperature === 'number' && !Number.isNaN(args.temperature))) &&
+      (args.maxTokens === undefined ||
+        (typeof args.maxTokens === 'number' && !Number.isNaN(args.maxTokens)))
+    );
+  }
+  return false;
+};
+
+const isSandboxCapabilityCancelMessage = (value: unknown): value is SandboxCapabilityCancelMessage => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const message = value as Record<string, unknown>;
   return (
-    message.type === PACKAGE_CAPABILITY_INVOKE_MESSAGE &&
+    message.type === PACKAGE_CAPABILITY_CANCEL_MESSAGE &&
     typeof message.requestId === 'string' &&
     message.requestId.length > 0 &&
-    message.requestId.length <= 128 &&
-    message.capability === 'host.runtime.info'
+    message.requestId.length <= 128
   );
 };
 
@@ -275,12 +345,15 @@ export const PackageAppHost: React.FC<PackageAppHostProps> = ({
   moduleId,
   onBack,
   allowSandboxedWeb = false,
+  focusSession,
+  focusNonce,
 }) => {
   const { t, i18n } = useTranslation();
   const [hostState, setHostState] = useState<PackageAppHostState>({ status: 'loading' });
   const sandboxFrameRef = useRef<HTMLIFrameElement>(null);
   const activeSandboxRuntimeRef = useRef<ActiveSandboxRuntime | undefined>(undefined);
   const pendingSurfaceAiPortHandoffRef = useRef<PendingSurfaceAiPortHandoff | undefined>(undefined);
+  const pendingModelInvocationRef = useRef<{ requestId: string; runtimeId: string } | undefined>(undefined);
   const iframeLoadHandlerRef = useRef<() => void>(() => undefined);
 
   useEffect(() => {
@@ -289,6 +362,17 @@ export const PackageAppHost: React.FC<PackageAppHostProps> = ({
     let loadedRuntimeKey = '';
     const closeSandboxRuntime = async (): Promise<void> => {
       const runtime = activeSandboxRuntimeRef.current;
+      if (pendingModelInvocationRef.current) {
+        const pending = pendingModelInvocationRef.current;
+        pendingModelInvocationRef.current = undefined;
+        void packageClient
+          .cancelModel({
+            packageId,
+            runtimeId: pending.runtimeId,
+            requestId: pending.requestId,
+          })
+          .catch((): undefined => undefined);
+      }
       if (!runtime) return;
       try {
         await packageClient.closeRuntime(packageId, runtime.runtimeId);
@@ -345,7 +429,8 @@ export const PackageAppHost: React.FC<PackageAppHostProps> = ({
           !listing ||
           listing.delivery === 'bundled-legacy' ||
           listing.state !== 'installed' ||
-          !listing.enabled ||
+                    !listing.enabled ||
+          !listing.compatible || listing.revoked || listing.installedTrust === 'unsigned-revoked' ||
           (!(allowSandboxedWeb && isInstalledSandboxedWebModule(listing, module)) &&
             !isTrustedReactModule(listing, module))
         ) {
@@ -400,12 +485,25 @@ export const PackageAppHost: React.FC<PackageAppHostProps> = ({
 
     const invokeSandboxCapability = async (event: MessageEvent<unknown>): Promise<void> => {
       const frame = sandboxFrameRef.current;
-      if (
-        !frame?.contentWindow ||
-        event.source !== frame.contentWindow ||
-        !isSandboxCapabilityInvokeMessage(event.data)
-      )
+      if (!frame?.contentWindow || event.source !== frame.contentWindow) return;
+
+      if (isSandboxCapabilityCancelMessage(event.data)) {
+        if (pendingModelInvocationRef.current?.requestId === event.data.requestId) {
+          const pending = pendingModelInvocationRef.current;
+          pendingModelInvocationRef.current = undefined;
+          void packageClient
+            .cancelModel({
+              packageId,
+              runtimeId: pending.runtimeId,
+              requestId: pending.requestId,
+            })
+            .catch((): undefined => undefined);
+        }
         return;
+      }
+
+      if (!isSandboxCapabilityInvokeMessage(event.data)) return;
+
       const runtimeId = activeSandboxRuntimeRef.current?.runtimeId;
       if (!runtimeId) {
         frame.contentWindow.postMessage(
@@ -418,6 +516,71 @@ export const PackageAppHost: React.FC<PackageAppHostProps> = ({
         );
         return;
       }
+
+      if (event.data.capability === 'model.invoke') {
+        if (pendingModelInvocationRef.current) {
+          frame.contentWindow.postMessage(
+            {
+              type: PACKAGE_CAPABILITY_RESULT_MESSAGE,
+              requestId: event.data.requestId,
+              result: { ok: false, code: 'PACKAGE_CAPABILITY_MODEL_BUSY' },
+            },
+            '*'
+          );
+          return;
+        }
+
+        try {
+          const lease = await packageClient.activateCapability({
+            version: 1,
+            packageId,
+            runtimeId,
+            capability: 'model.invoke',
+          });
+          pendingModelInvocationRef.current = { requestId: event.data.requestId, runtimeId };
+          try {
+            const modelArgs = event.data.args;
+            const result = await packageClient.invokeModel({
+              version: 1,
+              leaseId: lease.leaseId,
+              packageId,
+              runtimeId,
+              requestId: event.data.requestId,
+              contract: 'ai-challenge.turn.v1',
+              prompt: modelArgs.prompt,
+              systemPrompt: modelArgs.systemPrompt,
+              temperature: modelArgs.temperature,
+              maxTokens: modelArgs.maxTokens,
+            });
+            if (!disposed && sandboxFrameRef.current?.contentWindow === event.source) {
+              sandboxFrameRef.current.contentWindow.postMessage(
+                { type: PACKAGE_CAPABILITY_RESULT_MESSAGE, requestId: event.data.requestId, result },
+                '*'
+              );
+            }
+          } finally {
+            if (pendingModelInvocationRef.current?.requestId === event.data.requestId) {
+              pendingModelInvocationRef.current = undefined;
+            }
+            await packageClient
+              .cancelCapability({ leaseId: lease.leaseId, packageId, runtimeId })
+              .catch((): undefined => undefined);
+          }
+        } catch {
+          if (!disposed && sandboxFrameRef.current?.contentWindow === event.source) {
+            sandboxFrameRef.current.contentWindow.postMessage(
+              {
+                type: PACKAGE_CAPABILITY_RESULT_MESSAGE,
+                requestId: event.data.requestId,
+                result: { ok: false, code: 'PACKAGE_CAPABILITY_SYSCALL_DENIED' },
+              },
+              '*'
+            );
+          }
+        }
+        return;
+      }
+
       try {
         const lease = await packageClient.activateCapability({
           version: 1,
@@ -431,7 +594,12 @@ export const PackageAppHost: React.FC<PackageAppHostProps> = ({
             leaseId: lease.leaseId,
             packageId,
             runtimeId,
-            name: 'host.runtime.info',
+            name: event.data.capability,
+            ...((event.data.capability === 'notifications.post' || event.data.capability === 'sessions.report') &&
+            event.data.args &&
+            typeof event.data.args === 'object'
+              ? { args: event.data.args as PackageNotificationPost }
+              : {}),
           });
           if (!disposed && sandboxFrameRef.current?.contentWindow === event.source) {
             sandboxFrameRef.current.contentWindow.postMessage(
@@ -552,6 +720,38 @@ export const PackageAppHost: React.FC<PackageAppHostProps> = ({
     };
   }, [allowSandboxedWeb, moduleId, packageId]);
 
+  const ready = hostState.status === 'ready';
+  const focusSessionRef = useRef(focusSession);
+  focusSessionRef.current = focusSession;
+  const deliverFocus = useCallback((): void => {
+    const sessionId = focusSessionRef.current;
+    if (!sessionId) return;
+    try {
+      sandboxFrameRef.current?.contentWindow?.postMessage({ type: PACKAGE_SESSION_FOCUS_MESSAGE, sessionId }, '*');
+    } catch {
+      // A package that cannot receive the focus request simply stays where it is.
+    }
+  }, []);
+  useEffect(() => {
+    if (ready) deliverFocus();
+  }, [deliverFocus, focusNonce, focusSession, ready]);
+
+  useEffect(() => {
+    if (!ready) return undefined;
+    return onPackageSessionAction((action) => {
+      if (action.packageId !== packageId) return;
+      const message =
+        action.kind === 'create'
+          ? { type: PACKAGE_SESSION_CREATE_MESSAGE }
+          : { type: PACKAGE_SESSION_CLOSE_MESSAGE, sessionId: action.sessionId };
+      try {
+        sandboxFrameRef.current?.contentWindow?.postMessage(message, '*');
+      } catch {
+        // A package that cannot receive the request simply ignores it.
+      }
+    });
+  }, [packageId, ready]);
+
   if (hostState.status !== 'ready') {
     const messageKey =
       hostState.status === 'loading'
@@ -565,7 +765,7 @@ export const PackageAppHost: React.FC<PackageAppHostProps> = ({
           <span>{t(messageKey)}</span>
           {hostState.status !== 'loading' && (
             <Button type='primary' onClick={onBack}>
-              {t('guid.hubHome.shell.store')}
+              {t('common.back')}
             </Button>
           )}
         </div>
@@ -599,7 +799,11 @@ export const PackageAppHost: React.FC<PackageAppHostProps> = ({
             allow={IFRAME_PERMISSIONS}
             referrerPolicy='no-referrer'
             ref={sandboxFrameRef}
-            onLoad={() => iframeLoadHandlerRef.current()}
+            onLoad={() => {
+              iframeLoadHandlerRef.current();
+              // The first message can arrive before the package script runs; the document is listening once it has loaded.
+              deliverFocus();
+            }}
             srcDoc={hostState.sourceContent}
           />
         ) : (

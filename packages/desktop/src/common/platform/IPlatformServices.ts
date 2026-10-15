@@ -92,7 +92,7 @@ export interface IPowerManager {
  * and are NOT modelled here.
  */
 export interface INotificationService {
-  send(options: { title: string; body: string; icon?: string }): void;
+  send(options: { title: string; body: string; icon?: string; silent?: boolean }): void;
 }
 
 /**

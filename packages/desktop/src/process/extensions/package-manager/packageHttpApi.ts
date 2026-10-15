@@ -7,7 +7,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { PACKAGE_MUTATION_NATIVE_CHANNELS } from '../../../common/types/platform/electron';
-import { PackageOperationError, toPackageOperationFailure } from '../../../common/packages';
+import { PackageOperationError, toPackageOperationFailure } from '../../../common/packages/dependencyResolver';
 import type {
   PackageListFilter,
   PackageListing,
@@ -22,7 +22,7 @@ import type {
   PackageUpdatePermissionConsentGrant,
   PackageUpdatePermissionConsentPreparation,
   PackageUpdatePermissionConsentPrepareRequest,
-} from '../../../common/packages';
+} from '../../../common/packages/types';
 import type { PackageManagerService, PackageSandboxMutationLease } from './PackageManagerService';
 import {
   CatalogFederationError,
@@ -577,8 +577,33 @@ const redactTrustedMutationIpcError = (
   phase: 'install' | 'activation' | 'uninstall'
 ): PackageMutationRequestError | PackageOperationError => {
   if (error instanceof PackageMutationRequestError || error instanceof PackageOperationError) return error;
-  if (error instanceof CatalogFederationError) return new PackageMutationRequestError(error.code, 400);
+  if (error instanceof CatalogFederationError) {
+    // The renderer only receives the stable code; keep the cause diagnosable in the main-process log.
+    console.error('[PackagePlatform] Mutation rejected:', error.code, error.cause ?? error.message);
+    return new PackageMutationRequestError(error.code, 400);
+  }
+  console.error(`[PackagePlatform] ${phase} mutation failed:`, error);
   return new PackageOperationError(toPackageOperationFailure(error, phase));
+};
+
+/**
+ * A removed package may no longer be known to the service (for example when it
+ * was installed from a catalog revision that has since dropped it), so the
+ * post-uninstall status read can legitimately fail. Report the removal using the
+ * listing captured before the mutation instead of turning a completed uninstall
+ * into a failure.
+ */
+export const availableListingAfterUninstall = (before: PackageListing): PackageListing => {
+  const {
+    installedVersion: _installedVersion,
+    installedManifest: _installedManifest,
+    installedTrust: _installedTrust,
+    installedPublicationReview: _installedPublicationReview,
+    previousVersion: _previousVersion,
+    lastError: _lastError,
+    ...rest
+  } = before;
+  return { ...rest, state: 'available', enabled: false, updateAvailable: false };
 };
 
 const mutationPhase = (action: PackageMutationExecuteRequest['action']): 'install' | 'activation' | 'uninstall' =>
@@ -760,11 +785,16 @@ export const createLocalPackageMutationRuntime = ({
         consentId: request.consentId,
         ownerId: rawRequest.ownerId,
       };
+      const listingBefore =
+        request.action === 'uninstall' ? await service.status(request.id).catch((): undefined => undefined) : undefined;
       if (request.action === 'install') await broker.install(actionRequest);
       else if (request.action === 'uninstall') await broker.uninstall(actionRequest);
       else if (request.action === 'enable') await broker.enable(actionRequest);
       else if (request.action === 'disable') await broker.disable(actionRequest);
       else await broker.rollback(actionRequest);
+      if (request.action === 'uninstall' && listingBefore) {
+        return service.status(request.id).catch(() => availableListingAfterUninstall(listingBefore));
+      }
       return service.status(request.id);
     })();
     inFlightMutations.set(key, operation);

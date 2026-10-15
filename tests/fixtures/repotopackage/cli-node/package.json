@@ -1,0 +1,5 @@
+{
+  "name": "@demo/cli-node",
+  "version": "0.3.0",
+  "bin": { "demo-cli": "./bin/cli.js" }
+}

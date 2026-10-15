@@ -40,7 +40,7 @@ const clientMocks = vi.hoisted(() => ({
   listeners: [] as Array<(envelope: { event: ConversationEvent }) => void>,
 }));
 
-vi.mock('@/renderer/pages/company/companyBridgeClient', () => ({
+vi.mock('@package-apps/company/renderer/company/companyBridgeClient', () => ({
   companyClient: {
     runConversation: { invoke: clientMocks.runConversation },
     resolvePermission: { invoke: clientMocks.resolvePermission },
@@ -54,8 +54,8 @@ vi.mock('@/renderer/pages/company/companyBridgeClient', () => ({
   },
 }));
 
-import ManagerPopup from '@/renderer/pages/company/manager/ManagerPopup';
-import { resetCompanyConversationSessions } from '@/renderer/pages/company/useCompanyConversation';
+import ManagerPopup from '@package-apps/company/renderer/company/manager/ManagerPopup';
+import { resetCompanyConversationSessions } from '@package-apps/company/renderer/company/useCompanyConversation';
 
 /** Push a streamed conversation event to every subscribed listener. */
 const emit = (event: ConversationEvent): void => {

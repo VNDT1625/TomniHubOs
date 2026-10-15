@@ -296,7 +296,7 @@ export const StepProgressVisualizer: React.FC<{
                 <span className='text-13px font-700 text-t-primary truncate'>
                   {data.packageId
                     ? `Gói: ${data.packageId} ${data.packageVersion ? `(v${data.packageVersion})` : ''}`
-                    : 'Gói Tomni (.tomny)'}
+                        : 'Gói Tomny (.tomny)'}
                 </span>
                 <span className='text-11px text-t-tertiary truncate font-mono mt-1px'>{data.artifactPath}</span>
               </div>

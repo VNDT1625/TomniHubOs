@@ -7,6 +7,8 @@
 // configureChromium sets app name (dev isolation) and Chromium flags — must run before
 // ANY module that calls app.getPath('userData'), because Electron caches the path on first call.
 import './process/utils/configureChromium';
+// Start Laya before any heavy module is evaluated; its model takes the longest to load.
+import './process/utils/warmLaya';
 import './common/adapter/bridgeErrorWrapper';
 import { installGpuCrashHandler } from './process/utils/gpuRecovery';
 import { captureBackendStartupFailure, initSentry } from './sentry';
@@ -14,7 +16,10 @@ import { captureBackendStartupFailure, initSentry } from './sentry';
 initSentry();
 
 import './process/utils/configureConsoleLog';
-import { app, BrowserWindow, ipcMain, nativeImage, powerMonitor } from 'electron';
+import { app, BrowserWindow, ipcMain, nativeImage, powerMonitor, webContents } from 'electron';
+import { createMediaSleepController } from './process/system/backgroundMedia/mediaSleep';
+import { createSleepMetricsMonitor } from './process/system/backgroundMedia/sleepMetrics';
+import { registerSleepMetricsMonitor } from './process/bridge/systemSettingsBridge';
 import fixPath from 'fix-path';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -83,6 +88,23 @@ import electronSquirrelStartup from 'electron-squirrel-startup';
 // When a second instance starts (e.g. from protocol URL), it sends its data
 // to the first instance via second-instance event, then quits.
 const isE2ETestMode = process.env.TOMNY_E2E_TEST === '1';
+// Keep long-running jobs alive while sleeping only the desktop's media surfaces.
+const mediaSleep = createMediaSleepController(() => webContents.getAllWebContents());
+const sleepMetrics = createSleepMetricsMonitor({
+  readProcesses: () => app.getAppMetrics().map((metric) => ({
+    workingSetKB: metric.memory?.workingSetSize ?? 0,
+    cpuPercent: metric.cpu?.percentCPUUsage ?? 0,
+  })),
+});
+registerSleepMetricsMonitor(sleepMetrics);
+// New tabs and navigations can occur while background agents are running.
+// Pause their media too, without stopping the agent's page scripts or jobs.
+app.on('web-contents-created', (_event, contents) => {
+  contents.on('did-frame-finish-load', () => {
+    if (mediaSleep.isSleeping()) void mediaSleep.refreshContent(contents);
+  });
+  if (mediaSleep.isSleeping()) void mediaSleep.refreshContent(contents);
+});
 const skipSingleInstanceLock = isE2ETestMode || process.env.TOMNY_MULTI_INSTANCE === '1';
 const deepLinkFromArgv = process.argv.find(isHandledUrlArg);
 const gotTheLock = skipSingleInstanceLock ? true : app.requestSingleInstanceLock({ deepLinkUrl: deepLinkFromArgv });
@@ -260,18 +282,16 @@ function markBackendStartupFailed(error: unknown): void {
   (globalThis as typeof globalThis & { __backendStartupFailed?: boolean }).__backendStartupFailed = true;
 }
 
-function registerCronResumeBridge(backendPort: number): void {
+function registerCronResumeBridge(): void {
   disposeCronResumeListener?.();
 
+  // Timers do not advance while the computer sleeps; the in-process scheduler re-arms and runs what was missed.
   const onResume = () => {
-    void fetch(`http://127.0.0.1:${backendPort}/api/cron/internal/system-resume`, {
-      method: 'POST',
-      headers: {
-        'x-tomny-internal': '1',
-      },
-    }).catch((error) => {
-      console.error('[Tomny] Failed to notify backend about system resume:', error);
-    });
+    void import('@process/cron/scheduledTasks')
+      .then(({ getLegacyCronAdapter }) => getLegacyCronAdapter().resume())
+      .catch((error: unknown) => {
+        console.error('[Tomny] Scheduled tasks could not catch up after system resume:', error);
+      });
   };
 
   powerMonitor.on('resume', onResume);
@@ -326,7 +346,7 @@ function markBackendReady(backendPort: number, source: string): void {
   exposeBackendPort(backendPort);
   if (backendStartedOk) return;
   console.log(`[Tomny] ${source} ready (port=${backendPort})`);
-  registerCronResumeBridge(backendPort);
+  registerCronResumeBridge();
   backendStartedOk = true;
   backendStartupFailed = false;
   backendStartupFailureInfo = null;
@@ -364,7 +384,9 @@ const createWindow = ({ showOnReady = true }: { showOnReady?: boolean } = {}): v
     minWidth: MIN_WINDOW_WIDTH,
     minHeight: MIN_WINDOW_HEIGHT,
     show: false, // Hide until CSS is loaded to prevent FOUC
-    backgroundColor: '#ffffff',
+    // Fully transparent window (win/linux): the Home glass shell shows the
+    // desktop wallpaper through the renderer; opaque routes paint themselves.
+    backgroundColor: '#00000000',
     autoHideMenuBar: true,
     // Set icon for Windows/Linux in development mode
     ...(devIcon && process.platform !== 'darwin' ? { icon: devIcon } : {}),
@@ -379,7 +401,12 @@ const createWindow = ({ showOnReady = true }: { showOnReady?: boolean } = {}): v
           // NOTE: requires a full app restart to take effect (BrowserWindow option).
           trafficLightPosition: { x: 10, y: 13 },
         }
-      : { frame: false }),
+      : process.platform === 'win32'
+        ? // Acrylic blurs the desktop behind the window (CSS backdrop-filter cannot) and keeps
+          // the DWM rounded corners / shadow, which `transparent: true` would drop. Mica was tried:
+          // it is a near-opaque dark tint in dark mode, not see-through.
+          { frame: false, backgroundMaterial: 'acrylic' as const }
+        : { frame: false, transparent: true }),
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
       webviewTag: true, // 启用 webview 标签用于 HTML 预览 / Enable webview tag for HTML preview
@@ -435,10 +462,10 @@ const createWindow = ({ showOnReady = true }: { showOnReady?: boolean } = {}): v
         // Create status broadcast callback that emits via ipcBridge (pure emitter, no window binding)
         const statusBroadcast = createAutoUpdateStatusBroadcast();
         autoUpdaterService.initialize(statusBroadcast);
-        // Check for updates after 3 seconds, but do not auto-download on startup.
-        // The renderer will surface the update and the user decides when to download/install.
+        // Check and cache a verified update in the background after startup.
+        // Never install until the user explicitly quits or chooses Install Now.
         setTimeout(() => {
-          void autoUpdaterService.checkForUpdates();
+          void autoUpdaterService.checkForUpdatesAndDownload();
         }, 3000);
       })
       .catch((error) => {
@@ -510,6 +537,19 @@ const createWindow = ({ showOnReady = true }: { showOnReady?: boolean } = {}): v
 
   mainWindow.webContents.on('devtools-closed', () => {
     ipcBridge.application.devToolsStateChanged.emit({ isOpen: false });
+  });
+
+    // Both the Close button and the tray menu can hide the window. In either
+  // case, stop media playback without cancelling running agents or MCP servers.
+    mainWindow.on('hide', () => {
+    if (getCloseToTrayEnabled() && !getIsQuitting()) {
+      sleepMetrics.onSleep();
+      void mediaSleep.sleep();
+    }
+  });
+  mainWindow.on('show', () => {
+    sleepMetrics.onWake();
+    void mediaSleep.wake();
   });
 
   // 关闭拦截：当启用关闭到托盘时，隐藏窗口而非关闭
@@ -899,6 +939,11 @@ installQuitCleanup({
   disposeCronResumeListener: () => {
     disposeCronResumeListener?.();
     disposeCronResumeListener = null;
+  },
+
+  disposeConnections: async () => {
+    const { disposeConnectionPlatform } = await import('./process/extensions/package-manager/packageBridge');
+    await disposeConnectionPlatform();
   },
 
   shutdownModelGateway: async () => undefined,

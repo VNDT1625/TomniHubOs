@@ -1,4 +1,113 @@
 {
+  "pipeline": {
+    "title": "Sohbet hattı",
+    "button": "Hat",
+    "buttonTooltip": "Sohbet hattı: {{count}} aktif aşama",
+    "stagesTitle": "Aşamalar (sırayla)",
+    "stageCount": "{{count}} aşama",
+    "addStage": "Aşama ekle",
+    "addStagePlaceholder": "Eklenecek aşamayı seçin",
+    "emptyStages": "Henüz aşama yok. Mesajlar doğrudan modele gider.",
+    "moveUp": "Yukarı taşı",
+    "moveDown": "Aşağı taşı",
+    "duplicate": "Bir kopya daha ekle",
+    "remove": "Kaldır",
+    "enable": "Aç veya kapat",
+    "phase": {
+      "pre_query": "Sorgudan önce",
+      "retrieve": "Veri getirme",
+      "pre_model": "Modelden önce",
+      "post_model": "Modelden sonra"
+    },
+    "role": {
+      "guard": "Güvenlik koruması",
+      "authorized": "Yetkili",
+      "unverified": "Yetkisiz"
+    },
+    "inspector": {
+      "empty": "Nasıl çalıştığını görmek için bir aşama seçin.",
+      "model": "Karar modeli",
+      "modelName": "Laya",
+      "noModel": "Bu aşama model kullanmaz.",
+      "tasks": "Modele sorulan sorular",
+      "sharedCall": "Güvenlik, anlama ve araç şeması aynı metinde tek bir model geçişini paylaşır.",
+      "settings": "Ayarlar",
+      "mode": "Gizli bilgi bulunduğunda",
+      "modeRewrite": "Gizle ve devam et",
+      "modeBlock": "Mesajı durdur",
+      "apply": "Seçimi uygula",
+      "applyHint": "Kapalı: seçim yalnızca gösterilir, tüm araç grupları yüklü kalır.",
+      "source": "Göster",
+      "lastRun": "Son mesaj",
+      "dryRun": "Deneme çalıştırma",
+      "noRun": "Henüz gösterilecek bir şey yok. Mesaj gönderin veya denemeyi bekleyin.",
+      "input": "Modele giriş",
+      "output": "Model yanıtları",
+      "latency": "{{ms}} ms",
+      "sharedWith": "{{stage}} tarafından yapılan çağrıdan paylaşıldı",
+      "decision": "Karar",
+      "error": "Hata",
+      "errorCode": {
+        "starting": "Laya hâlâ başlıyor; yerleşik hızlı kontroller yanıt verdi.",
+        "timeout": "Laya çok geç yanıt verdi; yerleşik hızlı kontroller yanıt verdi.",
+        "cancelled": "İstek, Laya yanıt vermeden önce iptal edildi.",
+        "unavailable": "Bağlı bir karar modeli yok; yerleşik hızlı kontroller kullanılıyor.",
+        "failed": "Laya yanıt veremedi; yerleşik hızlı kontroller yanıt verdi."
+      },
+      "masked": "Gizli bilgiler burada gösterilmeden önce maskelenir.",
+      "questions": "Tek geçişte {{count}} soru"
+    },
+    "task": {
+      "security": "Güvenlik riski",
+      "understand": "Kullanıcı ne istiyor",
+      "toolSchema": "Gereken araç grupları"
+    },
+    "decision": {
+      "continue": "Devam",
+      "rewrite": "Yeniden yazıldı",
+      "block": "Engellendi",
+      "skip": "Atlandı",
+      "direct_action": "Doğrudan eylem"
+    },
+    "health": {
+      "checking": "Hat kontrol ediliyor…",
+      "ok": "Hat sağlıklı",
+      "failed": "Hatta sorun var"
+    },
+    "warnings": {
+      "title": "Dikkat",
+      "unguardedRetrieve": "“{{stage}}” bağlam ekliyor ancak sonrasında çalışan bir güvenlik aşaması yok.",
+      "noGuard": "Yetkili bir güvenlik aşaması açık değil. Bulut modele gönderilmeden önce varsayılan tarama yine çalışır."
+    },
+    "actions": {
+      "save": "Kaydet",
+      "cancel": "İptal",
+      "reset": "Varsayılana dön"
+    },
+    "messages": {
+      "loadFailed": "Sohbet hattı yüklenemedi.",
+      "saveFailed": "Sohbet hattı kaydedilemedi.",
+      "saved": "Sohbet hattı kaydedildi.",
+      "resetDone": "Varsayılan geri yüklendi. Uygulamak için kaydedin.",
+      "added": "{{name}} eklendi."
+    },
+    "stageName": {
+      "security": "Güvenlik koruması",
+      "understand": "Anlama",
+      "directAction": "Doğrudan eylem",
+      "toolSchema": "Araç şeması seçimi",
+      "rtk": "Canlı bilgi",
+      "modelRouter": "Model yönlendirici"
+    },
+    "stageDesc": {
+      "security": "Mesajda ve getirilen metinde gizli bilgileri ve prompt injection'ı bulur, gizler veya durdurur.",
+      "understand": "Kullanıcının ne istediğini bir kez belirler ve sonraki aşamalarla paylaşır.",
+      "directAction": "Model çağırmadan bağlantı açma veya depo paketleme gibi basit komutları çalıştırır.",
+      "toolSchema": "Bu mesaj için hangi araç gruplarının yükleneceğini seçer. Araç araması her zaman yedek olarak kullanılabilir.",
+      "rtk": "Mesaj yakın zamanla ilgili olduğunda güncel bilgi ekler.",
+      "modelRouter": "Göreve uygun modeli önerir."
+    }
+  },
   "welcome": {
     "title": "Merhaba, bugünkü planın nedir?",
     "placeholder": "Mesaj gönder, dosya yükle veya klasör aç...",
@@ -493,6 +602,31 @@
   "skills": {
     "loaded": "Yüklenen Beceriler"
   },
+  "attachMenu": {
+
+    "hookLabel": "Hook",
+    "hookCount": "{{count}} hook",
+    "hookNote": "Hook'lar olaylarda çalışır. Açıp kapatmak için Ayarlar'ı kullanın.",
+    "hookEmpty": "Etkin hook yok",
+    "autoSelectOffHint": "Açarsanız Laya plugin, skill ve hook'ları seçer",
+    "mcpCount": "{{count}} MCP",
+    "skillCount": "{{count}} beceri",
+    "viewSkill": "Görüntüle",
+    "back": "Geri",
+    "skillSourcePackage": "Paket: {{name}}",
+    "skillSourceStandalone": "Sizin eklediğiniz ya da yerleşik",
+    "skillDocNotFound": "Bu beceri dosyası artık kullanılamıyor.",
+    "skillDocTooLarge": "Bu SKILL.md burada gösterilemeyecek kadar büyük.",
+    "skillDocFailed": "Beceri okunamadı.",
+    "otherGroup": "Diğer",
+    "selectAllInPackage": "Paketteki tümünü seç",
+    "pluginLabel": "Eklenti",
+    "pluginCount": "{{count}} eklenti",
+    "mcpTag": "MCP",
+    "autoSelect": "Otomatik",
+    "autoSelectHint": "Laya uygun eklenti, beceri ve kancaları seçecek"
+  },
+
   "mcp": {
     "loaded": "Yüklü MCP",
     "managementHint": "Bir MCP anormal görünüyorsa, bunun nedeni genellikle MCP JSON yapılandırmasıdır. Araç ayarlarına gidip manuel olarak test edin.",

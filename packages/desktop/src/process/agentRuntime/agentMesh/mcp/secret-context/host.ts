@@ -17,6 +17,12 @@ export type SecretContextMcpHostScope = Readonly<{
   id: string;
   surface: string;
   allowedTabIds?: readonly string[];
+  /** Conversation this host serves; selects its session-scoped secrets. */
+  sessionId?: string;
+  /** Company group chat this host serves, when it serves one. */
+  companyId?: string;
+  /** Package App behind the active surface, resolved by Main; selects its package-scoped secrets. */
+  packageId?: string;
 }>;
 
 export type SecretContextMcpHostOptions = Readonly<{
@@ -28,7 +34,14 @@ export type SecretContextMcpHost = {
   url: string;
   port: number;
   headers: Array<{ name: string; value: string }>;
-  scope?: Readonly<{ id: string; surface: string; allowedTabIds: readonly string[] }>;
+  scope?: Readonly<{
+    id: string;
+    surface: string;
+    allowedTabIds: readonly string[];
+    sessionId?: string;
+    companyId?: string;
+    packageId?: string;
+  }>;
   close: () => Promise<void>;
 };
 
@@ -36,7 +49,14 @@ type NormalizedHostOptions = {
   key: string;
   signature: string;
   idleTimeoutMs: number;
-  scope?: Readonly<{ id: string; surface: string; allowedTabIds: readonly string[] }>;
+  scope?: Readonly<{
+    id: string;
+    surface: string;
+    allowedTabIds: readonly string[];
+    sessionId?: string;
+    companyId?: string;
+    packageId?: string;
+  }>;
 };
 
 type ManagedSecretContextMcpHost = SecretContextMcpHost & {
@@ -78,10 +98,27 @@ const normalizeHostOptions = (options: SecretContextMcpHostOptions): NormalizedH
   const allowedTabIds = [...new Set(options.scope.allowedTabIds?.map((tabId) => tabId.trim()).filter(Boolean) ?? [])]
     .toSorted()
     .slice(0, 64);
-  const scope = Object.freeze({ id, surface, allowedTabIds: Object.freeze(allowedTabIds) });
+  const sessionId = options.scope.sessionId?.trim() || undefined;
+  const companyId = options.scope.companyId?.trim() || undefined;
+  const packageId = options.scope.packageId?.trim() || undefined;
+  const scope = Object.freeze({
+    id,
+    surface,
+    allowedTabIds: Object.freeze(allowedTabIds),
+    ...(sessionId ? { sessionId } : {}),
+    ...(companyId ? { companyId } : {}),
+    ...(packageId ? { packageId } : {}),
+  });
   return {
     key: `scope:${id}`,
-    signature: JSON.stringify([surface, allowedTabIds, idleTimeoutMs]),
+    signature: JSON.stringify([
+      surface,
+      allowedTabIds,
+      idleTimeoutMs,
+      sessionId ?? null,
+      companyId ?? null,
+      packageId ?? null,
+    ]),
     idleTimeoutMs,
     scope,
   };
@@ -144,6 +181,9 @@ const createSecretContextMcpHost = async (normalized: NormalizedHostOptions): Pr
           ? {
               scopeId: normalized.scope.id,
               surface: normalized.scope.surface,
+              ...(normalized.scope.sessionId ? { sessionId: normalized.scope.sessionId } : {}),
+              ...(normalized.scope.companyId ? { companyId: normalized.scope.companyId } : {}),
+              ...(normalized.scope.packageId ? { packageId: normalized.scope.packageId } : {}),
               allowedTabIds:
                 normalized.scope.allowedTabIds.length > 0 ? new Set(normalized.scope.allowedTabIds) : undefined,
             }

@@ -1,3 +1,17 @@
+import type { SessionMemoryNativeAPI } from './sessionMemory';
+import type { CompanySecretsNativeAPI, PackageSecretsNativeAPI, SessionSecretsNativeAPI } from './sessionSecrets';
+import type { ExplorerNativeAPI } from './explorer';
+import type { LocalKeyNativeAPI, PackageConnectionsNativeAPI } from './packageConnections';
+import type { SkillDocumentNativeAPI } from '../../skills/skillDocument';
+
+import type { ExtensionStripNativeAPI } from '../../integrations/extensions/stripContract';
+import type { RepoStoreNativeAPI } from './repoStore';
+import type { LauncherNativeAPI } from './launcher';
+import type { RealtimeContentNativeAPI } from './realtimeContent';
+import type { HookSettingsNativeAPI } from '../../integrations/hooks/hookSettings';
+
+import type { FileViewerNativeAPI, LibraryNativeAPI } from '../../integrations/library/libraryContracts';
+
 import type {
   PackageIdentity,
   PackageListing,
@@ -7,8 +21,10 @@ import type {
   PackageAppGroupRemoveRequest,
   PackageCapabilityLease,
   PackageCapabilityLeaseRequest,
+  PackageCapabilityReceipt,
   PackageCapabilityResult,
   PackageCapabilitySyscall,
+  PackageCapabilityErrorCode,
   PackageAppGroupRenameRequest,
   PackageAppGroupReorderRequest,
   PackageMutationConsentGrant,
@@ -502,6 +518,54 @@ export type PackageCapabilityNativeAPI = {
   cancel(payload: PackageCapabilityCancelRequest): Promise<boolean>;
 };
 
+export const PACKAGE_MODEL_INVOKE_NATIVE_CHANNELS = {
+  invoke: 'package-platform.model-invoke.invoke',
+  cancel: 'package-platform.model-invoke.cancel',
+} as const;
+
+export type PackageModelInvokeNativeRequest = Readonly<{
+  version: 1;
+  packageId: string;
+  runtimeId: string;
+  requestId: string;
+  contract: 'ai-challenge.turn.v1';
+  prompt: string;
+  systemPrompt?: string;
+  temperature?: number;
+  maxTokens?: number;
+  leaseId?: string;
+}>;
+
+export type PackageModelInvokeNativeCancelRequest = Readonly<{
+  packageId: string;
+  runtimeId: string;
+  requestId: string;
+}>;
+
+export type PackageModelInvokeNativeResult =
+  | Readonly<{
+      ok: true;
+      requestId: string;
+      data: {
+        schemaVersion: 1;
+        contract: 'ai-challenge.turn.v1';
+        text: string;
+        elapsedMs: number;
+        model?: string;
+      };
+      receipt: PackageCapabilityReceipt;
+    }>
+  | Readonly<{
+      ok: false;
+      requestId: string;
+      code: PackageCapabilityErrorCode;
+    }>;
+
+export type PackageModelInvokeNativeAPI = {
+  invoke(payload: PackageModelInvokeNativeRequest): Promise<PackageModelInvokeNativeResult>;
+  cancel(payload: PackageModelInvokeNativeCancelRequest): Promise<boolean>;
+};
+
 export const MICROSOFT_STORE_NATIVE_CHANNELS = {
   requestConsent: 'package-platform.microsoft-store.request-consent',
   execute: 'package-platform.microsoft-store.execute',
@@ -601,6 +665,20 @@ export type PackageAppGroupNativeAPI = {
   remove(payload: PackageAppGroupRemoveRequest): Promise<PackageAppGroupNativeResult<PackageAppGroupDocument>>;
 };
 
+export type E2ENativeConversationCapture = Readonly<{
+  requests: readonly Readonly<{
+    conversationId: string;
+    files: readonly string[];
+    workspaceReferences: readonly Readonly<{ relativePath: string; kind: 'file' | 'folder' }>[];
+    prompt: string;
+  }>[];
+}>;
+
+export type E2ENativeConversationAPI = {
+  resetNativeConversationCapture(): Promise<boolean>;
+  getNativeConversationCapture(): Promise<E2ENativeConversationCapture>;
+};
+
 export interface ElectronBridgeAPI {
   emit: (name: string, data: unknown) => Promise<unknown> | void;
   on: (callback: (event: { value: string }) => void) => void;
@@ -610,6 +688,24 @@ export interface ElectronBridgeAPI {
   collectFeedbackLogs?: () => Promise<{ filename: string; data: number[] } | null>;
   // Feedback screenshot capture / ????
   captureFeedbackScreenshot?: () => Promise<{ filename: string; data: number[] } | null>;
+  explorer?: ExplorerNativeAPI;
+  realtimeContent?: RealtimeContentNativeAPI;
+  sessionMemory?: SessionMemoryNativeAPI;
+  sessionSecrets?: SessionSecretsNativeAPI;
+  companySecrets?: CompanySecretsNativeAPI;
+  packageSecrets?: PackageSecretsNativeAPI;
+  skillDocuments?: SkillDocumentNativeAPI;
+
+  packageConnections?: PackageConnectionsNativeAPI;
+  extensionStrip?: ExtensionStripNativeAPI;
+  repoStore?: RepoStoreNativeAPI;
+  /** Revokes this machine's local signing key; Main confirms first (packages.revokeLocalKey). */
+  localKeys?: LocalKeyNativeAPI;
+  launcher?: LauncherNativeAPI;
+  hookSettings?: HookSettingsNativeAPI;
+
+  fileViewer?: FileViewerNativeAPI;
+  library?: LibraryNativeAPI;
   accountSession?: AccountSessionNativeAPI;
   hubModelSelection?: HubModelSelectionNativeAPI;
   providerDiscovery?: ProviderDiscoveryNativeAPI;
@@ -622,9 +718,11 @@ export interface ElectronBridgeAPI {
   packageSurfaceAiRuntime?: PackageSurfaceAiRuntimeNativeAPI;
   packageSurfaceAiAccess?: PackageSurfaceAiAccessNativeAPI;
   packageCapability?: PackageCapabilityNativeAPI;
+  packageModelInvoke?: PackageModelInvokeNativeAPI;
   microsoftStore?: MicrosoftStoreNativeAPI;
   packageAppGroups?: PackageAppGroupNativeAPI;
   designViu?: DesignViuNativeAPI;
+  e2e?: E2ENativeConversationAPI;
 }
 
 export type BackendStartupFailureReason =

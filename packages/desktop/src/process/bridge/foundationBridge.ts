@@ -26,6 +26,7 @@ import { EventStore } from '../foundation/eventStore';
 import { HubExecutionAdapter, type HubExecutionTarget } from '../foundation/hubExecutionAdapter';
 import { ResourceAdapter } from '../foundation/resourceAdapter';
 import { type ActiveRunExecutionContext, type FoundationTrustRuntime, RunKernel } from '../foundation/runKernel';
+import type { OutcomeReceipt } from '../../common/foundation/receiptTypes';
 import { TrustBroker } from '../foundation/trustBroker';
 import { getResourceCoordinator } from '../resource/resourceCoordinator';
 import type {
@@ -49,7 +50,9 @@ export type FoundationCoreContextIdentity = {
   availableCapabilities?: string[];
   modelCapabilities?: string[];
   /** Main-only session host descriptors; renderer Foundation IPC cannot provide this field. */
-  mcpServers?: CoreMcpServer[];
+    mcpServers?: CoreMcpServer[];
+  /** Main-derived attachment flag; never supplied by renderer Foundation IPC. */
+  prefetchWorkspaceRead?: boolean;
   /** Main-only bounded derivation mode; renderer Foundation payloads cannot set this override. */
   sterile?: boolean;
   /** Main-only C4 mode: no personal context or built-in tool catalog. */
@@ -144,6 +147,8 @@ export type FoundationConversationRuntimeOptions = {
   origin?: string;
   /** Main-owned runtime shared with the Foundation conversation lifecycle. */
   trustRuntime?: FoundationTrustRuntime;
+  /** Runs after Foundation durably commits a terminal receipt. */
+  onTerminalReceipt?: (receipt: OutcomeReceipt) => Promise<void> | void;
 };
 export type FoundationRunLifecycleStart = {
   requestId: string;
@@ -769,7 +774,8 @@ export const createFoundationRunLifecycle = (
           },
         }
       )
-        .then((result): NativeConversationStartTerminal | undefined => {
+        .then(async (result): Promise<NativeConversationStartTerminal | undefined> => {
+          await options.onTerminalReceipt?.(result.receipt);
           if (coreExecutionStarted || result.receipt.status === 'verified') return undefined;
           console.error(
             '[FoundationConv] Run ended before core started:',
@@ -833,7 +839,11 @@ export const createFoundationConversationRuntime = (
       coreRuntime.resolveOrchestrationProposal(proposalId, approved),
     getSession: (sessionId) => coreRuntime.getSession(sessionId),
     updateSessionConfig: (sessionId, config) => coreRuntime.updateSessionConfig(sessionId, config),
-    listModels: (targetId, workspace) => coreRuntime.listModels(targetId, workspace),
+        listModels: (targetId, workspace) => coreRuntime.listModels(targetId, workspace),
+        listCommands: (targetId, workspace, logicalSessionId, onUpdate) =>
+      coreRuntime.listCommands?.(targetId, workspace, logicalSessionId, onUpdate) ??
+      Promise.resolve({ status: 'unsupported', commands: [] }),
+    releaseCommands: (logicalSessionId) => coreRuntime.releaseCommands?.(logicalSessionId),
   };
 };
 

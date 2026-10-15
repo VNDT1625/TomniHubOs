@@ -31,6 +31,7 @@ import MessagePlan from './components/MessagePlan';
 import MessageTips from './components/MessageTips';
 import MessageToolCall from './components/MessageToolCall';
 import MessageToolGroup from './components/MessageToolGroup';
+import MessageLiveImageOutput from './components/MessageLiveImageOutput';
 import MessageToolGroupSummary from './components/MessageToolGroupSummary';
 import MessageCronTrigger from './components/MessageCronTrigger';
 import MessageSkillSuggest from './components/MessageSkillSuggest';
@@ -41,6 +42,7 @@ import ConversationSearchBar from './components/ConversationSearchBar';
 import type { WriteFileResult } from './types';
 import { useAutoScroll } from './useAutoScroll';
 import { useAutoPreviewOfficeFiles } from '@/renderer/hooks/file/useAutoPreviewOfficeFiles';
+import SelectionContextMenu from './components/SelectionContextMenu';
 import SelectionReplyButton from './components/SelectionReplyButton';
 
 type IMessageVO =
@@ -221,6 +223,8 @@ const MessageItem: React.FC<{ message: TMessage; highlighted?: boolean }> = Reac
         return <MessagePlan message={message}></MessagePlan>;
       case 'thinking':
         return <MessageThinking message={message}></MessageThinking>;
+      case 'image_output':
+        return <MessageLiveImageOutput message={message} />;
       case 'available_commands':
         return null;
       default:
@@ -625,9 +629,9 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
           {/* Gradient mask */}
           <div className='absolute bottom-0 left-0 right-0 h-100px pointer-events-none' />
           {/* Scroll button */}
-          <div className='absolute bottom-20px left-50% transform -translate-x-50% z-100'>
+          <div className='absolute bottom-20px right-16px z-100'>
             <div
-              className='relative flex items-center justify-center w-40px h-40px rd-full bg-base shadow-lg cursor-pointer hover:bg-1 transition-all hover:scale-110 border-1 border-solid border-3'
+              className='relative flex items-center justify-center w-36px h-36px rd-full bg-base shadow-md cursor-pointer hover:bg-1 transition-colors border-1 border-solid border-3'
               onClick={handleScrollButtonClick}
               title={
                 isStreaming
@@ -651,6 +655,7 @@ const MessageList: React.FC<{ className?: string; emptySlot?: React.ReactNode }>
       )}
 
       <SelectionReplyButton messages={list} />
+      <SelectionContextMenu messages={list} />
     </div>
   );
 };

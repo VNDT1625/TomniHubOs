@@ -22,7 +22,9 @@ export type WindowBounds = {
   height: number;
 };
 
-export const MIN_WINDOW_WIDTH = 400;
+// 960 keeps the desktop chrome (sidebar + centred search + toolbar) usable;
+// narrower than this the renderer would flip into the mobile layout.
+export const MIN_WINDOW_WIDTH = 960;
 export const MIN_WINDOW_HEIGHT = 600;
 
 // Default window fills 80% of the primary display horizontally and 95%

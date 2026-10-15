@@ -5,6 +5,7 @@
  */
 
 import { ipcBridge } from '@/common';
+import type { WorkspaceReferenceRequest } from '@/common/chat/workspaceReference';
 import type { TMessage } from '@/common/chat/chatLib';
 import { transformMessage } from '@/common/chat/chatLib';
 import { uuid } from '@/common/utils';
@@ -497,7 +498,11 @@ const OpenClawSendBox: React.FC<{ conversation_id: string }> = ({ conversation_i
         sessionStorage.setItem(processedKey, 'true');
         setAiProcessing(true);
         aiProcessingRef.current = true;
-        const { input, files = [] } = JSON.parse(stored) as { input: string; files?: string[] };
+        const { input, files = [], workspace_references } = JSON.parse(stored) as {
+          input: string;
+          files?: string[];
+          workspace_references?: WorkspaceReferenceRequest[];
+        };
         const loading_id = uuid();
         const initialDisplayMessage = buildDisplayMessage(input, files, workspacePath);
         const initialGoalExpansion = expandGoalCommand(input);
@@ -517,6 +522,7 @@ const OpenClawSendBox: React.FC<{ conversation_id: string }> = ({ conversation_i
           input: withGoalSteeringDirective(initialModelInput, conversation_id),
           conversation_id,
           files,
+          workspace_references,
           loading_id,
         });
         const { msg_id } = sendResult;

@@ -1,4 +1,33 @@
 {
+  "downloadGate": {
+    "title": "Download request",
+    "message": "Save \"{{filename}}\" from {{source}}?",
+    "detail": "File type: {{extension}}. Size: {{size}}.",
+    "sizeUnknown": "unknown size",
+    "noExtension": "none",
+    "save": "Save",
+    "cancel": "Cancel"
+  },
+  "extensionStrip": {
+    "button": "Extensions",
+    "popupTitle": "Extensions",
+    "fullAccess": "Full access",
+    "accessRequested": "Access requested for this site",
+    "empty": "No extensions are turned on yet.",
+    "loadError": "Could not load extensions.",
+    "pin": "Pin to toolbar",
+    "unpin": "Unpin from toolbar",
+    "more": "More",
+    "siteAccess": "Site access",
+    "siteOnClick": "On click",
+    "siteOnSite": "On specific sites",
+    "siteAllSites": "On all sites",
+    "allowSite": "Allow on this site",
+    "uninstall": "Remove extension",
+    "actionFailed": "The change could not be saved.",
+    
+"manage": "Manage extensions"
+  },
   "navTitle": "Browser",
   "title": "Browser",
   "subtitle": "Browse the web in-app and let an AI model drive the page as a web agent.",

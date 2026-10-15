@@ -26,6 +26,8 @@ export type LegacyCronAdapterOptions = {
   events?: Partial<LegacyCronEvents>;
   timezone?: () => string;
   ready?: Promise<void>;
+  /** Resolves with the conversation the next run of a task opens, so Run now can return before the run ends. */
+  awaitRunConversation?: (taskId: string) => { promise: Promise<string>; dispose(): void };
 };
 
 const DEFAULT_RETRY = {
@@ -238,16 +240,43 @@ export class LegacyCronAdapter implements CronServiceClient {
 
   public async runNow(params: { job_id: string }): Promise<{ conversation_id: string }> {
     await this.ready();
-    await this.options.service.runNow(params.job_id);
-    const job = await this.getJob(params);
-    if (!job) throw new Error(`Scheduled task not found: ${params.job_id}`);
-    this.options.events?.updated?.(job);
-    this.options.events?.executed?.({
-      job_id: job.id,
-      status: job.state.last_status || 'ok',
-      ...(job.state.last_error ? { error: job.state.last_error } : {}),
+    const tracked = this.options.awaitRunConversation?.(params.job_id);
+    const running = this.options.service.runNow(params.job_id).then(async () => {
+      const job = await this.getJob(params);
+      if (!job) throw new Error(`Scheduled task not found: ${params.job_id}`);
+      this.options.events?.updated?.(job);
+      this.options.events?.executed?.({
+        job_id: job.id,
+        status: job.state.last_status || 'ok',
+        ...(job.state.last_error ? { error: job.state.last_error } : {}),
+      });
+      return job.metadata.conversation_id;
     });
-    return { conversation_id: job.metadata.conversation_id };
+    if (!tracked) return { conversation_id: await running };
+    // The run keeps going after the reply; its failure is recorded on the task.
+    running.catch((error: unknown) => console.warn('[ScheduledTasks] Run now failed:', error));
+    try {
+      return { conversation_id: await Promise.race([tracked.promise, running]) };
+    } finally {
+      tracked.dispose();
+    }
+  }
+
+  /** Catches up the scheduler after the computer wakes from sleep. */
+  public async resume(): Promise<void> {
+    await this.ready();
+    await this.options.service.resume();
+  }
+
+  /** The saved skill content for a task, or undefined when it has none. */
+  public async readSkill(params: { job_id: string }): Promise<string | undefined> {
+    await this.ready();
+    try {
+      return await readFile(skillPath(this.options.skillsDirectory, params.job_id), 'utf8');
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+      throw error;
+    }
   }
 
   public async saveSkill(params: { job_id: string; content: string }): Promise<void> {

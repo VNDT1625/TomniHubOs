@@ -3,7 +3,10 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type { ResolvedAttachmentDelivery, ResolvedNativeAttachment } from '@process/services/agentChat/attachments';
 
-export type CodexTurnInput = { type: 'text'; text: string; text_elements: [] } | { type: 'localImage'; path: string };
+export type CodexTurnInput =
+  | { type: 'text'; text: string; text_elements: [] }
+  | { type: 'localImage'; path: string }
+  | { type: 'skill'; name: string; path: string };
 
 export type AcpPromptBlock =
   | { type: 'text'; text: string }

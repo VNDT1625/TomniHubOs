@@ -1,4 +1,4 @@
-/** Always-on terminal capability for the default IDE surface. */
+/** Fixed reviewed terminal host, active only while the signed IDE package is enabled. */
 
 import { disposeTerminalBridge, registerTerminalBridge } from './terminalBridge';
 import { disposeTerminalServices, getTerminalServices } from './terminalWiring';

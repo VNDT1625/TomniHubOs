@@ -1,0 +1,22 @@
+{
+  "connections": [
+    { "kind": "rules", "id": "agents", "title": "AGENTS.md", "path": "source/AGENTS.md", "format": "agents-md" },
+    { "kind": "rules", "id": "claude", "title": "CLAUDE.md", "path": "source/CLAUDE.md", "format": "claude-md" },
+    {
+      "kind": "rules",
+      "id": "security",
+      "title": "security.mdc",
+      "path": "source/.cursor/rules/security.mdc",
+      "format": "cursor-mdc"
+    },
+    {
+      "kind": "rules",
+      "id": "style",
+      "title": "style.mdc",
+      "path": "source/.cursor/rules/style.mdc",
+      "format": "cursor-mdc"
+    },
+    { "kind": "rules", "id": "git", "title": "git.md", "path": "source/.windsurf/rules/git.md", "format": "windsurf" }
+  ],
+  "openItems": []
+}

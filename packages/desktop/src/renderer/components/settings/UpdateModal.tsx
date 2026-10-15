@@ -116,12 +116,13 @@ const UpdateModal: React.FC = () => {
         case 'available':
           setUpdateInfo({ version: event.version || '', releaseNotes: event.releaseNotes });
           setStatus('available');
-          setVisible(true);
+          // Startup discovery is background-only; do not interrupt the user.
           break;
         case 'not-available':
           setStatus('upToDate');
           break;
         case 'downloading':
+          setStatus('downloading');
           if (event.progress) {
             setProgress({
               percent: Math.round(event.progress.percent),
@@ -133,6 +134,7 @@ const UpdateModal: React.FC = () => {
           break;
         case 'downloaded':
           setStatus('downloaded');
+          setVisible(true);
           break;
         case 'error':
           setErrorMsg(event.error || t('update.downloadFailed'));

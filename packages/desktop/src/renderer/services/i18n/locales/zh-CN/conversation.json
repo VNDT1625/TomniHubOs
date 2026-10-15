@@ -1,4 +1,113 @@
 {
+  "pipeline": {
+    "title": "聊天流水线",
+    "button": "流水线",
+    "buttonTooltip": "聊天流水线：已启用 {{count}} 个阶段",
+    "stagesTitle": "按顺序排列的阶段",
+    "stageCount": "{{count}} 个阶段",
+    "addStage": "添加阶段",
+    "addStagePlaceholder": "选择要添加的阶段",
+    "emptyStages": "还没有阶段，消息将直接发送给模型。",
+    "moveUp": "上移",
+    "moveDown": "下移",
+    "duplicate": "再添加一个副本",
+    "remove": "移除",
+    "enable": "开启或关闭",
+    "phase": {
+      "pre_query": "查询前",
+      "retrieve": "检索",
+      "pre_model": "模型前",
+      "post_model": "模型后"
+    },
+    "role": {
+      "guard": "安全守卫",
+      "authorized": "已授权",
+      "unverified": "未授权"
+    },
+    "inspector": {
+      "empty": "选择一个阶段以查看其工作方式。",
+      "model": "决策模型",
+      "modelName": "Laya",
+      "noModel": "此阶段不使用模型。",
+      "tasks": "向模型提出的问题",
+      "sharedCall": "安全、理解和工具模式在处理同一文本时共用一次模型推理。",
+      "settings": "设置",
+      "mode": "发现敏感信息时",
+      "modeRewrite": "隐藏后继续",
+      "modeBlock": "拦截消息",
+      "apply": "应用选择结果",
+      "applyHint": "关闭：仅显示选择结果，所有工具组仍会加载。",
+      "source": "显示",
+      "lastRun": "最近一条消息",
+      "dryRun": "试运行",
+      "noRun": "暂无内容。请发送消息或等待试运行。",
+      "input": "模型输入",
+      "output": "模型输出",
+      "latency": "{{ms}} 毫秒",
+      "sharedWith": "共用 {{stage}} 的调用结果",
+      "decision": "决定",
+      "error": "错误",
+      "errorCode": {
+        "starting": "Laya 正在启动；已由内置快速检查代为回答。",
+        "timeout": "Laya 响应太慢；已由内置快速检查代为回答。",
+        "cancelled": "请求在 Laya 回答前已取消。",
+        "unavailable": "未连接决策模型；正在使用内置快速检查。",
+        "failed": "Laya 无法回答；已由内置快速检查代为回答。"
+      },
+      "masked": "敏感信息在此显示前已被遮盖。",
+      "questions": "一次推理回答 {{count}} 个问题"
+    },
+    "task": {
+      "security": "安全风险",
+      "understand": "用户想要什么",
+      "toolSchema": "需要的工具组"
+    },
+    "decision": {
+      "continue": "继续",
+      "rewrite": "已改写",
+      "block": "已拦截",
+      "skip": "已跳过",
+      "direct_action": "直接动作"
+    },
+    "health": {
+      "checking": "正在检查流水线…",
+      "ok": "流水线正常",
+      "failed": "流水线出现问题"
+    },
+    "warnings": {
+      "title": "提示",
+      "unguardedRetrieve": "“{{stage}}”会添加上下文，但其后没有运行任何安全阶段。",
+      "noGuard": "未启用任何已授权的安全阶段。发送到云端模型之前，仍会运行默认扫描。"
+    },
+    "actions": {
+      "save": "保存",
+      "cancel": "取消",
+      "reset": "恢复默认"
+    },
+    "messages": {
+      "loadFailed": "无法加载聊天流水线。",
+      "saveFailed": "无法保存聊天流水线。",
+      "saved": "聊天流水线已保存。",
+      "resetDone": "已恢复默认，请保存以应用。",
+      "added": "已添加 {{name}}。"
+    },
+    "stageName": {
+      "security": "安全守卫",
+      "understand": "理解意图",
+      "directAction": "直接动作",
+      "toolSchema": "工具模式选择",
+      "rtk": "实时知识",
+      "modelRouter": "模型路由"
+    },
+    "stageDesc": {
+      "security": "在消息和检索到的文本中查找敏感信息与提示注入，并将其隐藏或拦截。",
+      "understand": "一次性判断用户的请求，并共享给后续阶段。",
+      "directAction": "无需调用模型即可执行打开链接、打包仓库等简单命令。",
+      "toolSchema": "为本条消息选择需要加载的工具组，工具搜索始终可作为后备。",
+      "rtk": "当消息涉及近期内容时补充最新信息。",
+      "modelRouter": "推荐适合该任务的模型。"
+    }
+  },
   "welcome": {
     "title": "Hi，今天有什么安排？",
     "placeholder": "发消息、上传文件、打开文件夹或创建定时任务...",
@@ -491,6 +600,31 @@
   "skills": {
     "loaded": "已加载技能"
   },
+  "attachMenu": {
+
+    "hookLabel": "Hook",
+    "hookCount": "{{count}} 个 Hook",
+    "hookNote": "Hook 会在事件发生时运行，可在设置中开启或关闭。",
+    "hookEmpty": "没有已启用的 Hook",
+    "autoSelectOffHint": "开启后由 Laya 自动选择插件、技能和 Hook",
+    "mcpCount": "{{count}} 个 MCP",
+    "skillCount": "{{count}} 个技能",
+    "viewSkill": "查看",
+    "back": "返回",
+    "skillSourcePackage": "来源包：{{name}}",
+    "skillSourceStandalone": "由你添加或内置",
+    "skillDocNotFound": "该技能文件已不可用。",
+    "skillDocTooLarge": "该 SKILL.md 文件过大，无法在此显示。",
+    "skillDocFailed": "无法读取该技能。",
+    "otherGroup": "其他",
+    "selectAllInPackage": "全选此包",
+    "pluginLabel": "插件",
+    "pluginCount": "{{count}} 个插件",
+    "mcpTag": "MCP",
+    "autoSelect": "自动选择",
+    "autoSelectHint": "Laya 会自动选择合适的插件、技能和钩子"
+  },
+
   "mcp": {
     "loaded": "已加载 MCP",
     "managementHint": "如果某个 MCP 加载异常，通常是 MCP JSON 配置有问题。请到工具设置页检查并手动检测。",

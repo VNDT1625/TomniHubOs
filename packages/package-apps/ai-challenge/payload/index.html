@@ -1,0 +1,1744 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:; connect-src 'none';"
+    />
+    <title>AI Challenge - Mech Arena</title>
+    <style>
+      :root {
+        --bg-primary: #0a0e17;
+        --bg-secondary: #111827;
+        --bg-card: rgba(17, 24, 39, 0.85);
+        --border-color: rgba(75, 85, 99, 0.4);
+        --border-glow: rgba(59, 130, 246, 0.5);
+        --text-main: #f9fafb;
+        --text-muted: #9ca3af;
+        --accent-cyan: #06b6d4;
+        --accent-blue: #3b82f6;
+        --accent-danger: #ef4444;
+        --accent-amber: #f59e0b;
+        --accent-purple: #8b5cf6;
+        --accent-pink: #ec4899;
+        --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        --font-sans: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        font-family: var(--font-sans);
+        background: var(--bg-primary);
+        color: var(--text-main);
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        overflow-x: hidden;
+      }
+      header {
+        background: var(--bg-secondary);
+        border-bottom: 1px solid var(--border-color);
+        padding: 12px 24px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 16px;
+        flex-wrap: wrap;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .brand-badge {
+        background: linear-gradient(135deg, var(--accent-blue), var(--accent-cyan));
+        color: white;
+        font-weight: 800;
+        font-size: 11px;
+        padding: 3px 8px;
+        border-radius: 6px;
+        letter-spacing: 0.05em;
+      }
+      h1 {
+        font-size: 18px;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .view-nav {
+        display: flex;
+        background: rgba(0, 0, 0, 0.4);
+        padding: 4px;
+        border-radius: 10px;
+        border: 1px solid var(--border-color);
+        gap: 4px;
+      }
+      .nav-tab {
+        background: transparent;
+        border: none;
+        color: var(--text-muted);
+        padding: 7px 16px;
+        font-size: 13px;
+        font-weight: 600;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.15s ease;
+      }
+      .nav-tab.active {
+        background: var(--accent-blue);
+        color: white;
+        box-shadow: 0 0 12px rgba(59, 130, 246, 0.4);
+      }
+      .header-actions {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .btn {
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid var(--border-color);
+        color: var(--text-main);
+        padding: 8px 14px;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        transition: all 0.15s ease;
+      }
+      .btn:hover:not(:disabled) {
+        background: rgba(255, 255, 255, 0.12);
+        border-color: var(--accent-cyan);
+      }
+      .btn:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+      .btn-primary {
+        background: linear-gradient(135deg, var(--accent-blue), var(--accent-cyan));
+        border: none;
+        color: white;
+      }
+      .btn-primary:hover:not(:disabled) {
+        opacity: 0.9;
+        box-shadow: 0 0 16px rgba(6, 182, 212, 0.4);
+      }
+      .status-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        padding: 4px 10px;
+        background: rgba(16, 185, 129, 0.15);
+        color: #10b981;
+        border: 1px solid rgba(16, 185, 129, 0.3);
+        border-radius: 999px;
+      }
+      .pulse-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: #10b981;
+        box-shadow: 0 0 8px #10b981;
+      }
+      main {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        padding: 16px 24px;
+        gap: 16px;
+        max-width: 1400px;
+        width: 100%;
+        margin: 0 auto;
+      }
+
+      /* --- HANGAR STYLES --- */
+      .hangar-grid {
+        display: grid;
+        grid-template-columns: 1.1fr 0.9fr;
+        gap: 18px;
+      }
+      .hangar-section {
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: 14px;
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+      }
+      .section-heading {
+        font-size: 15px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--accent-cyan);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        padding-bottom: 8px;
+      }
+      .weight-class-cards {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 10px;
+      }
+      .weight-card {
+        background: rgba(0, 0, 0, 0.35);
+        border: 1px solid var(--border-color);
+        border-radius: 10px;
+        padding: 12px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .weight-card:hover {
+        border-color: var(--accent-blue);
+        background: rgba(59, 130, 246, 0.08);
+      }
+      .weight-card.active {
+        border-color: var(--accent-cyan);
+        background: rgba(6, 182, 212, 0.12);
+        box-shadow: 0 0 16px rgba(6, 182, 212, 0.25);
+      }
+      .weight-title {
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--text-main);
+      }
+      .weight-range {
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--accent-amber);
+      }
+      .weight-desc {
+        font-size: 11px;
+        color: var(--text-muted);
+        line-height: 1.3;
+        margin-top: 4px;
+      }
+
+      .presets-bar {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+      .preset-chip {
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid var(--border-color);
+        color: var(--text-main);
+        padding: 6px 12px;
+        border-radius: 8px;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.15s ease;
+      }
+      .preset-chip:hover {
+        background: rgba(255, 255, 255, 0.1);
+        border-color: var(--accent-blue);
+      }
+      .preset-chip.active {
+        background: var(--accent-blue);
+        color: white;
+        border-color: var(--accent-blue);
+      }
+
+      .stats-allocator {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        background: rgba(0, 0, 0, 0.25);
+        padding: 14px;
+        border-radius: 10px;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+      }
+      .budget-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 13px;
+      }
+      .budget-badge {
+        font-family: var(--font-mono);
+        font-weight: 700;
+        font-size: 12px;
+        padding: 3px 8px;
+        border-radius: 6px;
+        background: rgba(59, 130, 246, 0.2);
+        color: var(--accent-cyan);
+        border: 1px solid rgba(6, 182, 212, 0.4);
+      }
+      .stat-row {
+        display: grid;
+        grid-template-columns: 110px 1fr 90px;
+        align-items: center;
+        gap: 12px;
+      }
+      .stat-label {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text-main);
+      }
+      .stat-stepper {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        justify-content: flex-end;
+      }
+      .step-btn {
+        width: 24px;
+        height: 24px;
+        border-radius: 6px;
+        border: 1px solid var(--border-color);
+        background: rgba(255, 255, 255, 0.06);
+        color: white;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+        font-weight: 700;
+      }
+      .step-btn:hover:not(:disabled) {
+        background: var(--accent-blue);
+      }
+      .step-btn:disabled {
+        opacity: 0.3;
+        cursor: not-allowed;
+      }
+      .stat-val-text {
+        font-family: var(--font-mono);
+        font-size: 13px;
+        font-weight: 700;
+        min-width: 26px;
+        text-align: center;
+      }
+
+      .elements-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+      .element-card {
+        background: rgba(0, 0, 0, 0.35);
+        border: 1px solid var(--border-color);
+        border-radius: 10px;
+        padding: 12px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .element-card:hover {
+        border-color: var(--accent-cyan);
+      }
+      .element-card.active {
+        border-color: var(--accent-cyan);
+        box-shadow: 0 0 16px rgba(6, 182, 212, 0.3);
+      }
+      .element-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+        font-weight: 700;
+      }
+      .element-desc {
+        font-size: 11px;
+        color: var(--text-muted);
+        line-height: 1.3;
+      }
+
+      .spec-sheet {
+        background: rgba(0, 0, 0, 0.4);
+        border-radius: 10px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .spec-row {
+        display: flex;
+        justify-content: space-between;
+        font-size: 12px;
+        border-bottom: 1px dashed rgba(255, 255, 255, 0.06);
+        padding-bottom: 6px;
+      }
+      .spec-name {
+        color: var(--text-muted);
+      }
+      .spec-value {
+        font-weight: 700;
+        font-family: var(--font-mono);
+        color: var(--text-main);
+      }
+
+      /* --- ARENA STYLES --- */
+      .arena-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: 14px;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+      }
+      .arena-hud {
+        display: grid;
+        grid-template-columns: 1fr auto 1fr;
+        padding: 14px 20px;
+        background: rgba(0, 0, 0, 0.6);
+        border-bottom: 1px solid var(--border-color);
+        align-items: center;
+        gap: 16px;
+      }
+      .fighter-hud {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .fighter-hud.right {
+        text-align: right;
+      }
+      .fighter-meta {
+        display: flex;
+        justify-content: space-between;
+        font-size: 13px;
+        font-weight: 700;
+      }
+      .fighter-hud.right .fighter-meta {
+        flex-direction: row-reverse;
+      }
+      .bar-track {
+        height: 10px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 5px;
+        overflow: hidden;
+        position: relative;
+      }
+      .bar-fill {
+        height: 100%;
+        transition: width 0.25s ease;
+      }
+      .bar-fill.hp {
+        background: linear-gradient(90deg, #10b981, #06b6d4);
+      }
+      .bar-fill.hp-opp {
+        background: linear-gradient(90deg, #f59e0b, #ef4444);
+      }
+      .bar-fill.energy {
+        background: linear-gradient(90deg, #6366f1, #8b5cf6);
+        height: 6px;
+        margin-top: 3px;
+      }
+      .match-center {
+        text-align: center;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .match-timer {
+        font-size: 24px;
+        font-weight: 800;
+        font-family: var(--font-mono);
+        color: var(--accent-cyan);
+      }
+      .match-round {
+        font-size: 11px;
+        text-transform: uppercase;
+        color: var(--text-muted);
+        letter-spacing: 0.1em;
+      }
+      .stage-container {
+        position: relative;
+        width: 100%;
+        height: 380px;
+        background: radial-gradient(circle at 50% 60%, #172554 0%, #090d16 100%);
+        overflow: hidden;
+      }
+      #gameCanvas {
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+      .bottom-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+      }
+      .panel {
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .panel-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        padding-bottom: 8px;
+      }
+      .panel-title {
+        font-size: 13px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--accent-cyan);
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .focus-gauge {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        color: var(--text-muted);
+      }
+      .focus-pips {
+        display: flex;
+        gap: 4px;
+      }
+      .focus-pip {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.15);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        transition: all 0.2s ease;
+      }
+      .focus-pip.filled {
+        background: var(--accent-amber);
+        box-shadow: 0 0 8px var(--accent-amber);
+      }
+      .chat-box {
+        display: flex;
+        gap: 8px;
+      }
+      .chat-input {
+        flex: 1;
+        background: rgba(0, 0, 0, 0.4);
+        border: 1px solid var(--border-color);
+        color: var(--text-main);
+        padding: 10px 14px;
+        border-radius: 8px;
+        font-size: 13px;
+        outline: none;
+      }
+      .chat-input:focus {
+        border-color: var(--accent-blue);
+      }
+      .quick-tactics {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .tactic-btn {
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid var(--border-color);
+        color: var(--text-muted);
+        padding: 6px 10px;
+        border-radius: 6px;
+        font-size: 11px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.15s ease;
+      }
+      .tactic-btn:hover:not(:disabled) {
+        background: rgba(59, 130, 246, 0.15);
+        color: var(--text-main);
+        border-color: var(--accent-blue);
+      }
+      .tactic-btn:disabled {
+        opacity: 0.3;
+        cursor: not-allowed;
+      }
+      .log-feed {
+        flex: 1;
+        height: 120px;
+        overflow-y: auto;
+        font-family: var(--font-mono);
+        font-size: 12px;
+        background: rgba(0, 0, 0, 0.3);
+        padding: 10px;
+        border-radius: 8px;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .log-line {
+        line-height: 1.4;
+      }
+      .log-line.coach {
+        color: var(--accent-amber);
+        font-weight: 600;
+      }
+      .log-line.agent {
+        color: var(--accent-cyan);
+      }
+      .log-line.system {
+        color: var(--text-muted);
+      }
+
+      /* Modal */
+      .modal-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.75);
+        backdrop-filter: blur(4px);
+        display: none;
+        place-items: center;
+        z-index: 1000;
+      }
+      .modal-overlay.open {
+        display: grid;
+      }
+      .modal-card {
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-color);
+        width: min(520px, calc(100% - 32px));
+        border-radius: 14px;
+        padding: 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        box-shadow: 0 16px 48px rgba(0, 0, 0, 0.8);
+      }
+      .modal-title {
+        font-size: 16px;
+        font-weight: 700;
+      }
+      .form-group {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .form-label {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text-muted);
+      }
+      .form-control {
+        background: rgba(0, 0, 0, 0.5);
+        border: 1px solid var(--border-color);
+        padding: 10px 12px;
+        border-radius: 8px;
+        color: var(--text-main);
+        font-family: inherit;
+        font-size: 13px;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="brand">
+        <span class="brand-badge">S1 MECH ARENA</span>
+        <h1>⚔️ AI Challenge</h1>
+      </div>
+
+      <nav class="view-nav">
+        <button class="nav-tab active" id="tabHangar" data-view="hangar">🔧 Xưởng Hangar</button>
+        <button class="nav-tab" id="tabArena" data-view="arena">⚔️ Võ Đài Arena</button>
+      </nav>
+
+      <div class="header-actions">
+        <div class="status-pill">
+          <span class="pulse-dot"></span>
+          <span id="modelStatusText">Local Model Sẵn Sàng</span>
+        </div>
+        <button class="btn" id="btnOpenModelModal">⚙️ Thêm Model</button>
+        <button class="btn btn-primary" id="btnToggleMatch" style="display: none">▶️ Bắt Đầu Trận</button>
+      </div>
+    </header>
+
+    <main>
+      <!-- ================= 1. HANGAR VIEW ================= -->
+      <section id="hangarView" style="display: block">
+        <div class="hangar-grid">
+          <!-- Left Column: Specs, Presets & Stat Allocation -->
+          <div class="hangar-section">
+            <div class="section-heading">🛠️ Cấu Hình Robot & Hạng Cân</div>
+
+            <div>
+              <div style="font-size: 12px; font-weight: 600; color: var(--text-muted); margin-bottom: 8px">
+                1. HẠNG CÂN THI ĐẤU
+              </div>
+              <div class="weight-class-cards" id="weightClassContainer">
+                <div class="weight-card" data-weight="flyweight">
+                  <div class="weight-title">Hạng Nhẹ</div>
+                  <div class="weight-range">1B - 3B</div>
+                  <div class="weight-desc">Phản xạ chớp nhoáng, tiết kiệm RAM.</div>
+                </div>
+                <div class="weight-card active" data-weight="middleweight">
+                  <div class="weight-title">Hạng Trung</div>
+                  <div class="weight-range">7B - 9B</div>
+                  <div class="weight-desc">Cân bằng hoàn hảo công thủ.</div>
+                </div>
+                <div class="weight-card" data-weight="heavyweight">
+                  <div class="weight-title">Hạng Nặng</div>
+                  <div class="weight-range">14B - 70B+</div>
+                  <div class="weight-desc">Giáp dày, hỏa lực cực lớn.</div>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <div style="font-size: 12px; font-weight: 600; color: var(--text-muted); margin-bottom: 8px">
+                2. MẪU CHIẾN BINH THIẾT KẾ SẴN (PRESETS)
+              </div>
+              <div class="presets-bar" id="presetsBar">
+                <button class="preset-chip active" data-preset="v-striker">🤖 V-Striker (Cân Bằng)</button>
+                <button class="preset-chip" data-preset="aegis-sentinel">🛡️ Aegis Sentinel (Thủ Vững)</button>
+                <button class="preset-chip" data-preset="cyber-ronin">⚔️ Cyber Ronin (Tốc Biến)</button>
+              </div>
+            </div>
+
+            <div class="stats-allocator">
+              <div class="budget-header">
+                <span style="font-weight: 700">3. PHÂN BỔ ĐIỂM THUỘC TÍNH</span>
+                <span class="budget-badge" id="budgetDisplay">Điểm Khả Dụng: 0 / 30</span>
+              </div>
+
+              <div class="stat-row">
+                <span class="stat-label">❤️ Máu (HP)</span>
+                <div class="bar-track" style="height: 6px">
+                  <div class="bar-fill hp" id="statBarHp" style="width: 50%"></div>
+                </div>
+                <div class="stat-stepper">
+                  <button type="button" class="step-btn" data-stat="hp" data-delta="-1">-</button>
+                  <span class="stat-val-text" id="statValHp">8</span>
+                  <button type="button" class="step-btn" data-stat="hp" data-delta="1">+</button>
+                </div>
+              </div>
+
+              <div class="stat-row">
+                <span class="stat-label">⚡ Năng Lượng</span>
+                <div class="bar-track" style="height: 6px">
+                  <div class="bar-fill energy" id="statBarEnergy" style="width: 50%"></div>
+                </div>
+                <div class="stat-stepper">
+                  <button type="button" class="step-btn" data-stat="energy" data-delta="-1">-</button>
+                  <span class="stat-val-text" id="statValEnergy">8</span>
+                  <button type="button" class="step-btn" data-stat="energy" data-delta="1">+</button>
+                </div>
+              </div>
+
+              <div class="stat-row">
+                <span class="stat-label">🏃 Tốc Độ</span>
+                <div class="bar-track" style="height: 6px">
+                  <div class="bar-fill" id="statBarSpeed" style="width: 40%; background: var(--accent-cyan)"></div>
+                </div>
+                <div class="stat-stepper">
+                  <button type="button" class="step-btn" data-stat="speed" data-delta="-1">-</button>
+                  <span class="stat-val-text" id="statValSpeed">6</span>
+                  <button type="button" class="step-btn" data-stat="speed" data-delta="1">+</button>
+                </div>
+              </div>
+
+              <div class="stat-row">
+                <span class="stat-label">💥 Sức Mạnh</span>
+                <div class="bar-track" style="height: 6px">
+                  <div class="bar-fill" id="statBarPower" style="width: 30%; background: var(--accent-danger)"></div>
+                </div>
+                <div class="stat-stepper">
+                  <button type="button" class="step-btn" data-stat="power" data-delta="-1">-</button>
+                  <span class="stat-val-text" id="statValPower">4</span>
+                  <button type="button" class="step-btn" data-stat="power" data-delta="1">+</button>
+                </div>
+              </div>
+
+              <div class="stat-row">
+                <span class="stat-label">🛡️ Giáp Thủ</span>
+                <div class="bar-track" style="height: 6px">
+                  <div class="bar-fill" id="statBarArmor" style="width: 30%; background: var(--accent-amber)"></div>
+                </div>
+                <div class="stat-stepper">
+                  <button type="button" class="step-btn" data-stat="armor" data-delta="-1">-</button>
+                  <span class="stat-val-text" id="statValArmor">4</span>
+                  <button type="button" class="step-btn" data-stat="armor" data-delta="1">+</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right Column: Elemental Cores & Live Spec Sheet -->
+          <div class="hangar-section">
+            <div class="section-heading">🔮 Lõi Nguyên Tố & Bảng Thông Số</div>
+
+            <div>
+              <div style="font-size: 12px; font-weight: 600; color: var(--text-muted); margin-bottom: 8px">
+                4. CHỌN LÕI NGUYÊN TỐ
+              </div>
+              <div class="elements-grid" id="elementsContainer">
+                <div class="element-card active" data-element="lightning">
+                  <div class="element-header">
+                    <span>⚡</span>
+                    <span style="color: var(--accent-purple)">Lôi Điện (EMP)</span>
+                  </div>
+                  <div class="element-desc">Gây choáng, hút năng lượng đối thủ, tăng 15% tốc độ.</div>
+                </div>
+                <div class="element-card" data-element="fire">
+                  <div class="element-header">
+                    <span>🔥</span>
+                    <span style="color: var(--accent-danger)">Nhiệt Hỏa (Burn)</span>
+                  </div>
+                  <div class="element-desc">Thiêu đốt liên tục (DoT), tăng 15% sát thương đòn nặng.</div>
+                </div>
+                <div class="element-card" data-element="ice">
+                  <div class="element-header">
+                    <span>❄️</span>
+                    <span style="color: var(--accent-cyan)">Băng Hàn (Cryo)</span>
+                  </div>
+                  <div class="element-desc">Làm chậm đối thủ 25%, tăng 20% khả năng đỡ đòn.</div>
+                </div>
+                <div class="element-card" data-element="cyber">
+                  <div class="element-header">
+                    <span>🔮</span>
+                    <span style="color: var(--accent-pink)">Không Gian Số</span>
+                  </div>
+                  <div class="element-desc">Khiên tự hồi phục, hồi năng lượng nhanh hơn 25%.</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="spec-sheet">
+              <div style="font-size: 13px; font-weight: 700; color: var(--accent-cyan); margin-bottom: 4px">
+                📋 THÔNG SỐ CHIẾN BINH DỰ KIẾN
+              </div>
+              <div class="spec-row">
+                <span class="spec-name">Độ Bền Tối Đa (Max HP)</span>
+                <span class="spec-value" id="specHp">140 HP</span>
+              </div>
+              <div class="spec-row">
+                <span class="spec-name">Năng Lượng Tối Đa</span>
+                <span class="spec-value" id="specEnergy">112 EN</span>
+              </div>
+              <div class="spec-row">
+                <span class="spec-name">Tốc Độ Di Chuyển</span>
+                <span class="spec-value" id="specSpeed">9.2 m/s</span>
+              </div>
+              <div class="spec-row">
+                <span class="spec-name">Sức Tấn Công Cơ Bản</span>
+                <span class="spec-value" id="specPower">12.0</span>
+              </div>
+              <div class="spec-row">
+                <span class="spec-name">Khả Năng Chống Chịu</span>
+                <span class="spec-value" id="specArmor">14.0</span>
+              </div>
+              <div class="spec-row">
+                <span class="spec-name">Kỹ Năng Nguyên Tố</span>
+                <span class="spec-value" id="specSkill" style="color: var(--accent-cyan)">Bộc Phá Lôi (EMP Burst)</span>
+              </div>
+            </div>
+
+            <div style="display: flex; gap: 12px; margin-top: auto">
+              <button type="button" class="btn btn-primary" id="btnDeployToArena" style="flex: 1; padding: 12px; font-size: 14px">
+                🚀 Sẵn Sàng Vào Võ Đài (Deploy Mech)
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= 2. ARENA VIEW ================= -->
+      <section id="arenaView" style="display: none">
+        <section class="arena-card">
+          <div class="arena-hud">
+            <div class="fighter-hud">
+              <div class="fighter-meta">
+                <span id="myMechName">🤖 V-Striker (Bạn)</span>
+                <span id="myMechHpText">100 / 100 HP</span>
+              </div>
+              <div class="bar-track">
+                <div class="bar-fill hp" id="myMechHpBar" style="width: 100%"></div>
+              </div>
+              <div class="bar-track" style="height: 6px">
+                <div class="bar-fill energy" id="myMechEnBar" style="width: 80%"></div>
+              </div>
+            </div>
+
+            <div class="match-center">
+              <div class="match-timer" id="matchTimer">02:00</div>
+              <div class="match-round" id="matchRoundText">HIỆP 1 • ĐỐI KHÁNG RANK</div>
+            </div>
+
+            <div class="fighter-hud right">
+              <div class="fighter-meta">
+                <span id="oppMechName">🦾 Dreadnought (Đối thủ)</span>
+                <span id="oppMechHpText">100 / 100 HP</span>
+              </div>
+              <div class="bar-track">
+                <div class="bar-fill hp-opp" id="oppMechHpBar" style="width: 100%"></div>
+              </div>
+              <div class="bar-track" style="height: 6px">
+                <div class="bar-fill energy" id="oppMechEnBar" style="width: 70%"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="stage-container">
+            <canvas id="gameCanvas" width="960" height="380"></canvas>
+          </div>
+        </section>
+
+        <div class="bottom-grid" style="margin-top: 16px">
+          <section class="panel">
+            <div class="panel-header">
+              <span class="panel-title">📡 AI Telemetry & Mind Feed</span>
+              <span style="font-size: 11px; color: var(--text-muted)" id="distanceIndicator">Khoảng cách: 4.0m</span>
+            </div>
+            <div class="log-feed" id="logFeed">
+              <div class="log-line system">[Hệ thống] Đấu trường AI Mech Arena khởi tạo sẵn sàng.</div>
+              <div class="log-line system">[Hệ thống] Model Qwen-7B (Hạng Trung) đã nạp vào bộ điều khiển V-Striker.</div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-header">
+              <span class="panel-title">🎙️ Coach Corner - Góc Huấn Luyện Viên</span>
+              <div class="focus-gauge">
+                <span>Focus:</span>
+                <div class="focus-pips" id="focusPips">
+                  <div class="focus-pip filled"></div>
+                  <div class="focus-pip filled"></div>
+                  <div class="focus-pip filled"></div>
+                  <div class="focus-pip filled"></div>
+                  <div class="focus-pip"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="quick-tactics" id="quickTacticsContainer">
+              <button class="tactic-btn" data-tactic="Bật khiên phòng thủ, canh phản công!" data-urgency="advice" data-cost="1">
+                🛡️ Bật khiên thủ (1 Focus)
+              </button>
+              <button class="tactic-btn" data-tactic="Đối thủ sơ hở, dồn combo EMP ngay!" data-urgency="urgent_command" data-cost="2">
+                ⚡ Dồn sát thương EMP (2 Focus)
+              </button>
+              <button class="tactic-btn" data-tactic="Lùi lại giữ khoảng cách, hồi năng lượng!" data-urgency="advice" data-cost="1">
+                🏃 Lùi hồi năng lượng (1 Focus)
+              </button>
+              <button class="tactic-btn" data-tactic="Đóng băng bước di chuyển của đối thủ!" data-urgency="advice" data-cost="1">
+                ❄️ Kìm chân băng giá (1 Focus)
+              </button>
+              <button class="tactic-btn" data-tactic="Kích hoạt Overdrive, tấn công tổng lực!" data-urgency="urgent_command" data-cost="2">
+                🔥 Thiêu đốt rực lửa (2 Focus)
+              </button>
+            </div>
+
+            <form class="chat-box" id="coachForm">
+              <input
+                type="text"
+                class="chat-input"
+                id="coachInput"
+                placeholder="Nhập lệnh chỉ đạo chiến thuật cho Robot (1-2 Focus)..."
+                autocomplete="off"
+              />
+              <button type="submit" class="btn btn-primary" id="btnSubmitCoach">Chỉ Đạo</button>
+            </form>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <!-- Modal Cấu hình Model -->
+    <div class="modal-overlay" id="modelModal">
+      <div class="modal-card">
+        <h2 class="modal-title">⚙️ Cấu Hình Local Decision Model</h2>
+        <div class="form-group">
+          <label class="form-label">Loại Kết Nối</label>
+          <select class="form-control" id="modelTypeSelect">
+            <option value="ollama">Ollama Local Endpoint (localhost:11434)</option>
+            <option value="lmstudio">LM Studio Local Endpoint (localhost:1234)</option>
+            <option value="script">Local Decision Script (.js)</option>
+            <option value="builtin">Bot Đối Thủ Máy Tích Hợp Sẵn</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Tên Model / Đường dẫn</label>
+          <input type="text" class="form-control" id="modelEndpointInput" value="qwen2.5:7b" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Hạng Cân Chỉ Định</label>
+          <select class="form-control" id="modelWeightSelect">
+            <option value="flyweight">Hạng Nhẹ (1B - 3B)</option>
+            <option value="middleweight" selected>Hạng Trung (7B - 9B)</option>
+            <option value="heavyweight">Hạng Nặng (14B - 70B+)</option>
+          </select>
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px">
+          <button type="button" class="btn" id="btnCloseModelModal">Hủy</button>
+          <button type="button" class="btn btn-primary" id="btnSaveModelConfig">Lưu & Kết Nối</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Embedded Sandboxed Scripts: Deterministic Inlining -->
+    <!-- tomni:inline adapter/tomniGameAdapter.js -->
+    <!-- tomni:inline hangarUi.js -->
+    <!-- tomni:inline arenaSimulator.js -->
+    <!-- tomni:inline modelProvider.js -->
+    <script>
+      (function () {
+        'use strict';
+
+        // --- 1. Loadout & Game State ---
+        var currentLoadout = {
+          name: 'V-Striker',
+          weightClass: 'middleweight',
+          element: 'lightning',
+          allocatedStats: { hp: 8, energy: 8, speed: 6, power: 4, armor: 4 },
+        };
+
+        var gameState = {
+          inMatch: false,
+          matchId: 'arena-match-1',
+          tick: 0,
+          timeLeft: 120,
+          weightClass: 'middleweight',
+          activeDirective: '',
+          myMech: {
+            name: 'V-Striker',
+            hp: 140,
+            maxHp: 140,
+            energy: 112,
+            maxEnergy: 112,
+            speed: 9.2,
+            power: 12.0,
+            armor: 14.0,
+            x: 240,
+            vx: 0,
+            state: 'idle', // idle, attacking, blocking, hit
+            element: 'lightning',
+          },
+          oppMech: {
+            name: 'Dreadnought',
+            hp: 140,
+            maxHp: 140,
+            energy: 110,
+            maxEnergy: 110,
+            speed: 7.0,
+            power: 14.0,
+            armor: 15.0,
+            x: 720,
+            vx: 0,
+            state: 'idle',
+            element: 'fire',
+          },
+          floatingTexts: [],
+        };
+
+        // --- 2. Element References ---
+        var hangarView = document.getElementById('hangarView');
+        var arenaView = document.getElementById('arenaView');
+        var tabHangar = document.getElementById('tabHangar');
+        var tabArena = document.getElementById('tabArena');
+        var btnDeployToArena = document.getElementById('btnDeployToArena');
+        var btnToggleMatch = document.getElementById('btnToggleMatch');
+
+        var canvas = document.getElementById('gameCanvas');
+        var ctx = canvas.getContext('2d');
+        var logFeed = document.getElementById('logFeed');
+        var coachForm = document.getElementById('coachForm');
+        var coachInput = document.getElementById('coachInput');
+        var focusPips = document.getElementById('focusPips');
+        var matchTimer = document.getElementById('matchTimer');
+        var myMechHpBar = document.getElementById('myMechHpBar');
+        var myMechHpText = document.getElementById('myMechHpText');
+        var myMechEnBar = document.getElementById('myMechEnBar');
+        var oppMechHpBar = document.getElementById('oppMechHpBar');
+        var oppMechHpText = document.getElementById('oppMechHpText');
+        var oppMechEnBar = document.getElementById('oppMechEnBar');
+        var distanceIndicator = document.getElementById('distanceIndicator');
+
+        // Modal elements
+        var modelModal = document.getElementById('modelModal');
+        var btnOpenModelModal = document.getElementById('btnOpenModelModal');
+        var btnCloseModelModal = document.getElementById('btnCloseModelModal');
+        var btnSaveModelConfig = document.getElementById('btnSaveModelConfig');
+
+        // Hangar DOM elements
+        var weightCards = document.querySelectorAll('.weight-card');
+        var presetChips = document.querySelectorAll('.preset-chip');
+        var elementCards = document.querySelectorAll('.element-card');
+        var budgetDisplay = document.getElementById('budgetDisplay');
+        var stepBtns = document.querySelectorAll('.step-btn');
+        var statValHp = document.getElementById('statValHp');
+        var statValEnergy = document.getElementById('statValEnergy');
+        var statValSpeed = document.getElementById('statValSpeed');
+        var statValPower = document.getElementById('statValPower');
+        var statValArmor = document.getElementById('statValArmor');
+        var specHp = document.getElementById('specHp');
+        var specEnergy = document.getElementById('specEnergy');
+        var specSpeed = document.getElementById('specSpeed');
+        var specPower = document.getElementById('specPower');
+        var specArmor = document.getElementById('specArmor');
+        var specSkill = document.getElementById('specSkill');
+
+        // --- 3. Providers & Adapter Setup ---
+        var HangarLib = window.AiChallengeHangar || null;
+        var ArbiterLib = window.AiChallengeArenaSimulator || null;
+        var matchArbiter = null;
+        var pendingPlayerAction = null;
+        var pendingOpponentAction = null;
+
+        var focusManager = HangarLib
+          ? new HangarLib.CoachFocusManager({ maxFocus: 5, initialFocus: 4 })
+          : {
+              currentFocus: 4,
+              maxFocus: 5,
+              canExecute: function () { return true; },
+              consume: function () { return true; },
+              recover: function () {},
+              onFocusChange: function () {},
+            };
+
+        var gameAdapter = typeof window.TomniGameAdapter === 'function'
+          ? new window.TomniGameAdapter({
+              gameId: 'ai-challenge',
+              title: 'AI Challenge: Mech Arena',
+              onAction: function (decision) {
+                if (decision && decision.action) {
+                  handleAgentAction(decision.action, decision.source, decision.reasoningBrief, decision.modelUsed);
+                }
+              },
+              onCoachDirective: function (dir) {
+                if (dir && dir.text) {
+                  receiveCoachDirective(dir.text, dir.urgency);
+                }
+              },
+            })
+          : null;
+
+        var modelProvider = window.AiChallengeModelProvider && window.AiChallengeModelProvider.ModelDecisionProvider
+          ? new window.AiChallengeModelProvider.ModelDecisionProvider({ timeoutMs: 1400 })
+          : null;
+
+        var isInvokingModel = false;
+
+        // --- 4. Focus UI Sync ---
+        function updateFocusPips(current, max) {
+          var pips = focusPips.querySelectorAll('.focus-pip');
+          for (var i = 0; i < pips.length; i++) {
+            pips[i].className = 'focus-pip' + (i < current ? ' filled' : '');
+          }
+          // Update tactic buttons enablement
+          var tacticBtns = document.querySelectorAll('.tactic-btn');
+          for (var j = 0; j < tacticBtns.length; j++) {
+            var cost = Number(tacticBtns[j].dataset.cost) || 1;
+            tacticBtns[j].disabled = current < cost;
+          }
+        }
+
+        if (focusManager.onFocusChange) {
+          focusManager.onFocusChange(updateFocusPips);
+          updateFocusPips(focusManager.currentFocus, focusManager.maxFocus);
+        }
+
+        // --- 5. Hangar UI Controller & Synchronization ---
+        function syncHangarUi() {
+          if (!HangarLib) return;
+          var validation = HangarLib.validateLoadout(currentLoadout.weightClass, currentLoadout.allocatedStats);
+          budgetDisplay.textContent = 'Điểm Khả Dụng: ' + validation.remaining + ' / ' + validation.budget;
+
+          // Update stat value numbers and stepper buttons
+          statValHp.textContent = currentLoadout.allocatedStats.hp;
+          statValEnergy.textContent = currentLoadout.allocatedStats.energy;
+          statValSpeed.textContent = currentLoadout.allocatedStats.speed;
+          statValPower.textContent = currentLoadout.allocatedStats.power;
+          statValArmor.textContent = currentLoadout.allocatedStats.armor;
+
+          // Calculate effective specs
+          var effective = HangarLib.calculateEffectiveStats(
+            currentLoadout.weightClass,
+            currentLoadout.allocatedStats,
+            currentLoadout.element
+          );
+          specHp.textContent = effective.maxHp + ' HP';
+          specEnergy.textContent = effective.maxEnergy + ' EN';
+          specSpeed.textContent = effective.speed + ' m/s';
+          specPower.textContent = effective.power;
+          specArmor.textContent = effective.armor;
+          specSkill.textContent = effective.specialSkill;
+
+          // Update active weight card
+          weightCards.forEach(function (card) {
+            card.classList.toggle('active', card.dataset.weight === currentLoadout.weightClass);
+          });
+
+          // Update active element card
+          elementCards.forEach(function (card) {
+            card.classList.toggle('active', card.dataset.element === currentLoadout.element);
+          });
+        }
+
+        // Weight Class card clicks
+        weightCards.forEach(function (card) {
+          card.addEventListener('click', function () {
+            currentLoadout.weightClass = card.dataset.weight;
+            gameState.weightClass = card.dataset.weight;
+            syncHangarUi();
+          });
+        });
+
+        // Elemental Core card clicks
+        elementCards.forEach(function (card) {
+          card.addEventListener('click', function () {
+            currentLoadout.element = card.dataset.element;
+            syncHangarUi();
+          });
+        });
+
+        // Preset chip clicks
+        presetChips.forEach(function (chip) {
+          chip.addEventListener('click', function () {
+            presetChips.forEach(function (c) { c.classList.remove('active'); });
+            chip.classList.add('active');
+            var presetId = chip.dataset.preset;
+            if (HangarLib && HangarLib.ROBOT_PRESETS) {
+              var found = HangarLib.ROBOT_PRESETS.find(function (p) { return p.id === presetId; });
+              if (found) {
+                currentLoadout.name = found.name;
+                currentLoadout.weightClass = found.weightClass;
+                currentLoadout.element = found.element;
+                currentLoadout.allocatedStats = Object.assign({}, found.allocatedStats);
+                gameState.weightClass = found.weightClass;
+                syncHangarUi();
+              }
+            }
+          });
+        });
+
+        // Stat Stepper +/- clicks
+        stepBtns.forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            var stat = btn.dataset.stat;
+            var delta = Number(btn.dataset.delta) || 0;
+            var currentVal = Number(currentLoadout.allocatedStats[stat]) || 0;
+            var newVal = currentVal + delta;
+            if (newVal < 0 || newVal > 15) return;
+
+            var proposedStats = Object.assign({}, currentLoadout.allocatedStats);
+            proposedStats[stat] = newVal;
+            if (HangarLib) {
+              var check = HangarLib.validateLoadout(currentLoadout.weightClass, proposedStats);
+              if (!check.valid && delta > 0) return; // Cannot exceed budget
+            }
+
+            currentLoadout.allocatedStats[stat] = newVal;
+            syncHangarUi();
+          });
+        });
+
+        // View Navigation Switching
+        function switchView(target) {
+          if (target === 'hangar') {
+            if (gameState.inMatch) {
+              addLog('[Cảnh báo] Trận đấu đang diễn ra! Hãy tạm dừng trước khi về xưởng.', 'system');
+              return;
+            }
+            hangarView.style.display = 'block';
+            arenaView.style.display = 'none';
+            tabHangar.classList.add('active');
+            tabArena.classList.remove('active');
+            btnToggleMatch.style.display = 'none';
+          } else {
+            hangarView.style.display = 'none';
+            arenaView.style.display = 'block';
+            tabHangar.classList.remove('active');
+            tabArena.classList.add('active');
+            btnToggleMatch.style.display = 'inline-flex';
+          }
+        }
+
+        tabHangar.addEventListener('click', function () { switchView('hangar'); });
+        tabArena.addEventListener('click', function () { switchView('arena'); });
+
+        // Deploy to Arena
+        btnDeployToArena.addEventListener('click', function () {
+          if (HangarLib) {
+            var validation = HangarLib.validateLoadout(currentLoadout.weightClass, currentLoadout.allocatedStats);
+            if (!validation.valid) {
+              alert('Cấu hình chưa hợp lệ: ' + validation.errors.join('\n'));
+              return;
+            }
+            var effective = HangarLib.calculateEffectiveStats(
+              currentLoadout.weightClass,
+              currentLoadout.allocatedStats,
+              currentLoadout.element
+            );
+            gameState.myMech.name = currentLoadout.name;
+            gameState.myMech.maxHp = effective.maxHp;
+            gameState.myMech.hp = effective.maxHp;
+            gameState.myMech.maxEnergy = effective.maxEnergy;
+            gameState.myMech.energy = effective.maxEnergy;
+            gameState.myMech.speed = effective.speed;
+            gameState.myMech.power = effective.power;
+            gameState.myMech.armor = effective.armor;
+            gameState.myMech.element = effective.element;
+
+            document.getElementById('myMechName').textContent = '🤖 ' + currentLoadout.name + ' (Bạn)';
+            myMechHpText.textContent = effective.maxHp + ' / ' + effective.maxHp + ' HP';
+            addLog('[Xưởng Hangar] Triển khai thành công Robot ' + currentLoadout.name + ' (' + effective.weightLabel + ') vào đấu trường!', 'system');
+          }
+          switchView('arena');
+        });
+
+        // Initialize Hangar
+        syncHangarUi();
+
+        // --- 6. Logging & Sidebar Session Reporting ---
+        function addLog(text, type) {
+          var line = document.createElement('div');
+          line.className = 'log-line ' + (type || 'system');
+          line.textContent = text;
+          logFeed.appendChild(line);
+          logFeed.scrollTop = logFeed.scrollHeight;
+        }
+
+        function reportSidebarSession() {
+          var status = gameState.inMatch ? 'working' : 'idle';
+          var title = 'Mech Arena: ' + gameState.myMech.hp + '% vs ' + gameState.oppMech.hp + '%';
+
+          if (gameAdapter && typeof gameAdapter.reportSession === 'function') {
+            gameAdapter.reportSession({
+              matchId: gameState.matchId,
+              title: title,
+              status: status,
+              lastActiveAt: Date.now(),
+            });
+          }
+        }
+
+        // --- 7. Coach Directive Handlers ---
+        function receiveCoachDirective(text, urgency) {
+          gameState.activeDirective = text;
+          var urgencyTag = urgency === 'urgent_command' ? ' [LỆNH KHẨN]' : '';
+          addLog('🎙️ [HLV Chỉ Đạo' + urgencyTag + ']: ' + text, 'coach');
+          spawnFloatingText(gameState.myMech.x, 140, '⚡ CHIẾN THUẬT' + urgencyTag + '!', '#f59e0b');
+
+          // Direct tactical override into arbiter action
+          if (text.includes('khiên') || text.includes('thủ')) {
+            pendingPlayerAction = { movement: 'hold', combat: 'block', elementSkill: null };
+          } else if (text.includes('EMP') || text.includes('combo') || text.includes('tấn công')) {
+            pendingPlayerAction = { movement: 'dash_forward', combat: 'heavy_smash', elementSkill: 'elemental_burst' };
+          } else if (text.includes('lùi')) {
+            pendingPlayerAction = { movement: 'dash_backward', combat: null, elementSkill: null };
+          } else if (text.includes('băng')) {
+            pendingPlayerAction = { movement: 'hold', combat: 'light_jab', elementSkill: 'elemental_burst' };
+          } else if (text.includes('Thiêu') || text.includes('Overdrive')) {
+            pendingPlayerAction = { movement: 'advance', combat: 'heavy_smash', elementSkill: 'overdrive' };
+          }
+
+          if (gameAdapter && typeof gameAdapter.sendCoachDirective === 'function') {
+            gameAdapter.sendCoachDirective({
+              matchId: gameState.matchId,
+              text: text,
+              urgency: urgency === 'urgent_command' ? 'urgent' : 'advice',
+            });
+          }
+        }
+
+        coachForm.addEventListener('submit', function (e) {
+          e.preventDefault();
+          var text = coachInput.value.trim();
+          if (!text) return;
+
+          var urgency = (text.includes('!') || text === text.toUpperCase()) ? 'urgent_command' : 'advice';
+          if (!focusManager.canExecute(urgency)) {
+            addLog('[Cảnh báo] Hết điểm Focus! Cần chờ hồi phục.', 'system');
+            return;
+          }
+
+          focusManager.consume(urgency);
+          receiveCoachDirective(text, urgency);
+          coachInput.value = '';
+        });
+
+        document.querySelectorAll('.tactic-btn').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            var urgency = btn.dataset.urgency || 'advice';
+            if (!focusManager.canExecute(urgency)) {
+              addLog('[Cảnh báo] Không đủ Focus (cần ' + (urgency === 'urgent_command' ? 2 : 1) + ' điểm)!', 'system');
+              return;
+            }
+            focusManager.consume(urgency);
+            receiveCoachDirective(btn.dataset.tactic, urgency);
+          });
+        });
+
+        function handleAgentAction(action, source, reasoningBrief, modelUsed) {
+          if (!action) return;
+          pendingPlayerAction = action;
+
+          var sourceTag = source === 'model' ? ('🤖 [Model ' + (modelUsed || '') + ']') : '⚡ [Script Bot]';
+          var reasonText = reasoningBrief ? (' - "' + reasoningBrief + '"') : '';
+          addLog(sourceTag + ': ' + action.movement + ' / ' + (action.combat || 'none') + reasonText, 'agent');
+        }
+
+        function triggerAttack(attacker, target, damage, label) {
+          attacker.state = 'attacking';
+          attacker.energy = Math.max(0, attacker.energy - 8);
+          setTimeout(function () {
+            if (attacker.state === 'attacking') attacker.state = 'idle';
+          }, 350);
+
+          var dist = Math.abs(attacker.x - target.x);
+          if (dist < 140) {
+            var actualDamage = target.state === 'blocking' ? Math.floor(damage * 0.3) : damage;
+            target.hp = Math.max(0, target.hp - actualDamage);
+            target.state = 'hit';
+            spawnFloatingText(target.x, 180, '-' + actualDamage + ' HP', '#ef4444');
+            setTimeout(function () {
+              if (target.state === 'hit') target.state = 'idle';
+            }, 250);
+          }
+        }
+
+        function spawnFloatingText(x, y, text, color) {
+          gameState.floatingTexts.push({ x: x, y: y, text: text, color: color, life: 30 });
+        }
+
+        function requestAgentDecision() {
+          if (!gameState.inMatch || isInvokingModel) return;
+          var dist = Math.abs(gameState.myMech.x - gameState.oppMech.x);
+          var distMeters = Number((dist / 80).toFixed(1));
+          distanceIndicator.textContent = 'Khoảng cách: ' + distMeters + 'm';
+
+          var observation = {
+            matchId: gameState.matchId,
+            tick: gameState.tick,
+            timeLeftSeconds: gameState.timeLeft,
+            distance: distMeters,
+            myMech: {
+              name: gameState.myMech.name,
+              hp: gameState.myMech.hp,
+              maxHp: gameState.myMech.maxHp,
+              energy: gameState.myMech.energy,
+              maxEnergy: gameState.myMech.maxEnergy,
+              element: gameState.myMech.element,
+              positionX: gameState.myMech.x,
+              status: gameState.myMech.state === 'attacking' ? 'attacking' : gameState.myMech.state === 'blocking' ? 'blocking' : 'idle',
+            },
+            opponentMech: {
+              name: gameState.oppMech.name,
+              hp: gameState.oppMech.hp,
+              maxHp: gameState.oppMech.maxHp,
+              energy: gameState.oppMech.energy,
+              maxEnergy: gameState.oppMech.maxEnergy,
+              element: gameState.oppMech.element,
+              positionX: gameState.oppMech.x,
+              status: gameState.oppMech.state === 'attacking' ? 'attacking' : gameState.oppMech.state === 'blocking' ? 'blocking' : 'idle',
+            },
+            coachDirective: gameState.activeDirective || undefined,
+          };
+
+          if (gameAdapter && typeof gameAdapter.sendObservation === 'function') {
+            gameAdapter.sendObservation(observation);
+          }
+
+          if (modelProvider && typeof modelProvider.requestDecision === 'function') {
+            isInvokingModel = true;
+            modelProvider.requestDecision({
+              matchId: gameState.matchId,
+              tick: gameState.tick,
+              weightClass: gameState.weightClass,
+              observation: observation,
+            }).then(function (decision) {
+              isInvokingModel = false;
+              if (!gameState.inMatch) return;
+              if (decision && decision.action) {
+                handleAgentAction(decision.action, decision.source, decision.reasoningBrief, decision.modelUsed);
+              }
+            }).catch(function () {
+              isInvokingModel = false;
+            });
+          }
+        }
+
+        // --- 8. Match Loop & Canvas Renderer ---
+        function startMatch() {
+          gameState.inMatch = true;
+          gameState.matchId = 'arena-match-' + Date.now();
+          gameState.tick = 0;
+          gameState.timeLeft = 120;
+          gameState.myMech.hp = gameState.myMech.maxHp;
+          gameState.oppMech.hp = gameState.oppMech.maxHp;
+          btnToggleMatch.textContent = '⏸️ Tạm Dừng Trận';
+
+          if (ArbiterLib && ArbiterLib.MatchArbiter) {
+            matchArbiter = new ArbiterLib.MatchArbiter({
+              matchId: gameState.matchId,
+              playerMech: {
+                name: gameState.myMech.name,
+                element: gameState.myMech.element,
+                maxHp: gameState.myMech.maxHp,
+                hp: gameState.myMech.maxHp,
+                maxEnergy: gameState.myMech.maxEnergy,
+                energy: gameState.myMech.maxEnergy,
+                speed: gameState.myMech.speed,
+                power: gameState.myMech.power,
+                armor: gameState.myMech.armor,
+              },
+              opponentMech: {
+                name: gameState.oppMech.name,
+                element: gameState.oppMech.element,
+                maxHp: gameState.oppMech.maxHp,
+                hp: gameState.oppMech.maxHp,
+                maxEnergy: gameState.oppMech.maxEnergy,
+                energy: gameState.oppMech.maxEnergy,
+                speed: gameState.oppMech.speed,
+                power: gameState.oppMech.power,
+                armor: gameState.oppMech.armor,
+              },
+            });
+          }
+
+          addLog('[Trận Đấu] HIỆP 1 BẮT ĐẦU!', 'system');
+          reportSidebarSession();
+        }
+
+        function stopMatch() {
+          gameState.inMatch = false;
+          btnToggleMatch.textContent = '▶️ Tiếp Tục Trận';
+          reportSidebarSession();
+        }
+
+        btnToggleMatch.addEventListener('click', function () {
+          if (gameState.inMatch) stopMatch();
+          else startMatch();
+        });
+
+        // Background simulation tick (100ms)
+        setInterval(function () {
+          if (!gameState.inMatch) return;
+          gameState.tick++;
+
+          // Opponent Bot AI action selection
+          if (gameState.tick % 10 === 0) {
+            var distMeters = matchArbiter ? matchArbiter.getDistanceMeters() : 4;
+            if (distMeters > 2.5) {
+              pendingOpponentAction = { movement: 'advance', combat: null, elementSkill: null };
+            } else {
+              var roll = Math.random();
+              if (roll < 0.5) {
+                pendingOpponentAction = { movement: 'hold', combat: 'light_jab', elementSkill: null };
+              } else if (roll < 0.8) {
+                pendingOpponentAction = { movement: 'hold', combat: 'heavy_smash', elementSkill: 'elemental_burst' };
+              } else {
+                pendingOpponentAction = { movement: 'hold', combat: 'block', elementSkill: null };
+              }
+            }
+          }
+
+          // Step Match Arbiter
+          if (matchArbiter) {
+            var summary = matchArbiter.step(pendingPlayerAction, pendingOpponentAction);
+            pendingPlayerAction = null;
+            pendingOpponentAction = null;
+
+            // Sync visual positions & state
+            gameState.myMech.x = summary.player.xMeters * 80;
+            gameState.myMech.hp = summary.player.hp;
+            gameState.myMech.energy = summary.player.energy;
+            gameState.myMech.state = summary.player.state;
+
+            gameState.oppMech.x = summary.opponent.xMeters * 80;
+            gameState.oppMech.hp = summary.opponent.hp;
+            gameState.oppMech.energy = summary.opponent.energy;
+            gameState.oppMech.state = summary.opponent.state;
+
+            gameState.timeLeft = summary.timeLeftSeconds;
+            var mins = String(Math.floor(gameState.timeLeft / 60)).padStart(2, '0');
+            var secs = String(gameState.timeLeft % 60).padStart(2, '0');
+            matchTimer.textContent = mins + ':' + secs;
+            distanceIndicator.textContent = 'Khoảng cách: ' + summary.distanceMeters + 'm';
+
+            // Process Combat Events
+            for (var evIdx = 0; evIdx < summary.events.length; evIdx++) {
+              var ev = summary.events[evIdx];
+              if (ev.type === 'hit') {
+                var hitX = ev.defender === gameState.myMech.name ? gameState.myMech.x : gameState.oppMech.x;
+                var prefix = ev.isBlocked ? '🛡️ -' : '-';
+                spawnFloatingText(hitX, 180, prefix + ev.damage + ' HP', ev.isBlocked ? '#06b6d4' : '#ef4444');
+              } else if (ev.type === 'parry_counter') {
+                spawnFloatingText(gameState.myMech.x, 150, '⚔️ PARRY PHẢN ĐÒN!', '#3b82f6');
+              } else if (ev.type === 'elemental_burst') {
+                var burstX = ev.caster === gameState.myMech.name ? gameState.oppMech.x : gameState.myMech.x;
+                spawnFloatingText(burstX, 160, '⚡ BỘC PHÁ LÔI -' + ev.damage, '#8b5cf6');
+              } else if (ev.type === 'match_ended') {
+                gameState.inMatch = false;
+                var winText = ev.winner === 'player' ? '🏆 [KẾT THÚC] BẠN ĐÃ CHIẾN THẮNG KNOCKOUT!' : ev.winner === 'opponent' ? '💀 [KẾT THÚC] BẠN ĐÃ THUA TRẬN!' : '⚖️ [KẾT THÚC] TRẬN ĐẤU BẤT PHÂN THẮNG BẠI!';
+                addLog(winText, 'system');
+                btnToggleMatch.textContent = '▶️ Bắt Đầu Lại';
+                reportSidebarSession();
+              }
+            }
+          }
+
+          // Passive focus regen every 5 seconds (50 ticks)
+          if (gameState.tick % 50 === 0 && focusManager.recover) {
+            focusManager.recover(1);
+          }
+
+          // Player Agent AI autonomous action (every 1.5s)
+          if (gameState.tick % 15 === 0 && gameState.inMatch) {
+            requestAgentDecision();
+          }
+
+          // Update HUD bars
+          myMechHpBar.style.width = Math.round((gameState.myMech.hp / gameState.myMech.maxHp) * 100) + '%';
+          myMechHpText.textContent = gameState.myMech.hp + ' / ' + gameState.myMech.maxHp + ' HP';
+          myMechEnBar.style.width = Math.round((gameState.myMech.energy / gameState.myMech.maxEnergy) * 100) + '%';
+
+          oppMechHpBar.style.width = Math.round((gameState.oppMech.hp / gameState.oppMech.maxHp) * 100) + '%';
+          oppMechHpText.textContent = gameState.oppMech.hp + ' / ' + gameState.oppMech.maxHp + ' HP';
+          oppMechEnBar.style.width = Math.round((gameState.oppMech.energy / gameState.oppMech.maxEnergy) * 100) + '%';
+        }, 100);
+
+        // Render Frame (60 FPS)
+        function render() {
+          var w = canvas.width;
+          var h = canvas.height;
+          ctx.clearRect(0, 0, w, h);
+
+          // Perspective Arena Floor Grid
+          ctx.strokeStyle = 'rgba(59, 130, 246, 0.2)';
+          ctx.lineWidth = 1;
+          for (var i = 0; i <= w; i += 60) {
+            ctx.beginPath();
+            ctx.moveTo(i, h * 0.6);
+            ctx.lineTo((i - w * 0.5) * 1.6 + w * 0.5, h);
+            ctx.stroke();
+          }
+          for (var y = h * 0.6; y <= h; y += 30) {
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(w, y);
+            ctx.stroke();
+          }
+
+          // Move fighters
+          gameState.myMech.x = Math.max(80, Math.min(w - 120, gameState.myMech.x + gameState.myMech.vx));
+          gameState.oppMech.x = Math.max(80, Math.min(w - 120, gameState.oppMech.x + gameState.oppMech.vx));
+
+          // Draw Fighter Shadows
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+          ctx.beginPath();
+          ctx.ellipse(gameState.myMech.x, 310, 40, 14, 0, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.beginPath();
+          ctx.ellipse(gameState.oppMech.x, 310, 40, 14, 0, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Draw Player Mech
+          var myColor = currentLoadout.element === 'fire' ? '#ef4444' : currentLoadout.element === 'ice' ? '#06b6d4' : currentLoadout.element === 'cyber' ? '#ec4899' : '#8b5cf6';
+          drawMech(ctx, gameState.myMech.x, 240, myColor, '#3b82f6', gameState.myMech.state, false);
+
+          // Draw Opponent Mech (Crimson / Amber)
+          drawMech(ctx, gameState.oppMech.x, 240, '#ef4444', '#f59e0b', gameState.oppMech.state, true);
+
+          // Floating combat numbers
+          for (var f = gameState.floatingTexts.length - 1; f >= 0; f--) {
+            var ft = gameState.floatingTexts[f];
+            ctx.fillStyle = ft.color;
+            ctx.font = 'bold 16px monospace';
+            ctx.fillText(ft.text, ft.x - 24, ft.y);
+            ft.y -= 1.2;
+            ft.life--;
+            if (ft.life <= 0) gameState.floatingTexts.splice(f, 1);
+          }
+
+          requestAnimationFrame(render);
+        }
+
+        function drawMech(ctx, x, y, primaryColor, secondaryColor, state, flip) {
+          ctx.save();
+          ctx.translate(x, y);
+          if (flip) ctx.scale(-1, 1);
+
+          // Shield FX if blocking
+          if (state === 'blocking') {
+            ctx.strokeStyle = '#06b6d4';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(20, 0, 48, -Math.PI * 0.4, Math.PI * 0.4);
+            ctx.stroke();
+          }
+
+          // Body Torso
+          ctx.fillStyle = primaryColor;
+          ctx.fillRect(-22, -35, 44, 55);
+
+          // Chest Armor Plate
+          ctx.fillStyle = secondaryColor;
+          ctx.fillRect(-16, -25, 32, 28);
+
+          // Core Eye / Visor
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(4, -48, 14, 6);
+
+          // Head
+          ctx.fillStyle = primaryColor;
+          ctx.fillRect(-14, -56, 28, 20);
+
+          // Arms
+          ctx.fillStyle = secondaryColor;
+          if (state === 'attacking') {
+            ctx.fillRect(16, -20, 36, 12);
+          } else {
+            ctx.fillRect(16, -10, 12, 34);
+          }
+          ctx.fillRect(-28, -10, 12, 34);
+
+          // Legs
+          ctx.fillStyle = '#1e293b';
+          ctx.fillRect(-18, 20, 14, 40);
+          ctx.fillRect(4, 20, 14, 40);
+
+          ctx.restore();
+        }
+
+        // Start render loop
+        render();
+
+        // Modal interactions
+        btnOpenModelModal.addEventListener('click', function () {
+          modelModal.classList.add('open');
+        });
+        btnCloseModelModal.addEventListener('click', function () {
+          modelModal.classList.remove('open');
+        });
+        btnSaveModelConfig.addEventListener('click', function () {
+          var endpoint = document.getElementById('modelEndpointInput').value.trim();
+          addLog('[Cấu Hình Model] Đã kết nối với: ' + endpoint, 'system');
+          document.getElementById('modelStatusText').textContent = endpoint + ' (Kết nối)';
+          modelModal.classList.remove('open');
+        });
+      })();
+    </script>
+  </body>
+</html>

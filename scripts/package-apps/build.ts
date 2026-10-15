@@ -24,6 +24,8 @@ const REPO_ROOT = path.resolve(__dirname, '../..');
 const OUTPUT_ROOT = path.resolve(process.env.TOMNI_PACKAGE_OUTPUT_ROOT ?? path.join(REPO_ROOT, 'store-artifacts'));
 const BUILD_ROOT = path.join(OUTPUT_ROOT, '.package-build');
 const RELEASE_BASE_URL = 'https://github.com/VNDT1625/tomni-hub-agent-os/releases/download/tomni-store-v1';
+/** First-party apps track the desktop release line, which starts at the clean 0.0.0 baseline. */
+const FIRST_PARTY_ENGINE_RANGE = '>=0.0.0';
 
 type StaticPackageFile = {
   relativePath: string;
@@ -34,7 +36,9 @@ type PackageArtifactFormat = 'json-bundle' | 'tomny-zip';
 
 type PackageDefinition = {
   id:
-    | 'com.tomni.automation-studio'
+        | 'com.tomni.automation-studio'
+    | 'com.tomni.browser'
+    | 'com.tomni.ide'
     | 'com.tomni.company'
     | 'com.tomni.knowledge'
     | 'com.tomni.pet'
@@ -72,7 +76,40 @@ type PackageDefinition = {
 
 const definitions: PackageDefinition[] = [
   {
-    id: 'com.tomni.automation-studio',
+        id: 'com.tomni.browser',
+    artifactFormat: 'tomny-zip',
+    entry: 'packages/package-apps/browser/src/entry.tsx',
+    name: 'Browser',
+    description: 'An independently downloadable Browser surface backed by the trusted native browser bridge.',
+    bundleKind: 'single',
+    permissions: ['browser.control', 'network.access', 'model.invoke'],
+    tags: ['browser', 'web-agent', 'research'],
+    enginesTomni: FIRST_PARTY_ENGINE_RANGE,
+    surfaceModuleId: 'browser',
+    modules: [
+      { id: 'browser', title: 'Browser', surface: 'apps/browser', pinnable: true,
+        runtime: 'trusted-react', entrypoint: 'app.js' },
+    ],
+  },
+  {
+        id: 'com.tomni.ide',
+    artifactFormat: 'tomny-zip',
+    entry: 'packages/package-apps/ide/src/entry.tsx',
+    name: 'IDE',
+    description: 'An independently downloadable IDE surface backed by the reviewed workspace bridge.',
+    bundleKind: 'single',
+    permissions: ['workspace.read', 'workspace.write', 'model.invoke'],
+    tags: ['ide', 'editor', 'workspace'],
+    enginesTomni: FIRST_PARTY_ENGINE_RANGE,
+    surfaceModuleId: 'ide',
+    modules: [
+      { id: 'ide', title: 'IDE', surface: 'apps/ide', pinnable: true,
+        runtime: 'trusted-react', entrypoint: 'app.js' },
+    ],
+  },
+  {
+        id: 'com.tomni.automation-studio',
+    artifactFormat: 'tomny-zip',
     entry: 'packages/desktop/src/renderer/package-apps/automation/index.tsx',
     name: 'Automation Studio',
     description: 'An independently downloaded workflow builder for scheduled, agentic and connected automations.',
@@ -90,7 +127,7 @@ const definitions: PackageDefinition[] = [
       'workspace.write',
     ],
     tags: ['automation', 'workflows', 'agents', 'scheduling'],
-    enginesTomni: '>=1.0.0',
+    enginesTomni: FIRST_PARTY_ENGINE_RANGE,
     surfaceModuleId: 'automation',
     modules: [
       {
@@ -111,7 +148,7 @@ const definitions: PackageDefinition[] = [
     bundleKind: 'single',
     permissions: ['agent.invoke', 'model.invoke'],
     tags: ['company', 'agents', 'orchestration'],
-    enginesTomni: '>=1.0.0',
+    enginesTomni: FIRST_PARTY_ENGINE_RANGE,
     surfaceModuleId: 'company',
     modules: [
       {
@@ -132,7 +169,7 @@ const definitions: PackageDefinition[] = [
     bundleKind: 'single',
     permissions: ['knowledge.read'],
     tags: ['knowledge', 'facts', 'research'],
-    enginesTomni: '>=1.0.0',
+    enginesTomni: FIRST_PARTY_ENGINE_RANGE,
     surfaceModuleId: 'knowledge',
     modules: [
       {
@@ -154,21 +191,22 @@ const definitions: PackageDefinition[] = [
     bundleKind: 'single',
     permissions: ['desktop.pet.control'],
     tags: ['pet', 'desktop', 'companion'],
-    enginesTomni: '>=1.0.0',
+    enginesTomni: FIRST_PARTY_ENGINE_RANGE,
     surfaceModuleId: 'pet',
     modules: [
       { id: 'pet', title: 'Pet', surface: 'apps/pet', pinnable: true, runtime: 'trusted-react', entrypoint: 'app.js' },
     ],
   },
   {
-    id: 'com.tomni.document-studio',
+        id: 'com.tomni.document-studio',
+    artifactFormat: 'tomny-zip',
     entry: 'packages/package-apps/document-studio/src/renderer/entry.tsx',
     name: 'Document Studio',
     description: 'An independently downloaded workspace for files, Office documents and live collaboration.',
     bundleKind: 'single',
     permissions: ['workspace.read', 'workspace.write'],
     tags: ['documents', 'office', 'files', 'collaboration'],
-    enginesTomni: '>=1.0.0',
+    enginesTomni: FIRST_PARTY_ENGINE_RANGE,
     surfaceModuleId: 'document',
     modules: [
       {
@@ -191,7 +229,7 @@ const definitions: PackageDefinition[] = [
     bundleKind: 'single',
     permissions: ['workspace.read', 'workspace.write'],
     tags: ['design', 'visual-authoring', 'prototype', 'viu'],
-    enginesTomni: '>=1.0.0',
+    enginesTomni: FIRST_PARTY_ENGINE_RANGE,
     surfaceModuleId: 'design',
     mainContributions: [{ schemaVersion: 1, id: 'design-viu-v1' }],
     modules: [

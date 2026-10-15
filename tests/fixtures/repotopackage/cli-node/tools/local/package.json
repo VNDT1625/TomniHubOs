@@ -1,0 +1,5 @@
+{
+  "name": "local-tool",
+  "private": true,
+  "bin": { "local-tool": "scripts/run.mjs", "local-ts": "src/index.ts" }
+}

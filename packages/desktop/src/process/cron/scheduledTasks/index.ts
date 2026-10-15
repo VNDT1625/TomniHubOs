@@ -1,6 +1,7 @@
 export * from './schedule';
 
 export * from './runtimeRunner';
+export * from './conversationRunner';
 
 export * from './ipcContract';
 export * from './legacyCronAdapter';

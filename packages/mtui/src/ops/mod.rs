@@ -6,10 +6,10 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 const UNDERSTAND_STALE_MAX_PATHS: usize = 200;
-const UNDERSTAND_LOCK_STALE_AFTER: Duration = Duration::from_secs(30);
-const UNDERSTAND_LOCK_WAIT_TIMEOUT: Duration = Duration::from_secs(32);
+pub(crate) const UNDERSTAND_LOCK_STALE_AFTER: Duration = Duration::from_secs(30);
+pub(crate) const UNDERSTAND_LOCK_WAIT_TIMEOUT: Duration = Duration::from_secs(32);
 
-struct UnderstandStaleLock {
+pub(crate) struct UnderstandStaleLock {
     path: PathBuf,
 }
 
@@ -19,7 +19,7 @@ impl Drop for UnderstandStaleLock {
     }
 }
 
-fn acquire_understand_stale_lock(
+pub(crate) fn acquire_understand_stale_lock(
     project_root: &Path,
     stale_after: Duration,
     wait_timeout: Duration,
@@ -215,7 +215,7 @@ pub fn delete_file(
             command: "delete".to_string(),
             operation: "delete_file".to_string(),
             operation_id,
-            file: canonical.display().to_string(),
+            file: display_path(&canonical),
             changed: false,
             backup: None,
             diff_summary,
@@ -286,7 +286,7 @@ pub fn delete_file(
         command: "delete".to_string(),
         operation: "delete_file".to_string(),
         operation_id,
-        file: canonical.display().to_string(),
+        file: display_path(&canonical),
         changed: true,
         backup: Some(backup_path.display().to_string()),
         diff_summary,
@@ -429,7 +429,7 @@ pub fn create_file(
                 "create_file".to_string()
             },
             operation_id,
-            file: canonical.display().to_string(),
+            file: display_path(&canonical),
             changed: true,
             backup: backup_path.map(|p| p.display().to_string()),
             diff_summary,
@@ -444,7 +444,7 @@ pub fn create_file(
             "create_file".to_string()
         },
         operation_id,
-        file: canonical.display().to_string(),
+        file: display_path(&canonical),
         changed: false,
         backup: None,
         diff_summary,
@@ -1735,6 +1735,48 @@ fn add_patch_path(paths: &mut std::collections::BTreeSet<String>, raw: &str) {
     paths.insert(without_prefix);
 }
 
+/// For each `error: patch failed: FILE:LINE` line git printed, says which hunk no longer matches and what the file
+/// reads there now, so the patch can be rebased without a separate read.
+fn describe_patch_failure(project_root: &Path, stderr: &str) -> String {
+    let mut notes = Vec::new();
+    for line in stderr.lines() {
+        let Some(rest) = line.trim().strip_prefix("error: patch failed: ") else {
+            continue;
+        };
+        let Some((file, line_no)) = rest.rsplit_once(':') else {
+            continue;
+        };
+        let Ok(start) = line_no.trim().parse::<usize>() else {
+            continue;
+        };
+        let excerpt = std::fs::read_to_string(project_root.join(file))
+            .ok()
+            .map(|text| {
+                text.lines()
+                    .enumerate()
+                    .skip(start.saturating_sub(2))
+                    .take(5)
+                    .map(|(index, content)| format!("{}: {}", index + 1, content.trim_end()))
+                    .collect::<Vec<_>>()
+                    .join(" | ")
+            })
+            .unwrap_or_default();
+        notes.push(if excerpt.is_empty() {
+            format!("{}: the hunk at line {} no longer matches", file, start)
+        } else {
+            format!(
+                "{}: the hunk at line {} no longer matches; the file now reads: {}",
+                file, start, excerpt
+            )
+        });
+    }
+    if notes.is_empty() {
+        String::new()
+    } else {
+        format!("\nWhere: {}", notes.join("\n"))
+    }
+}
+
 fn validate_git_apply(project_root: &Path, patch_text: &str, check: bool) -> Result<(), MtuiError> {
     let mut command = std::process::Command::new("git");
     command
@@ -1769,8 +1811,9 @@ fn validate_git_apply(project_root: &Path, patch_text: &str, check: bool) -> Res
     })?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+        let where_it_failed = describe_patch_failure(project_root, &stderr);
         return Err(MtuiError::Conflict {
-            message: format!("Patch does not apply cleanly: {}", stderr.trim()),
+            message: format!("Patch does not apply cleanly: {}{}", stderr.trim(), where_it_failed),
             suggestion: "Regenerate the patch from current file contents or use mtui read to inspect exact ranges".to_string(),
         });
     }
@@ -1900,7 +1943,7 @@ pub fn replace_text(
             command: "edit".to_string(),
             operation: "replace".to_string(),
             operation_id,
-            file: canonical.display().to_string(),
+            file: display_path(&canonical),
             changed: true,
             backup: Some(backup_path.display().to_string()),
             diff_summary: crate::diff::diff_summary_string(diff.insertions, diff.deletions),
@@ -1915,7 +1958,7 @@ pub fn replace_text(
             command: "edit".to_string(),
             operation: "replace".to_string(),
             operation_id,
-            file: canonical.display().to_string(),
+            file: display_path(&canonical),
             changed: false,
             backup: None,
             diff_summary: crate::diff::diff_summary_string(diff.insertions, diff.deletions),
@@ -1926,6 +1969,422 @@ pub fn replace_text(
             concurrency,
         })
     }
+}
+
+/// A path for people and logs. Windows canonical paths carry a `\\?\` prefix that only adds noise.
+pub fn display_path(path: &Path) -> String {
+    let text = path.display().to_string();
+    text.strip_prefix(r"\\?\").map(str::to_string).unwrap_or(text)
+}
+
+/// One exact-text replacement inside a `replace-many` batch.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct ReplaceEdit {
+    pub old: String,
+    pub new: String,
+    /// Replace every occurrence instead of requiring exactly one.
+    #[serde(default)]
+    pub all: bool,
+}
+
+/// All the replacements for one file in an `edit-many` batch.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct FileEdits {
+    pub file: String,
+    pub edits: Vec<ReplaceEdit>,
+}
+
+/// Writes text with the file's own line endings, so a multi-line edit typed with `\n` still matches a CRLF file.
+fn match_line_endings(text: &str, crlf: bool) -> String {
+    let unix = text.replace("\r\n", "\n");
+    if crlf {
+        unix.replace('\n', "\r\n")
+    } else {
+        unix
+    }
+}
+
+fn read_utf8_text(file_path: &Path, canonical: &Path) -> Result<String, MtuiError> {
+    let _ = file_path;
+    let content_bytes = crate::safety::check_not_binary(canonical)?;
+    String::from_utf8(content_bytes).map_err(|_| MtuiError::EncodingError {
+        message: "File is not valid UTF-8".to_string(),
+        suggestion: "MTUI only supports UTF-8 files".to_string(),
+    })
+}
+
+struct PlannedEdits {
+    content: String,
+    matches: usize,
+    lines: LineRange,
+}
+
+/// Runs the edits in order on the in-memory text. Each must match exactly once (unless `all`); nothing is written.
+fn plan_edits(content: &str, edits: &[ReplaceEdit], label: &str) -> Result<PlannedEdits, MtuiError> {
+    if edits.is_empty() {
+        return Err(MtuiError::InvalidArgument {
+            message: format!("No edits were given for {}", label),
+            suggestion: "Pass a JSON array of {\"old\", \"new\"} objects".to_string(),
+        });
+    }
+    let crlf = content.contains("\r\n");
+    let mut working = content.to_string();
+    let mut matches = 0usize;
+    let mut lines: Option<LineRange> = None;
+    for (index, edit) in edits.iter().enumerate() {
+        if edit.old.is_empty() {
+            return Err(MtuiError::InvalidArgument {
+                message: format!("Edit {} for {} has empty old text", index + 1, label),
+                suggestion: "Every edit needs the exact text to replace".to_string(),
+            });
+        }
+        let old = match_line_endings(&edit.old, crlf);
+        let new = match_line_endings(&edit.new, crlf);
+        let count = working.matches(old.as_str()).count();
+        if count == 0 {
+            return Err(MtuiError::NoMatch {
+                message: format!("Edit {} of {}: text not found in {}", index + 1, edits.len(), label),
+                suggestion: "Nothing was written; check the old text, which must match exactly".to_string(),
+            });
+        }
+        if count > 1 && !edit.all {
+            return Err(MtuiError::MultipleMatches {
+                message: format!(
+                    "Edit {} of {}: found {} matches in {}",
+                    index + 1,
+                    edits.len(),
+                    count,
+                    label
+                ),
+                matches: count,
+                suggestion: "Nothing was written; use \"all\": true or a more specific old text".to_string(),
+            });
+        }
+        let range = text_range_for_match(&working, &old, edit.all);
+        lines = Some(match lines {
+            Some(existing) => LineRange {
+                start: existing.start.min(range.start),
+                end: existing.end.max(range.end),
+            },
+            None => range,
+        });
+        matches += count;
+        working = working.replace(old.as_str(), &new);
+    }
+    Ok(PlannedEdits {
+        content: working,
+        matches,
+        lines: lines.unwrap_or(LineRange { start: 1, end: 1 }),
+    })
+}
+
+/// Backs the file up, writes the new text and records the operation. Returns the backup path.
+fn commit_text_change(
+    project_root: &Path,
+    canonical: &Path,
+    before: &str,
+    after: &str,
+    operation_id: &str,
+    operation_type: &str,
+) -> Result<PathBuf, MtuiError> {
+    let diff = crate::diff::generate_diff(before, after);
+    let backup_path = crate::backup::create_backup(project_root, operation_id, canonical, before.as_bytes())
+        .map_err(|e| MtuiError::BackupFailed {
+            message: format!("{}", e),
+            suggestion: "Check disk space".to_string(),
+        })?;
+    let diff_path = crate::diff::save_diff(project_root, operation_id, &diff.diff).map_err(|e| MtuiError::DiffFailed {
+        message: format!("{}", e),
+        suggestion: "Check disk space".to_string(),
+    })?;
+    fs::atomic_write(canonical, after.as_bytes()).map_err(|e| MtuiError::WriteFailed {
+        message: format!("Failed to write file: {}", e),
+        suggestion: "Check disk space and permissions".to_string(),
+    })?;
+    mark_understand_stale(project_root, canonical);
+
+    let conn = crate::history::open_db(project_root).map_err(|e| MtuiError::Internal {
+        message: format!("Database error: {}", e),
+    })?;
+    let (agent_id, task_id, plan_id) = operation_metadata();
+    let record = crate::history::OperationRecord {
+        operation_id: operation_id.to_string(),
+        command: "edit".to_string(),
+        operation_type: operation_type.to_string(),
+        cwd: std::env::current_dir().unwrap_or_default().display().to_string(),
+        project_path: project_root.display().to_string(),
+        file_path: Some(canonical.display().to_string()),
+        before_hash: Some(fs::compute_hash(before.as_bytes())),
+        after_hash: Some(fs::compute_hash(after.as_bytes())),
+        backup_path: Some(backup_path.display().to_string()),
+        diff_path: Some(diff_path.display().to_string()),
+        changed: true,
+        created_at: chrono::Utc::now().to_rfc3339(),
+        agent_id,
+        task_id,
+        plan_id,
+    };
+    crate::history::record_operation(&conn, &record).map_err(|e| MtuiError::Internal {
+        message: format!("Failed to record operation: {}", e),
+    })?;
+    Ok(backup_path)
+}
+
+/// Shared tail of the single-file batch commands: stale check, diff, dry-run handling and the commit.
+#[allow(clippy::too_many_arguments)]
+fn finish_single_edit(
+    project_root: &Path,
+    canonical: &Path,
+    content: &str,
+    new_content: String,
+    matches: usize,
+    lines: LineRange,
+    operation: &str,
+    dry_run: bool,
+    expected_hash: Option<&str>,
+    accept_stale: Option<&str>,
+) -> Result<EditResult, MtuiError> {
+    let before_hash = fs::compute_hash(content.as_bytes());
+    let concurrency = assess_stale_edit(project_root, canonical, &before_hash, expected_hash, lines, accept_stale)?;
+    let diff = crate::diff::generate_diff(content, &new_content);
+    let operation_id = generate_operation_id();
+    let changed = new_content != content;
+    let backup = if dry_run || !changed {
+        None
+    } else {
+        Some(commit_text_change(
+            project_root,
+            canonical,
+            content,
+            &new_content,
+            &operation_id,
+            operation,
+        )?)
+    };
+    Ok(EditResult {
+        command: "edit".to_string(),
+        operation: operation.to_string(),
+        operation_id,
+        file: display_path(canonical),
+        changed: backup.is_some(),
+        backup: backup.map(|path| path.display().to_string()),
+        diff_summary: crate::diff::diff_summary_string(diff.insertions, diff.deletions),
+        matches: Some(matches),
+        line: None,
+        current_hash: before_hash,
+        expected_hash: expected_hash.map(|value| value.to_string()),
+        concurrency,
+    })
+}
+
+/// Applies several exact replacements to one file as a single operation: one backup, one diff, one history record
+/// and one undo. If any edit fails nothing is written.
+#[allow(clippy::too_many_arguments)]
+pub fn replace_many(
+    project_root: &Path,
+    file_path: &Path,
+    edits: &[ReplaceEdit],
+    dry_run: bool,
+    expected_hash: Option<&str>,
+    accept_stale: Option<&str>,
+    config: &crate::config::MtuiConfig,
+) -> Result<EditResult, MtuiError> {
+    let canonical = crate::safety::validate_path(file_path, project_root, config)?;
+    let content = read_utf8_text(file_path, &canonical)?;
+    let planned = plan_edits(&content, edits, &file_path.display().to_string())?;
+    finish_single_edit(
+        project_root,
+        &canonical,
+        &content,
+        planned.content,
+        planned.matches,
+        planned.lines,
+        "replace-many",
+        dry_run,
+        expected_hash,
+        accept_stale,
+    )
+}
+
+/// Replaces text matched by a regular expression. `$1`-style capture references work in the replacement. The
+/// pattern must match exactly once unless `all`.
+#[allow(clippy::too_many_arguments)]
+pub fn replace_regex(
+    project_root: &Path,
+    file_path: &Path,
+    pattern: &str,
+    replacement: &str,
+    all: bool,
+    dry_run: bool,
+    expected_hash: Option<&str>,
+    accept_stale: Option<&str>,
+    config: &crate::config::MtuiConfig,
+) -> Result<EditResult, MtuiError> {
+    let regex = regex::Regex::new(pattern).map_err(|e| MtuiError::InvalidArgument {
+        message: format!("Invalid regular expression: {}", e),
+        suggestion: "Use Rust regex syntax; escape literal punctuation with a backslash".to_string(),
+    })?;
+    let canonical = crate::safety::validate_path(file_path, project_root, config)?;
+    let content = read_utf8_text(file_path, &canonical)?;
+    let crlf = content.contains("\r\n");
+    let replacement = match_line_endings(replacement, crlf);
+    let count = regex.find_iter(&content).count();
+    if count == 0 {
+        return Err(MtuiError::NoMatch {
+            message: format!("Pattern not found in {}", file_path.display()),
+            suggestion: "Nothing was written; check the pattern against `mtui read`".to_string(),
+        });
+    }
+    if count > 1 && !all {
+        return Err(MtuiError::MultipleMatches {
+            message: format!("Found {} matches in {}", count, file_path.display()),
+            matches: count,
+            suggestion: "Use --all or a more specific pattern".to_string(),
+        });
+    }
+    let (new_content, lines) = {
+        let first = regex.find(&content).map(|m| (m.start(), m.end())).unwrap_or((0, 0));
+        let last = regex
+            .find_iter(&content)
+            .last()
+            .map(|m| (m.start(), m.end()))
+            .unwrap_or(first);
+        let lines = LineRange {
+            start: line_for_byte(&content, first.0),
+            end: line_for_byte(&content, if all { last.1 } else { first.1 }),
+        };
+        let replaced = if all {
+            regex.replace_all(&content, replacement.as_str()).into_owned()
+        } else {
+            regex.replace(&content, replacement.as_str()).into_owned()
+        };
+        (replaced, lines)
+    };
+    finish_single_edit(
+        project_root,
+        &canonical,
+        &content,
+        new_content,
+        count,
+        lines,
+        "replace-regex",
+        dry_run,
+        expected_hash,
+        accept_stale,
+    )
+}
+
+#[derive(Debug, Serialize)]
+pub struct MultiEditFile {
+    pub operation_id: String,
+    pub file: String,
+    pub matches: usize,
+    pub changed: bool,
+    pub backup: Option<String>,
+    pub diff_summary: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct MultiEditResult {
+    pub command: String,
+    pub operation: String,
+    /// Pass to `mtui undo --group` to restore every file of the batch.
+    pub group_id: String,
+    pub changed: bool,
+    pub dry_run: bool,
+    pub file_count: usize,
+    pub files: Vec<MultiEditFile>,
+}
+
+/// Applies edits to several files as one batch. Every file is planned in memory first, so a bad edit anywhere writes
+/// nothing; if a write fails part-way, the files already written are restored. Operation ids share a group id, so
+/// one `undo --group` reverts the whole batch.
+pub fn replace_files(
+    project_root: &Path,
+    files: &[FileEdits],
+    dry_run: bool,
+    config: &crate::config::MtuiConfig,
+) -> Result<MultiEditResult, MtuiError> {
+    if files.is_empty() {
+        return Err(MtuiError::InvalidArgument {
+            message: "No files were given".to_string(),
+            suggestion: "Pass a JSON array of {\"file\", \"edits\"} objects".to_string(),
+        });
+    }
+    struct Planned {
+        canonical: PathBuf,
+        before: String,
+        after: String,
+        matches: usize,
+    }
+    let mut planned: Vec<Planned> = Vec::new();
+    for entry in files {
+        let canonical = crate::safety::validate_path(Path::new(&entry.file), project_root, config)?;
+        if planned.iter().any(|item| item.canonical == canonical) {
+            return Err(MtuiError::InvalidArgument {
+                message: format!("{} appears twice in the batch", entry.file),
+                suggestion: "List each file once and put all its edits together".to_string(),
+            });
+        }
+        let before = read_utf8_text(Path::new(&entry.file), &canonical)?;
+        let plan = plan_edits(&before, &entry.edits, &entry.file)?;
+        planned.push(Planned {
+            canonical,
+            before,
+            after: plan.content,
+            matches: plan.matches,
+        });
+    }
+
+    let group_id = generate_operation_id();
+    let mut results = Vec::new();
+    let mut written: Vec<usize> = Vec::new();
+    let writing = !dry_run && planned.iter().any(|item| item.before != item.after);
+    for (index, item) in planned.iter().enumerate() {
+        let operation_id = format!("{}.{}", group_id, index);
+        let diff = crate::diff::generate_diff(&item.before, &item.after);
+        let changed = item.before != item.after;
+        let mut backup = None;
+        if writing && changed {
+            match commit_text_change(
+                project_root,
+                &item.canonical,
+                &item.before,
+                &item.after,
+                &operation_id,
+                "replace-many",
+            ) {
+                Ok(path) => {
+                    written.push(index);
+                    backup = Some(path.display().to_string());
+                }
+                Err(error) => {
+                    for done in written.iter().rev() {
+                        let earlier = &planned[*done];
+                        let _ = fs::atomic_write(&earlier.canonical, earlier.before.as_bytes());
+                    }
+                    return Err(error);
+                }
+            }
+        }
+        results.push(MultiEditFile {
+            operation_id,
+            file: display_path(&item.canonical),
+            matches: item.matches,
+            changed: backup.is_some(),
+            backup,
+            diff_summary: crate::diff::diff_summary_string(diff.insertions, diff.deletions),
+        });
+    }
+    Ok(MultiEditResult {
+        command: "edit-many".to_string(),
+        operation: "edit-many".to_string(),
+        group_id,
+        changed: !written.is_empty(),
+        dry_run,
+        file_count: results.len(),
+        files: results,
+    })
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -2058,7 +2517,7 @@ pub fn line_replace(
             command: "edit".to_string(),
             operation: "line_replace".to_string(),
             operation_id,
-            file: canonical.display().to_string(),
+            file: display_path(&canonical),
             changed: true,
             backup: Some(backup_path.display().to_string()),
             diff_summary: crate::diff::diff_summary_string(diff.insertions, diff.deletions),
@@ -2073,7 +2532,7 @@ pub fn line_replace(
             command: "edit".to_string(),
             operation: "line_replace".to_string(),
             operation_id,
-            file: canonical.display().to_string(),
+            file: display_path(&canonical),
             changed: false,
             backup: None,
             diff_summary: crate::diff::diff_summary_string(diff.insertions, diff.deletions),
@@ -2264,7 +2723,7 @@ fn insert_at_marker(
             command: "edit".to_string(),
             operation: op_name.to_string(),
             operation_id,
-            file: canonical.display().to_string(),
+            file: display_path(&canonical),
             changed: true,
             backup: Some(backup_path.display().to_string()),
             diff_summary: crate::diff::diff_summary_string(diff.insertions, diff.deletions),
@@ -2279,7 +2738,7 @@ fn insert_at_marker(
             command: "edit".to_string(),
             operation: op_name.to_string(),
             operation_id,
-            file: canonical.display().to_string(),
+            file: display_path(&canonical),
             changed: false,
             backup: None,
             diff_summary: crate::diff::diff_summary_string(diff.insertions, diff.deletions),
@@ -2407,7 +2866,7 @@ pub fn delete_text(
             command: "edit".to_string(),
             operation: "delete".to_string(),
             operation_id,
-            file: canonical.display().to_string(),
+            file: display_path(&canonical),
             changed: true,
             backup: Some(backup_path.display().to_string()),
             diff_summary: crate::diff::diff_summary_string(diff.insertions, diff.deletions),
@@ -2422,7 +2881,7 @@ pub fn delete_text(
             command: "edit".to_string(),
             operation: "delete".to_string(),
             operation_id,
-            file: canonical.display().to_string(),
+            file: display_path(&canonical),
             changed: false,
             backup: None,
             diff_summary: crate::diff::diff_summary_string(diff.insertions, diff.deletions),
@@ -3227,7 +3686,7 @@ fn resolve_spec_temporary_dir(project_root: &Path, spec: &str) -> Result<PathBuf
         .trim_end_matches('/')
         .to_string();
     let slug = normalized
-        .split(".tomny/specs/")
+        .split(".tomni/specs/")
         .last()
         .unwrap_or(&normalized)
         .split('/')
@@ -3242,11 +3701,11 @@ fn resolve_spec_temporary_dir(project_root: &Path, spec: &str) -> Result<PathBuf
     {
         return Err(MtuiError::InvalidArgument {
             message: "Invalid spec slug".to_string(),
-            suggestion: "Use --spec <slug> or --spec .tomny/specs/<slug>/".to_string(),
+            suggestion: "Use --spec <slug> or --spec .tomni/specs/<slug>/".to_string(),
         });
     }
     Ok(project_root
-        .join(".tomny")
+        .join(".tomni")
         .join("specs")
         .join(slug)
         .join("plan")
@@ -3377,6 +3836,95 @@ fn expand_brace_glob(pattern: &str) -> Vec<String> {
         })
         .collect()
 }
+
+#[derive(Debug, Serialize)]
+pub struct GlobResult {
+    pub command: String,
+    pub pattern: String,
+    pub dir: String,
+    pub files: Vec<String>,
+    pub match_count: usize,
+    pub limit: usize,
+    pub truncated: bool,
+}
+
+/// List files below `dir` whose path relative to `dir` matches `pattern`.
+///
+/// Discovery follows the same ignore-aware, sorted walk as `search`, and returned paths are
+/// project-relative so they can be passed straight to `read`, `edit`, or `search`.
+pub fn glob_files(
+    project_root: &Path,
+    dir: &Path,
+    pattern: &str,
+    limit: usize,
+    config: &crate::config::MtuiConfig,
+) -> Result<GlobResult, MtuiError> {
+    let search_dir = crate::safety::validate_path(dir, project_root, config)?;
+    if !search_dir.is_dir() {
+        return Err(MtuiError::InvalidArgument {
+            message: format!("Not a directory: {}", dir.display()),
+            suggestion: "Pass a directory; use `mtui search` to look inside one file".to_string(),
+        });
+    }
+    let patterns = compile_search_globs(&[pattern.replace('\\', "/")])?;
+    let limit = limit.max(1);
+    let canonical_root =
+        std::fs::canonicalize(project_root).unwrap_or_else(|_| project_root.to_path_buf());
+    // Walk the un-canonicalized path (as `search` does): the ignore matcher compares entries
+    // against the project root as the user spelled it.
+    let normalized_root = project_root.components().collect::<PathBuf>();
+    let walk_dir = if dir.is_absolute() {
+        dir.to_path_buf()
+    } else {
+        project_root.join(dir)
+    }
+    .components()
+    .collect::<PathBuf>();
+    let walker = fs::discovery::discover_files(
+        project_root,
+        &walk_dir,
+        &config.ignore.patterns,
+        u64::MAX,
+    )
+    .map_err(|error| MtuiError::InvalidArgument {
+        message: format!("Cannot discover files: {error:#}"),
+        suggestion: "Fix invalid ignore patterns in .mtui/config.toml".to_string(),
+    })?;
+
+    let mut files = Vec::new();
+    let mut truncated = false;
+    for path in walker {
+        let Ok(relative_to_dir) = path.strip_prefix(&walk_dir) else {
+            continue;
+        };
+        let relative_to_dir = relative_to_dir.to_string_lossy().replace('\\', "/");
+        if !patterns
+            .iter()
+            .any(|candidate| glob_matches(candidate, &relative_to_dir))
+        {
+            continue;
+        }
+        if files.len() >= limit {
+            truncated = true;
+            break;
+        }
+        let display = path
+            .strip_prefix(&normalized_root)
+            .map(|relative| relative.to_string_lossy().replace('\\', "/"))
+            .unwrap_or_else(|_| display_project_path(&canonical_root, &path));
+        files.push(display);
+    }
+    Ok(GlobResult {
+        command: "glob".to_string(),
+        pattern: pattern.to_string(),
+        dir: display_project_path(&canonical_root, &search_dir),
+        match_count: files.len(),
+        files,
+        limit,
+        truncated,
+    })
+}
+
 
 fn glob_matches(pattern: &glob::Pattern, relative: &str) -> bool {
     pattern.matches(relative)
@@ -3822,26 +4370,19 @@ mod tests {
     }
 
     #[test]
-    fn summary_cache_uses_canonical_then_migration_then_legacy_generation() {
+    fn summary_cache_migrates_legacy_generation_to_canonical_path() {
         let temp = tempfile::tempdir().expect("tempdir");
-        let summaries = [(".tomny", 1_u64), (".omni", 2_u64), (".tomni", 3_u64)];
-        for (metadata_dir, built_at) in summaries {
-            let understand = temp.path().join(metadata_dir).join("understand");
-            std::fs::create_dir_all(&understand).expect("create understand directory");
-            std::fs::write(
-                understand.join("summary.json"),
-                serde_json::json!({ "builtAt": built_at }).to_string(),
-            )
-            .expect("write summary");
-        }
+        let legacy = temp.path().join(".omni").join("understand");
+        std::fs::create_dir_all(&legacy).expect("create legacy understand directory");
+        std::fs::write(
+            legacy.join("summary.json"),
+            serde_json::json!({ "builtAt": 2_u64 }).to_string(),
+        )
+        .expect("write legacy summary");
 
-        assert_eq!(summary_cache(temp.path()).unwrap()["builtAt"], 3);
-        std::fs::remove_file(temp.path().join(".tomni/understand/summary.json"))
-            .expect("remove canonical summary");
         assert_eq!(summary_cache(temp.path()).unwrap()["builtAt"], 2);
-        std::fs::remove_file(temp.path().join(".omni/understand/summary.json"))
-            .expect("remove migration summary");
-        assert_eq!(summary_cache(temp.path()).unwrap()["builtAt"], 1);
+        assert!(temp.path().join(".tomni/understand/summary.json").is_file());
+        assert!(!temp.path().join(".omni").exists());
     }
 
     #[test]

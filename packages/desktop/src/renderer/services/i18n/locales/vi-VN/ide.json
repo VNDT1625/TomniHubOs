@@ -2082,5 +2082,53 @@
       "confirm": "T\u00f4i ph\u00ea duy\u1ec7t b\u1ea3n thi\u1ebft k\u1ebf n\u00e0y v\u00e0 cho ph\u00e9p b\u1eaft \u0111\u1ea7u giai \u0111o\u1ea1n vi\u1ebft m\u00e3.",
       "handoffHint": "Sau khi \u0111\u01b0\u1ee3c ph\u00ea duy\u1ec7t, Build0 s\u1ebd c\u1ea5u tr\u00fac h\u00f3a m\u00f4 h\u00ecnh s\u1ea3n ph\u1ea9m, chu\u1ea9n h\u00f3a thi\u1ebft k\u1ebf v\u00e0 g\u1eedi k\u1ebf ho\u1ea1ch tri\u1ec3n khai c\u00f3 th\u1ec3 truy v\u1ebft cho agent."
     }
+  },
+  "social": {
+    "title": "M\u1ea1ng x\u00e3 h\u1ed9i",
+    "tabs": {
+      "feed": "B\u1ea3ng tin",
+      "reels": "Reels",
+      "messages": "Tin nh\u1eafn",
+      "settings": "C\u00e0i \u0111\u1eb7t"
+    },
+    "feed": {
+      "all": "T\u1ea5t c\u1ea3",
+      "empty": "Kh\u00f4ng c\u00f3 b\u00e0i vi\u1ebft m\u1edbi n\u00e0o trong b\u1ea3ng tin.",
+      "loadMore": "T\u1ea3i th\u00eam b\u00e0i vi\u1ebft",
+      "like": "Th\u00edch",
+      "comment": "B\u00ecnh lu\u1eadn",
+      "openOriginal": "M\u1edf g\u1ed1c",
+      "likesCount": "{{count}} l\u01b0\u1ee3t th\u00edch",
+      "commentsCount": "{{count}} b\u00ecnh lu\u1eadn"
+    },
+    "reels": {
+      "mute": "T\u1eaft ti\u1ebfng",
+      "unmute": "B\u1eadt ti\u1ebfng",
+      "empty": "Ch\u01b0a c\u00f3 video ng\u1eafn n\u00e0o trong h\u00e0ng \u0111\u1ee3i.",
+      "commentsTitle": "B\u00ecnh lu\u1eadn",
+      "addCommentPlaceholder": "Th\u00eam b\u00ecnh lu\u1eadn...",
+      "send": "G\u1eedi"
+    },
+    "messages": {
+      "title": "Tin nh\u1eafn",
+      "searchPlaceholder": "T\u00ecm cu\u1ed9c tr\u00f2 chuy\u1ec7n...",
+      "emptyConversations": "Kh\u00f4ng t\u00ecm th\u1ea5y cu\u1ed9c tr\u00f2 chuy\u1ec7n n\u00e0o",
+      "selectConversation": "Ch\u1ecdn m\u1ed9t cu\u1ed9c tr\u00f2 chuy\u1ec7n \u0111\u1ec3 b\u1eaft \u0111\u1ea7u nh\u1eafn tin",
+      "inputPlaceholder": "Nh\u1eadp tin nh\u1eafn..."
+    },
+    "settings": {
+      "accountsTitle": "T\u00e0i kho\u1ea3n \u0111\u00e3 li\u00ean k\u1ebft",
+      "accountsDesc": "Qu\u1ea3n l\u00fd nhi\u1ec1u t\u00e0i kho\u1ea3n tr\u00ean t\u1eebng n\u1ec1n t\u1ea3ng, ho\u00e0n to\u00e0n c\u00e1ch ly phi\u00ean v\u00e0 cookie.",
+      "noAccounts": "Ch\u01b0a c\u00f3 t\u00e0i kho\u1ea3n n\u00e0o \u0111\u01b0\u1ee3c k\u1ebft n\u1ed1i.",
+      "addNew": "Th\u00eam t\u00e0i kho\u1ea3n m\u1edbi",
+      "logout": "\u0110\u0103ng xu\u1ea5t",
+      "syncFeed": "\u0110\u1ed3ng b\u1ed9 b\u1ea3ng tin",
+      "syncMessages": "Tin nh\u1eafn & H\u1ed9p th\u01b0",
+      "storageTitle": "Qu\u1ea3n l\u00fd L\u01b0u tr\u1eef & B\u1ed9 nh\u1edb Cache",
+      "storageDesc": "D\u1eef li\u1ec7u b\u00e0i vi\u1ebft v\u00e0 reels \u0111\u00e3 xem s\u1ebd t\u1ef1 \u0111\u1ed9ng \u0111\u01b0\u1ee3c d\u1ecdn d\u1eb9p sau 48 gi\u1edd \u0111\u1ec3 gi\u1ea3i ph\u00f3ng dung l\u01b0\u1ee3ng.",
+      "clearCache": "D\u1ecdn d\u1eb9p b\u1ed9 nh\u1edb ngay",
+      "permissionModalTitle": "\u1ee6y quy\u1ec1n truy c\u1eadp",
+      "continueLogin": "Ti\u1ebfp t\u1ee5c \u0111\u0103ng nh\u1eadp"
+    }
   }
 }

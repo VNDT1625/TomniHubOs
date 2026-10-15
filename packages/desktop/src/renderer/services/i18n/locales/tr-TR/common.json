@@ -1,4 +1,93 @@
 {
+  "superSearch": {
+    "placeholder": {
+      "hub": "Ara…",
+      "browser": "{{engine}} ile ara…"
+    },
+    "ariaLabel": "Süper Arama",
+    "scopeLabel": "Arama kapsamı",
+    "scope": {
+      "all": "Tümü"
+    },
+    "source": {
+      "local": "Uygulama içi",
+      "apps": "Uygulamalar",
+      "web": "Web"
+    },
+    "state": {
+      "loading": "Aranıyor…",
+      "empty": "Sonuç yok",
+      "error": "Bu kaynak hata verdi; diğerleri çalışmaya devam ediyor",
+      "timeout": "Bu kaynak çok yavaş yanıt verdi",
+      "unavailable": "Kaynak hazır değil",
+      "noBridge": "Bağlı, ancak arama yürütme köprüsü henüz bağlanmadı",
+      "disabled": "Bu kaynak kapalı. Kaynak ayarlarından açın."
+    },
+    "hint": {
+      "empty": "Aramak için yazın. Tek bir kaynakta aramak için fb: abc gibi bir önek kullanın.",
+      "scopeOnly": "{{source}} içinde aranıyor — aranacak metni yazın."
+    },
+    "rank": "#{{rank}} · ilk %{{percent}}",
+    "rankTitle": "{{source}} içinde {{count}} sonuçtan {{rank}}. sıra — ilk %{{percent}}",
+    "resultCount": "{{count}} sonuç",
+    "footer": "↑↓ seç · Enter aç · Esc kapat",
+    "close": "Kapat",
+    "clear": "Temizle",
+    "engineLabel": "Arama motoru",
+    "config": {
+      "title": "Arama kaynakları",
+      "source": "Source",
+      "remove": "Remove",
+      "addCustom": "Add a site search",
+      "customHelp": "Paste the search link of any site and put {q} where the keyword goes, e.g. https://www.google.com/maps/search/{q}",
+      "customName": "Name",
+      "customUrl": "Search link with {q}",
+      "customInvalid": "Needs a name, a unique alias and an http(s) link containing {q}",
+      "add": "Add",
+      "open": "Kaynak ayarları",
+      "enabled": "Açık",
+      "inAll": "“Tümü”ne dahil",
+      "alias": "Takma ad",
+      "aliasInvalid": "Takma ad geçersiz veya zaten kullanılıyor",
+      "connectedNote": "Bağlı üçüncü taraf kaynaklar siz açana kadar kapalıdır; sorgular yalnızca açık kaynaklara gönderilir.",
+      "reset": "Varsayılana sıfırla",
+      "done": "Bitti",
+      "none": "Bağlı arama aracı bulunamadı"
+    },
+    "web": {
+      "searchWith": "{{engine}} üzerinde “{{query}}” ara",
+      "openSite": "{{site}} sitesini aç"
+    },
+    "local": {
+      "untitledConversation": "Adsız sohbet",
+      "restartApp": "Uygulamayı yeniden başlat",
+      "actionSubtitle": "Eylem",
+      "pageSubtitle": "Sayfa",
+      "settings": "Ayarlar",
+      "page": {
+        "home": "Ana sayfa",
+        "history": "Geçmiş",
+        "scheduled": "Zamanlanmış görevler",
+        "store": "Mağaza",
+        "browser": "Tarayıcı",
+        "ide": "IDE",
+        "company": "Şirket",
+        "git": "Git",
+        "account": "Hesap",
+        "settings": "Ayarlar"
+      }
+    },
+    "settings": {
+      "theme": "Tema ve renk düzeni",
+      "cssTheme": "Özel CSS teması",
+      "wallpaper": "Duvar kağıdı",
+      "interfaceLanguage": "Arayüz dili",
+      "modelProviders": "Model sağlayıcıları ve API anahtarları",
+      "mcpServers": "MCP sunucuları ve bağlayıcılar",
+      "skills": "Beceriler",
+      "webui": "Uzaktan / WebUI erişimi"
+    }
+  },
   "send": "Gönder",
   "cancel": "İptal",
   "save": "Kaydet",
@@ -11,6 +100,7 @@
   "skills": "Beceriler",
   "workspace": "Proje",
   "settings": "Ayarlar",
+  "home": "Ana Sayfa",
   "system": "Sistem",
   "about": "Hakkımızda",
   "back": "Sohbete Dön",
@@ -23,6 +113,7 @@
   "loading": "Lütfen bekleyin...",
   "copy": "Kopyala",
   "reply": "Alıntı",
+  "copiedInline": "Kopyalandı",
   "copySuccess": "Kopyalandı",
   "copyFailed": "Kopyalama başarısız",
   "download": "İndir",
@@ -89,6 +180,17 @@
   "fileAttach.uploading": "Yükleniyor...",
   "fileAttach.uploadSuccess": "Yükleme başarılı",
   "fileAttach.cancelUpload": "Yüklemeyi iptal et",
+  "attachmentQuickView": {
+    "showAttachments": "Ekleri göster ({{count}})",
+    "hideAttachments": "Ekleri gizle ({{count}})",
+    "remove": "{{label}} kaldır",
+    "label": "{{label}} hızlı görünümü",
+    "loading": "Önizleme yükleniyor…",
+    "unsupported": "Bu dosya türü burada önizlenemez.",
+    "directory": "Klasörler burada önizlenemez.",
+    "too-large": "Bu dosya hızlı görünüm için çok büyük.",
+    "unavailable": "Bu dosya artık kullanılamıyor."
+  },
   "expand": "Genişlet",
   "name": "Ad",
   "added": "Eklendi",
@@ -98,5 +200,267 @@
   "import": "İçe Aktar",
   "processing": "İşleniyor...",
   "optional": "(isteğe bağlı)",
-  "clear": "Temizle"
+  "clear": "Temizle",
+  "notificationHub": {
+    "title": "Bildirimler",
+    "summary": "{{p0}} acil · {{p1}} önemli · {{filtered}} filtrelendi",
+    "layaOn": "Laya yeni bildirimleri sınıflandırıyor.",
+    "layaOff": "Laya çalışmıyor; bildirimler yerleşik kurallarla sınıflandırılıyor.",
+    "taskCreated": "Görev oluşturuldu",
+    "taskFailed": "Görev oluşturulamadı",
+    "tabs": {
+      "focus": "Odak",
+      "digest": "Özet",
+      "filtered": "Filtrelenen",
+      "sources": "Kaynaklar"
+    },
+    "empty": {
+      "focus": "Şu an ilgilenmeniz gereken bir şey yok.",
+      "digest": "Henüz güncelleme yok.",
+      "filtered": "Filtrelenen bir şey yok."
+    },
+    "level": {
+      "P0": "Acil",
+      "P1": "Önemli",
+      "P2": "Özet",
+      "P3": "Filtre"
+    },
+    "by": {
+      "laya": "Laya sınıflandırdı",
+      "rules": "kurala göre",
+      "user": "sizin seçiminiz",
+      "llm": "modelinize göre sıralandı"
+    },
+    "actions": {
+      "open": "Aç",
+      "createTask": "Göreve çevir",
+      "move": "Taşı",
+      "markRead": "Okundu",
+      "remove": "Kaldır",
+      "alwaysImportant": "Bu gönderen her zaman acil",
+      "alwaysMute": "Bu göndereni her zaman filtrele",
+      "syncAll": "Kaynakları şimdi denetle",
+      "markAllRead": "Tümünü okundu say",
+      "clearTab": "Bu sekmeyi temizle",
+      "boostSender": "Bu kişiden gelenler hep acil",
+      "muteSender": "Bu kişiyi hep filtrele",
+      "muteSource": "{{name}} sesini kapat",
+      "unmuteSource": "{{name}} sesini aç",
+      "settings": "Bildirim ayarları"
+    },
+    "event": {
+      "needsInput": "{{name}} yanıtınızı bekliyor",
+      "failed": "{{name}} başarısız oldu",
+      "done": "{{name}} tamamlandı",
+      "scheduleFailed": "Zamanlanmış görev {{name}} başarısız oldu",
+      "scheduleDone": "Zamanlanmış görev {{name}} tamamlandı",
+      "webUnread": "{{name}}: {{count}} okunmamış (+{{added}})",
+      "ramHigh": "Bellek azalıyor",
+      "ramHighBody": "RAM %{{percent}} dolu ({{used}} / {{total}} GB). Gerekmeyen modelleri veya sekmeleri kapatın."
+    },
+    "errors": {
+      "label": "Bir ad girin.",
+      "host": "Sunucu adresi geçersiz.",
+      "user": "E-posta veya kullanıcı adı girin.",
+      "port": "Port 1 ile 65535 arasında olmalı.",
+      "password": "Parola çok uzun.",
+      "url": "http veya https akış adresi kullanın.",
+      "origin": "facebook.com gibi bir site girin.",
+      "kind": "Bilinmeyen kaynak türü.",
+      "missing": "Bu kaynak artık yok.",
+      "limit": "30 kaynak sınırına ulaşıldı.",
+      "busy": "Bu kaynak zaten eşitleniyor.",
+      "unknown": "Bir sorun oluştu. Tekrar deneyin.",
+      "channel": "Bir YouTube kanal bağlantısı, @handle veya kanal kimliği girin.",
+      "unsupported": "Bu sistemde kullanılamaz."
+    },
+    "sources": {
+      "title": "Bağlı kaynaklar",
+      "add": "Kaynak ekle",
+      "intro": "Tomny yalnızca izin verdiklerinizi okur: okundu olarak işaretlemeden posta başlıkları, herkese açık akışlar, seçtiğiniz uygulamaların Windows bildirimleri ve izin verilen siteler için sekme başlığındaki okunmamış sayısı ile sitenin kendi bildirimleri.",
+      "none": "Henüz kaynak yok. E-posta, akış veya site ekleyin.",
+      "kind": {
+        "imap": "E-posta",
+        "feed": "Akış",
+        "web": "Site",
+        "youtube": "YouTube",
+        "os": "Masaüstü uygulamaları"
+      },
+      "lastError": "Hata: {{error}}",
+      "lastSync": "{{time}} denetlendi",
+      "webPassive": "Site yerleşik tarayıcıda açıldığında güncellenir",
+      "neverSynced": "Henüz denetlenmedi",
+      "noPassword": "parola kayıtlı değil",
+      "enabled": "Etkin",
+      "syncNow": "Denetle",
+      "edit": "Düzenle",
+      "remove": "Kaldır",
+      "removeConfirm": "Bu kaynak ve kayıtlı parolası kaldırılsın mı?",
+      "provider": "Sağlayıcı",
+      "presets": {
+        "gmail": "Gmail",
+        "outlook": "Outlook / Microsoft 365",
+        "yahoo": "Yahoo Mail",
+        "icloud": "iCloud Mail",
+        "custom": "Diğer IMAP sunucusu"
+      },
+      "presetHint": {
+        "gmail": "2 Adımlı Doğrulamayı açın, myaccount.google.com/apppasswords adresinde bir uygulama şifresi oluşturup buraya yapıştırın. Gmail ayarlarında IMAP açık olmalı.",
+        "outlook": "İki adımlı oturum açma açıksa Microsoft hesabı güvenlik sayfasından bir uygulama şifresi kullanın. Bazı iş hesapları IMAP’i engeller.",
+        "yahoo": "Yahoo Hesap Güvenliği’nde bir uygulama şifresi oluşturup buraya yapıştırın.",
+        "icloud": "account.apple.com adresinde uygulamaya özel parola oluşturup buraya yapıştırın.",
+        "custom": "Sağlayıcınızın IMAP sunucusunu girin. Yalnızca TLS bağlantıları kullanılır."
+      },
+      "user": "E-posta veya kullanıcı adı",
+      "password": "Uygulama şifresi",
+      "passwordKeep": "Kayıtlı parolayı korumak için boş bırakın",
+      "host": "IMAP sunucusu",
+      "port": "Port",
+      "mailbox": "Klasör",
+      "url": "Akış adresi (RSS veya Atom)",
+      "webHint": "Yerleşik tarayıcıda oturum açtığınız bir site seçin. Tomny sekme başlığındaki okunmamış sayısını ve izin verirseniz sitenin gösterdiği bildirimleri izler; sayfa içeriğini asla okumaz.",
+      "origin": "Site",
+      "label": "Ad",
+      "interval": "Denetleme aralığı (dk)",
+      "cancel": "İptal",
+      "save": "Kaydet",
+      "saved": "Kaynak kaydedildi",
+      "syncOk": "Denetlendi: {{count}} yeni",
+      "syncFailed": "Denetleme başarısız: {{error}}",
+      "cardTitle": "Kaynaklar ve hesaplar",
+      "osApps": "Dahil edilecek uygulamalar",
+      "osHint": "Diğer Windows uygulamalarının gösterdiği bildirimleri okur (Zalo, Telegram, Discord, Outlook, tarayıcılar). Uygulama seçin ya da Tomny hariç tüm uygulamaları dahil etmek için hiçbirini seçmeyin.",
+      "osNone": "Henüz uygulama bildirimi bulunamadı veya bu sistem Windows değil.",
+      "osAllApps": "Tüm uygulamalar",
+      "preview": "Kısa bir önizleme sakla",
+      "previewHint": "Kapalı: yalnızca gönderen ve konu okunur.",
+      "youtubeHint": "Bir kanal bağlantısı, @handle veya kanal kimliği yapıştırın. Yeni yüklemeler YouTube'un herkese açık akışından gelir; oturum açma veya API anahtarı gerekmez.",
+      "channel": "YouTube kanalı",
+      "capture": "Sitenin kendi bildirimlerini al",
+      "captureHint": "Sayfa bir bildirim gösterdiğinde (bir AI yanıtı hazır, yeni bir mesaj) bildirim merkeze gider ve yalnızca önemliyse uyarır."
+    },
+    "rules": {
+      "title": "Filtre kuralları",
+      "useLaya": "Bildirimleri Laya sınıflandırsın",
+      "layaRunning": "Laya bu cihazda çalışıyor.",
+      "layaStopped": "Laya çalışmıyor; Tomny onu yalnızca bunun için başlatmaz.",
+      "systemAlerts": "Acil bildirimler için sistem uyarısı",
+      "vip": "Her zaman acil gönderenler",
+      "muted": "Her zaman filtrelenen gönderenler",
+      "urgent": "Acil anahtar sözcükler",
+      "vipPlaceholder": "Satır başına bir tane: boss@company.com veya company.com",
+      "mutedPlaceholder": "Satır başına bir tane: news@shop.com veya shop.com",
+      "urgentPlaceholder": "Satır başına bir tane, örneğin: son tarih",
+      "save": "Kuralları kaydet",
+      "saved": "Kurallar kaydedildi"
+    },
+    "delivery": {
+      "interrupt": "Uyarıldı",
+      "digest": "Akışta",
+      "silent": "Gizli"
+    },
+    "view": {
+      "toolbar": "Bildirimleri filtrele",
+      "search": "Bildirimlerde ara",
+      "groupBy": "Grupla",
+      "group": {
+        "time": "En yeni önce",
+        "level": "Öneme göre",
+        "source": "Kaynağa göre",
+        "account": "Hesaba göre"
+      },
+      "source": "Kaynak",
+      "allSources": "Tüm kaynaklar",
+      "unreadOnly": "Yalnızca okunmamış",
+      "noAccount": "Diğer"
+    },
+    "sourceKind": {
+      "agent": "Tomny ajanları",
+      "schedule": "Zamanlamalar",
+      "team": "Ekipler",
+      "system": "Tomny",
+      "email": "Posta",
+      "feed": "Akışlar",
+      "web": "Siteler",
+      "youtube": "YouTube",
+      "os": "Masaüstü uygulamaları",
+      "app": "Tomny uygulamaları"
+    },
+    "missed": {
+      "title": "Neleri kaçırdınız",
+      "period": {
+        "today": "Bugün",
+        "24h": "24 sa",
+        "7d": "7 gün"
+      },
+      "none": "Bu dönemde yeni bir şey yok.",
+      "counts": "{{total}} bildirim, {{unread}} okunmamış · {{p0}} acil · {{p1}} önemli · {{p2}} özet · {{p3}} filtrelendi",
+      "askAgent": "Yazılı bir özet için herhangi bir Tomny ajanına “ne kaçırdım?” diye sorun."
+    },
+    "catalog": {
+      "title": "Neler bağlanabilir",
+      "intro": "Çalışıyor: Tomny kendisi getirir. Oturum açılmış site: yerleşik tarayıcıda siteye oturum açık olduğu sürece çalışır. Yalnızca adaptör: planlandı, önce bir sağlayıcı entegrasyonu gerekir.",
+      "support": {
+        "working": "çalışıyor",
+        "session": "oturum açılmış site",
+        "adapter-ready": "yalnızca adaptör"
+      },
+      "group": {
+        "mail": "Posta",
+        "ai": "AI asistanları",
+        "social": "Sosyal",
+        "messages": "Mesajlar",
+        "video": "Video",
+        "desktop": "Masaüstü",
+        "apps": "Uygulamalar"
+      }
+    },
+    "triage": {
+      "cardTitle": "Laya önceliklendirme",
+      "title": "Sizi neler rahatsız edebilir",
+      "intro": "Önce kurallar, listeleriniz ve açtığınız ya da kapattığınız şeyler karar verir; bu cihazda ve ücretsiz. Laya zaten çalışıyorsa yardım eder.",
+      "interrupt": "Şunlar için uyar",
+      "interruptHint": "Geri kalan her şey akışta bekler.",
+      "p0p1": "Acil + önemli",
+      "learn": "Açtıklarımdan veya kapattıklarımdan öğren",
+      "learnHint": "Bir göndereni bir seviye yukarı veya aşağı taşır; tek başına hiçbir şeyi acil yapmaz.",
+      "packageApps": "Tomny uygulamalarından bildirimler",
+      "packageAppsHint": "notifications.show bildiren yüklü uygulamalar bildirim gönderebilir; kendilerini acil olarak işaretleyemezler.",
+      "retention": "Bildirimleri sakla (gün)",
+      "muted": "Sesi kapatılan kaynaklar",
+      "mutedNone": "Sesi kapatılan kaynak yok."
+    },
+    "llm": {
+      "title": "Belirsiz öğeleri bir modele sor",
+      "enable": "Belirsiz öğeler için model kullan",
+      "intro": "Varsayılan olarak kapalı. Yalnızca kuralların yerleştiremediği öğeler; kodlar, sayılar, bağlantılar ve adresler kaldırılarak küçük gruplar halinde gönderilir. Günlük sınır asla aşılmaz.",
+      "model": "Model",
+      "modelPlaceholder": "Küçük, ucuz bir model kimliği",
+      "dailyLimit": "Günde en fazla öğe",
+      "includeSnippet": "Maskelenmiş önizlemeyi de gönder",
+      "includeSnippetHint": "Kapalı: yalnızca kaynak, gönderen alan adı ve maskelenmiş konu gönderilir.",
+      "usage": "Bugün kullanılan: {{used}} / {{limit}}",
+      "inactive": "Etkin değil",
+      "lastRun": "son grup {{time}}",
+      "error": {
+        "budget": "bugünkü sınıra ulaşıldı",
+        "no-model": "bu modeli sunabilecek sağlayıcı yok",
+        "unparsed": "modelin yanıtı okunamadı"
+      },
+      "errorGeneric": "son hata: {{error}}"
+    },
+    "flash": {
+      "title": "Hızlı bildirimler",
+      "empty": "Şu an ilgilenmeniz gereken bir şey yok.",
+      "viewAll": "Tümünü gör",
+      "viewAllMore": "Tümünü gör (+{{count}})"
+    },
+    "page": {
+      "subtitle": "Size ulaşan her şey, kaynaklarınız ve Laya ayarları.",
+      "tabs": {
+        "feed": "Bildirimler",
+        "triage": "Laya ve bütçe"
+      }
+    }
+  }
 }

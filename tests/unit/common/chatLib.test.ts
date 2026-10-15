@@ -184,6 +184,99 @@ describe('normalizeAgentStreamError', () => {
 });
 
 describe('transformMessage', () => {
+
+  it('projects only a valid live image lifecycle into a dedicated chat message', () => {
+    const queued = transformMessage({
+      type: 'image_output',
+      msg_id: 'image-output-event-1',
+      conversation_id: CONVERSATION_ID,
+      data: {
+        schemaVersion: 1,
+        outputId: 'image-output-1',
+        revision: 1,
+        conversationId: CONVERSATION_ID,
+        runId: 'run-1',
+        source: 'browser-screenshot',
+        state: 'queued',
+      },
+    });
+    const invalid = transformMessage({
+      type: 'image_output',
+      msg_id: 'image-output-event-2',
+      conversation_id: CONVERSATION_ID,
+      data: {
+        schemaVersion: 1,
+        outputId: 'image-output-1',
+        revision: 2,
+        conversationId: CONVERSATION_ID,
+        runId: 'run-1',
+        source: 'browser-screenshot',
+        state: 'queued',
+        workspacePath: '.tomni/artifacts/live-images/private.png',
+      },
+    });
+
+    expect(queued?.type).toBe('image_output');
+    if (queued?.type !== 'image_output') throw new Error('expected image output');
+    expect(queued.content.outputId).toBe('image-output-1');
+    expect(invalid).toBeUndefined();
+  });
+
+  it('updates one live image card only when a newer valid lifecycle revision arrives', () => {
+    const queued = transformMessage({
+      type: 'image_output',
+      msg_id: 'image-output-event-1',
+      conversation_id: CONVERSATION_ID,
+      data: {
+        schemaVersion: 1,
+        outputId: 'image-output-1',
+        revision: 1,
+        conversationId: CONVERSATION_ID,
+        runId: 'run-1',
+        source: 'browser-screenshot',
+        state: 'queued',
+      },
+    });
+    const running = transformMessage({
+      type: 'image_output',
+      msg_id: 'image-output-event-2',
+      conversation_id: CONVERSATION_ID,
+      data: {
+        schemaVersion: 1,
+        outputId: 'image-output-1',
+        revision: 2,
+        conversationId: CONVERSATION_ID,
+        runId: 'run-1',
+        source: 'browser-screenshot',
+        state: 'running',
+      },
+    });
+    const stale = transformMessage({
+      type: 'image_output',
+      msg_id: 'image-output-event-3',
+      conversation_id: CONVERSATION_ID,
+      data: {
+        schemaVersion: 1,
+        outputId: 'image-output-1',
+        revision: 1,
+        conversationId: CONVERSATION_ID,
+        runId: 'run-1',
+        source: 'browser-screenshot',
+        state: 'queued',
+      },
+    });
+
+    let list = composeMessage(queued, []);
+    list = composeMessage(running, list);
+    list = composeMessage(stale, list);
+
+    expect(list).toHaveLength(1);
+    expect(list[0]?.type).toBe('image_output');
+    if (list[0]?.type !== 'image_output') throw new Error('expected image output');
+    expect(list[0].content.state).toBe('running');
+    expect(list[0].content.revision).toBe(2);
+  });
+
   it('turns a Core orchestration proposal into a dedicated chat message', () => {
     const transformed = transformMessage({
       type: 'orchestration_proposal',

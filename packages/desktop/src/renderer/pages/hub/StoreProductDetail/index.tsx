@@ -11,9 +11,18 @@ import { ApplicationOne, CheckOne, Left, Lock, Shield } from '@icon-park/react';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getFirstRunnablePackageModule } from '../PackageAppHost';
+import { isPackageListingInstalled } from '../installedPackageApps';
 import { packageClient } from '../packageClient';
+import { PackageSecretsSection } from './PackageSecretsSection';
+import SkillDocumentModal from '@/renderer/components/skills/SkillDocumentModal';
+import { PackageConnectionsSection } from './connections/PackageConnectionsSection';
 import styles from './StoreProductDetail.module.css';
 import { requestPackagePermissionUpdateConsent } from './permissionConsent';
+
+/** The Hub shell refreshes its app list when the installed package set changes. */
+const notifyPackagesChanged = (): void => {
+  window.dispatchEvent(new CustomEvent('tomni-packages-changed'));
+};
 
 type StoreProductDetailProps = {
   packageId: string;
@@ -43,6 +52,7 @@ const StoreProductDetail: React.FC<StoreProductDetailProps> = ({ packageId, onBa
   const { t, i18n } = useTranslation();
   const [listing, setListing] = useState<PackageListing>();
   const [loading, setLoading] = useState(true);
+  const [viewedSkill, setViewedSkill] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [surfaceAiConsents, setSurfaceAiConsents] = useState<readonly PackageSurfaceAiAccessConsentDisplay[]>([]);
@@ -75,7 +85,7 @@ const StoreProductDetail: React.FC<StoreProductDetailProps> = ({ packageId, onBa
     void load();
   }, [load]);
 
-  const installed = listing?.state === 'installed';
+  const installed = listing ? isPackageListingInstalled(listing) : false;
   const hasLocalInstall = Boolean(listing?.installedVersion);
   const runnableModule = useMemo(() => (listing ? getFirstRunnablePackageModule(listing) : undefined), [listing]);
   const requiresPayment = Boolean(listing?.offer?.active && listing.offer.price.amountMinor > 0);
@@ -91,6 +101,7 @@ const StoreProductDetail: React.FC<StoreProductDetailProps> = ({ packageId, onBa
       setListing(
         permissionConsentId ? await packageClient.install(id, permissionConsentId) : await packageClient.install(id)
       );
+      notifyPackagesChanged();
     } catch (operationError) {
       const message = operationError instanceof Error ? operationError.message : String(operationError);
       setError(message);
@@ -106,8 +117,12 @@ const StoreProductDetail: React.FC<StoreProductDetailProps> = ({ packageId, onBa
     setError(undefined);
     try {
       setListing(await packageClient.uninstall(listing.manifest.id));
+      notifyPackagesChanged();
     } catch (operationError) {
       const message = operationError instanceof Error ? operationError.message : String(operationError);
+      // The removal may have partly or fully applied before the error: resync from the service.
+      await load();
+      notifyPackagesChanged();
       setError(message);
       Message.error(message);
     } finally {
@@ -121,6 +136,7 @@ const StoreProductDetail: React.FC<StoreProductDetailProps> = ({ packageId, onBa
     setError(undefined);
     try {
       setListing(await operation(listing.manifest.id));
+      notifyPackagesChanged();
     } catch (operationError) {
       const message = operationError instanceof Error ? operationError.message : String(operationError);
       setError(message);
@@ -269,7 +285,9 @@ const StoreProductDetail: React.FC<StoreProductDetailProps> = ({ packageId, onBa
 
   const { manifest } = listing;
   const AppIcon = ApplicationOne;
-  const signedFirstParty = listing.trust === 'signed-first-party';
+    const signedFirstParty = listing.trust === 'signed-first-party';
+  const artifactTrust = listing.installedTrust ?? listing.trust;
+  const verified = !listing.revoked && (artifactTrust === 'signed-first-party' || artifactTrust === 'signed-store');
   const statusKey = listing.updateAvailable
     ? 'guid.hubHome.storeDetail.updateAvailable'
     : !listing.compatible
@@ -291,7 +309,11 @@ const StoreProductDetail: React.FC<StoreProductDetailProps> = ({ packageId, onBa
         {t('guid.hubHome.storeDetail.back')}
       </Button>
 
-      {error && <Alert type='error' content={error} closable onClose={() => setError(undefined)} />}
+            {error && <Alert type='error' content={error} closable onClose={() => setError(undefined)} />}
+      {!listing.compatible && (
+        <Alert type='warning' content={`Package yêu cầu Tomny ${manifest.engines.tomni}. Phiên bản ứng dụng hiện tại không đáp ứng yêu cầu; hãy cập nhật Tomny hoặc cài bản package tương thích.`} />
+      )}
+      {listing.revoked && <Alert type='error' content='Chữ ký hoặc quyền tin cậy của package đã bị thu hồi. Không thể bật hoặc cài cho tới khi có bản phát hành hợp lệ.' />}
 
       <Card className={styles.heroCard} bordered>
         <div className={styles.hero}>
@@ -314,7 +336,9 @@ const StoreProductDetail: React.FC<StoreProductDetailProps> = ({ packageId, onBa
               >
                 {t(statusKey)}
               </Tag>
-              <Tag icon={<Shield theme='outline' size={12} />}>{t('guid.hubHome.storeDetail.verified')}</Tag>
+                             {verified && <Tag icon={<Shield theme='outline' size={12} />}>{t('guid.hubHome.storeDetail.verified')}</Tag>}
+               {artifactTrust === 'local-built' && <Tag color='purple'>Tạo trên máy này · không đồng bộ cloud</Tag>}
+               {artifactTrust === 'unsigned-revoked' && <Tag color='red'>Khoá cục bộ đã thu hồi</Tag>}
               <Tag>{manifest.bundleKind}</Tag>
               {listing.offer?.active && (
                 <Tag data-testid='store-product-offer'>
@@ -471,6 +495,27 @@ const StoreProductDetail: React.FC<StoreProductDetailProps> = ({ packageId, onBa
             })}
           </div>
         </Card>
+      ) : null}
+
+      {installed ? (
+        <>
+          <PackageConnectionsSection
+            packageId={manifest.id}
+            onSecrets={() => document.getElementById('store-package-secrets')?.scrollIntoView({ behavior: 'smooth' })}
+            onOpenSkill={(skillKey: string) => setViewedSkill(skillKey.split('/').pop() ?? skillKey)}
+          />
+          {viewedSkill ? (
+            <SkillDocumentModal
+              name={viewedSkill}
+              packageId={manifest.id}
+              packageName={manifest.name}
+              onClose={() => setViewedSkill(undefined)}
+            />
+          ) : null}
+          <div id='store-package-secrets'>
+            <PackageSecretsSection packageId={manifest.id} />
+          </div>
+        </>
       ) : null}
 
       {screenshots.length > 0 ? (

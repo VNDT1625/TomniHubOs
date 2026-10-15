@@ -118,6 +118,34 @@ export type CreateHumanLikeInput = (sink: InputSink) => IHumanLikeInput;
 /** Agent-facing lifecycle for an observed Quick Test session. */
 export type QuickTestControl = QuickTestLifecycleService;
 
+/** One browser extension as the agent sees it. Holds no file paths and no key material. */
+export type BrowserExtensionSummary = Readonly<{
+  /** The id Electron gives the extension; null while it is not loaded. */
+  extensionId: string | null;
+  packageId: string;
+  connectionId: string;
+  name: string;
+  version: string | null;
+  /** The person switched it on. */
+  enabled: boolean;
+  /** Electron has it loaded in this session now. */
+  loaded: boolean;
+  /** Toolbar pin state; null until the toolbar that pins extensions exists. */
+  pinned: boolean | null;
+  permissions: readonly string[];
+  hostPermissions: readonly string[];
+  lastError: string | null;
+}>;
+
+/** Outcome of a popup request: ok, or the reason it could not be opened. */
+export type BrowserExtensionPopupResult = Readonly<{ ok: true }> | Readonly<{ ok: false; reason: string }>;
+
+/** The extension view the agent tools use. Injected by Main; absent means the extension tools are not offered. */
+export type BrowserExtensionControl = Readonly<{
+  list: () => Promise<readonly BrowserExtensionSummary[]>;
+  openPopup: (extensionId: string, tabId: string | undefined) => Promise<BrowserExtensionPopupResult>;
+}>;
+
 /**
  * Injected collaborators and tunables for {@link createBrowserControlServer}.
  * Only the four browser services plus the lease authority are required; the rest
@@ -172,6 +200,8 @@ export type BrowserControlDeps = {
   }) => Promise<void>;
   /** Persist a protected browser PNG as a durable report-ready artifact. */
   persistScreenshot?: (tabId: BrowserTabId, png: Uint8Array) => Promise<string>;
+  /** Publish a protected capture through an active Main-owned Run; unavailable outside that scope. */
+  publishLiveScreenshot?: (input: { outputId: string; tabId: BrowserTabId }) => Promise<void>;
   /** Delay primitive for scroll pacing and `browser_wait_for` polling. Defaults to `setTimeout`. */
   sleep?: (ms: number) => Promise<void>;
   /** Wall-clock source (Unix ms) used by `browser_wait_for` timeouts. Defaults to `Date.now`. */
@@ -214,6 +244,61 @@ export type BrowserControlDeps = {
   /** Persist only the protected PNG; no raw evidence file may be created first. */
   persistProtectedEvidence?: (filePath: string, png: Uint8Array) => Promise<void>;
   quickTest?: QuickTestControl;
+  /** Browser extensions the agent may list and act on. When absent, the browser_extension_* tools are not offered. */
+  extensions?: BrowserExtensionControl;
+};
+
+/** Default ceiling for {@link IPagePerception} `browser_wait_for` polling. */
+/** Input of `browser_extension_action`. */
+type ExtensionActionArgs = Readonly<{
+  action: 'enable' | 'disable' | 'open-popup';
+  extensionId: string | undefined;
+  packageId: string | undefined;
+  connectionId: string | undefined;
+  tabId: string | undefined;
+}>;
+
+/**
+ * Routes `browser_extension_action`. Enable and disable never reach the extension host: the agent cannot approve them,
+ * so the answer says the person must decide and nothing changes. Only open-popup is performed.
+ */
+const runBrowserExtensionAction = async (
+  extensions: BrowserExtensionControl,
+  args: ExtensionActionArgs
+): Promise<ToolTextResult> => {
+  if (args.extensionId === undefined && (args.packageId === undefined || args.connectionId === undefined)) {
+    return textResult('Give extensionId, or packageId together with connectionId.', true);
+  }
+  const all = await extensions.list();
+  const target = all.find((item) =>
+    args.extensionId === undefined
+      ? item.packageId === args.packageId && item.connectionId === args.connectionId
+      : item.extensionId === args.extensionId
+  );
+  if (target === undefined) return textResult('No browser extension matches that id.', true);
+  if (args.action === 'enable' || args.action === 'disable') {
+    if (target.enabled === (args.action === 'enable')) {
+      return textResult(JSON.stringify({ status: 'no_change', action: args.action, extension: target }));
+    }
+    return textResult(
+      JSON.stringify({
+        status: 'needs_human_approval',
+        action: args.action,
+        extension: target,
+        message:
+          'Turning a browser extension on or off needs the person approval in the Extensions page. The agent cannot approve it; ask the person to change it there.',
+      })
+    );
+  }
+  if (target.extensionId === null) {
+    return textResult(
+      'The extension is not loaded, so it has no popup to open. Ask the person to turn it on first.',
+      true
+    );
+  }
+  const outcome = await extensions.openPopup(target.extensionId, args.tabId);
+  if (outcome.ok === false) return textResult(`Popup not opened: ${outcome.reason}`, true);
+  return textResult(JSON.stringify({ status: 'popup_requested', extensionId: target.extensionId }));
 };
 
 /** Default ceiling for {@link IPagePerception} `browser_wait_for` polling. */
@@ -367,6 +452,55 @@ export const createBrowserControlServer = (deps: BrowserControlDeps): McpServer 
     const result: unknown = await contents.executeJavaScript(code);
     return result;
   };
+
+  // --- browser extensions (agent view; enable and disable need the person's approval) ----
+  if (deps.extensions !== undefined) {
+    const extensions = deps.extensions;
+    server.tool(
+      'browser_extension_list',
+      `List the browser extensions installed for the Browser (read-only). Returns JSON with one entry per extension:
+packageId, connectionId, extensionId (set while it is loaded), name, version, enabled (the person switched it on),
+loaded (Electron has it loaded now), pinned (null: toolbar pinning does not exist yet), permissions, hostPermissions
+and lastError. No file paths or keys are shown.`,
+      {},
+      async () => {
+        try {
+          return textResult(JSON.stringify({ extensions: await extensions.list() }, null, 2));
+        } catch (error) {
+          return textResult(`Error listing extensions: ${describeError(error)}`, true);
+        }
+      }
+    );
+    server.tool(
+      'browser_extension_action',
+      `Act on one browser extension.
+- enable / disable: NOT performed by the agent. Turning an extension on or off needs the person's approval in the
+  Extensions page, so this answers "needs_human_approval" and changes nothing.
+- open-popup: ask the Browser toolbar to open the extension's popup, optionally for tabId. Needs a loaded extension.
+
+Identify the extension with extensionId, or with packageId plus connectionId (see browser_extension_list).`,
+      {
+        action: z.enum(['enable', 'disable', 'open-popup']).describe('What to do with the extension.'),
+        extensionId: z.string().min(1).max(64).optional().describe('The extension id from browser_extension_list.'),
+        packageId: z.string().min(1).max(128).optional().describe('Package id, used with connectionId.'),
+        connectionId: z.string().min(1).max(128).optional().describe('Connection id, used with packageId.'),
+        tabId: z.string().min(1).optional().describe('Tab for open-popup; omit for the active tab.'),
+      },
+      async (args) => {
+        try {
+          return await runBrowserExtensionAction(extensions, {
+            action: args.action,
+            extensionId: args.extensionId,
+            packageId: args.packageId,
+            connectionId: args.connectionId,
+            tabId: args.tabId,
+          });
+        } catch (error) {
+          return textResult(`Error with the extension: ${describeError(error)}`, true);
+        }
+      }
+    );
+  }
 
   // --- browser_open --------------------------------------------------------
   server.tool(
@@ -739,6 +873,33 @@ Returns a PNG image plus its dimensions and, when persisted, an absolute filePat
         };
       } catch (error) {
         return textResult(`Error capturing screenshot: ${describeError(error)}`, true);
+      }
+    }
+  );
+
+
+  server.tool(
+    'publish_browser_screenshot',
+    `Publish a protected screenshot to the active conversation as an image output. The host chooses the workspace destination and validates the image; do not provide file paths, URLs, or image bytes.
+
+Input:
+- outputId: opaque image output id allocated for this run (required)
+- tabId: which existing tab to capture; omit to use the active/only tab (optional)
+
+Returns publication progress only; the chat image becomes visible after the governed run verifies.`,
+    {
+      outputId: z.string().regex(/^[A-Za-z0-9._:@-]{1,200}$/).describe('Opaque output id allocated by the active run.'),
+      tabId: z.string().optional().describe('Tab to capture; defaults to the active/only tab.'),
+    },
+    async ({ outputId, tabId }) => {
+      try {
+        if (!deps.publishLiveScreenshot) {
+          return textResult('Live screenshot publishing is unavailable outside an authorized conversation run.', true);
+        }
+        await deps.publishLiveScreenshot({ outputId, tabId: resolveTabId(tabId) });
+        return textResult('Protected screenshot publication is finalizing.');
+      } catch {
+        return textResult('Protected screenshot publication failed.', true);
       }
     }
   );

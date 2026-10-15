@@ -17,9 +17,13 @@
  */
 
 import { createTerminalManager, type ITerminalManager } from './terminalManager';
+import { getHubActivityRegistry } from '@process/system/hubActivity/hubActivityRegistry';
+import { attachTerminalActivity } from '@process/system/hubActivity/hubActivitySources';
 import { createTerminalScheduleStore, type ITerminalScheduleStore } from './terminalScheduleStore';
 import { createTerminalScheduler, type ITerminalScheduler } from './terminalScheduler';
 import { tryCreateNodePtyBackend } from './nodePtyBackend';
+import { getLiveSessionRegistry } from '@process/system/liveSessions/liveSessionRegistry';
+import { attachTerminalLiveSessions } from '@process/system/liveSessions/terminalSessions';
 
 /** The shared Terminal services for the whole Main process. */
 export type TerminalServices = {
@@ -44,6 +48,16 @@ export const getTerminalServices = (): TerminalServices => {
   // createTerminalManager uses its built-in child_process default).
   const backend = tryCreateNodePtyBackend() ?? undefined;
   const manager = createTerminalManager(backend ? { backend } : {});
+  attachTerminalActivity(getHubActivityRegistry(), {
+    list: () => manager.list(),
+    kill: (id) => manager.kill(id),
+    onSessionsChanged: (listener) => manager.on('sessions-changed', listener),
+  });
+  attachTerminalLiveSessions(getLiveSessionRegistry(), {
+    list: () => manager.list(),
+    onSessionsChanged: (listener) => manager.on('sessions-changed', listener),
+    onData: (listener) => manager.on('data', listener),
+  });
   const store = createTerminalScheduleStore();
   const scheduler = createTerminalScheduler({ store, manager });
   shared = { manager, store, scheduler };

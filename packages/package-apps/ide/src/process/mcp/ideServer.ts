@@ -32,6 +32,7 @@
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
+import { createTeamBatchEditor } from '@package-apps/ide/process/collaboration/teamEdit/teamBatchEdit';
 import type { ISessionMemoryStore } from '@process/userUnderstanding/sessionMemoryStore';
 import type { RepoSecretCombo, RepoSecretContext } from '@package-apps/ide/process/data/memory/repoSecretStore';
 import {
@@ -4161,6 +4162,89 @@ Input:
             return `AMBIGUOUS: ${result.detail}\nUse a longer unique oldText anchor.`;
           }
           return `Edit failed: ${result.error}`;
+        })
+    );
+
+    const batch = createTeamBatchEditor({ team });
+
+    server.tool(
+      'tomny_team_edit_many',
+      `Tomny batch edit. Exact text replacements across SEVERAL files in one go: every file's lease is taken first, all edits run as one MTUI batch, and nothing is written if any edit is stale or ambiguous. One tomny_team_undo reverts the whole batch. Prefer it over many tomny_team_edit calls.`,
+      {
+        rootPath: requiredString('Absolute workspace root.'),
+        agentId: requiredString('Stable participant id for this session.'),
+        files: z
+          .array(
+            z.object({
+              relPath: requiredString('Workspace-relative path of the file to edit.'),
+              edits: z
+                .array(
+                  z.object({
+                    oldText: requiredString('Exact non-empty current text to replace.'),
+                    newText: z.string().describe('Replacement text. Empty string deletes the old text.'),
+                    all: z.boolean().optional().describe('Replace every match instead of requiring exactly one.'),
+                  })
+                )
+                .min(1)
+                .max(100),
+            })
+          )
+          .min(1)
+          .max(40),
+      },
+      ({ rootPath, agentId, files }) =>
+        guard(async () => {
+          const outcome = await batch.editMany(
+            nonEmptyString(rootPath, 'rootPath'),
+            nonEmptyString(agentId, 'agentId'),
+            files.map((file) => ({
+              relPath: file.relPath ?? '',
+              edits: (file.edits ?? []).map((edit) => ({
+                oldText: edit.oldText ?? '',
+                newText: edit.newText ?? '',
+                ...(edit.all === undefined ? {} : { all: edit.all }),
+              })),
+            }))
+          );
+          return outcome.message;
+        })
+    );
+
+    server.tool(
+      'tomny_team_apply_patch',
+      `Tomny patch applier. Applies a unified diff (git format, several files allowed) through MTUI after taking the lease of every file it names. A hunk that no longer matches is refused with the file's current lines, and nothing is written.`,
+      {
+        rootPath: requiredString('Absolute workspace root.'),
+        agentId: requiredString('Stable participant id for this session.'),
+        patch: requiredString('The unified diff, with ---/+++ lines naming workspace-relative files.'),
+      },
+      ({ rootPath, agentId, patch }) =>
+        guard(async () => {
+          const outcome = await batch.applyPatch(
+            nonEmptyString(rootPath, 'rootPath'),
+            nonEmptyString(agentId, 'agentId'),
+            patch
+          );
+          return outcome.message;
+        })
+    );
+
+    server.tool(
+      'tomny_team_undo',
+      `Tomny undo. Restores the files of one MTUI operation (operationId) or of a whole tomny_team_edit_many batch (groupId). It refuses when a file changed after the operation, so it can never erase someone else's later work. Give exactly one of operationId or groupId.`,
+      {
+        rootPath: requiredString('Absolute workspace root.'),
+        agentId: requiredString('Stable participant id for this session.'),
+        operationId: z.string().optional().describe('One operation id returned by an MTUI edit.'),
+        groupId: z.string().optional().describe('The group id returned by tomny_team_edit_many.'),
+      },
+      ({ rootPath, agentId, operationId, groupId }) =>
+        guard(async () => {
+          const outcome = await batch.undo(nonEmptyString(rootPath, 'rootPath'), nonEmptyString(agentId, 'agentId'), {
+            ...(operationId ? { operationId } : {}),
+            ...(groupId ? { groupId } : {}),
+          });
+          return outcome.message;
         })
     );
 

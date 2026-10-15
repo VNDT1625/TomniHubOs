@@ -5,10 +5,15 @@
  */
 
 const { spawnSync } = require('node:child_process');
+const fs = require('node:fs');
 const path = require('node:path');
 
 const root = path.resolve(__dirname, '..');
-const target = path.join(root, 'packages', 'desktop', 'src', 'process', 'ide', 'mcp', 'omniMcpSidecar.ts');
+const targetCandidates = [
+  path.join(root, 'packages', 'package-apps', 'ide', 'src', 'process', 'mcp', 'omniMcpSidecar.ts'),
+  path.join(root, 'packages', 'desktop', 'src', 'process', 'ide', 'mcp', 'omniMcpSidecar.ts'),
+];
+const target = targetCandidates.find((candidate) => fs.existsSync(candidate)) ?? targetCandidates[0];
 const args = ['x', 'tsx', target, ...process.argv.slice(2)];
 
 const run = (command, commandArgs) =>

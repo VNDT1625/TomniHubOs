@@ -120,7 +120,7 @@ fn counts_from_tasks(tasks: &[TaskRecord]) -> TaskCounts {
 }
 
 fn specs_root(project_root: &Path) -> PathBuf {
-    project_root.join(".tomny").join("specs")
+    crate::workspace_metadata::canonical_metadata_root(project_root).join("specs")
 }
 
 fn resolve_spec_dir(
@@ -135,7 +135,7 @@ fn resolve_spec_dir(
             .trim_end_matches('/')
             .to_string();
         let slug = normalized
-            .split(".tomny/specs/")
+            .split(".tomni/specs/")
             .last()
             .unwrap_or(&normalized)
             .split('/')
@@ -145,7 +145,7 @@ fn resolve_spec_dir(
         if slug.is_empty() {
             return Err(MtuiError::InvalidArgument {
                 message: "Spec slug is empty".to_string(),
-                suggestion: "Use --spec <slug> or --spec .tomny/specs/<slug>/".to_string(),
+                suggestion: "Use --spec <slug> or --spec .tomni/specs/<slug>/".to_string(),
             });
         }
         return Ok((slug.clone(), root.join(slug)));
@@ -153,7 +153,7 @@ fn resolve_spec_dir(
 
     let mut entries = fs::read_dir(&root)
         .map_err(|_| MtuiError::FileNotFound {
-            message: "No .tomny/specs directory found".to_string(),
+            message: "No .tomni/specs directory found".to_string(),
             suggestion: "Create a planning spec in the IDE first".to_string(),
         })?
         .filter_map(|entry| entry.ok())
@@ -186,6 +186,21 @@ pub fn query_tasks(
     spec: Option<&str>,
     mode: &str,
 ) -> Result<TasksResult, MtuiError> {
+    match crate::workspace_metadata::ensure_canonical_workspace_metadata(project_root) {
+        crate::workspace_metadata::MigrationStatus::Failed => {
+            return Err(MtuiError::Internal {
+                message: "Workspace metadata migration failed; inspect .tomni/migration before retrying.".to_string(),
+            });
+        }
+        crate::workspace_metadata::MigrationStatus::Conflicted => {
+            return Err(MtuiError::InvalidArgument {
+                message: "Workspace metadata migration has unresolved conflicts.".to_string(),
+                suggestion: "Inspect .tomni/migration/conflicts, reconcile the retained files, then retry.".to_string(),
+            });
+        }
+        crate::workspace_metadata::MigrationStatus::AlreadyCanonical
+        | crate::workspace_metadata::MigrationStatus::Migrated => {}
+    }
     let (slug, spec_dir) = resolve_spec_dir(project_root, spec)?;
     let tasks_path = spec_dir.join("tasks.md");
     let text = fs::read_to_string(&tasks_path).map_err(|_| MtuiError::FileNotFound {

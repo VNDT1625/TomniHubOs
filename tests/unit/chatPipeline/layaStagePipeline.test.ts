@@ -3,25 +3,37 @@ import {
   ChatPipelineExecutor,
   ChatStageRegistry,
   LayaSecurityStage,
-  MockContext7Stage,
-  ToolRouterStage,
+  ToolSchemaStage,
   type ChatPipelineDefinition,
+  type IChatStage,
 } from '../../../packages/desktop/src/process/services/chatPipeline';
 
+/** Test double for a retrieve-phase package stage; the product has no built-in documentation retriever. */
+const docsRetrieverStage: IChatStage = {
+  id: 'test:docs-retriever',
+  displayName: 'Docs retriever (test double)',
+  description: 'Appends a fixed documentation snippet to the context',
+  phase: 'retrieve',
+  defaultEnabled: false,
+  async execute(input) {
+    const snippet = '[docs: python and react reference]';
+    return { decision: 'continue', context: input.context ? `${input.context}\n\n${snippet}` : snippet };
+  },
+};
+
 describe('LayaSecurityStage and End-to-End Chat Pipeline', () => {
-  it('rewrites Vietnamese credentials while Context7 supplies SDK docs in user-configured sequence', async () => {
+  it('rewrites Vietnamese credentials while a retrieve stage supplies docs in user-configured sequence', async () => {
     const registry = new ChatStageRegistry();
 
-    const context7 = new MockContext7Stage();
     const laya = new LayaSecurityStage();
-    const router = new ToolRouterStage();
+    const router = new ToolSchemaStage();
 
-    registry.registerPackageStage(context7, 'com.context7.docs-retriever');
+    registry.registerPackageStage(docsRetrieverStage, 'test:docs-retriever');
     registry.registerBuiltin(laya);
     registry.registerBuiltin(router);
 
     // User arranged order in UI:
-    // [Query] -> [Context7 Docs] -> [Laya Security Guard] -> [Tool Router] -> [LLM]
+    // [Query] -> [Docs retriever] -> [Laya Security Guard] -> [Tool Router] -> [LLM]
     const userDefinition: ChatPipelineDefinition = {
       schemaVersion: 1,
       id: 'custom-coding-pipeline',
@@ -29,8 +41,8 @@ describe('LayaSecurityStage and End-to-End Chat Pipeline', () => {
       enabled: true,
       stages: [
         {
-          id: 'step-context7',
-          stageRegistryId: 'com.context7.docs-retriever',
+          id: 'step-docs',
+          stageRegistryId: 'test:docs-retriever',
           phase: 'retrieve',
           enabled: true,
         },
@@ -43,7 +55,7 @@ describe('LayaSecurityStage and End-to-End Chat Pipeline', () => {
         },
         {
           id: 'step-router',
-          stageRegistryId: 'builtin:tool-router',
+          stageRegistryId: 'builtin:tool-schema',
           phase: 'pre_model',
           enabled: true,
         },
@@ -60,11 +72,11 @@ describe('LayaSecurityStage and End-to-End Chat Pipeline', () => {
     expect(result.status).toBe('completed');
     // Verify Laya rewrote the password
     expect(result.finalQuery).toBe('tôi tên Thuận, mk zalo [REDACTED], hãy viết code đọc docs bằng python');
-    // Verify Context7 attached python documentation
-    expect(result.finalContext).toContain('[Context7: Python 3.12 Standard Library Reference - AsyncIO & Typing]');
-    // Verify ToolRouter routed to code_executor
+    // Verify the retrieve stage attached its documentation
+    expect(result.finalContext).toContain('[docs: python and react reference]');
+    // Verify the tool schema stage selected the project tools group
     expect(result.executedStages).toHaveLength(3);
-    expect(result.executedStages[2].evidence?.routedTools).toContain('code_executor');
+    expect(result.executedStages[2].evidence?.capabilities).toContain('surface.ide');
   });
 
   it('allows harmless colloquial Vietnamese without false positive blocking or rewriting', async () => {

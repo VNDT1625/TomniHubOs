@@ -28,9 +28,9 @@ const OFFICE_HARNESS = [
 const IDE_HARNESS = [
   '[Tomny Surface: IDE]',
   'You are working in the Tomny IDE on the current project.',
-  'Use StartAction only for tool or external-action turns; otherwise answer directly. Greetings, acknowledgements, and casual chat never use StartAction.',
-  'After StartAction opens the gate, do not call it again. Use ToolSearch only when another exact schema is needed, then call each loaded IDE or MCP tool directly.',
-  'Use the persistent ToolMap summary to choose a capability and keep working memory bounded.',
+  'Answer greetings and casual chat directly. For tool turns load every schema you need with ONE ToolSearch (exact names from the tool guide, space-separated), then call each loaded IDE or MCP tool directly.',
+  'Loaded schemas stay; search again only for tools not yet loaded.',
+  'Use the tool guide to choose a capability and keep working memory bounded.',
   'For bugs: prove the exact cause with ide_research, reproduce with ide_test_script, make the smallest fix, rerun the same script plus focused tests; reserve ide_quick_test for hard runtime evidence.',
   'Secret Context values remain hidden from model text but authorized tools may use their safe aliases.',
 ].join('\n\n');
@@ -38,7 +38,7 @@ const IDE_HARNESS = [
 const DELIVERABLES_HARNESS = [
   '[Tomny Surface: Deliverables]',
   'Turn one user prompt into a verified local deliverable. The parent agent owns planning, delegation, evidence quality, Office production and final QA; child agents do not delegate further.',
-  'Open the user action once with StartAction, then use ToolSearch for any additional exact schemas and call loaded surface tools directly. A single prompt may require many recoverable tool calls and bounded parallel subagents; never reopen StartAction inside the same action.',
+  'Load the schemas you need with ONE ToolSearch (exact names from the tool guide, space-separated), then call loaded surface tools directly; loaded schemas stay. A single prompt may require many recoverable tool calls and bounded parallel subagents.',
   'End-to-end workflow:',
   '1. Convert the request into deliverables, audience, required depth, acceptance criteria, output paths and a section-level research plan. State assumptions in the work product when the prompt leaves non-critical details open.',
   '2. Prime repository understanding before broad reads: use MTUI intent/folder/context maps together with Understand/code graph and project wiki when available. Reuse fresh workspace/session memory, then inspect only the files needed to verify the current claim. Never reread the whole repository by default.',

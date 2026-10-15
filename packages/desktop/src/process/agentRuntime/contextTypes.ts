@@ -111,6 +111,18 @@ export type PersonalLearningRecord = {
 export type ContextDocument = { version: 1; agents: AgentContext[]; people: PersonalContext[] };
 export type SecretKind = 'credential' | 'password' | 'token' | 'cookie' | 'private-key' | 'other';
 export type SecretBinding = { surfaces: string[]; purposes: string[]; targets?: string[] };
+/**
+ * Where a secret set may be used. Absent means `app` (every conversation, within its binding). A `company` set is
+ * usable only by that company's group chat; a `session` set lives in RAM and only for that conversation; a `package`
+ * set belongs to one installed Package App and is usable only while that package is the active surface or runs its own code.
+ */
+export type SecretScope =
+  | { kind: 'app' }
+  | { kind: 'company'; companyId: string }
+  | { kind: 'session'; sessionId: string }
+  | { kind: 'package'; packageId: string };
+/** Identity of the run that asks to use a secret, resolved by Main and never supplied by a model. */
+export type SecretCaller = { sessionId?: string; companyId?: string; packageId?: string };
 export type SecretDescriptor = {
   handle: string;
   /** User-facing name of the secret set. */
@@ -121,6 +133,8 @@ export type SecretDescriptor = {
   /** Variable names only; values remain encrypted in the vault payload. */
   fields: string[];
   binding: SecretBinding;
+  /** Absent means `app`. */
+  scope?: SecretScope;
   createdAt: number;
   updatedAt: number;
   expiresAt?: number;
@@ -132,6 +146,8 @@ export type SecretResolveRequest = {
   purpose: string;
   target?: string;
   fields: string[];
+  /** Required to use a `company` or `session` set; an app set ignores it. */
+  caller?: SecretCaller;
 };
 export type CoreContextComposeInput = {
   agentId: string;

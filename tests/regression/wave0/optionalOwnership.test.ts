@@ -49,6 +49,13 @@ const readRendererSourceFiles = (directory = RENDERER_SOURCE_ROOT): OptionalOwne
 
 const LEGACY_OPTIONAL_ROOTS = [] as const;
 
+/** Historical Studio suite repeats module IDs now owned by standalone packages.
+ * Keep its signed catalog identity for uninstall/recovery, but audit new standalone ownership separately. */
+const standaloneCatalog = () => createFirstPartyPackageCatalog().filter(
+    (entry) => entry.manifest.type === 'app' && entry.manifest.id !== 'com.tomni.studio'
+
+);
+
 /** Relocated optional source must remain absent from both emitted base graphs. */
 const EXTRACTED_OPTIONAL_OWNERSHIP: readonly OptionalPackageOwnershipDeclaration[] = [
   {
@@ -188,7 +195,7 @@ describe('optional package ownership audit', () => {
   });
 
   it('derives package-app ownership from the actual first-party catalog manifests', () => {
-    const denylist = createOptionalPackageOwnershipDenylistFromCatalog(createFirstPartyPackageCatalog());
+    const denylist = createOptionalPackageOwnershipDenylistFromCatalog(standaloneCatalog());
     const result = scanOptionalPackageOwnership({
       denylist,
       coreSourceFiles: [
@@ -312,7 +319,7 @@ describe('optional package ownership audit', () => {
     const sourceFiles = readRendererSourceFiles();
     const result = scanOptionalPackageOwnership({
       denylist: createOptionalPackageOwnershipDenylistFromCatalog(
-        createFirstPartyPackageCatalog(),
+                standaloneCatalog(),
         LEGACY_OPTIONAL_ROOTS
       ),
       coreSourceFiles: sourceFiles,
@@ -375,8 +382,11 @@ describe('optional package ownership audit', () => {
       baseArtifactInputs: inputs,
     });
 
-    expect(result.violations).toEqual([]);
+        expect(result.violations).toEqual([]);
     expect(() => assertOptionalPackageOwnershipClean(result)).not.toThrow();
+    // Shipping Browser/IDE as optional downloads requires no UI implementation in the desktop renderer graph.
+        expect(inputs.filter((file) => file.startsWith('packages/package-apps/browser/src/renderer/') && !file.endsWith('/constants.ts'))).toEqual([]);
+    expect(inputs.filter((file) => file.startsWith('packages/package-apps/ide/src/renderer/'))).toEqual([]);
   });
 
   it('rejects optional domains from the exact emitted main-process graph when release evidence is present', () => {

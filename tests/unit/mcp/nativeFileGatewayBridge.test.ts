@@ -16,12 +16,20 @@ vi.mock('@office-ai/platform', () => ({
 import type { NativeFileGateway } from '@process/resources/nativeFileGateway';
 import { NATIVE_FILE_MUTATION_DISABLED, registerFileGatewayBridge } from '@process/resources/nativeFileGatewayBridge';
 
+const electronMocks = vi.hoisted(() => ({ showOpenDialog: vi.fn() }));
+vi.mock('electron', () => ({
+  BrowserWindow: { getFocusedWindow: () => undefined, getAllWindows: () => [] },
+  dialog: { showOpenDialog: electronMocks.showOpenDialog },
+}));
+
 const gateway = {
   getFilesByDir: vi.fn(async () => [{ name: 'safe.txt' }]),
   listWorkspaceFiles: vi.fn(async () => [{ name: 'safe.txt' }]),
   imageDataUrl: vi.fn(async () => 'data:image/png;base64,c2FmZQ=='),
   fetchRemoteImage: vi.fn(async () => 'data:image/png;base64,cmVtb3Rl'),
   readText: vi.fn(async () => 'safe text'),
+  attachmentQuickView: vi.fn(async () => ({ kind: 'text', content: 'safe excerpt', truncated: false })),
+  registerAttachmentQuickView: vi.fn(() => ({ id: 'attachment-1' })),
   readBase64: vi.fn(async () => 'c2FmZSB0ZXh0'),
   createTempFile: vi.fn(async () => '/tmp/unsafe.txt'),
   writeText: vi.fn(async () => true),
@@ -58,6 +66,11 @@ describe('native file gateway bridge containment', () => {
       'data:image/png;base64,cmVtb3Rl'
     );
     await expect(invoke('native-fs.read', { path: '/workspace/safe.txt' })).resolves.toBe('safe text');
+    await expect(invoke('native-fs.attachment-quick-view', { attachment_id: 'attachment-1' })).resolves.toEqual({
+      kind: 'text',
+      content: 'safe excerpt',
+      truncated: false,
+    });
     await expect(invoke('native-fs.read-buffer', { path: '/workspace/safe.txt' })).resolves.toBe('c2FmZSB0ZXh0');
     await expect(invoke('native-fs.metadata', { path: '/workspace/safe.txt' })).resolves.toEqual({
       path: '/workspace/safe.txt',
@@ -68,8 +81,19 @@ describe('native file gateway bridge containment', () => {
     expect(gateway.imageDataUrl).toHaveBeenCalledWith('/workspace/safe.png');
     expect(gateway.fetchRemoteImage).toHaveBeenCalledWith('https://images.example/safe.png');
     expect(gateway.readText).toHaveBeenCalledWith('/workspace/safe.txt');
+    expect(gateway.attachmentQuickView).toHaveBeenCalledWith('attachment-1');
     expect(gateway.readBase64).toHaveBeenCalledWith('/workspace/safe.txt');
     expect(gateway.metadata).toHaveBeenCalledWith('/workspace/safe.txt');
+  });
+
+  it('issues an opaque quick-view capability only for files selected by Main', async () => {
+    electronMocks.showOpenDialog.mockResolvedValue({ filePaths: ['/workspace/safe.txt'] });
+    gateway.registerAttachmentQuickView.mockReturnValue({ id: 'attachment-1' });
+
+    await expect(invoke('native-fs.attachment-select', undefined)).resolves.toEqual([
+      { attachmentId: 'attachment-1', path: '/workspace/safe.txt' },
+    ]);
+    expect(gateway.registerAttachmentQuickView).toHaveBeenCalledWith('/workspace/safe.txt');
   });
 
   it('rejects every renderer-exposed filesystem mutation before the gateway can touch disk', async () => {
@@ -78,19 +102,13 @@ describe('native file gateway bridge containment', () => {
       NATIVE_FILE_MUTATION_DISABLED
     );
     await expect(
-      invoke('native-fs.copy', {
-        file_paths: ['/workspace/unsafe.txt'],
-        workspace: '/workspace',
-      })
+      invoke('native-fs.copy', { file_paths: ['/workspace/unsafe.txt'], workspace: '/workspace' })
     ).rejects.toThrow(NATIVE_FILE_MUTATION_DISABLED);
     await expect(invoke('native-fs.remove', { path: '/workspace/unsafe.txt' })).rejects.toThrow(
       NATIVE_FILE_MUTATION_DISABLED
     );
     await expect(
-      invoke('native-fs.rename', {
-        path: '/workspace/unsafe.txt',
-        new_name: 'renamed.txt',
-      })
+      invoke('native-fs.rename', { path: '/workspace/unsafe.txt', new_name: 'renamed.txt' })
     ).rejects.toThrow(NATIVE_FILE_MUTATION_DISABLED);
 
     expect(gateway.createTempFile).not.toHaveBeenCalled();

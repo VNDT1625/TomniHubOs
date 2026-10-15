@@ -37,7 +37,12 @@ type AssistantNavigationState = {
 };
 const OPEN_ASSISTANT_EDITOR_INTENT_KEY = 'guid.openAssistantEditorIntent';
 
-const AssistantSettings: React.FC = () => {
+type AssistantSettingsProps = {
+  /** When false, renders without SettingsPageWrapper so it can be embedded as a tab (for example in Capabilities). */
+  withWrapper?: boolean;
+};
+
+const AssistantSettings: React.FC<AssistantSettingsProps> = ({ withWrapper = true }) => {
   const [message, messageContext] = Message.useMessage({ maxCount: 10 });
   const viewMode = useSettingsViewMode();
   const isPageMode = viewMode === 'page';
@@ -116,8 +121,9 @@ const AssistantSettings: React.FC = () => {
     void editor.handleEdit(targetAssistant);
   }, [assistants, editor, navigationState]);
 
+  const Wrapper: React.ElementType = withWrapper ? SettingsPageWrapper : React.Fragment;
   return (
-    <SettingsPageWrapper>
+    <Wrapper>
       <div className='flex flex-col h-full w-full'>
         {messageContext}
         <TomnyScrollArea className='flex-1 min-h-0 pb-16px scrollbar-hide' disableOverflow={isPageMode}>
@@ -150,11 +156,19 @@ const AssistantSettings: React.FC = () => {
             setEditAgent={editor.setEditAgent}
             editContext={editor.editContext}
             setEditContext={editor.setEditContext}
+            editPrompts={editor.editPrompts}
+            setEditPrompts={editor.setEditPrompts}
             promptViewMode={editor.promptViewMode}
             setPromptViewMode={editor.setPromptViewMode}
             availableSkills={editor.availableSkills}
             selectedSkills={editor.selectedSkills}
             setSelectedSkills={editor.setSelectedSkills}
+            selectedPlugins={editor.selectedPlugins}
+            setSelectedPlugins={editor.setSelectedPlugins}
+            selectedHooks={editor.selectedHooks}
+            selectedTools={editor.selectedTools}
+            setSelectedTools={editor.setSelectedTools}
+            setSelectedHooks={editor.setSelectedHooks}
             pendingSkills={editor.pendingSkills}
             customSkills={editor.customSkills}
             setDeletePendingSkillName={editor.setDeletePendingSkillName}
@@ -194,7 +208,7 @@ const AssistantSettings: React.FC = () => {
           />
         </TomnyScrollArea>
       </div>
-    </SettingsPageWrapper>
+    </Wrapper>
   );
 };
 

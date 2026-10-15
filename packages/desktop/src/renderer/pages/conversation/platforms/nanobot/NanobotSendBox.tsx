@@ -5,6 +5,7 @@
  */
 
 import { ipcBridge } from '@/common';
+import type { WorkspaceReferenceRequest } from '@/common/chat/workspaceReference';
 import type { TMessage } from '@/common/chat/chatLib';
 import { transformMessage } from '@/common/chat/chatLib';
 import CommandQueuePanel from '@/renderer/components/chat/CommandQueuePanel';
@@ -384,7 +385,11 @@ const NanobotSendBox: React.FC<{ conversation_id: string }> = ({ conversation_id
 
       try {
         setAiProcessing(true);
-        const { input, files = [] } = JSON.parse(stored) as { input: string; files?: string[] };
+        const { input, files = [], workspace_references } = JSON.parse(stored) as {
+          input: string;
+          files?: string[];
+          workspace_references?: WorkspaceReferenceRequest[];
+        };
         const res = await getConversationOrNull(conversation_id);
         const resolvedWorkspace = res?.extra?.workspace ?? '';
         setWorkspacePath(resolvedWorkspace);
@@ -406,6 +411,7 @@ const NanobotSendBox: React.FC<{ conversation_id: string }> = ({ conversation_id
           input: withGoalSteeringDirective(initialModelInput, conversation_id),
           conversation_id,
           files,
+          workspace_references,
         });
         const { msg_id } = sendResult;
 

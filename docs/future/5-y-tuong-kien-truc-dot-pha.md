@@ -6,6 +6,8 @@
 - **Phân loại:** Ecosystem, Developer Experience (DX), User Experience (UX) & Edge Intelligence
 - **Tác giả/Chủ sở hữu:** Core Architecture & Platform Engineering
 
+- **Hiện trạng theo mã nguồn (2026-10-05):** ý tưởng 1 một phần (biểu đồ cột/đường/vùng/tròn từ JSON, zoom/pan/tải SVG cho biểu đồ và Mermaid; chưa có Excalidraw, Vega-Lite, kéo thả node); ý tưởng 2 một phần (có `ModelRoutingStage` nhưng tắt mặc định, chưa có tầng trả lời cục bộ); ý tưởng 3 một phần (`/repotopackage` chạy cho web tĩnh, theme, IDE viewer và MCP server; xem `docs/FEATURE_STATUS.md`); ý tưởng 4 một phần (chat pipeline có stage cắm ghép và giao diện sắp xếp; chưa có gói pipeline từ Store); ý tưởng 5 đã có (`/guide`, khối `spotlight`, lớp phủ làm sáng một điều khiển, người dùng luôn là người bấm). Chi tiết ở `docs/FEATURE_STATUS.md` mục 4.
+
 ---
 
 ## 1. Tổng quan Mục tiêu (Executive Summary)

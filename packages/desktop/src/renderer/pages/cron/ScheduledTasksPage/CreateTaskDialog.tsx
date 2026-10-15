@@ -24,6 +24,7 @@ import GuidModelSelector from '@renderer/pages/guid/components/GuidModelSelector
 import { WorkspaceFolderSelect } from '@renderer/components/workspace';
 import { DETECTED_AGENTS_SWR_KEY, fetchDetectedAgents, type AgentMetadata } from '@renderer/utils/model/agentTypes';
 import { createCronSchedule } from '@renderer/pages/cron/cronUtils';
+import type { ScheduleDraft } from '@/common/chat/slash/scheduleCommand';
 
 const FormItem = Form.Item;
 const TextArea = Input.TextArea;
@@ -38,6 +39,8 @@ interface CreateTaskDialogProps {
   conversation_id?: string;
   conversation_title?: string;
   agent_type?: string;
+  /** Values typed with `/schedule`; only used when creating a task. */
+  draft?: ScheduleDraft | null;
 }
 
 type FrequencyType = 'manual' | 'hourly' | 'daily' | 'weekdays' | 'weekly' | 'custom';
@@ -137,6 +140,7 @@ const CreateTaskDialog: React.FC<CreateTaskDialogProps> = ({
   conversation_id: _conversation_id,
   conversation_title,
   agent_type,
+  draft,
 }) => {
   const { t } = useTranslation();
   const [form] = Form.useForm();
@@ -204,8 +208,14 @@ const CreateTaskDialog: React.FC<CreateTaskDialogProps> = ({
       setConfigOptions(undefined);
       setWorkspace(undefined);
       setSelectedAgent(undefined);
+      if (draft) {
+        setFrequency(draft.frequency);
+        setTime(draft.time);
+        setWeekday(draft.weekday);
+        if (draft.prompt) form.setFieldsValue({ name: draft.prompt.slice(0, 60), prompt: draft.prompt });
+      }
     }
-  }, [visible, editJob, form]);
+  }, [visible, editJob, form, draft]);
 
   // Resolve backend from selectedAgent (handles both CLI and preset agents)
   const resolvedBackend = useMemo(() => {

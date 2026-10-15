@@ -1,0 +1,159 @@
+# /btw — backlog shared live context
+
+Trạng thái: TARGET; checkbox đều mở, không đồng nhất overlay hiện hữu với tính năng đã hoàn tất.
+Backlog phụ thuộc canonical và `docs/execution/mvp-plan.md`; không lập lịch release cạnh tranh.
+Đợt soạn này chỉ tạo tài liệu; các test/command dưới đây là yêu cầu khi triển khai.
+Không fork, không task mới; một shared session, nhiều call Q&A có lifecycle độc lập.
+
+- [ ] BTW-T01 — Integrator khóa ownership và acceptance atom.
+  - [ ] BTW-T01.01 — Ghi revision bắt đầu và dirty paths trước giao việc.
+  - [ ] BTW-T01.02 — Giao exact allowlist riêng cho SendBox/rail và runtime service.
+  - [ ] BTW-T01.03 — Giữ bootstrap, shared schemas, IPC/preload registration và routing cho Integrator.
+  - [ ] BTW-T01.04 — Chỉ định một owner cho từng migration/table và production file chung.
+  - [ ] BTW-T01.05 — Chốt handoff có command, exit code, evidence, rollback và xung đột.
+- [ ] BTW-T02 — Khóa semantics và hiện trạng.
+  - [ ] BTW-T02.01 — Giữ CURRENT giới hạn tại SendBox, useBtwCommand, HubRail và HubSessionContext đã đọc.
+  - [ ] BTW-T02.02 — Xác minh main askSideQuestion khi triển khai trước kết luận context semantics.
+  - [ ] BTW-T02.03 — Ghi fork bridge/service chỉ là neo đối chiếu, không khẳng định btw dùng fork.
+  - [ ] BTW-T02.04 — Định nghĩa tab có tên và phân biệt parent task với model call bên lề.
+  - [ ] BTW-T02.05 — Nghiệm thu thiết kế không có đường fallback tự tạo task hoặc conversation.
+- [ ] BTW-T03 — Chốt phụ thuộc liên nhóm.
+  - [ ] BTW-T03.01 — Xác nhận owner/sự tồn tại `docs/plan/pipeline-chat` trước nhận contract context.
+  - [ ] BTW-T03.02 — Xác nhận owner/sự tồn tại `docs/plan/model-da-phuong-thuc` trước hỗ trợ media.
+  - [ ] BTW-T03.03 — Xác nhận owner/sự tồn tại `docs/plan/chat-composer` trước đổi slash routing.
+  - [ ] BTW-T03.04 — Chốt snapshot/publication/provenance với pipeline và focus/draft với composer.
+  - [ ] BTW-T03.05 — Đánh BLOCKED atom thiếu contract, không tự bịa API hay tên test.
+- [ ] BTW-T04 — Xây shared identity.
+  - [ ] BTW-T04.01 — Dùng sharedSessionId hiện hữu hoặc mapping được Integrator duyệt.
+  - [ ] BTW-T04.02 — Tách questionId, callId và attemptId khỏi task identity.
+  - [ ] BTW-T04.03 — Xác thực parentRunId tại main thay vì tin renderer.
+  - [ ] BTW-T04.04 — Tab state chỉ lưu reference, không copy history thành branch riêng.
+  - [ ] BTW-T04.05 — Nghiệm thu gửi nhiều câu hỏi không tăng số task hoặc conversation fork.
+- [ ] BTW-T05 — Integrator khóa canonical event schema.
+  - [ ] BTW-T05.01 — Thêm envelope eventId/sessionId/sequence/type/schemaVersion.
+  - [ ] BTW-T05.02 — Gắn actor/origin/questionId/callId/parentRunId theo nguồn xác thực.
+  - [ ] BTW-T05.03 — Gắn snapshotVersion và sourceEventIds cho nội dung assistant suy ra.
+  - [ ] BTW-T05.04 — Chốt visibility/trust labels để side answer không thành user instruction.
+  - [ ] BTW-T05.05 — Nghiệm thu deserialize event không rõ version thất bại an toàn hoặc migrate rõ.
+- [ ] BTW-T06 — Lưu history chuẩn và cấp thứ tự.
+  - [ ] BTW-T06.01 — Main cấp sequence trong transaction theo từng shared session.
+  - [ ] BTW-T06.02 — Lưu question publication trước khi dispatch model cho question đó.
+  - [ ] BTW-T06.03 — Parent events và side events cùng dùng một history owner.
+  - [ ] BTW-T06.04 — Không dùng timestamp client để giải quyết thứ tự commit.
+  - [ ] BTW-T06.05 — Nghiệm thu hai writer đồng thời không tạo sequence trùng hoặc mất event.
+- [ ] BTW-T07 — Chống gửi lặp.
+  - [ ] BTW-T07.01 — Tạo clientRequestId trước gửi và giữ qua retry mạng.
+  - [ ] BTW-T07.02 — Unique session/request key trả lại kết quả admission cũ khi gửi lặp.
+  - [ ] BTW-T07.03 — Phân biệt retry transport với yêu cầu retry model tường minh.
+  - [ ] BTW-T07.04 — Gắn terminal publication với callId để callback lặp không append hai answer.
+  - [ ] BTW-T07.05 — Nghiệm thu double-click/reconnect hai tab chỉ dispatch một call cho cùng request.
+- [ ] BTW-T08 — Khóa snapshot tại dispatch.
+  - [ ] BTW-T08.01 — Lấy committed high-watermark sau question publication.
+  - [ ] BTW-T08.02 — Context assembler đọc nhất quán event được phép đến watermark đó.
+  - [ ] BTW-T08.03 — Ghi projectionVersion/policyVersion và source range vào call record.
+  - [ ] BTW-T08.04 — Queue lấy snapshot khi dispatch, không khi người dùng vừa enqueue.
+  - [ ] BTW-T08.05 — Nghiệm thu call dùng N không thay token khi event N+1 xuất hiện.
+- [ ] BTW-T09 — Đồng bộ live tới lần gọi tiếp theo.
+  - [ ] BTW-T09.01 — Parent next-call assembler đọc latest committed history trong cùng session.
+  - [ ] BTW-T09.02 — Publish Q&A bên lề để cả parent và rail dùng chung provenance.
+  - [ ] BTW-T09.03 — Hiển thị latestHistoryVersion khác activeCallSnapshotVersion khi cần.
+  - [ ] BTW-T09.04 — Không tuyên bố parent đã đọc event mới nếu không có lần gọi tiếp theo.
+  - [ ] BTW-T09.05 — Nghiệm thu A đọc N, Q&A commit N+1/N+2, B tiếp theo thấy các event phù hợp.
+- [ ] BTW-T10 — Duy trì read-only Q&A.
+  - [ ] BTW-T10.01 — Runtime profile không cấp mutation tools hoặc task-control capability.
+  - [ ] BTW-T10.02 — Dispatcher deny shell/write/send/download kể cả model tự phát tool call.
+  - [ ] BTW-T10.03 — Yêu cầu hành động trả giới hạn/toolsRequired mà không tạo task tự động.
+  - [ ] BTW-T10.04 — Hướng dẫn model phân biệt dữ kiện assistant và chỉ thị user của parent.
+  - [ ] BTW-T10.05 — Nghiệm thu “hãy sửa file” trong btw không sửa file hay đổi mục tiêu parent.
+- [ ] BTW-T11 — Trust, secrets và egress.
+  - [ ] BTW-T11.01 — Lọc context theo scope/quyền tại main trước mỗi dispatch.
+  - [ ] BTW-T11.02 — Chỉ đưa opaque handle hoặc biểu diễn đã che, không resolve secret cho model.
+  - [ ] BTW-T11.03 — Dùng egress seam chung cho provider, destination và payload limit.
+  - [ ] BTW-T11.04 — Recheck quyền trước publication và chặn answer không còn được phép.
+  - [ ] BTW-T11.05 — Nghiệm thu prompt injection từ tài liệu không nâng quyền side call.
+- [ ] BTW-T12 — Ngân sách shared session.
+  - [ ] BTW-T12.01 — Tạo atomic reservation chung cho parent và các side call.
+  - [ ] BTW-T12.02 — Giữ parent reservation đã cấp, side chỉ nhận ngân sách còn khả dụng.
+  - [ ] BTW-T12.03 — Mỗi call có input/output cap và deadline không vượt session ceiling.
+  - [ ] BTW-T12.04 — Admission báo thiếu budget trước dispatch, không fallback session khác.
+  - [ ] BTW-T12.05 — Nghiệm thu hai side call cạnh tranh không cộng vượt tổng ngân sách.
+- [ ] BTW-T13 — Usage settlement và concurrency.
+  - [ ] BTW-T13.01 — Settle usage thật thay vì dùng token estimate làm số cuối.
+  - [ ] BTW-T13.02 — Cancel/error chỉ release phần chưa dùng, giữ phần đã tiêu thụ.
+  - [ ] BTW-T13.03 — Provider usage unknown giữ trạng thái chờ đối soát thay vì zero.
+  - [ ] BTW-T13.04 — Giới hạn concurrency/queue và cho hủy trước dispatch không tiêu token model.
+  - [ ] BTW-T13.05 — Nghiệm thu queue timeout có receipt và không giữ reservation vô hạn.
+- [ ] BTW-T14 — Cancellation độc lập.
+  - [ ] BTW-T14.01 — Side call dùng abort controller riêng, không dùng chung parent signal.
+  - [ ] BTW-T14.02 — Cancel side không dừng parent hoặc các question khác.
+  - [ ] BTW-T14.03 — Cancel parent không tự hủy side đã được admission.
+  - [ ] BTW-T14.04 — Cancel cả session là action riêng có phạm vi tường minh.
+  - [ ] BTW-T14.05 — Nghiệm thu cancel/finish race chỉ có một terminal result cho call.
+- [ ] BTW-T15 — Error isolation và retry.
+  - [ ] BTW-T15.01 — Lỗi side không rollback history hoặc chuyển parent sang failed.
+  - [ ] BTW-T15.02 — Lỗi parent không xóa answer bên lề đang hoàn tất.
+  - [ ] BTW-T15.03 — Retry model tạo attempt/callId mới liên kết question cũ.
+  - [ ] BTW-T15.04 — UI hiển thị retryability mà không lộ stack trace hoặc credential.
+  - [ ] BTW-T15.05 — Nghiệm thu provider unavailable vẫn giữ draft/history và parent tiếp tục độc lập.
+- [ ] BTW-T16 — Integrator triển khai IPC.
+  - [ ] BTW-T16.01 — Schema request giới hạn question bytes/title length và session reference.
+  - [ ] BTW-T16.02 — Validate sender/window/origin và quyền session trước admission.
+  - [ ] BTW-T16.03 — Chốt accepted/denied/cancelled/conflict result semantics ổn định.
+  - [ ] BTW-T16.04 — Subscribe/replay có bounded batch, cursor và unsubscribe handle.
+  - [ ] BTW-T16.05 — Viết contract test wrong-session và malformed payload khi triển khai.
+- [ ] BTW-T17 — Route slash command đúng luồng.
+  - [ ] BTW-T17.01 — SendBox nhận `/btw <câu hỏi>` trước đường gửi task thông thường.
+  - [ ] BTW-T17.02 — `/btw` rỗng mở input rail, không gửi message rỗng.
+  - [ ] BTW-T17.03 — Không gọi conversation.fork hoặc task-create từ handler này.
+  - [ ] BTW-T17.04 — Giữ draft nếu session unsupported hoặc admission lỗi.
+  - [ ] BTW-T17.05 — Nghiệm thu keyboard submit không vừa gửi parent vừa gửi side question.
+- [ ] BTW-T18 — Tab rail có tên.
+  - [ ] BTW-T18.01 — Thêm tab ID ổn định và nhãn i18n “Hỏi bên lề”.
+  - [ ] BTW-T18.02 — Focus tab đúng sharedSessionId khi slash command được chấp nhận.
+  - [ ] BTW-T18.03 — Hiển thị tiêu đề trao đổi ngắn đã che và cho sửa tên nếu cần.
+  - [ ] BTW-T18.04 — Rename/focus/close chỉ đổi view, không fork history hoặc đổi parent run.
+  - [ ] BTW-T18.05 — Nghiệm thu task đang chạy vẫn quan sát được khi mở tab Q&A.
+- [ ] BTW-T19 — Stream và publication.
+  - [ ] BTW-T19.01 — Delta có callId/deltaIndex để UI loại fragment trùng.
+  - [ ] BTW-T19.02 — Canonical final answer chỉ append sau finalization và permission recheck.
+  - [ ] BTW-T19.03 — Reply-to questionId giữ đúng cặp dù hoàn thành trái thứ tự gửi.
+  - [ ] BTW-T19.04 — Partial bị ngắt gắn interrupted, không giả thành answer hoàn chỉnh.
+  - [ ] BTW-T19.05 — Nghiệm thu callback muộn sau cancel không publish final ngoài ý muốn.
+- [ ] BTW-T20 — Multi-tab replay và cleanup.
+  - [ ] BTW-T20.01 — Replay và live subscription dùng cursor tránh khoảng hở giữa hai pha.
+  - [ ] BTW-T20.02 — Projection dedupe eventId/sequence và yêu cầu replay khi có gap.
+  - [ ] BTW-T20.03 — Session switch dispose listener và tăng generation để loại response cũ.
+  - [ ] BTW-T20.04 — Close rail detach view; cancel call chỉ qua action riêng được main xác nhận.
+  - [ ] BTW-T20.05 — Nghiệm thu hai tab hội tụ và không rò answer sang session vừa chuyển tới.
+- [ ] BTW-T21 — Restart và migration.
+  - [ ] BTW-T21.01 — Lưu outbox/dispatch state để phân biệt chưa gửi và gửi chưa biết kết quả.
+  - [ ] BTW-T21.02 — Unknown dispatch trở thành interrupted/unknown nếu provider không hỗ trợ resume.
+  - [ ] BTW-T21.03 — Không tự retry call có thể tính phí chỉ vì app vừa restart.
+  - [ ] BTW-T21.04 — Migration additive giữ event mới khi rollback code và có fallback đọc an toàn.
+  - [ ] BTW-T21.05 — Nghiệm thu crash trước/sau dispatch không âm thầm tạo hai answer hoặc hai khoản phí.
+- [ ] BTW-T22 — Compaction, retention và privacy.
+  - [ ] BTW-T22.01 — Summary giữ source ranges và trust labels, không biến suy đoán thành quyết định.
+  - [ ] BTW-T22.02 — Không lưu hidden reasoning hoặc secret thô trong event/projection.
+  - [ ] BTW-T22.03 — Xóa history lan tới rail cache, summaries và attachment references liên quan.
+  - [ ] BTW-T22.04 — Log/telemetry dùng dữ liệu tối thiểu đã che, không sao chép Q&A riêng tùy tiện.
+  - [ ] BTW-T22.05 — Nghiệm thu thông báo thu hồi nêu đúng giới hạn token đã gửi provider.
+- [ ] BTW-T23 — Accessibility và kiểm thử đúng bằng chứng.
+  - [ ] BTW-T23.01 — Keyboard/focus/status announcement hỗ trợ mở, hỏi, hủy và đóng tab.
+  - [ ] BTW-T23.02 — Mọi text qua i18n; CSS ở stylesheet chung và đồng bộ design reference nếu look đổi.
+  - [ ] BTW-T23.03 — Tìm test/script thực tế rồi mới chọn lệnh targeted, không bịa suite hiện hữu.
+  - [ ] BTW-T23.04 — Nếu thiếu, viết contract/integration tests snapshot, budget race, revoke và restart.
+  - [ ] BTW-T23.05 — Ghi command thật, exit code và revision cho từng acceptance case khi đã chạy.
+- [ ] BTW-T24 — Gate và kill switch.
+  - [ ] BTW-T24.01 — Khi triển khai chạy `bun run lint`, `bun run format:check` theo gate repository.
+  - [ ] BTW-T24.02 — Khi triển khai chạy `bunx tsc --noEmit`, `bun run test`; không ghi pass trước kết quả.
+  - [ ] BTW-T24.03 — Nếu đổi text/i18n chạy `bun run i18n:types`, `node scripts/check-i18n.js`.
+  - [ ] BTW-T24.04 — Kill switch chỉ dừng side admission mới, giữ history và không dừng parent.
+  - [ ] BTW-T24.05 — Review `mtui --json diff --last`, git status và báo dirty paths ngoài scope; không tự commit.
+
+## Điều kiện đóng backlog
+- [ ] BTW-T25 — Integrator chốt evidence theo canonical.
+  - [ ] BTW-T25.01 — Chứng minh tab có tên, parent chạy tiếp, không fork và không tạo task mới.
+  - [ ] BTW-T25.02 — Chứng minh Q&A publish vào shared history với per-call version và provenance.
+  - [ ] BTW-T25.03 — Giữ PARTIAL nếu độc lập cancel/error, budget chung hoặc restart chưa có proof.
+  - [ ] BTW-T25.04 — Ghi BLOCKED kèm dependency/owner cho contract chưa sẵn sàng.
+  - [ ] BTW-T25.05 — Bàn giao rủi ro, rollback, bằng chứng và giới hạn; không dùng số dòng docs làm release proof.

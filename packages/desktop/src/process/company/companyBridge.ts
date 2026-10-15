@@ -47,7 +47,9 @@ import { getAssistantResourceStore } from '@process/resources/nativeAssistantRes
 
 import { createNativeAssistant, listReadyAgents, listReadyAssistants } from '@process/resources/agentCatalogBridge';
 
+import { createLayaPipelinePredictor } from '@process/services/security/layaSidecarClient';
 import { listReadyProviders } from '@process/services/tomnyProviderBridge';
+import { GROUP_RELEVANCE_THRESHOLD, sanitizeRoutingInput, scoreGroupRelevance } from './routing/groupRelevance';
 import {
   createCompanyConfigStore,
   createFromDescription,
@@ -96,6 +98,8 @@ export const COMPANY_CHANNELS = {
   runConversation: 'company.run-conversation',
   resolvePermission: 'company.resolve-permission',
   cancelConversation: 'company.cancel-conversation',
+  /** Score how relevant each group member is to one chat message (Laya, with a keyword fallback). */
+  routeGroupMessage: 'company.route-group-message',
   conversationEvent: 'company.conversation-event',
 } as const;
 
@@ -117,6 +121,19 @@ export type CreateFromDescriptionRequest = {
    * capability assessment.
    */
   strengthsGuidance?: string;
+};
+
+/** Request for {@link COMPANY_CHANNELS.routeGroupMessage}. Bounded and re-validated in the Main process. */
+export type RouteGroupMessageRequest = {
+  text: string;
+  candidates: { id: string; name: string; responsibilities?: string }[];
+};
+
+/** Response of {@link COMPANY_CHANNELS.routeGroupMessage}. */
+export type RouteGroupMessageResponse = {
+  scores: { id: string; score: number }[];
+  threshold: number;
+  source: 'laya' | 'keywords';
 };
 
 /** Request carrying just a company id (structure / rules reads). */
@@ -305,6 +322,9 @@ export const companyChannels = {
   ),
   cancelConversation: bridge.buildProvider<CompanyResult<void>, CancelConversationRequest>(
     COMPANY_CHANNELS.cancelConversation
+  ),
+  routeGroupMessage: bridge.buildProvider<CompanyResult<RouteGroupMessageResponse>, RouteGroupMessageRequest>(
+    COMPANY_CHANNELS.routeGroupMessage
   ),
   /** Main → renderer push of live conversation events (transcript + status board). */
   conversationEvent: bridge.buildEmitter<ConversationEventEnvelope>(COMPANY_CHANNELS.conversationEvent),
@@ -673,6 +693,17 @@ export function registerCompanyBridge(options: RegisterCompanyBridgeOptions = {}
       const structure = buildStructure(toStructureSpec(config));
       const poweredByModel = await resolveCompanyModelId().catch((): string | undefined => undefined);
       return poweredByModel ? { ...structure, poweredByModel } : structure;
+    })
+  );
+
+  // Decide which group members are relevant enough (>= threshold) to read a chat message.
+  companyChannels.routeGroupMessage.provider(
+    safe('routeGroupMessage', async (req) => {
+      const input = sanitizeRoutingInput(req?.text, req?.candidates);
+      if (!input) throw new Error('[CompanyBridge] routeGroupMessage needs text and at least one candidate.');
+      // Fails fast while the sidecar is still loading (and starts it), so routing falls back to keywords.
+      const result = await scoreGroupRelevance(input, createLayaPipelinePredictor());
+      return { ...result, threshold: GROUP_RELEVANCE_THRESHOLD };
     })
   );
 

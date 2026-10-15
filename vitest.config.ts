@@ -3,7 +3,7 @@ import path from 'path';
 
 const aliases = {
   '@package-apps/browser/': path.resolve(__dirname, './packages/package-apps/browser/src') + '/',
-
+  '@package-apps/company/': path.resolve(__dirname, './packages/package-apps/company/src') + '/',
   '@package-apps/ide/': path.resolve(__dirname, './packages/package-apps/ide/src') + '/',
   '@package-apps/design/': path.resolve(__dirname, './packages/package-apps/design/src') + '/',
   '@package-apps/document-studio/': path.resolve(__dirname, './packages/package-apps/document-studio/src') + '/',

@@ -15,6 +15,8 @@ type QuitCleanupDeps = {
   markExplicitQuit: () => void;
   destroyTray: () => void;
   disposeCronResumeListener: () => void;
+  /** Stops the connection platform (web apps, services, extensions, download gate). Bounded and never fails the quit. */
+  disposeConnections?: () => Promise<void>;
   shutdownModelGateway: () => Promise<void>;
   stopBackend: () => Promise<void>;
   destroyPetWindow: () => Promise<void> | void;
@@ -25,6 +27,36 @@ type QuitCleanupDeps = {
 };
 
 const DEFAULT_QUIT_CLEANUP_TIMEOUT_MS = 10_000;
+/** Time the connection platform gets to stop its processes; the whole cleanup stays within the quit timeout. */
+export const CONNECTION_SHUTDOWN_TIMEOUT_MS = 6_000;
+
+/**
+ * Runs one shutdown step and waits at most `timeoutMs` for it. Never rejects: a failure or a timeout is logged and
+ * the quit goes on, so one stuck part cannot keep the application open.
+ */
+export async function runBounded(
+  name: string,
+  work: () => Promise<void>,
+  timeoutMs: number,
+  log: (message: string, error?: unknown) => void
+): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<'timeout'>((resolve) => {
+    timer = setTimeout(() => resolve('timeout'), timeoutMs);
+  });
+  const finished = Promise.resolve()
+    .then(work)
+    .then(
+      (): 'done' => 'done',
+      (error: unknown): 'done' => {
+        log(`[Tomny] ${name} failed during shutdown.`, error);
+        return 'done';
+      }
+    );
+  const outcome = await Promise.race([finished, timeout]);
+  clearTimeout(timer);
+  if (outcome === 'timeout') log(`[Tomny] ${name} did not stop within ${timeoutMs} ms; quitting anyway.`);
+}
 
 async function runWithTimeout(
   work: Promise<void>,
@@ -54,6 +86,15 @@ async function runQuitCleanup(deps: QuitCleanupDeps): Promise<void> {
   deps.destroyTray();
 
   const cleanup = async () => {
+    if (deps.disposeConnections !== undefined) {
+      await runBounded(
+        'connection platform',
+        deps.disposeConnections,
+        CONNECTION_SHUTDOWN_TIMEOUT_MS,
+        (message, error) => (error === undefined ? deps.logWarn(message) : deps.logError(message, error))
+      );
+    }
+
     deps.disposeCronResumeListener();
 
     await deps

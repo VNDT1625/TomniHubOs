@@ -43,10 +43,13 @@ const getNotificationIcon = (): string | undefined => {
 export async function showNotification({
   title,
   body,
+  silent,
 }: {
   title: string;
   body: string;
   conversation_id?: string;
+  /** Show it without the OS sound. */
+  silent?: boolean;
 }): Promise<void> {
   // Check if notification is enabled
   const notificationEnabled = await ProcessConfig.get('system.notificationEnabled');
@@ -57,7 +60,7 @@ export async function showNotification({
   const iconPath = getNotificationIcon();
 
   try {
-    getPlatformServices().notification.send({ title, body, icon: iconPath });
+    getPlatformServices().notification.send({ title, body, icon: iconPath, silent });
   } catch (error) {
     console.error('[Notification] Error creating notification:', error);
   }

@@ -34,15 +34,9 @@ type StaleMarker = {
 
 const readStaleMarker = async (rootPath: string): Promise<StaleMarker | null> => {
   try {
-    let text: string | null = null;
-    for (const metaDir of ['.tomni', '.omni', '.tomny']) {
-      try {
-        text = await fs.readFile(path.join(rootPath, metaDir, 'understand', 'stale.json'), 'utf-8');
-        break;
-      } catch {
-        // Try the next metadata directory for migration compatibility.
-      }
-    }
+    const text = await fs.readFile(path.join(rootPath, '.tomni', 'understand', 'stale.json'), 'utf-8').catch(
+      (): null => null
+    );
     if (!text) return null;
     const parsed = JSON.parse(text) as Partial<StaleMarker>;
     return {

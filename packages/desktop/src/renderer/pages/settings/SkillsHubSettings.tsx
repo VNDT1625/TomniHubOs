@@ -1,10 +1,14 @@
 import { ipcBridge } from '@/common';
-import { Button, Message, Modal, Typography } from '@arco-design/web-react';
+import { Button, Message, Typography } from '@arco-design/web-react';
 import { Delete, FolderOpen, Info, Lightning, Puzzle, Search, Refresh } from '@icon-park/react';
 import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import SettingsPageWrapper from './components/SettingsPageWrapper';
+
+import CapabilityRemoveModal from './ToolsSettings/CapabilityRemoveModal';
+import { PluginOriginGroup, groupByPlugin, usePluginNames } from './ToolsSettings/CapabilityKindUi';
+import SkillDocumentModal from '@/renderer/components/skills/SkillDocumentModal';
 
 // Skill 信息类型 / Skill info type
 interface SkillInfo {
@@ -18,7 +22,9 @@ interface SkillInfo {
    */
   relative_location?: string;
   is_custom: boolean;
-  source?: 'builtin' | 'custom' | 'extension';
+  source?: 'builtin' | 'custom' | 'extension' | 'package';
+  /** Installed package that contributed this skill (source=package). */
+  packageId?: string;
 }
 
 // Normalize skill name for data-testid usage
@@ -58,9 +64,23 @@ const SkillsHubSettings: React.FC<SkillsHubSettingsProps> = ({ withWrapper = tru
   const [availableSkills, setAvailableSkills] = useState<SkillInfo[]>([]);
   const [skillPaths, setSkillPaths] = useState<{ user_skills_dir: string; builtin_skills_dir: string } | null>(null);
   const [search_query, setSearchQuery] = useState('');
+
+  const navigate = useNavigate();
+  const [pendingRemove, setPendingRemove] = useState<SkillInfo | null>(null);
+  /** A plugin skill opened read-only from its plugin group; it is viewed here, not switched or removed. */
+  const [viewingPluginSkill, setViewingPluginSkill] = useState<SkillInfo | null>(null);
   const [builtinAutoSkills, setBuiltinAutoSkills] = useState<Array<{ name: string; description: string }>>([]);
 
-  const mySkills = useMemo(() => availableSkills.filter((s) => s.source !== 'extension'), [availableSkills]);
+  /** Standalone skills: user-added and built-in. Package skills follow their plugin and are grouped below. */
+  const mySkills = useMemo(
+    () => availableSkills.filter((s) => s.source !== 'extension' && s.source !== 'package'),
+    [availableSkills]
+  );
+  const packageSkills = useMemo(
+    () => availableSkills.filter((s) => s.source === 'package' && s.packageId !== undefined),
+    [availableSkills]
+  );
+  const pluginNames = usePluginNames();
   const extensionSkills = useMemo(() => availableSkills.filter((s) => s.source === 'extension'), [availableSkills]);
 
   const filteredSkills = useMemo(() => {
@@ -71,6 +91,18 @@ const SkillsHubSettings: React.FC<SkillsHubSettingsProps> = ({ withWrapper = tru
         s.name.toLowerCase().includes(lowerQuery) || (s.description && s.description.toLowerCase().includes(lowerQuery))
     );
   }, [mySkills, search_query]);
+
+  const pluginSkillGroups = useMemo(() => {
+    const lowerQuery = search_query.trim().toLowerCase();
+    const matching = lowerQuery
+      ? packageSkills.filter(
+          (s) =>
+            s.name.toLowerCase().includes(lowerQuery) ||
+            (s.description && s.description.toLowerCase().includes(lowerQuery))
+        )
+      : packageSkills;
+    return groupByPlugin(matching, (s) => s.packageId);
+  }, [packageSkills, search_query]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -150,6 +182,25 @@ const SkillsHubSettings: React.FC<SkillsHubSettingsProps> = ({ withWrapper = tru
 
   const mainContent = (
     <div className='flex flex-col h-full w-full'>
+      <CapabilityRemoveModal
+        visible={pendingRemove !== null}
+        name={pendingRemove?.name ?? ''}
+        detail={pendingRemove?.location}
+        onCancel={() => setPendingRemove(null)}
+        onConfirm={() => {
+          const target = pendingRemove;
+          setPendingRemove(null);
+          if (target) void handleDelete(target.name);
+        }}
+      />
+      {viewingPluginSkill ? (
+        <SkillDocumentModal
+          name={viewingPluginSkill.name}
+          packageId={viewingPluginSkill.packageId}
+          packageName={pluginNames[viewingPluginSkill.packageId ?? ''] ?? viewingPluginSkill.packageId}
+          onClose={() => setViewingPluginSkill(null)}
+        />
+      ) : null}
       <div className='space-y-16px pb-24px'>
         {/* ======== 我的技能 / My Skills ======== */}
         <div
@@ -216,7 +267,7 @@ const SkillsHubSettings: React.FC<SkillsHubSettingsProps> = ({ withWrapper = tru
             </div>
           )}
 
-          {mySkills.length > 0 ? (
+          {mySkills.length + packageSkills.length > 0 ? (
             <div className='w-full flex flex-col gap-6px relative z-10'>
               {filteredSkills.map((skill) => (
                 <div
@@ -238,7 +289,11 @@ const SkillsHubSettings: React.FC<SkillsHubSettingsProps> = ({ withWrapper = tru
                   <div className='flex-1 min-w-0 flex flex-col justify-center gap-6px'>
                     <div className='flex items-center gap-10px flex-wrap'>
                       <h3 className='text-14px font-semibold text-t-primary/90 truncate m-0'>{skill.name}</h3>
-                      {skill.source === 'custom' ? (
+                      {skill.source === 'package' ? (
+                        <span className='bg-[rgba(var(--primary-6),0.08)] text-primary-6 border border-[rgba(var(--primary-6),0.2)] text-11px px-6px py-1px rd-4px font-medium'>
+                          {t('settings.capabilitiesTab.pluginBadge', { defaultValue: 'Plugin' })}
+                        </span>
+                      ) : skill.source === 'custom' ? (
                         <span className='bg-[rgba(var(--orange-6),0.08)] text-orange-6 border border-[rgba(var(--orange-6),0.2)] text-11px px-6px py-1px rd-4px font-medium'>
                           {t('settings.skillsHub.custom', { defaultValue: 'Custom' })}
                         </span>
@@ -263,19 +318,7 @@ const SkillsHubSettings: React.FC<SkillsHubSettingsProps> = ({ withWrapper = tru
                       <button
                         data-testid={`btn-delete-${normalizeTestId(skill.name)}`}
                         className='p-8px hover:bg-danger-1 hover:text-danger-6 text-t-tertiary rd-6px outline-none flex items-center justify-center border border-transparent cursor-pointer transition-colors shadow-sm bg-base sm:bg-transparent sm:shadow-none'
-                        onClick={() => {
-                          Modal.confirm({
-                            title: t('settings.skillsHub.deleteConfirmTitle', { defaultValue: 'Delete Skill' }),
-                            content: t('settings.skillsHub.deleteConfirmContent', {
-                              name: skill.name,
-                              defaultValue: `Are you sure you want to delete "${skill.name}"?`,
-                            }),
-                            okButtonProps: { status: 'danger' },
-                            okText: t('common.delete', { defaultValue: 'Delete' }),
-                            onOk: () => void handleDelete(skill.name),
-                            wrapClassName: 'modal-delete-skill',
-                          });
-                        }}
+                        onClick={() => setPendingRemove(skill)}
                         title={t('common.delete', { defaultValue: 'Delete' })}
                       >
                         <Delete size={16} />
@@ -283,6 +326,41 @@ const SkillsHubSettings: React.FC<SkillsHubSettingsProps> = ({ withWrapper = tru
                     )}
                   </div>
                 </div>
+              ))}
+              {pluginSkillGroups.map((group) => (
+                <PluginOriginGroup
+                  key={group.pluginId}
+                  pluginId={group.pluginId}
+                  testId={`plugin-skill-group-${normalizeTestId(group.pluginId)}`}
+                  label={t('settings.capabilitiesTab.fromPluginSkills', {
+                    name: pluginNames[group.pluginId] ?? group.pluginId,
+                    count: group.items.length,
+                  })}
+                  onManage={(pluginId) => navigate(`/store/package/${encodeURIComponent(pluginId)}`)}
+                >
+                  <ul className='capability-list'>
+                    {group.items.map((skill) => (
+                      <li
+                        key={skill.name}
+                        className='capability-row'
+                        data-testid={`plugin-skill-${normalizeTestId(skill.name)}`}
+                      >
+                        <div className='capability-row__main'>
+                          <span className='capability-row__name'>{skill.name}</span>
+                          <button
+                            type='button'
+                            className='capability-group__link'
+                            data-testid={`btn-view-plugin-skill-${normalizeTestId(skill.name)}`}
+                            onClick={() => setViewingPluginSkill(skill)}
+                          >
+                            {t('settings.capabilitiesTab.viewSkill')}
+                          </button>
+                        </div>
+                        {skill.description ? <p className='capability-row__summary'>{skill.description}</p> : null}
+                      </li>
+                    ))}
+                  </ul>
+                </PluginOriginGroup>
               ))}
             </div>
           ) : (

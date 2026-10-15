@@ -18,7 +18,6 @@ const studioPackageSource = readFileSync(
 );
 
 const legacyPackageRoutes = {
-  '/company': 'com.tomni.company',
   '/knowledge': 'com.tomni.knowledge',
   '/settings/company': 'com.tomni.company',
   '/settings/knowledge': 'com.tomni.knowledge',
@@ -26,10 +25,12 @@ const legacyPackageRoutes = {
 } as const;
 
 describe('legacy optional-package routes', () => {
-  it('keeps Browser and IDE in the base router without Store redirects', () => {
-    expect(routerSource).toContain("<Route path='/browser' element={withRouteFallback(Browser)} />");
-    expect(routerSource).toContain("<Route path='/ide' element={withRouteFallback(Ide)} />");
-    expect(routerSource).not.toContain('/store/package/com.tomni.browser');
+    it('does not bundle the Browser or IDE implementation in the base router', () => {
+    expect(routerSource).toContain("<DefaultPackageRoute app='browser' />");
+    expect(routerSource).toContain("<DefaultPackageRoute app='ide' />");
+    expect(routerSource).not.toContain("import('@package-apps/browser/renderer/browser/BrowserPage')");
+    expect(routerSource).not.toContain("import('@package-apps/ide/renderer/IdeWorkspace')");
+    expect(routerSource).not.toContain("path='/apps/com.tomni.ide/ide' element={<Navigate to='/ide'");
   });
   it('opens the default IDE route without assigning Store package identity', () => {
     expect(documentStudioSource).toContain("options.openDefaultSurface('ide')");
@@ -38,10 +39,16 @@ describe('legacy optional-package routes', () => {
     expect(studioPackageSource).not.toContain("openPackageModule('com.tomni.ide'");
   });
 
-  it('does not expose Testing, News, Realtime, or Terminal as standalone routes', () => {
-    for (const path of ['/testing', '/news', '/realtime', '/terminal']) {
-      expect(routerSource).not.toContain(`path='${path}'`);
+    it('does not expose Testing, News or Terminal as standalone routes', () => {
+        for (const path of ['/testing', '/news', '/terminal']) {
+      // An old link may only redirect elsewhere; it must never render its own page.
+      const routes = routerSource.split('<Route ').filter((route) => route.startsWith(`path='${path}'`));
+      for (const route of routes) expect(route).toMatch(/element=\{<Navigate to='[^']+' replace \/>\}/);
     }
+  });
+
+  it('renders Company in the Hub shell centre instead of a standalone page', () => {
+    expect(routerSource).toContain("<Route path='/company' element={withRouteFallback(CompanyRoute)} />");
   });
 
   it('open the relevant Store product state instead of loading an app from Settings or Core', () => {

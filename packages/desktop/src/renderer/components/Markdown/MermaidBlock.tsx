@@ -12,6 +12,7 @@ import { copyText } from '@/renderer/utils/ui/clipboard';
 import { Message } from '@arco-design/web-react';
 import { Copy, PreviewOpen } from '@icon-park/react';
 import { usePreviewContext } from '@/renderer/pages/conversation/Preview';
+import PanZoomFrame from './PanZoomFrame';
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -29,22 +30,31 @@ const ensureMermaidInitialized = (theme: 'light' | 'dark') => {
     securityLevel: 'strict',
     suppressErrorRendering: true,
     theme: theme === 'dark' ? 'dark' : 'default',
-    fontFamily: 'inherit',
+        fontFamily: 'system-ui, sans-serif',
+    themeVariables: { fontSize: '16px' },
+    flowchart: { useMaxWidth: false, nodeSpacing: 36, rankSpacing: 56 },
   });
   initializedTheme = theme;
 };
 
-const withResponsiveSvg = (svg: string): string => {
-  return svg.replace(/<svg\b([^>]*)>/i, (_match, attrs: string) => {
-    if (/style\s*=/.test(attrs)) {
-      return `<svg${attrs.replace(
-        /style\s*=\s*(["'])(.*?)\1/i,
-        (_styleMatch, quote: string, styleValue: string) =>
-          ` style=${quote}${styleValue};max-width: 100%; height: auto; display: block;${quote}`
-      )}>`;
-    }
-    return `<svg${attrs} style="max-width: 100%; height: auto; display: block;">`;
-  });
+/**
+ * Keep oversized diagrams at a legible intrinsic width, rather than shrinking
+ * thousands of pixels of Mermaid text into a 700px chat bubble.
+ */
+export const withResponsiveSvg = (svg: string): string => {
+  const match = /<svg\b([^>]*)>/i.exec(svg);
+  if (!match) return svg;
+  const attrs = match[1];
+  const viewBox = /\bviewBox=["'][\d.\s-]+\s([\d.]+)\s+([\d.]+)["']/i.exec(attrs);
+  const declaredWidth = /\bwidth=["']([\d.]+)(?:px)?["']/i.exec(attrs);
+  const naturalWidth = Number(viewBox?.[1] ?? declaredWidth?.[1] ?? 0);
+  const wide = Number.isFinite(naturalWidth) && naturalWidth > 840;
+  const width = wide ? Math.min(Math.ceil(naturalWidth), 2600) : null;
+  const sizing = wide ? `width:${width}px;max-width:none;` : 'max-width:100%;';
+  const styleAttr = /\sstyle=(["'])(.*?)\1/i.exec(attrs);
+  const originalStyle = styleAttr?.[2] ?? '';
+  const cleanAttrs = styleAttr ? attrs.replace(styleAttr[0], '') : attrs;
+  return svg.replace(match[0], `<svg${cleanAttrs} style="${originalStyle};${sizing}height:auto;display:block;">`);
 };
 
 function MermaidBlock({ code, style, showOpenInPanelButton = true }: MermaidBlockProps) {
@@ -55,6 +65,8 @@ function MermaidBlock({ code, style, showOpenInPanelButton = true }: MermaidBloc
   const [svg, setSvg] = useState<string | null>(null);
   const [isRendering, setIsRendering] = useState(false);
   const [viewMode, setViewMode] = useState<'preview' | 'source'>('source');
+  // Zoom and pan are opt-in, so a diagram keeps flowing with the message until the reader wants to explore it.
+  const [zoomMode, setZoomMode] = useState(false);
   const [debouncedCode, setDebouncedCode] = useState(code);
   const [currentTheme, setCurrentTheme] = useState<'light' | 'dark'>(() => {
     return (document.documentElement.getAttribute('data-theme') as 'light' | 'dark') || 'light';
@@ -225,6 +237,20 @@ function MermaidBlock({ code, style, showOpenInPanelButton = true }: MermaidBloc
                 }}
               />
             )}
+            {svg && viewMode === 'preview' && (
+              <span
+                role='button'
+                tabIndex={0}
+                data-testid='mermaid-zoom-toggle'
+                style={{ cursor: 'pointer', color: 'var(--text-secondary)', fontSize: '12px', lineHeight: '20px' }}
+                onClick={() => setZoomMode((value) => !value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') setZoomMode((value) => !value);
+                }}
+              >
+                {zoomMode ? 'Thu gọn' : 'Phóng to / kéo'}
+              </span>
+            )}
             <Copy
               data-testid='mermaid-copy'
               theme='outline'
@@ -244,15 +270,21 @@ function MermaidBlock({ code, style, showOpenInPanelButton = true }: MermaidBloc
           </div>
         </div>
 
-        {svg && viewMode === 'preview' ? (
+        {svg && viewMode === 'preview' && zoomMode ? (
+          <div style={{ backgroundColor: 'var(--bg-1)', padding: '8px 12px' }}>
+            <PanZoomFrame svgMarkup={svg} filename='so-do' label='Sơ đồ' height={460} testId='mermaid-zoom' />
+          </div>
+        ) : svg && viewMode === 'preview' ? (
           <div
             data-testid='mermaid-diagram'
+            aria-label='Sơ đồ Mermaid, cuộn để xem phần nằm ngoài khung'
             style={{
               backgroundColor: 'var(--bg-1)',
               padding: '12px',
-              overflowX: 'auto',
-              display: 'flex',
-              justifyContent: 'center',
+                            overflowX: 'auto',
+              overflowY: 'auto',
+              maxHeight: 'min(520px, 65vh)',
+              display: 'block',
             }}
             dangerouslySetInnerHTML={{ __html: svg }}
           />

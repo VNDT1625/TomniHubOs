@@ -1,0 +1,7 @@
+[project]
+name = "demo-tool"
+version = "1.0.0"
+
+[project.scripts]
+demo-tool = "demo_tool.cli:main"
+demo-run = "demo_tool.cli:main"

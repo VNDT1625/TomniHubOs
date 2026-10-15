@@ -34,8 +34,10 @@ import {
 } from './processPriorityManager';
 import { createSnapshotStore, defaultSnapshotStoreDeps, type SnapshotStore } from './systemSnapshotStore';
 import { probeStaticSystemInfo } from './staticInfoProbe';
+import { probeWindowsTelemetry } from './windowsTelemetryProbe';
 import type {
   LiveSystemMetrics,
+  HostTelemetry,
   MetricSample,
   ProcessPriorityLevel,
   SetPriorityResult,
@@ -51,6 +53,10 @@ export const SNAPSHOT_INTERVAL_MS = 8000;
 
 /** Maximum points kept in the rolling history buffer (for sparklines). */
 export const HISTORY_MAX = 120;
+/** Expensive OS process/counter probing runs only on demand while a viewer is connected. */
+export const HOST_TELEMETRY_INTERVAL_MS = 10000;
+/** The UI must not mistake an old successful probe for live data. */
+export const HOST_TELEMETRY_MAX_AGE_MS = 30000;
 
 /** A subscriber callback invoked with every live sample while streaming. */
 export type MetricsListener = (metrics: LiveSystemMetrics) => void;
@@ -67,6 +73,9 @@ export type SystemInfoServiceDeps = {
   snapshotStore: SnapshotStore;
   /** The priority manager (defaults to a real os/fs-backed manager). */
   priorityManager: ProcessPriorityManager;
+  /** Optional read-only, asynchronous Windows telemetry probe. */
+  probeHostTelemetry?: () => Promise<HostTelemetry | null>;
+
   /** Schedule a repeating tick; returns a cancel handle (defaults to setInterval). */
   setInterval: (handler: () => void, ms: number) => NodeJS.Timeout;
   /** Cancel a scheduled tick (defaults to clearInterval). */
@@ -80,6 +89,7 @@ export const buildDefaultDeps = (dataDir: string): SystemInfoServiceDeps => ({
   sampler: createLiveSampler(),
   snapshotStore: createSnapshotStore(defaultSnapshotStoreDeps(dataDir)),
   priorityManager: createPriorityManager(defaultPriorityManagerDeps(dataDir)),
+  probeHostTelemetry: process.platform === 'win32' ? probeWindowsTelemetry : undefined,
   setInterval: (handler, ms) => setInterval(handler, ms),
   clearInterval: (handle) => clearInterval(handle),
 });
@@ -116,18 +126,76 @@ export const createSystemInfoService = (deps: SystemInfoServiceDeps): SystemInfo
   let currentInterval = 0;
   let streamRefCount = 0;
   let lastSnapshotWriteAt = 0;
+  let lastHostTelemetryAttemptAt = -HOST_TELEMETRY_INTERVAL_MS;
+  let hostTelemetry: HostTelemetry | null = null;
+  let hostTelemetryPending = false;
+  let stopped = false;
   // Map a live pid → identity so a priority change persists by identity even
   // though the UI only knows the pid.
   let identityByPid = new Map<number, string>();
 
   const buildSnapshot = (): SystemSnapshot | null => {
     if (!staticInfo || !latestLive) return null;
-    return { static: staticInfo, live: latestLive, history: [...history] };
+    // Never persist/export machine-wide process names in Agent-facing snapshots.
+    const { hostTelemetry: privateTelemetry, ...safeLive } = latestLive;
+    // Only privacy-safe aggregates reach the Agent plane; process names stay here.
+    const telemetry = privateTelemetry
+      ? {
+          sampledAt: privateTelemetry.sampledAt,
+          disk: privateTelemetry.disk,
+          network: privateTelemetry.network,
+          gpuEnginePeakPercent: privateTelemetry.gpuEnginePeakPercent,
+          osProcessCount: privateTelemetry.processes ? privateTelemetry.processes.length : null,
+          processLimitReached: privateTelemetry.processLimitReached,
+        }
+      : null;
+    return {
+      static: staticInfo,
+      live: safeLive,
+      history: [...history],
+      monitor: { viewerActive: streamRefCount > 0, telemetry },
+    };
+  };
+
+  const persistSnapshot = (at: number): void => {
+    const snapshot = buildSnapshot();
+    if (!snapshot) return;
+    deps.snapshotStore.write(snapshot);
+    lastSnapshotWriteAt = at;
+  };
+
+  const maybeProbeHostTelemetry = (at: number): void => {
+    if (!deps.probeHostTelemetry || streamRefCount === 0 || hostTelemetryPending) return;
+    if (at - lastHostTelemetryAttemptAt < HOST_TELEMETRY_INTERVAL_MS) return;
+    lastHostTelemetryAttemptAt = at;
+    hostTelemetryPending = true;
+    void deps
+      .probeHostTelemetry()
+      .then((sample) => {
+        if (stopped || streamRefCount === 0) return;
+        hostTelemetry = sample;
+        // Push completed slow metrics without waiting a second sampling interval.
+        if (latestLive) {
+          latestLive = { ...latestLive, hostTelemetry: sample };
+          for (const listener of listeners) listener(latestLive);
+          // Let an agent reading the snapshot see the fresh counters immediately.
+          persistSnapshot(latestLive.sampledAt);
+        }
+      })
+      .catch(() => {
+        if (!stopped) hostTelemetry = null;
+      })
+      .finally(() => {
+        hostTelemetryPending = false;
+      });
   };
 
   const tick = (): void => {
     const live = deps.sampler.sample();
-    latestLive = live;
+    const fresh =
+      hostTelemetry && live.sampledAt - hostTelemetry.sampledAt <= HOST_TELEMETRY_MAX_AGE_MS ? hostTelemetry : null;
+    latestLive = streamRefCount > 0 ? { ...live, hostTelemetry: fresh } : live;
+    maybeProbeHostTelemetry(live.sampledAt);
 
     history.push({ t: live.sampledAt, cpu: live.cpu.overallPercent, mem: live.memory.usedPercent });
     if (history.length > HISTORY_MAX) history.splice(0, history.length - HISTORY_MAX);
@@ -135,14 +203,11 @@ export const createSystemInfoService = (deps: SystemInfoServiceDeps): SystemInfo
     identityByPid = new Map(live.processes.map((process) => [process.pid, processIdentity(process)]));
     deps.priorityManager.reapply(live.processes);
 
-    // Persist the snapshot at the slow cadence regardless of streaming so the
-    // agent always has a reasonably fresh file without paying for every tick.
-    if (live.sampledAt - lastSnapshotWriteAt >= SNAPSHOT_INTERVAL_MS - 1) {
-      const snapshot = buildSnapshot();
-      if (snapshot) {
-        deps.snapshotStore.write(snapshot);
-        lastSnapshotWriteAt = live.sampledAt;
-      }
+    // Persist at the slow cadence regardless of streaming so the agent always
+    // has a reasonably fresh file; while a viewer streams, persist every tick so
+    // the agent sees the same near-realtime data as the monitor tab.
+    if (streamRefCount > 0 || live.sampledAt - lastSnapshotWriteAt >= SNAPSHOT_INTERVAL_MS - 1) {
+      persistSnapshot(live.sampledAt);
     }
 
     if (streamRefCount > 0) {
@@ -160,6 +225,7 @@ export const createSystemInfoService = (deps: SystemInfoServiceDeps): SystemInfo
   };
 
   const start = async (): Promise<void> => {
+    stopped = false;
     staticInfo = await deps.probeStatic();
     // Prime the CPU delta + first sample immediately so the snapshot file and
     // any early reader have data without waiting a full interval.
@@ -168,6 +234,8 @@ export const createSystemInfoService = (deps: SystemInfoServiceDeps): SystemInfo
   };
 
   const stop = (): void => {
+    stopped = true;
+    hostTelemetry = null;
     if (timer) deps.clearInterval(timer);
     timer = null;
     currentInterval = 0;
@@ -192,7 +260,10 @@ export const createSystemInfoService = (deps: SystemInfoServiceDeps): SystemInfo
 
   const startStream = (): void => {
     streamRefCount += 1;
-    if (streamRefCount === 1) reschedule();
+    if (streamRefCount === 1) {
+      reschedule();
+      maybeProbeHostTelemetry(Date.now());
+    }
   };
 
   const stopStream = (): void => {

@@ -46,8 +46,12 @@ const CURRENT_PERSISTENT_CLEANUP: readonly SourceInventory[] = [
     path: 'packages/desktop/src/process/extensions/package-manager/packageBridge.ts',
     markers: [
       'quiescePackageRuntime: async (packageId) => {',
-      'if (packageId !== DESIGN_VIU_PACKAGE_ID) return;',
+            'if (packageId === DESIGN_VIU_PACKAGE_ID) {',
       'await designViuMcpRuntimeSingleton?.quiesce(packageId);',
+      'await browserPackageActivationLifecycle?.quiesce();',
+      'await idePackageActivationLifecycle?.quiesce();',
+      'await browserPackageActivationLifecycle?.resume();',
+      'await idePackageActivationLifecycle?.resume();',
     ],
   },
 ];
@@ -74,11 +78,16 @@ describe('C5-06 uninstall/revoke residual inventory', () => {
     }
   });
 
-  it('records that the wired persistent-runtime cleanup remains Design-only, not a full optional-package residual matrix', () => {
+    it('requires Browser and IDE native-host teardown while retaining the still-missing full residual matrix', () => {
     const bridge = readSource('packages/desktop/src/process/extensions/package-manager/packageBridge.ts');
     const service = readSource('packages/desktop/src/process/extensions/package-manager/PackageManagerService.ts');
 
-    expect(bridge).toContain('if (packageId !== DESIGN_VIU_PACKAGE_ID) return;');
+        expect(bridge).toContain("createFixedPackageActivationLifecycle('com.tomni.browser'");
+    expect(bridge).toContain("createFixedPackageActivationLifecycle('com.tomni.ide'");
+    expect(bridge).toContain('await browserPackageActivationLifecycle?.quiesce();');
+    expect(bridge).toContain('await idePackageActivationLifecycle?.quiesce();');
+    expect(bridge).toContain('await browserPackageActivationLifecycle?.resume();');
+    expect(bridge).toContain('await idePackageActivationLifecycle?.resume();');
     for (const hook of FULL_MATRIX_HOOKS_NOT_YET_WIRED) expect(service, hook).not.toContain(hook);
   });
 });

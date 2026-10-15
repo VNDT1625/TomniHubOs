@@ -53,7 +53,7 @@ export const ensureRealtimeKnowledgeMcpRegistered = async (): Promise<boolean> =
         {
           name: BUILTIN_REALTIME_KNOWLEDGE_NAME,
           description: REALTIME_KNOWLEDGE_MCP_DESCRIPTION,
-          enabled: false,
+          enabled: true,
           builtin: true,
           transport,
           original_json,

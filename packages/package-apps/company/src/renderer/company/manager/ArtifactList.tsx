@@ -14,8 +14,9 @@
  */
 
 import type { Artifact, ArtifactKind } from '../pipeline/pipelineTypes';
-import { Code, DocDetail, ExperimentOne, FileText, Notes } from '@icon-park/react';
-import { Tag } from '@arco-design/web-react';
+import { shell } from '@/common/adapter/ipcBridge';
+import { Code, DocDetail, ExperimentOne, FileText, FolderOpen, Notes } from '@icon-park/react';
+import { Button, Message, Tag } from '@arco-design/web-react';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -38,6 +39,10 @@ const KindIcon: React.FC<{ kind: ArtifactKind }> = ({ kind }) => {
 /** The artifact list. */
 const ArtifactList: React.FC<{ artifacts: Artifact[] }> = ({ artifacts }) => {
   const { t } = useTranslation();
+  // Reveal rather than open: the path comes from model output, so it is never launched.
+  const reveal = (filePath: string): void => {
+    shell.showItemInFolder.invoke(filePath).catch(() => Message.error(t('company.pipeline.showInFolderFailed')));
+  };
 
   if (artifacts.length === 0) {
     return <p className='m-0 py-20px text-center text-12px text-t-tertiary'>{t('company.pipeline.artifactsEmpty')}</p>;
@@ -65,6 +70,16 @@ const ArtifactList: React.FC<{ artifacts: Artifact[] }> = ({ artifacts }) => {
             {a.preview && <p className='m-0 mt-2px line-clamp-2 text-11px text-t-tertiary'>{a.preview}</p>}
             {a.path && <p className='m-0 mt-2px truncate text-11px text-t-secondary'>{a.path}</p>}
           </div>
+          {a.path && !a.simulated && (
+            <Button
+              size='mini'
+              type='text'
+              icon={<FolderOpen theme='outline' size='14' />}
+              aria-label={t('company.pipeline.showInFolder')}
+              title={t('company.pipeline.showInFolder')}
+              onClick={() => reveal(a.path as string)}
+            />
+          )}
         </div>
       ))}
     </div>

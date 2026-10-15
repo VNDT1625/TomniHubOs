@@ -1,0 +1,13 @@
+{
+  "name": "context7-codex",
+  "plugins": [
+    {
+      "name": "context7",
+      "source": {
+        "source": "local",
+        "path": "./plugins/codex/context7"
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}

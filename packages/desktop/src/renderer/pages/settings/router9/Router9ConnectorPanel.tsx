@@ -378,7 +378,11 @@ const Router9ConnectorPanel: React.FC<Router9ConnectorPanelProps> = ({ onProvide
   }, [plan]);
 
   return (
-    <Collapse bordered={false} className='mt-16px [&_.arco-collapse-item-content-box]:!px-0'>
+    <Collapse
+      bordered={false}
+      defaultActiveKey={['router9']}
+      className='mt-16px [&_.arco-collapse-item-content-box]:!px-0'
+    >
       <Collapse.Item
         name='router9'
         header={

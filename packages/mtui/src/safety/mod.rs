@@ -12,26 +12,43 @@ pub fn validate_path_for_new(
         project_root.join(file_path)
     };
 
-    if let Some(parent) = resolved.parent() {
-        if !config.allow_outside_project {
-            let canonical_root =
-                std::fs::canonicalize(project_root).unwrap_or_else(|_| project_root.to_path_buf());
-            if parent.starts_with(&canonical_root)
-                || std::fs::canonicalize(parent)
-                    .map(|p| p.starts_with(&canonical_root))
-                    .unwrap_or(false)
-            {
-                // OK
-            } else {
-                return Err(MtuiError::PathOutsideProject {
-                    message: format!("Path is outside project root: {}", file_path.display()),
-                    suggestion: "Use allow_outside_project in config to bypass".to_string(),
-                });
-            }
+    let resolved = normalize_lexically(&resolved);
+    if !config.allow_outside_project {
+        let canonical_root =
+            std::fs::canonicalize(project_root).unwrap_or_else(|_| project_root.to_path_buf());
+        // The parent directories of a new file may not exist yet, so judge the nearest
+        // existing ancestor. Canonicalizing it also resolves symlinks.
+        let inside = resolved
+            .ancestors()
+            .skip(1)
+            .find(|ancestor| ancestor.exists())
+            .and_then(|ancestor| std::fs::canonicalize(ancestor).ok())
+            .is_some_and(|ancestor| ancestor.starts_with(&canonical_root));
+        if !inside {
+            return Err(MtuiError::PathOutsideProject {
+                message: format!("Path is outside project root: {}", file_path.display()),
+                suggestion: "Use allow_outside_project in config to bypass".to_string(),
+            });
         }
     }
 
     Ok(resolved)
+}
+
+/// Collapse `.` and `..` components without touching the filesystem, so a path
+/// such as `new/../../outside` cannot pass a lexical prefix check.
+fn normalize_lexically(path: &Path) -> PathBuf {
+    let mut normalized = PathBuf::new();
+    for component in path.components() {
+        match component {
+            std::path::Component::CurDir => {}
+            std::path::Component::ParentDir => {
+                normalized.pop();
+            }
+            other => normalized.push(other.as_os_str()),
+        }
+    }
+    normalized
 }
 
 pub fn validate_path(

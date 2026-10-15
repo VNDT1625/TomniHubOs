@@ -19,7 +19,7 @@ type ReplyPos = { top: number; left: number; text: string; msgId: string; msgPos
  * return a collapsed/empty selection while the real selection lives inside
  * a shadowRoot.
  */
-function getEffectiveSelection(target: EventTarget | null): Selection | null {
+export function getEffectiveSelection(target: EventTarget | null): Selection | null {
   // First try the standard selection
   const docSel = document.getSelection();
   if (docSel && !docSel.isCollapsed && docSel.toString().trim()) {
@@ -46,7 +46,7 @@ function getEffectiveSelection(target: EventTarget | null): Selection | null {
  * Find the closest message container from a selection's anchor node.
  * Handles both regular DOM and Shadow DOM cases.
  */
-function findMessageElement(sel: Selection): Element | null {
+export function findMessageElement(sel: Selection): Element | null {
   let node: Node | null = sel.anchorNode;
   if (!node) return null;
 

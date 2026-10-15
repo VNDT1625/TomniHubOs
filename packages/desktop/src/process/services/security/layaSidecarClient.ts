@@ -6,9 +6,12 @@
 
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
 import type { LayaPredictionResult, LayaPredictor, LayaQuestion } from './layaSemanticEgressModel';
+
+const WARMUP_TIMEOUT_MS = 30_000;
 
 export type LayaSidecarConfig = Readonly<{
   pythonPath?: string;
@@ -23,20 +26,56 @@ type PendingRequest = {
   timer: NodeJS.Timeout;
 };
 
+/**
+ * Where the sidecar script lives: an explicit override, the working directory (development), or next to the
+ * packaged app's resources. The first one that exists wins; the working-directory path is the last resort.
+ */
+export const resolveLayaScriptPath = (): string => {
+  const resources = (process as { resourcesPath?: string }).resourcesPath;
+  const candidates = [
+    process.env.TOMNY_LAYA_SIDECAR,
+    path.resolve(process.cwd(), 'scripts/laya_sidecar.py'),
+    resources ? path.join(resources, 'scripts', 'laya_sidecar.py') : undefined,
+    resources ? path.join(resources, 'app.asar.unpacked', 'scripts', 'laya_sidecar.py') : undefined,
+  ].filter((candidate): candidate is string => Boolean(candidate));
+  return (
+    candidates.find((candidate) => existsSync(candidate)) ?? path.resolve(process.cwd(), 'scripts/laya_sidecar.py')
+  );
+};
+
 export class LayaSidecarClient {
   private process: ChildProcessWithoutNullStreams | null = null;
   private isReady = false;
   private readyPromise: Promise<void> | null = null;
   private readonly pendingRequests = new Map<string, PendingRequest>();
   private readonly config: Required<LayaSidecarConfig>;
+  private warmup: {
+    state: Readonly<Record<string, string>>;
+    questions: Readonly<Record<string, LayaQuestion>>;
+  } | null = null;
 
   public constructor(config: LayaSidecarConfig = {}) {
     this.config = {
       pythonPath: config.pythonPath ?? 'python',
-      scriptPath: config.scriptPath ?? path.resolve(process.cwd(), 'scripts/laya_sidecar.py'),
-      startupTimeoutMs: config.startupTimeoutMs ?? 60_000,
+      scriptPath: config.scriptPath ?? resolveLayaScriptPath(),
+      startupTimeoutMs: config.startupTimeoutMs ?? 180_000,
       requestTimeoutMs: config.requestTimeoutMs ?? 5_000,
     };
+  }
+
+  /** True once the model has loaded and requests are served without waiting. */
+  public get ready(): boolean {
+    return this.isReady;
+  }
+
+  /** A representative request answered once at startup. Without it the first real request pays the warm-up. */
+  public setWarmup(state: Readonly<Record<string, string>>, questions: Readonly<Record<string, LayaQuestion>>): void {
+    this.warmup = { state, questions };
+  }
+
+  private async warmUp(): Promise<void> {
+    if (!this.warmup) return;
+    await this.send(this.warmup.state, this.warmup.questions, undefined, WARMUP_TIMEOUT_MS);
   }
 
   public async start(): Promise<void> {
@@ -83,9 +122,17 @@ export class LayaSidecarClient {
 
             // Startup handshake
             if (data.status === 'ready') {
-              this.isReady = true;
               clearTimeout(startupTimer);
-              resolve();
+              // Answer one request before reporting ready: the first inference after loading is much slower than
+              // the rest, and a person would be waiting on it.
+              void this.warmUp().then(() => {
+                if (this.process !== child) {
+                  reject(new Error('[LayaSidecarClient] Process exited during warm-up'));
+                  return;
+                }
+                this.isReady = true;
+                resolve();
+              });
               return;
             }
 
@@ -143,6 +190,31 @@ export class LayaSidecarClient {
     return this.readyPromise;
   }
 
+  private waitUntilReady(signal?: AbortSignal): Promise<void> {
+    const starting = this.start();
+    if (!signal) {
+      return starting;
+    }
+    return new Promise<void>((resolve, reject) => {
+      const onAbort = (): void => reject(new Error('Operation aborted while the sidecar was starting'));
+      if (signal.aborted) {
+        onAbort();
+        return;
+      }
+      signal.addEventListener('abort', onAbort, { once: true });
+      starting.then(
+        () => {
+          signal.removeEventListener('abort', onAbort);
+          resolve();
+        },
+        (error: unknown) => {
+          signal.removeEventListener('abort', onAbort);
+          reject(error instanceof Error ? error : new Error(String(error)));
+        }
+      );
+    });
+  }
+
   public async predict(
     state: Readonly<Record<string, string>>,
     questions: Readonly<Record<string, LayaQuestion>>,
@@ -150,14 +222,24 @@ export class LayaSidecarClient {
   ): Promise<LayaPredictionResult> {
     if (!this.isReady) {
       try {
-        await this.start();
+        // Startup keeps running in the background after the caller gives up, so a slow cold start is not restarted.
+        await this.waitUntilReady(signal);
       } catch (err) {
         throw new Error(`[LayaSidecarClient] Sidecar not ready: ${err instanceof Error ? err.message : String(err)}`);
       }
     }
 
+    return this.send(state, questions, signal, this.config.requestTimeoutMs);
+  }
+
+  private send(
+    state: Readonly<Record<string, string>>,
+    questions: Readonly<Record<string, LayaQuestion>>,
+    signal: AbortSignal | undefined,
+    timeoutMs: number
+  ): Promise<LayaPredictionResult> {
     if (!this.process || !this.process.stdin.writable) {
-      throw new Error('[LayaSidecarClient] Sidecar stdin is not writable');
+      return Promise.reject(new Error('[LayaSidecarClient] Sidecar stdin is not writable'));
     }
 
     const id = randomUUID();
@@ -170,8 +252,8 @@ export class LayaSidecarClient {
 
       const timer = setTimeout(() => {
         this.pendingRequests.delete(id);
-        reject(new Error(`[LayaSidecarClient] Request ${id} timed out after ${this.config.requestTimeoutMs}ms`));
-      }, this.config.requestTimeoutMs);
+        reject(new Error(`[LayaSidecarClient] Request ${id} timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
 
       const onAbort = () => {
         this.pendingRequests.delete(id);
@@ -227,4 +309,21 @@ export const getSharedLayaSidecarClient = (): LayaSidecarClient => {
 
 export const createLayaSidecarPredictor = (client: LayaSidecarClient = getSharedLayaSidecarClient()): LayaPredictor => {
   return (state, questions, signal) => client.predict(state, questions, signal);
+};
+
+/**
+ * For the chat path, where a person is waiting. While the model is still loading (tens of seconds on the first
+ * start) it fails at once instead of making every stage wait for it, so the deterministic checks answer right
+ * away. Starting is kicked off in the background, so later messages find it ready.
+ */
+export const createLayaPipelinePredictor = (
+  client: LayaSidecarClient = getSharedLayaSidecarClient()
+): LayaPredictor => {
+  return (state, questions, signal) => {
+    if (!client.ready) {
+      void client.start().catch((): void => undefined);
+      return Promise.reject(new Error('[LayaSidecarClient] Sidecar is still starting'));
+    }
+    return client.predict(state, questions, signal);
+  };
 };

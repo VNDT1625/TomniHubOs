@@ -1,4 +1,4 @@
-﻿//! Query the durable project Wiki exported by Tomny into `.omni/wiki/wiki.json`.
+﻿//! Query the durable project Wiki exported by Tomny into `.tomni/wiki/wiki.json`.
 //!
 //! This is intentionally a small read-only adapter over the persisted Wiki
 //! schema. Agents can retrieve shared, model-authored project knowledge without
@@ -8,7 +8,7 @@ use crate::error::MtuiError;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
-const WIKI_REL_PATH: &str = ".omni/wiki/wiki.json";
+const WIKI_REL_PATH: &str = ".tomni/wiki/wiki.json";
 const MAX_MATCH_CONTENT_CHARS: usize = 8_000;
 
 #[derive(Debug, Deserialize)]

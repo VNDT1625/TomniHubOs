@@ -12,15 +12,17 @@ import FeedbackButton from '@/renderer/components/base/FeedbackButton';
 import LanguageSwitcher from '@/renderer/components/settings/LanguageSwitcher';
 import { iconColors } from '@/renderer/styles/colors';
 import { isElectronDesktop } from '@/renderer/utils/platform';
-import { Alert, Button, Collapse, Form, InputNumber, Message, Modal, Switch, Tooltip } from '@arco-design/web-react';
+import { Alert, Button, Form, InputNumber, Message, Modal, Switch, Tooltip } from '@arco-design/web-react';
 import { FolderSearch } from '@icon-park/react';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import useSWR from 'swr';
 import { useSettingsViewMode } from '../../settingsViewContext';
 import DevSettings from './DevSettings';
+import BackgroundServicesPanel from './BackgroundServicesPanel';
 import DirInputItem from './DirInputItem';
 import PreferenceRow from './PreferenceRow';
+import StorageCenter from './StorageCenter';
 
 /**
  * System settings content component
@@ -46,8 +48,6 @@ const SystemModalContent: React.FC = () => {
   });
   const [closeToTray, setCloseToTray] = useState(false);
   const [gpuStatus, setGpuStatus] = useState<IGpuStatus | null>(null);
-  const [notificationEnabled, setNotificationEnabled] = useState(true);
-  const [cronNotificationEnabled, setCronNotificationEnabled] = useState(false);
   const [promptTimeout, setPromptTimeout] = useState<number>(300);
   const [agentIdleTimeout, setAgentIdleTimeout] = useState<number>(5);
   const [saveUploadToWorkspace, setSaveUploadToWorkspace] = useState(false);
@@ -81,32 +81,18 @@ const SystemModalContent: React.FC = () => {
     if (!isDesktop) return;
     Promise.all([
       ipcBridge.systemSettings.getCloseToTray.invoke(),
-      ipcBridge.systemSettings.getNotificationEnabled.invoke(),
-      ipcBridge.systemSettings.getCronNotificationEnabled.invoke(),
       ipcBridge.systemSettings.getSaveUploadToWorkspace.invoke(),
       ipcBridge.systemSettings.getAutoPreviewOfficeFiles.invoke(),
       ipcBridge.systemSettings.getPromptTimeout.invoke(),
       ipcBridge.systemSettings.getAgentIdleTimeout.invoke(),
     ])
-      .then(
-        ([
-          nextCloseToTray,
-          nextNotification,
-          nextCronNotification,
-          nextSaveUpload,
-          nextAutoPreview,
-          nextPrompt,
-          nextIdle,
-        ]) => {
-          setCloseToTray(nextCloseToTray);
-          setNotificationEnabled(nextNotification);
-          setCronNotificationEnabled(nextCronNotification);
-          setSaveUploadToWorkspace(nextSaveUpload);
-          setAutoPreviewOfficeFiles(nextAutoPreview);
-          setPromptTimeout(nextPrompt);
-          setAgentIdleTimeout(nextIdle);
-        }
-      )
+      .then(([nextCloseToTray, nextSaveUpload, nextAutoPreview, nextPrompt, nextIdle]) => {
+        setCloseToTray(nextCloseToTray);
+        setSaveUploadToWorkspace(nextSaveUpload);
+        setAutoPreviewOfficeFiles(nextAutoPreview);
+        setPromptTimeout(nextPrompt);
+        setAgentIdleTimeout(nextIdle);
+      })
       .catch(() => {});
   }, [isDesktop]);
 
@@ -179,20 +165,6 @@ const SystemModalContent: React.FC = () => {
     },
     [startOnBoot, t]
   );
-
-  const handleNotificationEnabledChange = useCallback((checked: boolean) => {
-    setNotificationEnabled(checked);
-    ipcBridge.systemSettings.setNotificationEnabled.invoke({ enabled: checked }).catch(() => {
-      setNotificationEnabled(!checked);
-    });
-  }, []);
-
-  const handleCronNotificationEnabledChange = useCallback((checked: boolean) => {
-    setCronNotificationEnabled(checked);
-    ipcBridge.systemSettings.setCronNotificationEnabled.invoke({ enabled: checked }).catch(() => {
-      setCronNotificationEnabled(!checked);
-    });
-  }, []);
 
   const handlePromptTimeoutChange = useCallback((val: number | undefined) => {
     setPromptTimeout(val as number);
@@ -382,45 +354,6 @@ const SystemModalContent: React.FC = () => {
                 </PreferenceRow>
               ))}
             </div>
-            {/* Notification settings with collapsible sub-options */}
-            <Collapse
-              bordered={false}
-              activeKey={notificationEnabled ? ['notification'] : []}
-              onChange={(_, keys) => {
-                const shouldExpand = (keys as string[]).includes('notification');
-                if (shouldExpand && !notificationEnabled) {
-                  handleNotificationEnabledChange(true);
-                } else if (!shouldExpand && notificationEnabled) {
-                  handleNotificationEnabledChange(false);
-                }
-              }}
-              className='[&_.arco-collapse-item]:!border-none [&_.arco-collapse-item-header]:!px-0 [&_.arco-collapse-item-header-title]:!flex-1 [&_.arco-collapse-item-content-box]:!px-0 [&_.arco-collapse-item-content-box]:!pb-0'
-            >
-              <Collapse.Item
-                name='notification'
-                showExpandIcon={false}
-                header={
-                  <div className='flex flex-1 items-center justify-between w-full'>
-                    <span className='text-14px text-2 ml-12px'>{t('settings.notification')}</span>
-                    <Switch
-                      checked={notificationEnabled}
-                      onClick={(e) => e.stopPropagation()}
-                      onChange={handleNotificationEnabledChange}
-                    />
-                  </div>
-                }
-              >
-                <div className='pl-12px'>
-                  <PreferenceRow label={t('settings.cronNotificationEnabled')}>
-                    <Switch
-                      checked={cronNotificationEnabled}
-                      disabled={!notificationEnabled}
-                      onChange={handleCronNotificationEnabledChange}
-                    />
-                  </PreferenceRow>
-                </div>
-              </Collapse.Item>
-            </Collapse>
             <Form form={form} layout='vertical' className='!mt-32px space-y-16px' onValuesChange={handleValuesChange}>
               <DirInputItem label={t('settings.workDir')} field='workDir' />
               {/* Log directory (read-only, click to open in file manager) */}
@@ -456,6 +389,10 @@ const SystemModalContent: React.FC = () => {
               )}
             </Form>
           </div>
+
+                    {isDesktop && <BackgroundServicesPanel />}
+          <StorageCenter isDesktop={isDesktop} />
+
 
           {/* Developer settings: DevTools + CDP (only visible in dev mode) */}
           <DevSettings />

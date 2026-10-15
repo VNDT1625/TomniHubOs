@@ -33,6 +33,18 @@ const AgentModalContent: React.FC = () => {
     setSearchParams({ tab: key });
   };
 
+  // Remote agents are development-only; production would show a tab bar with a single tab.
+  if (process.env.NODE_ENV !== 'development') {
+    return (
+      <div className='flex flex-col h-full w-full'>
+        {agentMessageContext}
+        <TomnyScrollArea className='flex-1 min-h-0 pb-16px scrollbar-hide' disableOverflow={isPageMode}>
+          <LocalAgents />
+        </TomnyScrollArea>
+      </div>
+    );
+  }
+
   return (
     <div className='flex flex-col h-full w-full'>
       {agentMessageContext}
@@ -48,13 +60,11 @@ const AgentModalContent: React.FC = () => {
             <LocalAgents />
           </TomnyScrollArea>
         </Tabs.TabPane>
-        {process.env.NODE_ENV === 'development' && (
-          <Tabs.TabPane key='remote' title={t('settings.agentManagement.remoteAgents')}>
-            <TomnyScrollArea className='flex-1 min-h-0 pb-16px scrollbar-hide' disableOverflow={isPageMode}>
-              <RemoteAgents />
-            </TomnyScrollArea>
-          </Tabs.TabPane>
-        )}
+        <Tabs.TabPane key='remote' title={t('settings.agentManagement.remoteAgents')}>
+          <TomnyScrollArea className='flex-1 min-h-0 pb-16px scrollbar-hide' disableOverflow={isPageMode}>
+            <RemoteAgents />
+          </TomnyScrollArea>
+        </Tabs.TabPane>
       </Tabs>
     </div>
   );

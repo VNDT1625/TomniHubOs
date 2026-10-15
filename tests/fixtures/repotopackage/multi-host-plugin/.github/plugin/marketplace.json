@@ -1,0 +1,9 @@
+{
+  "name": "context7-copilot",
+  "plugins": [
+    {
+      "name": "context7",
+      "source": "./plugins/copilot/context7"
+    }
+  ]
+}

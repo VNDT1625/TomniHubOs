@@ -63,7 +63,7 @@ const chromeServer = (): Partial<IMcpServer> & Pick<IMcpServer, 'name' | 'transp
   return {
     name: BUILTIN_CHROME_DEVTOOLS_NAME,
     description: 'Default MCP server: chrome-devtools',
-    enabled: false,
+    enabled: true,
     builtin: true,
     transport: { type: 'stdio', ...config },
     original_json: JSON.stringify({ mcpServers: { [BUILTIN_CHROME_DEVTOOLS_NAME]: config } }, null, 2),
@@ -116,9 +116,12 @@ export const ensureNativeDefaultMcpServers = async (): Promise<void> => {
       await registry.importMany([draft]);
       continue;
     }
+    // Only the image-generation server is forced to its draft state: it must stay off until its provider protocol
+    // exists. Other built-ins take their default once at creation, so a user switch in Settings is never reverted.
+    const enforcesEnabled = draft.name === BUILTIN_IMAGE_GEN_NAME;
     const needsRefresh =
       current.builtin !== true ||
-      current.enabled !== draft.enabled ||
+      (enforcesEnabled && current.enabled !== draft.enabled) ||
       !sameTransport(current.transport, draft.transport) ||
       current.original_json !== draft.original_json;
     if (!needsRefresh) continue;
@@ -129,7 +132,7 @@ export const ensureNativeDefaultMcpServers = async (): Promise<void> => {
       original_json: draft.original_json,
       builtin: true,
     });
-    if (current.enabled !== draft.enabled) {
+    if (enforcesEnabled && current.enabled !== draft.enabled) {
       // The registry only exposes a bounded toggle for enabled state.
       // eslint-disable-next-line no-await-in-loop
       await registry.toggle(current.id);

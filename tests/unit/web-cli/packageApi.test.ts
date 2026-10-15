@@ -918,6 +918,55 @@ describe('package update permission consent authority', () => {
       await fs.rm(ledgerRootDir, { recursive: true, force: true });
     }
   });
+
+  it('reports a completed uninstall even when the removed package is no longer known to the service', async () => {
+    const ledgerRootDir = await fs.mkdtemp(path.join(os.tmpdir(), 'tomny-package-ledger-'));
+    try {
+      const installed = updateListing(['workspace.read'], ['workspace.read']);
+      let removed = false;
+      const service = {
+        status: vi.fn(async (): Promise<PackageListing> => {
+          if (removed) throw new Error('Unknown package: ' + PACKAGE_ID);
+          return installed;
+        }),
+        uninstall: vi.fn(async (): Promise<PackageListing> => {
+          removed = true;
+          return { ...installed, state: 'available', enabled: false };
+        }),
+      } as unknown as PackageManagerService;
+      let nextId = 0;
+      const runtime = createLocalPackageMutationRuntime({
+        service,
+        ledgerRootDir,
+        now: () => new Date('2026-07-27T00:00:00.000Z'),
+        randomId: () => 'id-' + ++nextId,
+      });
+      const ownerId = 'electron:window-a';
+      const idempotencyKey = 'uninstall-delisted-1';
+      const consent = await runtime.requestConsent({
+        id: PACKAGE_ID,
+        action: 'uninstall',
+        idempotencyKey,
+        region: 'VN',
+        confirmed: true,
+        ownerId,
+      });
+      const result = await runtime.execute({
+        id: PACKAGE_ID,
+        action: 'uninstall',
+        idempotencyKey,
+        region: 'VN',
+        consentId: consent.consentId,
+        ownerId,
+      });
+      expect(service.uninstall).toHaveBeenCalledTimes(1);
+      expect(result).toMatchObject({ state: 'available', enabled: false, updateAvailable: false });
+      expect(result.installedVersion).toBeUndefined();
+      expect(result.installedManifest).toBeUndefined();
+    } finally {
+      await fs.rm(ledgerRootDir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('browser package runtime registry', () => {

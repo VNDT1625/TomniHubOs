@@ -847,7 +847,7 @@ describe('Foundation bridge payload validation', () => {
     expect(coreRuntime.executeToCompletion).not.toHaveBeenCalled();
   });
 
-  it('returns a terminal error when Core execution fails after starting', async () => {
+  it('leaves the terminal event to Core when Core execution fails after starting', async () => {
     const coreRuntime = {
       listTargets: vi.fn().mockResolvedValue([{ id: 'available-local', kind: 'local', available: true }]),
       executeToCompletion: vi.fn().mockRejectedValue(new Error('CORE_OUTPUT_EMPTY')),
@@ -865,10 +865,9 @@ describe('Foundation bridge payload validation', () => {
       'conversation-session'
     );
 
-    await expect(started.terminal).resolves.toMatchObject({
-      type: 'error',
-      text: expect.stringContaining('CORE_OUTPUT_EMPTY'),
-    });
+    // Core owns the stream and emits its own terminal error once it has started.
+    await expect(started.terminal).resolves.toBeUndefined();
+    expect(coreRuntime.executeToCompletion).toHaveBeenCalledTimes(1);
   });
 
   it('synchronizes intent userId to trustRuntime actorId avoiding actor mismatch when account is logged in', async () => {

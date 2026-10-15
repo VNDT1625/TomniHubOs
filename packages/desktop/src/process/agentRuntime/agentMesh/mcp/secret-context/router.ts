@@ -1,7 +1,14 @@
 import { randomBytes as nodeRandomBytes, randomUUID } from 'node:crypto';
 
-import type { SecretDescriptor, SecretKind } from '@process/agentRuntime/contextTypes';
-import type { SecretVault } from '@process/agentRuntime/secretVault';
+import type { SecretCaller, SecretDescriptor, SecretKind, SecretScope } from '@process/agentRuntime/contextTypes';
+import { secretVisibleTo, type SecretVault } from '@process/agentRuntime/secretVault';
+import {
+  getSecretRequestStore,
+  type SecretDestination,
+  type SecretRequest,
+  type SecretRequestInput,
+  type SecretRequestStore,
+} from './requests';
 
 export type SecretContextUseRequest = {
   handle: string;
@@ -11,6 +18,8 @@ export type SecretContextUseRequest = {
   surface: string;
   purpose: string;
   target?: string;
+  /** Host-resolved identity of the run; selects which session/company sets may resolve. */
+  caller?: SecretCaller;
 };
 
 export type SecretContextUseReceipt = {
@@ -32,6 +41,8 @@ export type SecretContextCaptureRequest = {
   tabId: string;
   selector: string;
   target: string;
+  /** Where the captured set lives; absent means permanent app scope. */
+  scope?: SecretScope;
 };
 
 export type SecretContextCaptureReceipt = {
@@ -48,6 +59,7 @@ export type SecretContextGenerateRequest = {
   label: string;
   field: string;
   generator: SecretContextGenerator;
+  scope?: SecretScope;
 };
 
 export type SecretContextGenerateReceipt = {
@@ -72,8 +84,38 @@ export type SecretContextStoredEvent = {
 
 export type SecretContextStoredCallback = (event: SecretContextStoredEvent) => Promise<void> | void;
 
-type SecretContextVault = Pick<SecretVault, 'put'>;
+type SecretContextVault = Pick<SecretVault, 'put' | 'list'>;
+
+/** What an agent may learn about a set: where it lives and where it can be used. Never a value. */
+export type SecretContextSetView = Readonly<{
+  handle: string;
+  label: string;
+  note?: string;
+  kind: SecretKind;
+  fields: readonly string[];
+  scope: 'app' | 'session' | 'company' | 'package';
+  destinations: readonly SecretDestination[];
+  hosts?: readonly string[];
+}>;
+
+const destinationsOf = (binding: SecretDescriptor['binding']): SecretDestination[] => {
+  const result: SecretDestination[] = [];
+  if (binding.surfaces.includes('secret-firewall') && binding.purposes.includes('opaque-use')) {
+    result.push('process', 'deploy');
+  }
+  if (binding.surfaces.includes('browser') && binding.purposes.includes('browser-fill')) result.push('browser');
+  if (binding.surfaces.includes('terminal') && binding.purposes.includes('terminal-input')) result.push('terminal');
+  return result;
+};
 type RandomBytes = (size: number) => Uint8Array;
+
+/** Asks the person for a Package App's access to one general app secret. Records a request; grants nothing. */
+export type PackageAccessRequester = {
+  requestAccess(
+    packageId: string,
+    input: { handle: string; reason: string }
+  ): Promise<{ requestId?: string; status: 'pending' | 'already-granted' }>;
+};
 
 export type SecretContextUseRouterOptions = {
   now?: () => number;
@@ -84,6 +126,8 @@ export type SecretContextUseRouterOptions = {
   captureBrowserValue?: SecretContextBrowserCapture;
   randomBytes?: RandomBytes;
   onSecretStored?: SecretContextStoredCallback;
+  requests?: SecretRequestStore;
+  packageAccess?: PackageAccessRequester;
 };
 
 const GENERIC_USE_ERROR = 'Secret context use failed.';
@@ -113,6 +157,8 @@ export class SecretContextUseRouter {
   private readonly randomBytes: RandomBytes;
   private vault?: SecretContextVault;
   private onSecretStored?: SecretContextStoredCallback;
+  private readonly requests: SecretRequestStore;
+  private packageAccess?: PackageAccessRequester;
 
   public constructor(options: SecretContextUseRouterOptions = {}) {
     this.now = options.now ?? Date.now;
@@ -123,6 +169,56 @@ export class SecretContextUseRouter {
     this.captureBrowserValue = options.captureBrowserValue;
     this.randomBytes = options.randomBytes ?? nodeRandomBytes;
     this.onSecretStored = options.onSecretStored;
+    this.requests = options.requests ?? getSecretRequestStore();
+    this.packageAccess = options.packageAccess;
+  }
+
+  /** Sets this run may use, in user-facing scopes only. Internal credentials (Telegram, channels) never appear. */
+  public async listVisible(caller: SecretCaller | undefined): Promise<SecretContextSetView[]> {
+    if (!this.vault) throw new Error('Secret listing failed.');
+    const time = this.now();
+    return (await this.vault.list())
+      .filter(
+        (item) =>
+          item.revokedAt === undefined &&
+          (item.expiresAt === undefined || item.expiresAt > time) &&
+          secretVisibleTo(item, caller)
+      )
+      .flatMap((item): SecretContextSetView[] => {
+        const destinations = destinationsOf(item.binding);
+        if (destinations.length === 0) return [];
+        return [
+          {
+            handle: item.handle,
+            label: item.label,
+            ...(item.note ? { note: item.note } : {}),
+            kind: item.kind,
+            fields: [...item.fields],
+            scope: item.scope?.kind ?? 'app',
+            destinations,
+            ...(destinations.includes('browser') && item.binding.targets ? { hosts: [...item.binding.targets] } : {}),
+          },
+        ];
+      });
+  }
+
+  /** Record that the agent needs a secret from the person. Nothing is stored in the vault. */
+  public request(sessionId: string, input: SecretRequestInput): { requestId: string; status: 'pending' } {
+    const request: SecretRequest = this.requests.add(sessionId, input);
+    return { requestId: request.id, status: 'pending' };
+  }
+
+  /** The active Package App asks for one of the person's general secrets. The person decides elsewhere. */
+  public async requestPackageAccess(
+    packageId: string,
+    input: { handle: string; reason: string }
+  ): Promise<{ requestId?: string; status: 'pending' | 'already-granted' }> {
+    if (!this.packageAccess) throw new Error('Package secret access is unavailable.');
+    return this.packageAccess.requestAccess(packageId, input);
+  }
+
+  public configurePackageAccess(access: PackageAccessRequester): void {
+    this.packageAccess = access;
   }
 
   /** Attach the Main-process vault without exposing it through the MCP server. */
@@ -136,6 +232,8 @@ export class SecretContextUseRouter {
   }
 
   private async notifySecretStored(event: SecretContextStoredEvent): Promise<void> {
+    // Session, company and package sets belong to their owner and never become part of the person's profile.
+    if (event.descriptor.scope && event.descriptor.scope.kind !== 'app') return;
     try {
       await this.onSecretStored?.(structuredClone(event));
     } catch {
@@ -191,6 +289,7 @@ export class SecretContextUseRouter {
             purposes: [SECRET_FIREWALL_PURPOSE, 'browser-fill'],
             targets: [request.target],
           },
+          ...(request.scope ? { scope: request.scope } : {}),
         },
         { [request.field]: value }
       );
@@ -224,6 +323,7 @@ export class SecretContextUseRouter {
             surfaces: [SECRET_FIREWALL_SURFACE],
             purposes: [SECRET_FIREWALL_PURPOSE],
           },
+          ...(request.scope ? { scope: request.scope } : {}),
         },
         { [request.field]: value }
       );

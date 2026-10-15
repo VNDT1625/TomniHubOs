@@ -49,7 +49,7 @@ import type { ISessionMcpServer } from '@/common/config/storage';
  * `localStorage` key under which the renderer remembers the conversation opened
  * for each company role. Keyed by `"<companyId>::<roleId>"` → conversation id.
  */
-export const ROLE_CONVERSATIONS_STORAGE_KEY = 'github.com/VNDT1625/OmniAgentpany.roleConversations';
+export const ROLE_CONVERSATIONS_STORAGE_KEY = 'tomny.company.roleConversations';
 
 /** Build the storage map key for one role. */
 const roleKey = (companyId: string, roleId: string): string => `${companyId}::${roleId}`;

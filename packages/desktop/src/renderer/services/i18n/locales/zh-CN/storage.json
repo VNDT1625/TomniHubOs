@@ -1,0 +1,35 @@
+{
+  "title": "Storage Center",
+  "description": "Review managed storage and keep rebuildable cache growth under control.",
+  "refresh": "Refresh",
+  "managedUsage": "Managed storage usage",
+  "autoCleanup": "Automatic cleanup",
+  "previewTitle": "Cleanup preview",
+  "previewDescription": "{{count}} eligible files · up to {{bytes}} reclaimable",
+  "reviewCleanup": "Review",
+  "cleanupConfirmTitle": "Remove expired cache files?",
+  "cleanupConfirmDescription": "Remove {{count}} expired managed cache files to reclaim up to {{bytes}}. User data, worktrees, models, adapters, package downloads, active resources, chats, artifacts, and secrets are excluded.",
+  "cleanupAction": "Remove expired files",
+  "cleanupSuccess": "Removed {{count}} expired cache files and reclaimed {{bytes}}.",
+  "cleanupError": "The cleanup plan could not be completed. No unpreviewed file was removed.",
+  "protectionNotice": "Workspaces, chats, artifacts, secrets, active resources, models, adapters, package downloads, and worktrees are never automatically deleted.",
+  "errorLoad": "Storage details could not be loaded.",
+  "errorPolicy": "Storage policy could not be saved.",
+  "category": {
+    "technicalCache": "Technical cache",
+    "models": "Local models",
+    "adapters": "Model adapters",
+    "packageDownloads": "Package downloads",
+    "logs": "Application logs",
+    "worktrees": "Worktrees",
+    "userData": "Protected user data"
+  },
+  "state": {
+    "ready": "Ready",
+    "scanning": "Scanning",
+    "busy": "In use",
+    "unavailable": "Unavailable",
+    "protected": "Protected",
+    "error": "Needs attention"
+  }
+}

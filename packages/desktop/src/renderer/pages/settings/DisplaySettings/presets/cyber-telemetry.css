@@ -1,0 +1,131 @@
+/* Cyber Telemetry (Brutalist)
+ * A control-room look: monospace type, square corners, hard borders and a single signal-green accent.
+ * Only colour variables and a few typographic rules are set, so every screen keeps its layout.
+ */
+
+:root {
+  --color-primary: #006b3c;
+  --primary: #006b3c;
+  --color-primary-light-1: #1f8456;
+  --color-primary-light-2: #4fa07a;
+  --color-primary-light-3: #86bfa2;
+  --color-primary-dark-1: #004f2c;
+  --primary-rgb: 0, 107, 60;
+
+  --brand: #006b3c;
+  --brand-light: #dcebe2;
+  --brand-hover: #86bfa2;
+  --color-brand-fill: #006b3c;
+  --color-brand-bg: #dcebe2;
+
+  --color-bg-1: #e9ede9;
+  --bg-1: #e9ede9;
+  --color-bg-2: #dfe4df;
+  --bg-2: #dfe4df;
+  --color-bg-3: #cfd6cf;
+  --bg-3: #cfd6cf;
+  --color-bg-4: #b6bfb6;
+  --bg-4: #b6bfb6;
+  --bg-base: #f4f7f4;
+  --bg-hover: #d9dfd9;
+  --bg-active: #cfd6cf;
+
+  --fill: #e4e9e4;
+  --color-fill: #e4e9e4;
+  --fill-0: #f4f7f4;
+  --dialog-fill-0: #f4f7f4;
+
+  --color-text-1: #0b0f0b;
+  --text-primary: #0b0f0b;
+  --color-text-2: #2f382f;
+  --text-secondary: #1f271f;
+  --text-tertiary: #3b453b;
+  --color-text-3: #596459;
+  --text-0: #0b0f0b;
+
+  --color-border: #9aa59a;
+  --color-border-1: #9aa59a;
+  --color-border-2: #bcc5bc;
+  --border-base: #9aa59a;
+  --border-light: #bcc5bc;
+
+  --success: #006b3c;
+  --warning: #9a5b00;
+  --danger: #b00020;
+  --info: #0b5f8a;
+
+  --message-user-bg: #d6ddd6;
+  --message-tips-bg: #dfe8e1;
+  --workspace-btn-bg: #d9dfd9;
+}
+
+[data-theme='dark'] {
+  --color-primary: #3dff8a;
+  --primary: #3dff8a;
+  --color-primary-light-1: #6dffa6;
+  --color-primary-light-2: #94ffbd;
+  --color-primary-light-3: #b8ffd3;
+  --color-primary-dark-1: #1fcc68;
+  --primary-rgb: 61, 255, 138;
+
+  --brand: #3dff8a;
+  --brand-light: #0f2a1a;
+  --brand-hover: #1fcc68;
+  --color-brand-fill: #3dff8a;
+  --color-brand-bg: #0f2a1a;
+
+  --color-bg-1: #070a07;
+  --bg-1: #070a07;
+  --color-bg-2: #0d130d;
+  --bg-2: #0d130d;
+  --color-bg-3: #152015;
+  --bg-3: #152015;
+  --color-bg-4: #203020;
+  --bg-4: #203020;
+  --bg-base: #030503;
+  --bg-hover: #0a100a;
+  --bg-active: #121b12;
+
+  --fill: #070a07;
+  --color-fill: #070a07;
+  --fill-0: rgba(61, 255, 138, 0.06);
+  --dialog-fill-0: #0d130d;
+
+  --color-text-1: #c8ffd4;
+  --text-primary: #c8ffd4;
+  --color-text-2: #8fcf9f;
+  --text-secondary: #a9e6b8;
+  --text-tertiary: #7fbb8e;
+  --color-text-3: #5f9a6d;
+  --text-0: #c8ffd4;
+
+  --color-border: #1f3a26;
+  --color-border-1: #1f3a26;
+  --color-border-2: #142617;
+  --border-base: #1f3a26;
+  --border-light: #142617;
+
+  --success: #3dff8a;
+  --warning: #ffb02e;
+  --danger: #ff5c6c;
+  --info: #4dc3ff;
+
+  --message-user-bg: #0f1b11;
+  --message-tips-bg: #0b160e;
+  --workspace-btn-bg: #0d130d;
+}
+
+body {
+  font-family: 'JetBrains Mono', 'Cascadia Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+  letter-spacing: 0;
+}
+
+.arco-btn,
+.arco-input-wrapper,
+.arco-textarea,
+.arco-select-view,
+.arco-card,
+.arco-modal,
+.arco-drawer {
+  border-radius: 2px;
+}

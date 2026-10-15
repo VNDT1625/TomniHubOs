@@ -46,4 +46,30 @@ describe('built-in MCP tool catalog', () => {
       expect(names, query).toContain('ide_research');
     }
   });
+
+  it('keeps compatibility aliases out of public tool discovery', () => {
+    const names = listBuiltinMcpToolCatalog().map((entry) => entry.name);
+    for (const alias of [
+      'ide_read_file',
+      'ide_glob',
+      'ide_search',
+      'ide_grep',
+      'ide_map',
+      'ide_analyze',
+      'ide_command',
+      'terminal_run',
+    ]) {
+      expect(names).not.toContain(alias);
+    }
+    for (const canonical of [
+      'tomny_read',
+      'tomny_glob',
+      'tomny_search',
+      'tomny_map',
+      'tomny_analyze',
+      'tomny_command',
+    ]) {
+      expect(names).toContain(canonical);
+    }
+  });
 });

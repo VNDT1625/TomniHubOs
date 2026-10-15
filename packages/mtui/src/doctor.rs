@@ -87,10 +87,10 @@ pub fn run(project_root: &Path) -> DoctorResult {
         );
     }
     if !understand_cache.exists {
-        recommendations.push("Build Understand/codegraph in the IDE before relying on MTUI summary/map/context for high-confidence results.".to_string());
+        recommendations.push("Run `mtui understand build` before relying on MTUI summary/map/context for high-confidence results.".to_string());
     }
     if understand_cache.stale_marker {
-        recommendations.push("Understand/codegraph is marked stale after MTUI writes; rebuild or update changed files in the IDE before relying on high-confidence MTUI map/context.".to_string());
+        recommendations.push("Understand/codegraph is marked stale after MTUI writes; run `mtui understand build` to refresh changed files before relying on high-confidence MTUI map/context.".to_string());
     }
     DoctorResult {
         command: "doctor".to_string(),

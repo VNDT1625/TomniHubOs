@@ -179,12 +179,12 @@ const consentPage = (params: { clientName: string; scope: string; fields: Record
 
 /** Build the OAuth HTTP handler. Mount it ahead of the Bearer auth gate. */
 export const createOmniOAuthHandler = (deps: OmniOAuthHandlerDeps): OmniOAuthHandler => {
-  /** Resolve the public origin, preferring the tunnel URL, falling back to Host. */
+  /** Resolve the public origin, preferring the tunnel URL, falling back to Host / X-Forwarded-Host. */
   const originOf = (req: IncomingMessage): string => {
     const tunnel = deps.getPublicOrigin();
     if (tunnel) return tunnel.replace(/\/+$/, '');
-    const host = (req.headers['host'] ?? '127.0.0.1').toString();
-    const proto = (req.headers['x-forwarded-proto'] ?? 'http').toString().split(',')[0];
+    const host = (req.headers['x-forwarded-host'] ?? req.headers['host'] ?? '127.0.0.1').toString().split(',')[0].trim();
+    const proto = (req.headers['x-forwarded-proto'] ?? 'http').toString().split(',')[0].trim();
     return `${proto}://${host}`;
   };
 

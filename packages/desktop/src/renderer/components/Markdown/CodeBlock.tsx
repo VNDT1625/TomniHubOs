@@ -5,15 +5,21 @@
  */
 
 import { Message } from '@arco-design/web-react';
-import { Copy, Down, Up } from '@icon-park/react';
+import { Copy, Down, PreviewOpen, Up } from '@icon-park/react';
 import katex from 'katex';
+import classNames from 'classnames';
 import React, { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import SyntaxHighlighter from 'react-syntax-highlighter';
 import { vs, vs2015 } from 'react-syntax-highlighter/dist/esm/styles/hljs';
+import type { PreviewContentType } from '@/common/types/office/preview';
 import { copyText } from '@/renderer/utils/ui/clipboard';
+import ChartBlock from './ChartBlock';
 import MermaidBlock from './MermaidBlock';
-import { formatCode, getDiffLineStyle } from './markdownUtils';
+import SpotlightBlock from './SpotlightBlock';
+import RichUiBlock from './richUi/RichUiBlock';
+import HtmlLiveBlock from './htmlPreview/HtmlLiveBlock';
+import { formatCode, getDiffLineStyle, isInlinePath, toUnifiedDiff } from './markdownUtils';
 
 const PREVIEW_LINES = 3;
 // code span: font-size 13px, line-height 20px (per ShadowView injection)
@@ -22,19 +28,123 @@ const CODE_LINE_HEIGHT = 20;
 const CODE_PADDING_VERTICAL = 13;
 const COLLAPSED_HEIGHT = PREVIEW_LINES * CODE_LINE_HEIGHT + CODE_PADDING_VERTICAL;
 
+/** Blocks the preview panel can render instead of showing as text; anything else opens as code. */
+const RENDERED_PREVIEW: Readonly<Record<string, PreviewContentType>> = {
+  html: 'html',
+  htm: 'html',
+  svg: 'html',
+  markdown: 'markdown',
+  md: 'markdown',
+  diff: 'diff',
+  patch: 'diff',
+};
+
+/**
+ * Opens a block in the conversation's preview panel (rendered view, editing, download, full screen).
+ * Uses the panel's window event so a block shown outside a conversation simply does nothing.
+ */
+const openBlockInPreview = (content: string, language: string, fileName?: string): void => {
+  window.dispatchEvent(
+    new CustomEvent('preview.open', {
+      detail: {
+        content: RENDERED_PREVIEW[language] === 'diff' ? toUnifiedDiff(content, fileName) : content,
+        contentType: RENDERED_PREVIEW[language] ?? 'code',
+        metadata: { language, title: fileName || language, ...(fileName ? { file_name: fileName } : {}) },
+      },
+    })
+  );
+};
+
 type CodeBlockProps = {
   children: string;
   className?: string;
   node?: unknown;
   hiddenCodeCopyButton?: boolean;
+  streaming?: boolean;
+  previewSourceId?: string;
+  previewBlockIndex?: number;
   codeStyle?: React.CSSProperties;
   [key: string]: unknown;
 };
+
+/** How long the chip shows its copied state, in milliseconds. */
+const CHIP_COPIED_MS = 1200;
+
+/**
+ * Inline code drawn as a chip. Clicking (or Enter/Space) copies the text unless the user has an
+ * active text selection. Path-shaped text gets the file-path token color.
+ */
+export const InlineCodeChip = React.memo(function InlineCodeChip({ text, isPath }: { text: string; isPath: boolean }) {
+  const { t } = useTranslation();
+  const [copied, setCopied] = useState(false);
+  const timerRef = useRef<number | undefined>(undefined);
+
+  React.useEffect(() => () => window.clearTimeout(timerRef.current), []);
+
+  const copy = React.useCallback(() => {
+    const selection = typeof window !== 'undefined' ? window.getSelection() : null;
+    if (selection && !selection.isCollapsed && selection.toString().length > 0) return;
+    copyText(text)
+      .then(() => {
+        setCopied(true);
+        window.clearTimeout(timerRef.current);
+        timerRef.current = window.setTimeout(() => setCopied(false), CHIP_COPIED_MS);
+      })
+      .catch(() => {
+        try {
+          Message.error(t('common.copyFailed'));
+        } catch {
+          /* ignore */
+        }
+      });
+  }, [text, t]);
+
+  const onKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    copy();
+  };
+
+  return (
+    <code
+      role='button'
+      tabIndex={0}
+      aria-label={t('common.copy')}
+      data-copied={copied ? 'true' : undefined}
+      data-copied-label={t('common.copiedInline')}
+      className={classNames('tomni-md-chip', isPath && 'tomni-md-chip--path')}
+      onClick={copy}
+      onKeyDown={onKeyDown}
+    >
+      {text}
+    </code>
+  );
+});
+
 
 function CodeBlock(props: CodeBlockProps) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const previewId = React.useId();
+  const openedHtml = useRef(false);
+  const htmlSource = String(props.children ?? '');
+  const htmlStreaming = props.streaming === true;
+  React.useEffect(() => {
+    // Hub previews receive the complete streamed document from Main, not the 8K tile summary.
+    if (!openedHtml.current || props.previewSourceId) return undefined;
+    const timer = window.setTimeout(
+      () => {
+        window.dispatchEvent(
+          new CustomEvent('preview.update', {
+            detail: { previewId, content: htmlSource, pending: htmlStreaming },
+          })
+        );
+      },
+      htmlStreaming ? 1000 : 0
+    );
+    return () => clearTimeout(timer);
+  }, [htmlSource, htmlStreaming, previewId, props.previewSourceId]);
   const [currentTheme, setCurrentTheme] = useState<'light' | 'dark'>(
     () => (document.documentElement.getAttribute('data-theme') as 'light' | 'dark') || 'light'
   );
@@ -58,9 +168,21 @@ function CodeBlock(props: CodeBlockProps) {
     }
   };
 
-  const { children, className, node: _node, hiddenCodeCopyButton: _h, codeStyle: _c, ...rest } = props;
-  const match = /language-(\w+)/.exec(className || '');
+  const {
+    children,
+    className,
+    node: _node,
+    hiddenCodeCopyButton: _h,
+    streaming: _s,
+    previewSourceId: _source,
+    previewBlockIndex: _ordinal,
+    codeStyle: _c,
+    ...rest
+  } = props;
+  const match = /language-([\w-]+)(?::([\w.-]+))?/.exec(className || '');
   const language = match?.[1] || 'text';
+  // `html:index.html` names the file the block is meant to become.
+  const fileName = match?.[2];
 
   // KaTeX math blocks
   if (language === 'latex' || language === 'math' || language === 'tex') {
@@ -76,12 +198,59 @@ function CodeBlock(props: CodeBlockProps) {
     }
   }
 
+  if (language === 'tomni-ui' || language === 'rich-ui') {
+    return <RichUiBlock source={String(children)} />;
+  }
+
+  if (language === 'html' || language === 'htm') {
+    return (
+      <HtmlLiveBlock
+        source={String(children)}
+        fileName={fileName}
+        streaming={htmlStreaming}
+        onOpen={() => {
+          openedHtml.current = true;
+          window.dispatchEvent(
+            new CustomEvent('preview.open', {
+              detail: {
+                content: htmlSource,
+                contentType: 'html',
+                metadata: {
+                  language: 'html',
+                  title: fileName ?? '',
+                  file_name: fileName,
+                  previewId,
+                  pending: htmlStreaming,
+                  ...(props.previewSourceId
+                    ? { sourceId: props.previewSourceId, blockIndex: props.previewBlockIndex ?? 0 }
+                    : {}),
+                },
+              },
+            })
+          );
+        }}
+      />
+    );
+  }
+
+  if (language === 'chart') {
+    return <ChartBlock source={String(children)} />;
+  }
+
+  if (language === 'spotlight') {
+    return <SpotlightBlock source={String(children)} />;
+  }
+
   if (language === 'mermaid') {
     return <MermaidBlock code={formatCode(children)} style={props.codeStyle} />;
   }
 
-  // Inline code (single line)
+  // Inline code (single line). Plain inline spans become chips; fenced single lines keep the code style.
   if (!String(children).includes('\n')) {
+    if (!className) {
+      const text = String(children);
+      return <InlineCodeChip text={text} isPath={isInlinePath(text)} />;
+    }
     return (
       <code {...rest} className={className} style={{ fontWeight: 'bold' }}>
         {children}
@@ -137,7 +306,7 @@ function CodeBlock(props: CodeBlockProps) {
           }}
         >
           <span style={{ color: footerTextColor, fontSize: '12px', lineHeight: '16px' }}>
-            {language.toLocaleLowerCase()}
+            {fileName || language.toLocaleLowerCase()}
           </span>
           {/* Buttons: always visible on touch devices, hover-only on pointer devices */}
           <div
@@ -165,6 +334,16 @@ function CodeBlock(props: CodeBlockProps) {
                 )}
               </span>
             )}
+            <span title={t('preview.openInPanelTooltip')} style={{ display: 'flex' }}>
+              <PreviewOpen
+                data-testid='code-block-open-in-panel'
+                theme='outline'
+                size='14'
+                style={{ cursor: 'pointer', display: 'block' }}
+                fill={iconFill}
+                onClick={() => openBlockInPreview(formattedContent, language.toLowerCase(), fileName)}
+              />
+            </span>
             <span title={t('common.copy')} style={{ display: 'flex' }}>
               <Copy
                 theme='outline'

@@ -129,9 +129,17 @@ const ExternalMcpGatewaySettings: React.FC = () => {
     }
   }, []);
 
-  useEffect(() => {
+    useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  // The OS keychain may unlock just after Electron startup; refresh status while
+  // bounded Main-process recovery attempts run, without needing a manual toggle.
+  useEffect(() => {
+    if (!status.enabled || status.running) return undefined;
+    const timer = setInterval(() => { void refresh(); }, 2500);
+    return () => clearInterval(timer);
+  }, [status.enabled, status.running, refresh]);
 
   // Subscribe to live Web Access progress events so the panel can replace its
   // opaque spinner with per-phase text (cloudflared install ~5–30 s first run,
@@ -1173,6 +1181,7 @@ const AuthSection: React.FC<{
           data={ALL_TOOL_ROWS}
           columns={[
             {
+              key: 'tool',
               title: t('externalMcp.auth.tools.colTool'),
               dataIndex: 'name',
               render: (_: unknown, row: ToolPermRow) => (
@@ -1187,6 +1196,7 @@ const AuthSection: React.FC<{
               ),
             },
             {
+              key: 'permission',
               title: t('externalMcp.auth.tools.colPermission'),
               dataIndex: 'name',
               width: 180,

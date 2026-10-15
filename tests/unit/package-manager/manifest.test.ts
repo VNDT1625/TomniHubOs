@@ -287,6 +287,14 @@ describe('package manifest validation', () => {
     expect(isPackageCompatible(manifest, 'not-a-version')).toBe(false);
   });
 
+    it('accepts host 0.0.0 for new packages requiring >=0.0.0 without weakening signed older manifests', () => {
+    const baseline = parsePackageManifest({ ...validManifest, engines: { tomni: '>=0.0.0' } });
+    expect(isPackageCompatible(baseline, '0.0.0')).toBe(true);
+    expect(isPackageCompatible(baseline, '0.0.1')).toBe(true);
+    const legacy = parsePackageManifest({ ...validManifest, engines: { tomni: '>=1.0.0' } });
+    expect(isPackageCompatible(legacy, '0.0.0')).toBe(false);
+  });
+
   it('resolves compatible active dependencies before their dependent package', () => {
     const core = parsePackageManifest({ ...validManifest, id: 'com.tomni.core', version: '1.1.0' });
     const runtime = parsePackageManifest({

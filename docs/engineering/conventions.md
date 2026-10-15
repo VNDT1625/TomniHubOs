@@ -11,6 +11,8 @@ mtui --json map intent "<task>"
 mtui --json map folder <path>
 ```
 
+`map`, `context`, `summary`, and `info` read the Understand cache. **CURRENT:** `mtui understand build` creates it offline without the IDE (`packages/mtui/src/understand/build.rs`; tests in `packages/mtui/tests/understand_build.rs`); `mtui understand status` reports whether a rebuild is needed. It preserves semantic summaries of unchanged files written by another builder. The IDE tool wiring runs the build automatically when the cache is missing (`packages/desktop/src/process/resources/nativeFile/mtuiUnderstand.ts`). **PARTIAL:** import edges are resolved for TypeScript/JavaScript (relative paths and `tsconfig.json` aliases), Rust modules, and Python; other languages get symbols and layers but no edges. **CURRENT:** the build classifies the folder as `code` or `docs` (documents and tables are at least 60% of indexed files; recorded as `kind` in the cache). Document folders also index `.txt`, `.csv`/`.tsv`, `.rst`, and `.adoc`, summarize each file from its title, first paragraph, headings, and word count (tables from their header and row count), expose headings and columns as searchable symbols, and turn local Markdown links and `[[wikilinks]]` into graph edges (`packages/mtui/src/understand/docs.rs`, tests in `packages/mtui/tests/understand_docs.rs`). In code projects those extra extensions stay unindexed. **TARGET:** `.docx`/`.pdf` text extraction and optional model-written summaries; binary documents are skipped today.
+
 Use MTUI for every repository write and inspect its diff before handoff. Keep unrelated dirty files untouched.
 
 Do not add duplicate guides, plans, session logs, memory notes, or subsystem READMEs. Update the owner listed in [the documentation index](../README.md).
@@ -61,7 +63,6 @@ Naming:
 - Hooks: camelCase beginning with use.
 - Utilities, type modules, and constants modules: camelCase filenames.
 - Constant values: UPPER_SNAKE_CASE.
-- CSS Modules: ComponentName.module.css or an established kebab-case stylesheet.
 - Tests: colocated or in the owning test area with a descriptive test suffix.
 
 Use configured aliases such as @, @process, and @renderer rather than deep relative traversal.
@@ -107,18 +108,12 @@ The same validation standard applies to HTTP, WebSocket, remote relay, MCP, pack
 - Persisted timestamps, IDs, enum values, and versions have stable formats.
 - Do not couple base context or recovery to an optional package database.
 - Tests use isolated temporary data and prove restart behavior for critical state.
+- Workspace metadata migrations use `.tomni` as the active root. Legacy-root migration validates paths without following symlinks, preserves conflict/recovery evidence, and must run before an owner reads or writes canonical workspace metadata; it must not become a runtime fallback.
+- Renderer workspace references are untrusted relative descriptors. Main resolves containment and actual kind before persistence; projected file content or Understanding summaries are bounded and delimited as untrusted prompt data.
 
-## Renderer and design system
+## Renderer
 
-Use:
-
-- Arco Design for interactive controls;
-- Icon Park for icons;
-- UnoCSS semantic tokens for layout and standard styling;
-- CSS Modules for complex component-local styling;
-- CSS variables and existing semantic theme tokens for color.
-
-Do not use raw interactive HTML when an Arco control exists. Do not introduce Tailwind, shadcn, another component system, hardcoded theme colors, or component-scoped global CSS.
+Renderer styling follows [docs/product/tomni-design-system.md](../product/tomni-design-system.md): the single global stylesheet `packages/desktop/src/renderer/styles/tomni-ui.css`, derived from `mockup/home-wireframe-v3.html`. Layout and page markup carry no CSS of their own.
 
 Keep accessibility semantics, keyboard operation, focus, reduced motion, loading, empty, denied, offline, error, and recovery states.
 

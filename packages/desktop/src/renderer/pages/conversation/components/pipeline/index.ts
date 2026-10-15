@@ -5,4 +5,4 @@
  */
 
 export * from './ChatPipelineButton';
-export * from './ChatPipelineDrawer';
+export * from './ChatPipelineModal';

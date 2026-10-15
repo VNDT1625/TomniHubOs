@@ -1,0 +1,18 @@
+{
+  "name": "full-demo",
+  "version": "1.2.0",
+  "description": "A hand-written plugin that uses every component folder",
+  "author": {
+    "name": "Example Author"
+  },
+  "userConfig": {
+    "api_token": {
+      "description": "Token for the demo service",
+      "sensitive": true,
+      "required": true
+    },
+    "region": {
+      "description": "Preferred region"
+    }
+  }
+}

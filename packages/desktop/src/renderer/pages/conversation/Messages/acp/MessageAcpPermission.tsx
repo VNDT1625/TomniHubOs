@@ -5,6 +5,7 @@
  */
 
 import type { IMessageAcpPermission } from '@/common/chat/chatLib';
+import type { AcpPermissionOption } from '@/common/types/platform/acpTypes';
 import { conversation } from '@/common/adapter/ipcBridge';
 import { Button, Card, Radio, Typography } from '@arco-design/web-react';
 import React, { useState } from 'react';
@@ -16,6 +17,27 @@ interface MessageAcpPermissionProps {
   message: IMessageAcpPermission;
 }
 
+/**
+ * Starts a fresh ACP prompt on the most permissive allow option so a plain Accept does
+ * not re-prompt; reject-only prompts fall back to their first offered option.
+ */
+const pickDefaultOption = (options: ReadonlyArray<AcpPermissionOption | undefined>): string | null => {
+  const allow =
+    options.find((option) => option?.kind === 'allow_always') ??
+    options.find((option) => option?.kind === 'allow_once');
+  if (allow?.option_id) return allow.option_id;
+  const allowLike = options.find((option) => option?.kind !== 'reject_always' && option?.kind !== 'reject_once');
+  return allowLike?.option_id ?? options[0]?.option_id ?? null;
+};
+
+/**
+ * Returns the option a Block button submits; reject-once is preferred so a blocked
+ * request stays retryable, and text matching is a last resort for custom options.
+ */
+const pickRejectOption = (options: ReadonlyArray<AcpPermissionOption | undefined>): AcpPermissionOption | undefined =>
+  options.find((option) => option?.kind === 'reject_once') ??
+  options.find((option) => option?.kind === 'reject_always') ??
+  options.find((option) => option?.name !== undefined && /reject|deny|block|cancel/i.test(option.name));
 const MessageAcpPermission: React.FC<MessageAcpPermissionProps> = React.memo(({ message }) => {
   const { options = [], tool_call } = message.content || {};
   const { t } = useTranslation();
@@ -46,27 +68,44 @@ const MessageAcpPermission: React.FC<MessageAcpPermissionProps> = React.memo(({ 
     };
   };
   const { title, icon } = getToolInfo();
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string | null>(() => pickDefaultOption(options));
   const [isResponding, setIsResponding] = useState(false);
   const [hasResponded, setHasResponded] = useState(false);
 
+  const rejectOption = pickRejectOption(options);
+
+  const respond = async (confirm_key: string): Promise<void> => {
+    await conversation.confirmMessage.invoke({
+      confirm_key,
+      msg_id: message.id,
+      conversation_id: message.conversation_id,
+      call_id: tool_call?.tool_call_id || message.id,
+    });
+    setHasResponded(true);
+  };
+
   const handleConfirm = async () => {
-    if (hasResponded || !selected) return;
+    if (hasResponded || !selected || isResponding) return;
 
     setIsResponding(true);
     try {
-      const invokeData = {
-        confirm_key: selected,
-        msg_id: message.id,
-        conversation_id: message.conversation_id,
-        call_id: tool_call?.tool_call_id || message.id,
-      };
-
-      await conversation.confirmMessage.invoke(invokeData);
-      setHasResponded(true);
+      await respond(selected);
     } catch (error) {
-      // Handle error case - could add error logging here
       console.error('Error confirming permission:', error);
+    } finally {
+      setIsResponding(false);
+    }
+  };
+
+  /** Denies the request with the agent reject option; no radio selection is required. */
+  const handleBlock = async () => {
+    if (!rejectOption?.option_id || hasResponded || isResponding) return;
+
+    setIsResponding(true);
+    try {
+      await respond(rejectOption.option_id);
+    } catch (error) {
+      console.error('Error blocking permission:', error);
     } finally {
       setIsResponding(false);
     }
@@ -115,7 +154,17 @@ const MessageAcpPermission: React.FC<MessageAcpPermissionProps> = React.memo(({ 
                 <Text type='secondary'>{t('messages.noOptionsAvailable')}</Text>
               )}
             </Radio.Group>
-            <div className='flex justify-start pl-20px'>
+            <div className='flex justify-start pl-20px space-x-2'>
+              {rejectOption && (
+                <Button
+                  size='mini'
+                  disabled={isResponding}
+                  onClick={handleBlock}
+                  data-testid='message-acp-permission-block'
+                >
+                  {t('messages.block')}
+                </Button>
+              )}
               <Button
                 type='primary'
                 size='mini'
@@ -123,7 +172,7 @@ const MessageAcpPermission: React.FC<MessageAcpPermissionProps> = React.memo(({ 
                 onClick={handleConfirm}
                 data-testid='message-acp-permission-confirm'
               >
-                {isResponding ? t('messages.processing') : t('messages.confirm')}
+                {isResponding ? t('messages.processing') : t('messages.accept')}
               </Button>
             </div>
           </>

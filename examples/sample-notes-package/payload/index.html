@@ -116,12 +116,16 @@
       </ul>
     </main>
     <script>
-      const notes = [];
+      const notes = []; // { id, text, at }
+      let nextId = 1;
+      let reportTimer = null;
+      let highlighted = '';
       const form = document.querySelector('#form');
       const input = document.querySelector('#note');
       const list = document.querySelector('#notes');
       const count = document.querySelector('#count');
       const render = () => {
+        scheduleReport();
         count.textContent = `${notes.length} note${notes.length === 1 ? '' : 's'}`;
         list.replaceChildren();
         if (notes.length === 0) {
@@ -131,11 +135,13 @@
           list.append(empty);
           return;
         }
-        notes.forEach((text, index) => {
+        notes.forEach((note, index) => {
           const item = document.createElement('li');
           const label = document.createElement('span');
           const remove = document.createElement('button');
-          label.textContent = text;
+          item.dataset.noteId = note.id;
+          if (note.id === highlighted) item.style.fontWeight = '600';
+          label.textContent = note.text;
           remove.type = 'button';
           remove.textContent = 'Remove';
           remove.addEventListener('click', () => {
@@ -146,11 +152,62 @@
           list.append(item);
         });
       };
+      // Show the notes under "Active" in the Hub sidebar. Needs the "sidebar.sessions" permission in the manifest.
+      // Each report replaces the whole list; an empty list removes this app from Active.
+      const reportSessions = () => {
+        reportTimer = null;
+        parent.postMessage(
+          {
+            type: 'tomni.capability.invoke',
+            requestId: `sessions-${Date.now()}`,
+            capability: 'sessions.report',
+            args: {
+              sessions: notes.map((note) => ({
+                id: note.id,
+                title: note.text,
+                status: 'idle',
+                lastActiveAt: note.at,
+              })),
+              // Shows "+" on the app row and "x" on each note in the sidebar.
+              actions: { create: true, close: true },
+            },
+          },
+          '*'
+        );
+      };
+      // Send on change, coalescing bursts to about one message per second.
+      const scheduleReport = () => {
+        if (reportTimer === null) reportTimer = setTimeout(reportSessions, 1000);
+      };
+      // The sidebar asks the app to bring one session forward when the user clicks it.
+      window.addEventListener('message', (event) => {
+        const message = event.data;
+        if (!message || typeof message !== 'object') return;
+        // "+" in the sidebar: add a note, then render() reports the new list.
+        if (message.type === 'tomni.sessions.create') {
+          notes.unshift({ id: `note-${nextId++}`, text: 'New note', at: Date.now() });
+          render();
+          return;
+        }
+        // "x" in the sidebar: remove that note, then render() reports the new list.
+        if (message.type === 'tomni.sessions.close') {
+          const index = notes.findIndex((note) => note.id === message.sessionId);
+          if (index !== -1) {
+            notes.splice(index, 1);
+            render();
+          }
+          return;
+        }
+        if (message.type !== 'tomni.sessions.focus') return;
+        highlighted = String(message.sessionId);
+        render();
+        list.querySelector(`[data-note-id="${CSS.escape(highlighted)}"]`)?.scrollIntoView({ block: 'nearest' });
+      });
       form.addEventListener('submit', (event) => {
         event.preventDefault();
         const value = input.value.trim();
         if (!value) return;
-        notes.unshift(value);
+        notes.unshift({ id: `note-${nextId++}`, text: value, at: Date.now() });
         input.value = '';
         render();
       });

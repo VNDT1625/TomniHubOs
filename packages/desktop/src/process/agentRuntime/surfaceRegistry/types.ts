@@ -3,6 +3,15 @@ export type SurfacePermissionMode = 'read-only' | 'workspace-write' | 'full-acce
 export type SurfaceContextSlice = 'agent' | 'personal' | 'workspace' | 'conversation' | 'surface';
 export type SurfaceCapabilityKind = 'mcp' | 'native' | 'skill' | 'bridge';
 
+/**
+ * Where a capability's tools are loaded, which decides whether their schemas cost tokens in a conversation:
+ * - `core`: part of ordinary Tomny chat; every surface and Super carries it.
+ * - `portable`: specialised but usable without its surface; absent from ordinary chat, loaded by Super and by its surface.
+ * - `surface-only`: needs its surface's live harness; loaded only while that surface is active, never by Super alone.
+ * A capability that does not say defaults to `surface-only`, so a new tool never spends tokens where it cannot work.
+ */
+export type SurfaceCapabilityAvailability = 'core' | 'portable' | 'surface-only';
+
 export type SurfaceCompatibilityPolicy = {
   targetKinds?: SurfaceTargetKind[];
   protocols?: string[];
@@ -26,6 +35,7 @@ export type SurfaceCapabilityBinding = {
   providerId?: string;
   serverName?: string;
   toolPatterns: string[];
+  availability?: SurfaceCapabilityAvailability;
   optional?: boolean;
   priority?: number;
   minimumPermissionMode: SurfacePermissionMode;

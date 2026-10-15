@@ -10,7 +10,12 @@ import BtwOverlay from '@/renderer/components/chat/BtwOverlay';
 import { useInputFocusRing } from '@/renderer/hooks/chat/useInputFocusRing';
 import SlashCommandMenu, { type SlashCommandMenuItem } from '@/renderer/components/chat/SlashCommandMenu';
 import { useBtwCommand } from '@/renderer/components/chat/BtwOverlay/useBtwCommand';
+import { runGuideCommand } from '@/renderer/components/Spotlight/spotlightBus';
+import { runScheduleCommand } from '@/renderer/pages/cron/scheduleDraft';
+import { handlePersonalMemoryCommand } from '@/renderer/services/personalMemoryCommand';
+import { useCommandPaletteController } from '@/renderer/hooks/chat/useCommandPaletteController';
 import { useSlashCommandController } from '@/renderer/hooks/chat/useSlashCommandController';
+import { paletteSlashCommands } from '@/renderer/utils/chat/commandPalette';
 import { useLayoutContext } from '@/renderer/hooks/context/LayoutContext';
 import { useConversationContextSafe } from '@/renderer/hooks/context/ConversationContext';
 import { useBuild0CommandSafe } from '@/renderer/hooks/context/Build0Context';
@@ -514,10 +519,18 @@ const SendBox: React.FC<{
 
   const mergedSlashCommands = useMemo(() => {
     const map = new Map<string, SlashCommandItem>();
+        // Provider-native commands take priority when the CLI actually advertised the same name.
+    for (const command of slash_commands) {
+      if (command.source === 'acp' || command.source === 'codex') map.set(command.name, command);
+    }
     for (const command of builtinSlashCommands) {
-      map.set(command.name, command);
+      if (!map.has(command.name)) map.set(command.name, command);
     }
     for (const command of slash_commands) {
+      if (!map.has(command.name)) map.set(command.name, command);
+    }
+    // The shared catalog comes last, so agent commands and contextual built-ins keep their names.
+    for (const command of paletteSlashCommands()) {
       if (!map.has(command.name)) {
         map.set(command.name, command);
       }
@@ -565,7 +578,28 @@ const SendBox: React.FC<{
     [slashController.filteredCommands]
   );
 
-  const isCommandMenuOpen = conversationExport.isOpen || slashController.isOpen;
+  // # (knowledge) and * (chat pipelines) share the palette with the home input; / and @ keep their own menus here.
+  const hashStarPalette = useCommandPaletteController({
+    input,
+    caretPosition,
+    onSelect: (nextText, nextCaret) => {
+      setInput(nextText);
+      requestAnimationFrame(() => {
+        const textarea = getTextareaElement();
+        if (!textarea) return;
+        textarea.focus();
+        textarea.setSelectionRange(nextCaret, nextCaret);
+        setCaretPosition(nextCaret);
+      });
+    },
+  });
+  const isHashStarPaletteOpen =
+    hashStarPalette.isOpen &&
+    (hashStarPalette.activeQuery?.prefix === '#' || hashStarPalette.activeQuery?.prefix === '*') &&
+    !conversationExport.isOpen &&
+    !slashController.isOpen;
+
+  const isCommandMenuOpen = conversationExport.isOpen || slashController.isOpen || isHashStarPaletteOpen;
   const isAtFileMenuOpen =
     Boolean(conversationContext?.workspace) &&
     Boolean(activeAtFileQuery) &&
@@ -654,7 +688,11 @@ const SendBox: React.FC<{
   };
 
   const handleOverlayKeyDown = (event: React.KeyboardEvent) => {
-    return conversationExport.handleKeyDown(event) || slashController.onKeyDown(event);
+    return (
+      conversationExport.handleKeyDown(event) ||
+      slashController.onKeyDown(event) ||
+      (isHashStarPaletteOpen && hashStarPalette.onKeyDown(event))
+    );
   };
 
   const renderExportFileNamePanel = () => {
@@ -1230,7 +1268,31 @@ const SendBox: React.FC<{
     if (activeCid) {
       warmedConversationRef.current = activeCid;
     }
-    if (enableBtw && btwQuestion !== null) {
+        // Do not intercept a first-party command name when the provider advertised a native one.
+    const nativeSlashName = /^\/([a-zA-Z0-9][a-zA-Z0-9_.:-]{0,79})(?=\s|$)/u.exec(input.trim())?.[1];
+    const providerOwnsSlash = Boolean(nativeSlashName && slash_commands.some(
+      (command) => (command.source === 'acp' || command.source === 'codex') && command.name === nativeSlashName
+    ));
+    // /guide points at a control in the app instead of sending a message.
+    const guide = providerOwnsSlash ? { handled: false, found: false } : runGuideCommand(input);
+    if (guide.handled) {
+      setInput('');
+      if (!guide.found) {
+        message.info('Mô tả vị trí cần tìm, ví dụ: /guide cài đặt, /guide chế độ Super, /guide thông báo');
+      }
+      return;
+    }
+    // /schedule opens the new-task form filled in; nothing runs until the user confirms there.
+        if (!providerOwnsSlash && runScheduleCommand(input)) {
+      setInput('');
+      return;
+    }
+    // /remember and /forget edit the personal memory directly; the model never sees them.
+        if (!providerOwnsSlash && handlePersonalMemoryCommand(input)) {
+      setInput('');
+      return;
+    }
+        if (!providerOwnsSlash && enableBtw && btwQuestion !== null) {
       const normalizedQuestion = btwQuestion.trim();
       if (!normalizedQuestion) {
         message.warning(t('conversation.sideQuestion.emptyQuestion'));
@@ -1505,6 +1567,20 @@ const SendBox: React.FC<{
               />
             ) : conversationExport.step === 'filename' ? (
               renderExportFileNamePanel()
+            ) : isHashStarPaletteOpen ? (
+              <SlashCommandMenu
+                title={hashStarPalette.menuTitle}
+                hint={hashStarPalette.menuHint}
+                items={hashStarPalette.items}
+                activeIndex={hashStarPalette.activeIndex}
+                loading={false}
+                onHoverItem={hashStarPalette.setActiveIndex}
+                onSelectItem={(item) => {
+                  const selected = hashStarPalette.items.find((candidate) => candidate.key === item.key);
+                  if (selected) hashStarPalette.selectItem(selected);
+                }}
+                emptyText={t('messages.slash.empty', { defaultValue: 'No commands found' })}
+              />
             ) : (
               <SlashCommandMenu
                 title={t('messages.slash.title', { defaultValue: 'Commands' })}

@@ -98,9 +98,9 @@ const LoginPage: React.FC = () => {
     if (mode === 'register') {
       document.title = t('login.tabRegister');
     } else if (mode === 'forgot') {
-      document.title = 'Khôi phục mật khẩu - TomniHubOS';
+    document.title = 'Khôi phục mật khẩu - Tomny';
     } else if (mode === 'verifyOtp') {
-      document.title = 'Xác thực tài khoản - TomniHubOS';
+    document.title = 'Xác thực tài khoản - Tomny';
     } else {
       document.title = t('login.pageTitle');
     }
@@ -477,7 +477,7 @@ const LoginPage: React.FC = () => {
       <header className='login-page__window-bar'>
         <div className='login-page__window-title'>
           <span className='login-page__window-dot' aria-hidden='true' />
-          <span>Tomni Hub Agent OS</span>
+          <span>Tomny Hub Agent OS</span>
         </div>
 
         <div className='login-page__window-actions'>

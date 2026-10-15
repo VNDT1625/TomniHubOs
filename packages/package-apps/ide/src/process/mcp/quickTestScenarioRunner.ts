@@ -226,7 +226,7 @@ export const loadSavedQuickTestScenario = async (
   if (!normalizedRoot) throw new Error('A project root path is required.');
   if (!normalizedId) throw new Error('A Quick Test scenario ID is required.');
 
-  const filePath = path.join(path.resolve(normalizedRoot), '.omni', 'quick-test', 'assets.json');
+  const filePath = path.join(path.resolve(normalizedRoot), '.tomni', 'quick-test', 'assets.json');
   let parsed: AssetsFile;
   try {
     parsed = JSON.parse(await readFile(filePath, 'utf8')) as AssetsFile;

@@ -672,7 +672,11 @@ export class RunKernel {
       effectState = result.effect?.state ?? 'not_committed';
       evidenceRefs = sanitizeExecutorEvidenceRefs([...result.evidenceRefs, ...delegatedEvidenceRefs]);
       await this.emit(intent, 'evidence.recorded', { count: evidenceRefs.length });
-    } catch {
+    } catch (error) {
+      console.error(
+        '[RunKernel] executor threw:',
+        (error instanceof Error ? (error.stack ?? error.message) : String(error)).slice(0, 1200)
+      );
       status = 'failed';
       failureReason = 'EXECUTION_THREW_ERROR';
     } finally {

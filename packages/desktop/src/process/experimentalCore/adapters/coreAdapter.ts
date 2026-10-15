@@ -5,6 +5,7 @@
  */
 
 import type { ExperimentalCoreModel, ExperimentalPermissionMode } from '../experimentalCoreProtocol';
+import type { CliCommandDiscovery } from '@/common/chat/slash/types';
 
 import type { ResolvedAttachmentDelivery } from '@process/services/agentChat/attachments';
 
@@ -37,6 +38,8 @@ export type DetectedCoreTarget = CoreAdapterDefinition & {
 export type CoreAdapterEvent =
   | { type: 'delta'; text: string; mode?: 'append' | 'replace' }
   | { type: 'status'; text: string }
+  /** Housekeeping the person should see, such as a changed model or mode; never part of the model's reasoning. */
+  | { type: 'notice'; text: string }
   | { type: 'thinking'; text: string }
   | { type: 'step'; text: string }
   | {
@@ -69,6 +72,7 @@ export type CoreMcpServer =
   | {
       name: string;
       transport: 'stdio';
+      cwd?: string;
       command: string;
       args?: string[];
       env?: Array<{ name: string; value: string }>;
@@ -123,18 +127,38 @@ export type CoreCapabilityPermissionRequest = {
   detail?: string;
 };
 
+/** One tool request as a PreToolUse hook sees it. `input` is already redacted for display. */
+export type CoreToolHookCall = { tool: string; callId?: string; input?: unknown };
+
+/**
+ * What PreToolUse hooks decided. There is no `allow` on purpose (design 11.6 item 1): `none` means no opinion,
+ * so the permission mode, the grant store and the person still decide. `ask` forces a fresh question.
+ */
+export type CoreToolHookVerdict =
+  | { action: 'none' }
+  | { action: 'deny'; reason: string }
+  | { action: 'ask'; reason?: string };
+
 /** Immutable parent execution boundary used only while resolving trusted live capability hosts. */
 export type CoreCapabilityHostContext = Readonly<{
+  /** Exact governed Run that resolved this live host; never renderer-supplied. */
+  requestId?: string;
+  /** Main-owned conversation identity used for output publication. */
+  conversationId?: string;
   sessionId: string;
   workspace: string;
   surface: string;
   permissionMode: Exclude<ExperimentalPermissionMode, 'full-access'>;
+  /** Tool-name patterns the conversation's catalog allows; hosts that list tools answer for these only. */
+  toolPatterns?: readonly string[];
   requestPermission?: (request: CoreCapabilityPermissionRequest) => Promise<boolean>;
 }>;
 
 export type CoreRunInput = {
-  sessionId: string;
+    sessionId: string;
   target: DetectedCoreTarget;
+  /** Main-owned opt-in: retain one private provider session per chat conversation, never across chats. */
+  persistentSession?: boolean;
   prompt: string;
   workspace: string;
   modelKey?: string;
@@ -148,7 +172,13 @@ export type CoreRunInput = {
   attachments?: ResolvedAttachmentDelivery;
   signal: AbortSignal;
   emit: (event: CoreAdapterEvent) => void;
-  requestPermission: (request: { tool: string; detail?: string }) => Promise<boolean>;
+  /** `forceFresh` skips stored grants and asks the person (used when a PreToolUse hook answered `ask`). */
+  requestPermission: (request: { tool: string; detail?: string; forceFresh?: boolean }) => Promise<boolean>;
+  /**
+   * Set only for an adapter that sees every tool request before the tool runs and can refuse it (the native
+   * Tomny adapter). Other adapters leave it unused; their hooks run inside `requestPermission`.
+   */
+  preToolUse?: (call: CoreToolHookCall) => Promise<CoreToolHookVerdict>;
 };
 
 export type CoreContextInspectionInput = {
@@ -166,7 +196,15 @@ export type CoreAdapter = {
   protocol: CoreAdapterProtocol;
   /** False when the host must rehydrate canonical session history on every turn. */
   retainsConversationHistory?: boolean;
-  listModels: (target: DetectedCoreTarget, workspace?: string) => Promise<ExperimentalCoreModel[]>;
+    listModels: (target: DetectedCoreTarget, workspace?: string) => Promise<ExperimentalCoreModel[]>;
+  /** Optional provider-native command discovery; never execute a prompt to discover commands. */
+    listCommands?: (
+    target: DetectedCoreTarget,
+    workspace: string,
+    logicalSessionId?: string,
+    onUpdate?: (value: CliCommandDiscovery) => void
+  ) => Promise<CliCommandDiscovery>;
+  releaseCommands?: (logicalSessionId: string) => void;
   /** Resolve the selected model's credential-bearing destination in Main before a Hub network grant. */
   networkHostForModel?: (modelKey?: string) => Promise<string | undefined>;
   inspectContext?: (input: CoreContextInspectionInput) => Promise<CoreContextSnapshot>;

@@ -1,0 +1,12 @@
+{
+  "connections": [
+    {
+      "kind": "knowledge",
+      "id": "docs",
+      "title": "docs",
+      "paths": ["source/docs/guide.md"],
+      "origin": "classifier"
+    }
+  ],
+  "openItems": []
+}

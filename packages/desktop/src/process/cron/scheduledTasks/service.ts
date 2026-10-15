@@ -41,6 +41,8 @@ export type CoreScheduledTaskService = {
   remove(id: string): Promise<void>;
   runNow(id: string): Promise<void>;
   cancel(id: string): Promise<boolean>;
+  /** Re-arms timers and catches up missed runs after the computer wakes from sleep. */
+  resume(): Promise<void>;
 };
 
 const defaultArmTimer = (at: number, onFire: () => void): TimerHandle => {
@@ -338,6 +340,13 @@ export const createCoreScheduledTaskService = (deps: CoreScheduledTaskServiceDep
       queued.delete(id);
       run.controller.abort();
       return true;
+    },
+    async resume() {
+      if (!started) return;
+      for (const handle of timers.values()) handle.cancel();
+      timers.clear();
+      // A run still in progress keeps going; everything else is reconciled as on start.
+      await Promise.all((await deps.store.list()).map((task) => (active.has(task.id) ? arm(task) : reconcile(task))));
     },
   };
 };

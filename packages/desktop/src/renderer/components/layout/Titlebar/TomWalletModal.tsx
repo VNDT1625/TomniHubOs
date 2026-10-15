@@ -151,7 +151,7 @@ export const TomWalletModal: React.FC<TomWalletModalProps> = ({ visible, onClose
                 </Tag>
               </h2>
               <span style={{ fontSize: '12px', color: '#94a3b8' }}>
-                Đơn vị tiền tệ tính toán tác vụ & dịch vụ AI trong TomniHubOS
+              Đơn vị tiền tệ tính toán tác vụ & dịch vụ AI trong Tomny
               </span>
             </div>
           </div>

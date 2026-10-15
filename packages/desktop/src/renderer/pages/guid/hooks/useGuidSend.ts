@@ -5,11 +5,17 @@
  */
 
 import { ipcBridge } from '@/common';
-import type { IMcpServer, TProviderWithModel } from '@/common/config/storage';
+import type { WorkspaceReferenceRequest } from '@/common/chat/workspaceReference';
+import {
+  serializeAttachmentReferences,
+  type SemanticAttachmentReference,
+} from '@/common/chat/semanticAttachmentReference';
+import type { CapabilityMode, IMcpServer, TChatConversation, TProviderWithModel } from '@/common/config/storage';
 import { buildAgentConversationParams, isTomnyAgentBackend } from '@/common/utils/buildAgentConversationParams';
 import { toSessionMcpServer } from '@/renderer/hooks/mcp/catalog';
 import { emitter } from '@/renderer/utils/emitter';
 import { buildDisplayMessage } from '@/renderer/utils/file/messageFiles';
+import { withResponseLanguageDirective } from '@/renderer/services/i18n/responseLanguage';
 import { updateWorkspaceTime } from '@/renderer/utils/workspace/workspaceHistory';
 import {
   BROWSER_CONTROL_MCP_NAME,
@@ -17,6 +23,9 @@ import {
   withIdeMemoryRules,
 } from '@/renderer/pages/conversation/hooks/superGuidance';
 import { Message } from '@arco-design/web-react';
+import { runGuideCommand } from '@/renderer/components/Spotlight/spotlightBus';
+import { runScheduleCommand } from '@/renderer/pages/cron/scheduleDraft';
+import { handlePersonalMemoryCommand } from '@/renderer/services/personalMemoryCommand';
 import { useCallback, useRef } from 'react';
 import { type TFunction } from 'i18next';
 import type { NavigateFunction } from 'react-router-dom';
@@ -28,6 +37,9 @@ export type GuidSendDeps = {
   setInput: React.Dispatch<React.SetStateAction<string>>;
   files: string[];
   setFiles: React.Dispatch<React.SetStateAction<string[]>>;
+  attachmentReferences: readonly SemanticAttachmentReference[];
+  workspaceReferences: WorkspaceReferenceRequest[];
+  setWorkspaceReferences: React.Dispatch<React.SetStateAction<WorkspaceReferenceRequest[]>>;
   dir: string;
   setDir: React.Dispatch<React.SetStateAction<string>>;
   setLoading: React.Dispatch<React.SetStateAction<boolean>>;
@@ -61,6 +73,10 @@ export type GuidSendDeps = {
   guidEnabledSkills: string[] | undefined;
   availableMcpServers: IMcpServer[];
   selectedMcpServerIds: string[] | undefined;
+  /** Default tool ids of the applied assistant; stored on the new conversation and checked by Main. */
+  assistantDefaultToolIds?: string[];
+  /** `auto` pools every enabled MCP server for the backend selector instead of the hidden manual list. */
+  capabilityMode: CapabilityMode;
   currentEffectiveAgentInfo: EffectiveAgentInfo;
   isGoogleAuth: boolean;
 
@@ -72,6 +88,11 @@ export type GuidSendDeps = {
 
   // Navigation
   navigate: NavigateFunction;
+  /**
+   * Conversation of the live agent tile selected on Home. When set, the next send continues
+   * that conversation instead of creating a new agent tile for the same command.
+   */
+  continueConversationId?: string;
   t: TFunction;
 };
 
@@ -90,6 +111,9 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
     setInput,
     files,
     setFiles,
+    attachmentReferences,
+    workspaceReferences,
+    setWorkspaceReferences,
     dir,
     setDir,
     setLoading,
@@ -111,18 +135,67 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
     guidEnabledSkills,
     availableMcpServers,
     selectedMcpServerIds,
-    currentEffectiveAgentInfo,
-    isGoogleAuth,
+    assistantDefaultToolIds,
+    capabilityMode,
     setMentionOpen,
     setMentionQuery,
     setMentionSelectorOpen,
     setMentionActiveIndex,
     navigate,
+    continueConversationId,
     t,
   } = deps;
   const sendingRef = useRef(false);
 
+  const displayInput = serializeAttachmentReferences(input, attachmentReferences, 'display');
+  const modelInput = serializeAttachmentReferences(input, attachmentReferences, 'model');
+
   const handleSend = useCallback(async () => {
+    // /guide points at a control instead of starting a conversation.
+    const guide = runGuideCommand(input);
+    if (guide.handled) {
+      setInput('');
+      if (!guide.found)
+        Message.info('Mô tả vị trí cần tìm, ví dụ: /guide cài đặt, /guide chế độ Super, /guide thông báo');
+      return;
+    }
+    // /schedule opens the new-task form filled in; nothing runs until the user confirms there.
+    if (runScheduleCommand(input)) {
+      setInput('');
+      return;
+    }
+    // /remember and /forget edit the personal memory directly; the model never sees them.
+    if (handlePersonalMemoryCommand(input)) {
+      setInput('');
+      return;
+    }
+    // Replying to a live tile selected on Home continues that agent's conversation. Every
+    // branch below starts by creating a conversation, which is what used to spawn a second
+    // agent tile for a command the user meant for the one already on screen.
+    if (continueConversationId) {
+      const existing = await ipcBridge.conversation.get
+        .invoke({ id: continueConversationId })
+        .catch((): undefined => undefined);
+      if (existing?.id) {
+        const displayMessage = buildDisplayMessage(displayInput, files, existing.extra.workspace || dir || '');
+        const result = await ipcBridge.conversation.sendMessage.invoke({
+          conversation_id: existing.id,
+          input: displayMessage,
+          model_input: withResponseLanguageDirective(
+            buildDisplayMessage(modelInput, files, existing.extra.workspace || dir || ''),
+            existing.id
+          ),
+          files,
+          workspace_references: workspaceReferences,
+        });
+        if (!result?.msg_id) throw new Error('HOME_SEND_NOT_ACCEPTED');
+        if (dir) updateWorkspaceTime(dir);
+        emitter.emit('chat.history.refresh');
+        return;
+      }
+      // The selected conversation is gone; fall through and start a fresh one instead.
+    }
+
     const isCustomWorkspace = !!dir;
     const finalWorkspace = dir || '';
 
@@ -146,7 +219,12 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
         ? guidEnabledSkills
         : undefined;
     const excludeBuiltinSkills = guidDisabledBuiltinSkills ?? resolveDisabledBuiltinSkills(agentInfo);
-    const selectedMcpServerIdSet = new Set(selectedMcpServerIds ?? []);
+    // Auto select pools every server the user enabled; the backend narrows that pool for each request.
+    const selectedMcpServerIdSet = new Set(
+      capabilityMode === 'auto'
+        ? availableMcpServers.filter((server) => server.enabled).map((server) => server.id)
+        : (selectedMcpServerIds ?? [])
+    );
     const selectedUserMcpServerIds = availableMcpServers
       .filter((server) => selectedMcpServerIdSet.has(server.id) && server.builtin !== true)
       .map((server) => server.id);
@@ -169,6 +247,38 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
       superSelected ? withSuperBrowserRules(rules) : rules;
 
     const finalEffectiveAgentType = effectiveAgentType;
+
+    const startConversation = async (conversation: TChatConversation, storagePrefix: string): Promise<void> => {
+      // Preset screens and Tomny command controls still need their conversation-page controller.
+      const needsConversationPage =
+        is_preset || (conversation.type === 'tomnyagentic' && input.trimStart().startsWith('/'));
+      if (needsConversationPage) {
+        sessionStorage.setItem(
+          `${conversation.type === 'remote' ? 'remote' : storagePrefix}_initial_message_${conversation.id}`,
+          JSON.stringify({
+            input: displayInput,
+            files: files.length > 0 ? files : undefined,
+            workspace_references: workspaceReferences.length > 0 ? workspaceReferences : undefined,
+          })
+        );
+        await navigate(`/conversation/${conversation.id}`);
+        return;
+      }
+      const displayMessage = buildDisplayMessage(displayInput, files, conversation.extra.workspace ?? finalWorkspace);
+      // The same governed native seam starts the run; no mounted chat page or optional package is required.
+      const result = await ipcBridge.conversation.sendMessage.invoke({
+        conversation_id: conversation.id,
+        input: displayMessage,
+        model_input: withResponseLanguageDirective(
+          buildDisplayMessage(modelInput, files, conversation.extra.workspace ?? finalWorkspace),
+          conversation.id
+        ),
+        files,
+        workspace_references: workspaceReferences,
+      });
+      if (!result?.msg_id) throw new Error('HOME_SEND_NOT_ACCEPTED');
+      emitter.emit('chat.history.refresh');
+    };
 
     // OpenClaw Gateway path
     if (selectedAgent === 'openclaw-gateway') {
@@ -202,8 +312,7 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
         const conversation = await ipcBridge.conversation.create.invoke(openclawConversationParams);
 
         if (!conversation || !conversation.id) {
-          alert('Failed to create OpenClaw conversation. Please ensure the OpenClaw Gateway is running.');
-          return;
+          throw new Error('HOME_CREATE_NOT_ACCEPTED');
         }
 
         if (isCustomWorkspace) {
@@ -212,16 +321,9 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
 
         emitter.emit('chat.history.refresh');
 
-        const initialMessage = {
-          input,
-          files: files.length > 0 ? files : undefined,
-        };
-        sessionStorage.setItem(`openclaw_initial_message_${conversation.id}`, JSON.stringify(initialMessage));
-
-        await navigate(`/conversation/${conversation.id}`);
+        await startConversation(conversation, 'openclaw');
       } catch (error: unknown) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        alert(`Failed to create OpenClaw conversation: ${errorMessage}`);
+        console.error('Failed to start OpenClaw conversation:', error);
         throw error;
       }
       return;
@@ -250,8 +352,7 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
         const conversation = await ipcBridge.conversation.create.invoke(nanobotConversationParams);
 
         if (!conversation || !conversation.id) {
-          alert('Failed to create Nanobot conversation. Please ensure nanobot is installed.');
-          return;
+          throw new Error('HOME_CREATE_NOT_ACCEPTED');
         }
 
         if (isCustomWorkspace) {
@@ -260,16 +361,9 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
 
         emitter.emit('chat.history.refresh');
 
-        const initialMessage = {
-          input,
-          files: files.length > 0 ? files : undefined,
-        };
-        sessionStorage.setItem(`nanobot_initial_message_${conversation.id}`, JSON.stringify(initialMessage));
-
-        await navigate(`/conversation/${conversation.id}`);
+        await startConversation(conversation, 'nanobot');
       } catch (error: unknown) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        alert(`Failed to create Nanobot conversation: ${errorMessage}`);
+        console.error('Failed to start Nanobot conversation:', error);
         throw error;
       }
       return;
@@ -293,6 +387,7 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
             preset_enabled_skills: enabled_skills_to_send,
             exclude_auto_inject_skills: excludeBuiltinSkills,
             selected_mcp_server_ids: selectedUserMcpServerIds,
+            assistant_default_tools: assistantDefaultToolIds ?? [],
             // tomnyagentic should consume the authoritative session snapshot, just
             // like team MCP does, instead of reloading only user servers from
             // the global MCP repository at runtime.
@@ -300,12 +395,13 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
             preset_assistant_id,
             session_mode: selectedMode,
             ide_memory_id: tomnyMemId,
+            capabilityMode,
+
           },
         });
 
         if (!conversation || !conversation.id) {
-          alert('Failed to create Tomny Agentic conversation. Please ensure the built-in agent is ready.');
-          return;
+          throw new Error('HOME_CREATE_NOT_ACCEPTED');
         }
 
         if (isCustomWorkspace) {
@@ -314,16 +410,9 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
 
         emitter.emit('chat.history.refresh');
 
-        const initialMessage = {
-          input,
-          files: files.length > 0 ? files : undefined,
-        };
-        sessionStorage.setItem(`tomnyagentic_initial_message_${conversation.id}`, JSON.stringify(initialMessage));
-
-        await navigate(`/conversation/${conversation.id}`);
+        await startConversation(conversation, 'tomnyagentic');
       } catch (error: unknown) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        alert(`Failed to create Tomny Agentic conversation: ${errorMessage}`);
+        console.error('Failed to start Tomny Agentic conversation:', error);
         throw error;
       }
       return;
@@ -384,6 +473,8 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
           selected_mcp_server_ids: selectedUserMcpServerIds,
           selected_session_mcp_servers: selectedSessionMcpServers,
           ide_memory_id: acpMemId,
+          capabilityMode,
+
           // Non-preset agents still forward user-selected custom skills via the
           // shared backend slot. For preset assistants this is already wired
           // through `preset_resources.enabled_skills` above.
@@ -394,8 +485,7 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
       try {
         const conversation = await ipcBridge.conversation.create.invoke(agentConversationParams);
         if (!conversation || !conversation.id) {
-          console.error('Failed to create ACP conversation - conversation object is null or missing id');
-          return;
+          throw new Error('HOME_CREATE_NOT_ACCEPTED');
         }
 
         if (isCustomWorkspace) {
@@ -404,13 +494,7 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
 
         emitter.emit('chat.history.refresh');
 
-        const initialMessage = {
-          input,
-          files: files.length > 0 ? files : undefined,
-        };
-        sessionStorage.setItem(`acp_initial_message_${conversation.id}`, JSON.stringify(initialMessage));
-
-        await navigate(`/conversation/${conversation.id}`);
+        await startConversation(conversation, 'acp');
       } catch (error: unknown) {
         console.error('Failed to create ACP conversation:', error);
         throw error;
@@ -419,6 +503,8 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
   }, [
     input,
     files,
+    workspaceReferences,
+    attachmentReferences,
     dir,
     selectedAgent,
     selectedAgentKey,
@@ -436,26 +522,31 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
     guidDisabledBuiltinSkills,
     availableMcpServers,
     selectedMcpServerIds,
+    assistantDefaultToolIds,
+    capabilityMode,
     navigate,
+    continueConversationId,
     t,
   ]);
 
   const sendMessageHandler = useCallback(() => {
-    if (loading || sendingRef.current) return;
+    if (!input.trim() || loading || sendingRef.current) return;
     sendingRef.current = true;
     setLoading(true);
     handleSend()
       .then(() => {
-        setInput('');
+        setInput((current) => (current === input ? '' : current));
         setMentionOpen(false);
         setMentionQuery(null);
         setMentionSelectorOpen(false);
         setMentionActiveIndex(0);
-        setFiles([]);
-        setDir('');
+        setFiles((current) => current.filter((path) => !files.includes(path)));
+        setWorkspaceReferences([]);
+        if (is_presetAgent) setDir('');
       })
       .catch((error) => {
         console.error('Failed to send message:', error);
+        Message.error(t('guid.hubHome.live.actionFailed'));
       })
       .finally(() => {
         sendingRef.current = false;
@@ -463,6 +554,12 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
       });
   }, [
     loading,
+    input,
+    files,
+    workspaceReferences,
+    is_presetAgent,
+    attachmentReferences,
+    t,
     handleSend,
     setLoading,
     setInput,
@@ -471,6 +568,7 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
     setMentionSelectorOpen,
     setMentionActiveIndex,
     setFiles,
+    setWorkspaceReferences,
     setDir,
   ]);
 

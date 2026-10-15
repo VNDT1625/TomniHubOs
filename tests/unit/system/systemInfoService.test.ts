@@ -34,7 +34,7 @@ const live = (sampledAt: number, pid = 1): LiveSystemMetrics => ({
 });
 
 /** Build a service with controllable timer + sampler. */
-const harness = () => {
+const harness = (extra: Partial<SystemInfoServiceDeps> = {}) => {
   let timerHandler: (() => void) | null = null;
   let intervalMs = 0;
   let clearCount = 0;
@@ -69,6 +69,7 @@ const harness = () => {
     clearInterval: (() => {
       clearCount += 1;
     }) as SystemInfoServiceDeps['clearInterval'],
+    ...extra,
   };
 
   const service = createSystemInfoService(deps);
@@ -126,6 +127,46 @@ describe('createSystemInfoService', () => {
     const afterStart = h.writes.length;
     h.tick(); // sampledAt=3000, only +1000 < interval → no write
     expect(h.writes.length).toBe(afterStart);
+  });
+
+  it('persists every tick while a viewer streams and marks the snapshot as viewed', async () => {
+    const h = harness();
+    await h.service.start();
+    expect(h.service.getSnapshot()?.monitor).toEqual({ viewerActive: false, telemetry: null });
+    h.service.startStream();
+    const before = h.writes.length;
+    h.tick();
+    h.tick();
+    expect(h.writes.length).toBe(before + 2);
+    expect(h.service.getSnapshot()?.monitor?.viewerActive).toBe(true);
+  });
+
+  it('exports only privacy-safe telemetry aggregates to the agent snapshot', async () => {
+    const telemetry = {
+      source: 'windows-cim' as const,
+      sampledAt: 2500,
+      processes: [{ pid: 7, name: 'secret-app.exe', cpuPercent: 1, memoryMB: 2 }],
+      processLimitReached: false,
+      disk: { readBytesPerSec: 1, writeBytesPerSec: 2 },
+      network: { receiveBytesPerSec: 3, sendBytesPerSec: 4 },
+      gpuEnginePeakPercent: 55,
+    };
+    const h = harness({ probeHostTelemetry: async () => telemetry });
+    await h.service.start();
+    h.service.startStream();
+    await Promise.resolve();
+    await Promise.resolve();
+    h.tick();
+    const snapshot = h.service.getSnapshot();
+    expect(snapshot?.monitor?.telemetry).toEqual({
+      sampledAt: 2500,
+      disk: { readBytesPerSec: 1, writeBytesPerSec: 2 },
+      network: { receiveBytesPerSec: 3, sendBytesPerSec: 4 },
+      gpuEnginePeakPercent: 55,
+      osProcessCount: 1,
+      processLimitReached: false,
+    });
+    expect(JSON.stringify(snapshot)).not.toContain('secret-app.exe');
   });
 
   it('refreshStatic re-probes and writes a fresh snapshot', async () => {

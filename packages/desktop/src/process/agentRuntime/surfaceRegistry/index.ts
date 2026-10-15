@@ -16,6 +16,7 @@ export {
 export type {
   ResolvedSurface,
   SurfaceCapabilityBinding,
+  SurfaceCapabilityAvailability,
   SurfaceCapabilityKind,
   SurfaceCompatibilityPolicy,
   SurfaceContextPolicy,

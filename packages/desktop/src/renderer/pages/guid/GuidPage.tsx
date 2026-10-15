@@ -5,10 +5,14 @@
  */
 
 import { ipcBridge } from '@/common';
+import type { AttachmentQuickView } from '@/common/chat/attachmentQuickView';
+import type { SemanticAttachmentReference } from '@/common/chat/semanticAttachmentReference';
+import AttachmentInventoryRail from '@/renderer/components/chat/AttachmentInventoryRail';
 import type { IMcpServer } from '@/common/config/storage';
 import { resolveLocaleKey } from '@/common/utils';
 
 import { useInputFocusRing } from '@/renderer/hooks/chat/useInputFocusRing';
+import { useCapabilityAutoSelect } from '@/renderer/hooks/ui/useCapabilityAutoSelect';
 import { openExternalUrl, resolveExtensionAssetUrl } from '@/renderer/utils/platform';
 import { CUSTOM_AVATAR_IMAGE_MAP } from './constants';
 import AgentPillBar from './components/AgentPillBar';
@@ -38,6 +42,9 @@ import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { mutate as swrMutate } from 'swr';
 import type { Assistant } from '@/common/types/agent/assistantTypes';
+import { useAssistantSessionApply } from '@/renderer/hooks/assistant/useAssistantSessionApply';
+import { dropAppliedPlugins } from '@/common/types/agent/assistant/assistantSessionSelection';
+import { buildDefaultToolCandidates } from '@/common/types/agent/assistant/defaultToolCandidates';
 import styles from './index.module.css';
 
 const GuidPage: React.FC = () => {
@@ -51,7 +58,6 @@ const GuidPage: React.FC = () => {
 
   const localeKey = resolveLocaleKey(i18n.language);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
-
   // Open external link
   const openLink = useCallback(async (url: string) => {
     try {
@@ -70,9 +76,14 @@ const GuidPage: React.FC = () => {
   const [guidDisabledBuiltinSkills, setGuidDisabledBuiltinSkills] = useState<string[] | undefined>(undefined);
   const [guidEnabledSkills, setGuidEnabledSkills] = useState<string[] | undefined>(undefined);
   const [availableMcpServers, setAvailableMcpServers] = useState<IMcpServer[]>([]);
+  // Readiness flags: an assistant's plugins and skills are planned only after the catalogs have loaded.
+  const [skillCatalogReady, setSkillCatalogReady] = useState(false);
+  const [mcpCatalogReady, setMcpCatalogReady] = useState(false);
   const [guidSelectedMcpServerIds, setGuidSelectedMcpServerIds] = useState<string[] | undefined>(undefined);
+  // Default tool ids the applied assistant attaches to this chat (session scope; capped and filtered by the planner).
+  const [guidAssistantToolIds, setGuidAssistantToolIds] = useState<string[]>([]);
 
-  useEffect(() => {
+  const loadSkillCatalog = useCallback(() => {
     Promise.all([ipcBridge.fs.listBuiltinAutoSkills.invoke(), ipcBridge.fs.listAvailableSkills.invoke()])
       .then(([autoSkills, availableSkills]) => {
         const autoNames = new Set(autoSkills.map((s) => s.name));
@@ -83,22 +94,48 @@ const GuidPage: React.FC = () => {
             .map((s) => ({ name: s.name, description: s.description, isAuto: false })),
         ];
         setAllSkills(merged);
+        setSkillCatalogReady(true);
       })
-      .catch(() => setAllSkills([]));
+      .catch(() => {
+        setAllSkills([]);
+        setSkillCatalogReady(true);
+      });
   }, []);
 
-  useEffect(() => {
+  const loadMcpCatalog = useCallback(() => {
     void ensureBackendMcpCatalog()
       .then(({ allServers }) => {
         setAvailableMcpServers(allServers);
-        setGuidSelectedMcpServerIds((prev) => prev ?? []);
+        setMcpCatalogReady(true);
+        // A server the user switched on in Settings is ticked for a new chat; built-in ones stay opt-in
+        // (Super), so a chat does not load every internal tool by default.
+        setGuidSelectedMcpServerIds(
+          (prev) =>
+            prev ?? allServers.filter((server) => server.enabled && server.builtin !== true).map((server) => server.id)
+        );
       })
       .catch((error) => {
         console.error('[GuidPage] Failed to load MCP catalog:', error);
         setAvailableMcpServers([]);
+        setMcpCatalogReady(true);
         setGuidSelectedMcpServerIds((prev) => prev ?? []);
       });
   }, []);
+
+  useEffect(() => {
+    loadSkillCatalog();
+    loadMcpCatalog();
+  }, [loadSkillCatalog, loadMcpCatalog]);
+
+  // A plugin turned on or off (Settings, or the attach menu) changes the servers and skills a chat can attach.
+  useEffect(() => {
+    const refresh = () => {
+      loadSkillCatalog();
+      loadMcpCatalog();
+    };
+    window.addEventListener('tomni-packages-changed', refresh);
+    return () => window.removeEventListener('tomni-packages-changed', refresh);
+  }, [loadSkillCatalog, loadMcpCatalog]);
 
   // --- Super (first-turn) ---
   // "Super" grants the new conversation's agent the Browser-Control tool set so
@@ -160,9 +197,50 @@ const GuidPage: React.FC = () => {
     locationKey: location.key,
   });
 
+  const { capabilityMode, autoSelect, onToggleAutoSelect } = useCapabilityAutoSelect();
   const guidInput = useGuidInput({
     locationState: location.state as { workspace?: string } | null,
   });
+
+  const attachmentQuickViews = useMemo<Readonly<Record<string, () => Promise<AttachmentQuickView>>>>(() => {
+    const nativeSelections = Object.entries(guidInput.attachmentQuickViewIds).map(([path, attachmentId]) => [
+      path,
+      () => ipcBridge.fs.attachmentQuickView.invoke({ attachment_id: attachmentId }),
+    ] as const);
+    const explorerSelections = Object.entries(guidInput.workspaceQuickViewRequests).map(([attachmentKey, request]) => [
+      attachmentKey,
+      () => window.electronAPI?.explorer?.quickView(request).then((result) => {
+        if (result?.ok === true) return result.data;
+        throw new Error(result && 'code' in result ? result.code : 'EXPLORER_QUICK_VIEW_UNAVAILABLE');
+      }) ?? Promise.reject(new Error('EXPLORER_QUICK_VIEW_UNAVAILABLE')),
+    ] as const);
+    return Object.fromEntries([...nativeSelections, ...explorerSelections]);
+  }, [guidInput.attachmentQuickViewIds, guidInput.workspaceQuickViewRequests]);
+
+  const removeAttachmentInventoryReference = useCallback(
+    (reference: SemanticAttachmentReference) => {
+      if (reference.source === 'workspace') {
+        guidInput.handleRemoveWorkspaceReference(reference.referencePath);
+        return;
+      }
+      guidInput.handleRemoveFile(reference.attachmentKey);
+    },
+    [guidInput.handleRemoveFile, guidInput.handleRemoveWorkspaceReference]
+  );
+
+    const [attachmentInventoryExpanded, setAttachmentInventoryExpanded] = useState(false);
+  const attachmentInventoryNode = (
+    <AttachmentInventoryRail
+            references={guidInput.attachmentReferences}
+      expanded={attachmentInventoryExpanded}
+      onRemoveReference={removeAttachmentInventoryReference}
+      quickViews={attachmentQuickViews}
+    />
+  );
+
+  // Set by selecting a live agent tile on Home: the next send continues that conversation
+  // instead of creating a second tile for the same command.
+  const [replyConversationId, setReplyConversationId] = useState<string | undefined>(undefined);
 
   const mention = useGuidMention({
     availableAgents: agentSelection.availableAgents,
@@ -179,6 +257,9 @@ const GuidPage: React.FC = () => {
     setInput: guidInput.setInput,
     files: guidInput.files,
     setFiles: guidInput.setFiles,
+    attachmentReferences: guidInput.attachmentReferences,
+    workspaceReferences: guidInput.workspaceReferences,
+    setWorkspaceReferences: guidInput.setWorkspaceReferences,
     dir: guidInput.dir,
     setDir: guidInput.setDir,
     setLoading: guidInput.setLoading,
@@ -204,6 +285,8 @@ const GuidPage: React.FC = () => {
     guidEnabledSkills,
     availableMcpServers,
     selectedMcpServerIds: guidSelectedMcpServerIds,
+    assistantDefaultToolIds: guidAssistantToolIds,
+    capabilityMode,
     currentEffectiveAgentInfo: agentSelection.currentEffectiveAgentInfo,
     isGoogleAuth: modelSelection.isGoogleAuth,
 
@@ -215,6 +298,7 @@ const GuidPage: React.FC = () => {
 
     // Navigation
     navigate,
+    continueConversationId: replyConversationId,
     t,
   });
 
@@ -222,7 +306,7 @@ const GuidPage: React.FC = () => {
 
   const focusComposer = useCallback(() => {
     window.requestAnimationFrame(() => {
-      guidContainerRef.current?.querySelector<HTMLTextAreaElement>('[data-testid=guid-input]')?.focus();
+      guidContainerRef.current?.querySelector<HTMLElement>('[data-testid=guid-input]')?.focus();
     });
   }, []);
 
@@ -238,10 +322,10 @@ const GuidPage: React.FC = () => {
     (value: string) => {
       guidInput.setInput(value);
       const match = value.match(mention.mentionMatchRegex);
-      // 首页不根据输入 @ 呼起 mention 列表，占位符里的 @agent 仅为提示，选 agent 用顶部栏或下拉手动选
+      // Typing @ opens the agent list; Enter or a click picks the agent.
       if (match) {
         mention.setMentionQuery(match[1]);
-        mention.setMentionOpen(false);
+        mention.setMentionOpen(true);
       } else {
         mention.setMentionQuery(null);
         mention.setMentionOpen(false);
@@ -380,6 +464,51 @@ const GuidPage: React.FC = () => {
     }
   }, [agentSelection.is_presetAgent, selectedAssistantRecord]);
 
+  // Plugins this chat received from the applied assistant; clearing the assistant removes exactly these.
+  const appliedPluginIdsRef = useRef<string[]>([]);
+  const openCreateAssistantRef = useRef<(() => void) | null>(null);
+
+  // Apply the selected assistant to this chat: its skills, plugins and hook notices, session scope only.
+  useAssistantSessionApply({
+    assistant: agentSelection.is_presetAgent ? selectedAssistantRecord : undefined,
+    plugins: availableMcpServers.map((server) => ({ id: server.id, enabled: server.enabled })),
+    skillNames: allSkills.map((skill) => skill.name),
+    tools: buildDefaultToolCandidates(availableMcpServers),
+    ready: skillCatalogReady && mcpCatalogReady,
+    onApply: (plan) => {
+      appliedPluginIdsRef.current = plan.pluginIds;
+      setGuidAssistantToolIds(plan.toolIds);
+      setGuidEnabledSkills(plan.skills);
+      // Keep built-in servers (Super browser control) the user may have turned on; replace the rest with the plan.
+      setGuidSelectedMcpServerIds((prev) => [
+        ...(prev ?? []).filter((id) =>
+          availableMcpServers.some((server) => server.id === id && server.builtin === true)
+        ),
+        ...plan.pluginIds,
+      ]);
+    },
+  });
+
+  /** Deselects the assistant for this chat and removes only the skills and plugins it had applied (session scope). */
+  const handleClearAssistant = useCallback(() => {
+    const applied = appliedPluginIdsRef.current;
+    appliedPluginIdsRef.current = [];
+    setGuidSelectedMcpServerIds((prev) => dropAppliedPlugins(prev ?? [], applied));
+    setGuidEnabledSkills(undefined);
+    setGuidDisabledBuiltinSkills(undefined);
+    setGuidAssistantToolIds([]);
+    agentSelection.setSelectedAgentKey(agentSelection.defaultAgentKey);
+  }, [agentSelection.defaultAgentKey, agentSelection.setSelectedAgentKey]);
+
+  const assistantPickerProps = {
+    assistants: agentSelection.assistants,
+    selectedAssistantId: selectedAssistantRecord?.id,
+    localeKey,
+    onSelectAssistant: (assistantId: string) => handleSelectAssistant(`custom:${assistantId}`),
+    onCreateAssistant: () => openCreateAssistantRef.current?.(),
+    onClearAssistant: handleClearAssistant,
+  };
+
   const heroTitle = useMemo(() => {
     if (!agentSelection.is_presetAgent) return t('conversation.welcome.title');
     const i18nName = selectedAssistantRecord?.name_i18n?.[localeKey];
@@ -420,12 +549,16 @@ const GuidPage: React.FC = () => {
   // Reset guid-local UI state before paint so same-route navigations do not
   // briefly show the previous draft or preset assistant layout.
   useLayoutEffect(() => {
-    guidInput.setInput('');
+        const realtimeDraft = (location.state as { realtimeDraft?: unknown } | null)?.realtimeDraft;
+    // The Hub keeps send/approval ownership; Realtime can only supply an editable draft.
+    guidInput.setInput(typeof realtimeDraft === 'string' ? realtimeDraft.slice(0, 6000) : '');
     guidInput.setFiles([]);
+    guidInput.setWorkspaceReferences([]);
     guidInput.setLoading(false);
     if (!(location.state as { workspace?: string } | null)?.workspace) {
       guidInput.setDir('');
     }
+    setReplyConversationId(undefined);
     setIsDescriptionExpanded(false);
   }, [guidInput.setDir, guidInput.setFiles, guidInput.setInput, guidInput.setLoading, location.key, location.state]);
 
@@ -676,6 +809,8 @@ const GuidPage: React.FC = () => {
       modelList={modelSelection.modelList}
       current_model={modelSelection.current_model}
       setCurrentModel={modelSelection.setCurrentModel}
+      setReasoningEffort={modelSelection.setReasoningEffort}
+
       currentAcpCachedModelInfo={agentSelection.currentAcpCachedModelInfo}
       selectedAcpModel={agentSelection.selectedAcpModel}
       setSelectedAcpModel={agentSelection.setSelectedAcpModel}
@@ -685,12 +820,16 @@ const GuidPage: React.FC = () => {
   // Build the action row
   const actionRowNode = (
     <GuidActionRow
+      assistantPicker={assistantPickerProps}
       variant={agentSelection.is_presetAgent ? 'default' : 'hub'}
       onOpenCollaboration={() => navigate('/company')}
       onOpenCapabilities={() => navigate('/settings/capabilities')}
       onOpenCodeApp={() => navigate('/studio')}
       onSelectWorkspace={(dir) => guidInput.setDir(dir)}
-      files={guidInput.files}
+            files={guidInput.files}
+      attachmentCount={guidInput.attachmentReferences.length}
+      attachmentExpanded={attachmentInventoryExpanded}
+      onToggleAttachments={() => setAttachmentInventoryExpanded((value) => !value)}
       onFilesUploaded={guidInput.handleFilesUploaded}
       modelSelectorNode={modelSelectorNode}
       selectedAgent={agentSelection.selectedAgent}
@@ -718,17 +857,15 @@ const GuidPage: React.FC = () => {
       mcpServers={availableMcpServers}
       selectedMcpServerIds={guidSelectedMcpServerIds ?? []}
       onToggleMcpServer={handleToggleMcpServer}
+      autoSelect={autoSelect}
+      onToggleAutoSelect={onToggleAutoSelect}
       superAvailable={Boolean(superServerId)}
       superEnabled={superEnabled}
       onToggleSuper={handleToggleSuper}
       hidePresetTag
       loading={guidInput.loading}
       isButtonDisabled={send.isButtonDisabled}
-      onSend={() => {
-        send.handleSend().catch((error) => {
-          console.error('Failed to send message:', error);
-        });
-      }}
+      onSend={send.sendMessageHandler}
     />
   );
 
@@ -742,6 +879,8 @@ const GuidPage: React.FC = () => {
                 variant='hub'
                 input={guidInput.input}
                 onInputChange={handleInputChange}
+                onAttachmentCaretChange={guidInput.setAttachmentCaret}
+                onRemoveAttachmentReference={guidInput.removeAttachmentReference}
                 onKeyDown={handleInputKeyDown}
                 onPaste={guidInput.onPaste}
                 onFocus={guidInput.handleTextareaFocus}
@@ -765,8 +904,8 @@ const GuidPage: React.FC = () => {
                   />
                 }
                 mentionDropdown={mentionDropdownNode}
-                files={guidInput.files}
-                onRemoveFile={guidInput.handleRemoveFile}
+                attachmentReferences={guidInput.attachmentReferences}
+                quickViews={attachmentQuickViews}
                 actionRow={actionRowNode}
                 workspaceDir={guidInput.dir}
                 onSelectWorkspace={(dir) => guidInput.setDir(dir)}
@@ -781,12 +920,23 @@ const GuidPage: React.FC = () => {
             selectedAgentName={selectedAgentName}
             selectedModelName={selectedModelName}
             workspaceName={guidInput.dir}
+            attachmentCount={guidInput.attachmentReferences.length}
+            attachmentInventory={attachmentInventoryNode}
+            onFocusDirectory={guidInput.setDir}
+            assistants={agentSelection.assistants}
+            onSelectAssistant={handleSelectAssistant}
+            onSelectActivity={(item) => {
+              // Selecting a tile retargets the composer at that agent: its folder becomes the
+              // workspace shown on the chat input bar, and the next send continues its
+              // conversation rather than minting a new agent tile for the same command.
+              setReplyConversationId(item?.kind === 'agent' ? item.sourceId : undefined);
+              if (item?.workspace) guidInput.setDir(item.workspace);
+            }}
           />
         </div>
       </ConfigProvider>
     );
   }
-
   return (
     <ConfigProvider getPopupContainer={() => guidContainerRef.current || document.body}>
       <div ref={guidContainerRef} className={styles.guidContainer}>
@@ -945,6 +1095,8 @@ const GuidPage: React.FC = () => {
             input={guidInput.input}
             onInputChange={handleInputChange}
             onKeyDown={handleInputKeyDown}
+            onAttachmentCaretChange={guidInput.setAttachmentCaret}
+            onRemoveAttachmentReference={guidInput.removeAttachmentReference}
             onPaste={guidInput.onPaste}
             onFocus={guidInput.handleTextareaFocus}
             onBlur={guidInput.handleTextareaBlur}
@@ -967,8 +1119,8 @@ const GuidPage: React.FC = () => {
               />
             }
             mentionDropdown={mentionDropdownNode}
-            files={guidInput.files}
-            onRemoveFile={guidInput.handleRemoveFile}
+            attachmentReferences={guidInput.attachmentReferences}
+            quickViews={attachmentQuickViews}
             actionRow={actionRowNode}
             workspaceDir={guidInput.dir}
             onSelectWorkspace={(dir) => guidInput.setDir(dir)}
@@ -984,6 +1136,9 @@ const GuidPage: React.FC = () => {
             onSelectAssistant={handleSelectAssistant}
             onSetInput={guidInput.setInput}
             onFocusInput={guidInput.handleTextareaFocus}
+            onRegisterOpenCreate={(openCreate) => {
+              openCreateAssistantRef.current = openCreate;
+            }}
             onRegisterOpenDetails={(openDetails) => {
               openAssistantDetailsRef.current = openDetails;
             }}

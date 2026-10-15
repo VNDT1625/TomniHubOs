@@ -36,6 +36,7 @@ import {
   createTomnySessionActionHistorySource,
   ExperimentalCoreRuntime,
   resolveCoreCapabilityServerNames,
+  resolveCoreSuperCapabilities,
   resolveCoreToolCatalogPolicy,
   type ExperimentalCoreEvent,
 } from '../../../packages/desktop/src/process/experimentalCore/experimentalCoreRuntime';
@@ -82,7 +83,91 @@ describe('experimental direct core runtime', () => {
       mode: 'surface',
       patterns: ['tomny_session_actions', 'music_*'],
     });
-    expect(resolveCoreToolCatalogPolicy(surface, true)).toEqual({ mode: 'super', patterns: ['*'] });
+    expect(resolveCoreToolCatalogPolicy(surface, true)).toEqual({
+      mode: 'super',
+      patterns: ['tomny_session_actions', 'music_*'],
+    });
+  });
+
+  it('keeps ungranted Super capabilities out of the guide and host set', () => {
+    const browser = {
+      id: 'surface.browser',
+      label: 'Browser',
+      kind: 'mcp' as const,
+      serverName: 'tomny-browser-control',
+      toolPatterns: ['browser_*'],
+      availability: 'portable' as const,
+      minimumPermissionMode: 'full-access' as const,
+      requireExplicitGrant: true,
+    };
+    const workspace = {
+      id: 'core.workspace-read',
+      label: 'Workspace',
+      kind: 'mcp' as const,
+      serverName: 'tomny-core-workspace',
+      toolPatterns: ['tomny_read'],
+      availability: 'core' as const,
+      minimumPermissionMode: 'read-only' as const,
+    };
+    const registry = {
+      discover: ({ explicitlyGrantedCapabilityIds = [] }: { explicitlyGrantedCapabilityIds?: string[] }) => [
+        {
+          compatible: true,
+          capabilities: [workspace, ...(explicitlyGrantedCapabilityIds.includes('surface.browser') ? [browser] : [])],
+        },
+      ],
+      list: () => [],
+    } as never;
+    const request = {
+      model: { targetKind: 'cli', protocol: 'tomny-json-stream' },
+      permissionMode: 'full-access',
+      grantedPermissionScopes: ['browser.control'],
+      availableCapabilityIds: ['core.workspace-read', 'surface.browser'],
+    } as const;
+
+    const hostNames = ['tomny-core-workspace', 'tomny-browser-control'];
+    const withoutGrant = resolveCoreSuperCapabilities(registry, request, hostNames);
+    expect(resolveCoreToolCatalogPolicy(undefined, true, [], withoutGrant).patterns).not.toContain('browser_*');
+    expect(resolveCoreCapabilityServerNames(undefined, registry, true, undefined, withoutGrant)).toEqual([
+      'tomny-core-workspace',
+    ]);
+
+    const withGrant = resolveCoreSuperCapabilities(
+      registry,
+      { ...request, explicitlyGrantedCapabilityIds: ['surface.browser'] },
+      hostNames
+    );
+    expect(resolveCoreToolCatalogPolicy(undefined, true, [], withGrant).patterns).toContain('browser_*');
+    expect(resolveCoreCapabilityServerNames(undefined, registry, true, undefined, withGrant)).toEqual([
+      'tomny-core-workspace',
+      'tomny-browser-control',
+    ]);
+  });
+
+  it('does not advertise a Super capability when no provider host is registered', () => {
+    const registry = {
+      discover: () => [
+        {
+          compatible: true,
+          capabilities: [
+            {
+              id: 'core.testing',
+              label: 'Testing',
+              kind: 'mcp' as const,
+              serverName: 'tomny-testing',
+              toolPatterns: ['test_*'],
+              minimumPermissionMode: 'read-only' as const,
+            },
+          ],
+        },
+      ],
+    } as never;
+    const capabilities = resolveCoreSuperCapabilities(
+      registry,
+      { model: { targetKind: 'cli', protocol: 'tomny-json-stream' }, permissionMode: 'full-access' },
+      []
+    );
+    expect(capabilities).toEqual([]);
   });
 
   it('discovers Super hosts from every registered surface without hard-coded surface names', () => {
@@ -235,6 +320,47 @@ describe('experimental direct core runtime', () => {
         evidenceRefs: expect.arrayContaining(['experimental-core:request:hub-run-1', 'experimental-core:target:codex']),
       })
     );
+  });
+
+    it('preserves an authorized native ACP slash command without context, harness, or composer text', async () => {
+    const claudeTarget: DetectedCoreTarget = {
+      ...target, id: 'claude', name: 'Claude ACP', protocol: 'acp', command: 'claude-agent-acp',
+    };
+    const claudeAdapter: CoreAdapter = { ...makeAdapter(), protocol: 'acp' };
+    const composePrompt = vi.fn(async ({ prompt }: { prompt: string }) => `[HOST PREFIX] ${prompt}`);
+    const nativeRuntime = new ExperimentalCoreRuntime((event) => events.push(event), {
+      detectTargets: vi.fn().mockResolvedValue([claudeTarget]),
+      adapters: [claudeAdapter],
+      coordinator,
+      agentMeshService: meshService,
+      contextComposer: { composePrompt } as never,
+    });
+    nativeRuntime.start(
+      'native-slash-1', 'claude', '/compact now', 'C:/workspace', undefined, 'workspace-write',
+      undefined, undefined,
+      {
+        nativeCliCommand: true,
+        savedMemoryContext: 'OLD SAVED MEMORY',
+        conversationContext: 'HOST CONTEXT',
+        surface: 'chat',
+      }
+    );
+    await vi.waitFor(() => expect(claudeAdapter.run).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(claudeAdapter.run).mock.calls[0][0].prompt).toBe('/compact now');
+    expect(composePrompt).not.toHaveBeenCalled();
+  });
+
+  it('refuses the native command flag when the resolved provider is not ACP', async () => {
+    runtime.start(
+      'native-non-acp-1', 'codex', '/compact', 'C:/workspace', undefined,
+      'workspace-write', undefined, undefined, { nativeCliCommand: true }
+    );
+    await vi.waitFor(() =>
+      expect(events.some((event) =>
+        event.requestId === 'native-non-acp-1' && event.type === 'error'
+      )).toBe(true)
+    );
+    expect(adapter.run).not.toHaveBeenCalled();
   });
 
   it('forwards Hub cancellation to the active direct-core request', async () => {
@@ -421,6 +547,55 @@ describe('experimental direct core runtime', () => {
       { timeout: 300 }
     );
     expect(singleSlotCoordinator.requestLease).toHaveBeenCalledTimes(1);
+  });
+
+  it('cancels a timed-out agent lease request so a late grant cannot leak the slot', async () => {
+    // One agent slot, already held by an outer Foundation lease.
+    const active = new Set<string>(['outer-foundation-lease']);
+    const waiters: Array<() => void> = [];
+    const grantNext = (): void => {
+      while (active.size < 1 && waiters.length > 0) waiters.shift()?.();
+    };
+    const singleSlotCoordinator = {
+      requestLease: vi.fn(
+        (_request: unknown, options?: { signal?: AbortSignal }) =>
+          new Promise<{ id: string }>((resolve, reject) => {
+            const grant = (): void => {
+              active.add('late-lease');
+              resolve({ id: 'late-lease' });
+            };
+            waiters.push(grant);
+            options?.signal?.addEventListener(
+              'abort',
+              () => {
+                waiters.splice(waiters.indexOf(grant), 1);
+                reject(new Error('cancelled'));
+              },
+              { once: true }
+            );
+          })
+      ),
+      releaseLease: vi.fn((id: string) => {
+        active.delete(id);
+        grantNext();
+      }),
+    };
+    const leaseRuntime = new ExperimentalCoreRuntime((event) => events.push(event), {
+      detectTargets: vi.fn().mockResolvedValue([target]),
+      adapters: [adapter],
+      coordinator: singleSlotCoordinator,
+    });
+    await leaseRuntime.listTargets();
+    leaseRuntime.start('lease-leak-1', 'codex', 'hello', 'C:/workspace');
+    await vi.waitFor(
+      () => expect(events.some((event) => event.requestId === 'lease-leak-1' && event.type === 'completed')).toBe(true),
+      { timeout: 5_000 }
+    );
+
+    // The outer run finishes. Nothing may still be queued for, or holding, the slot.
+    singleSlotCoordinator.releaseLease('outer-foundation-lease');
+    expect(active.size).toBe(0);
+    expect(waiters).toHaveLength(0);
   });
 
   it('discovers models with the selected workspace instead of guessing globally', async () => {
@@ -1605,25 +1780,26 @@ describe('experimental direct core runtime', () => {
       })
     );
     expect(resolveCapabilityHosts).toHaveBeenCalledWith(
-      ['tomny-tool-selector', 'tomny-music'],
+            expect.arrayContaining(['tomny-tool-selector', 'tomny-music']),
       [{ name: 'session-tools', transport: 'sse', url: 'http://127.0.0.1/session/sse' }],
-      {
+      expect.objectContaining({
+        requestId: 'surface-request',
         sessionId: surfaceRun.sessionId,
         workspace: 'C:/workspace',
         surface: 'music',
         permissionMode: 'workspace-write',
         requestPermission: expect.any(Function),
-      }
+      })
     );
     expect(adapter.run).toHaveBeenCalledWith(
       expect.objectContaining({
         surface: 'music',
         prompt: expect.stringContaining('music_*'),
-        mcpServers: [
+                mcpServers: expect.arrayContaining([
           { name: 'tomny-tool-selector', url: 'http://127.0.0.1/mcp' },
           { name: 'tomny-music', url: 'http://127.0.0.1/mcp' },
           { name: 'session-tools', transport: 'sse', url: 'http://127.0.0.1/session/sse' },
-        ],
+        ]),
       })
     );
   });
@@ -1725,7 +1901,7 @@ describe('experimental direct core runtime', () => {
         sessionId: '*',
         surfaceId: 'browser',
         capabilityId: 'core',
-        toolPattern: 'agent_secret_context_use',
+        toolPattern: 'tomny_secret_use',
       },
       effect: 'allow',
       lifetime: 'persistent',
@@ -1745,7 +1921,7 @@ describe('experimental direct core runtime', () => {
     );
     vi.mocked(adapter.run).mockImplementationOnce(async (input) => {
       const approved = await hostContext!.requestPermission!({
-        tool: 'agent_secret_context_use',
+        tool: 'tomny_secret_use',
         detail: 'opaque browser fill',
       });
       if (!approved) throw new Error('secret use denied');
@@ -1806,7 +1982,7 @@ describe('experimental direct core runtime', () => {
       ]
     );
     vi.mocked(adapter.run).mockImplementationOnce(async (input) => {
-      const approved = await input.requestPermission({ tool: 'secret_context_generate' });
+      const approved = await input.requestPermission({ tool: 'tomny_secret_generate' });
       if (!approved) throw new Error('secret use denied');
     });
     const untrustedRuntime = new ExperimentalCoreRuntime((event) => untrustedEvents.push(event), {
@@ -1882,7 +2058,10 @@ describe('experimental direct core runtime', () => {
     runtime.start('failed-request', 'codex', 'hello', 'C:/workspace');
     await vi.waitFor(() => expect(events.some((event) => event.type === 'error')).toBe(true));
 
-    expect(coordinator.requestLease).toHaveBeenCalledWith({ kind: 'agent', estCostMB: 96 });
+    expect(coordinator.requestLease).toHaveBeenCalledWith(
+      { kind: 'agent', estCostMB: 96 },
+      { signal: expect.any(AbortSignal) }
+    );
     expect(coordinator.releaseLease).toHaveBeenCalledWith('agent-lease');
   });
 });

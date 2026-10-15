@@ -23,6 +23,16 @@ const actionIcons: Record<string, string> = {
   mcp: '🔌',
 };
 
+/**
+ * Starts a fresh prompt on the allow-always option when one exists so a plain Accept
+ * becomes a persistent grant that does not re-prompt; deny options are the last resort.
+ */
+const pickDefaultOption = (options: ReadonlyArray<{ value: unknown }>): string | null => {
+  const values = options.map((option) => String(option.value));
+  if (values.includes('proceed_always')) return 'proceed_always';
+  if (values.includes('proceed_once')) return 'proceed_once';
+  return values.find((value) => value !== 'cancel') ?? values[0] ?? null;
+};
 const MessagePermission: React.FC<MessagePermissionProps> = React.memo(({ message }) => {
   const { t } = useTranslation();
   const {
@@ -35,7 +45,7 @@ const MessagePermission: React.FC<MessagePermissionProps> = React.memo(({ messag
     native_core_permission_id,
   } = message.content || {};
 
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string | null>(() => pickDefaultOption(options));
   const [isResponding, setIsResponding] = useState(false);
   const [hasResponded, setHasResponded] = useState(false);
 
@@ -67,6 +77,36 @@ const MessagePermission: React.FC<MessagePermissionProps> = React.memo(({ messag
       setHasResponded(true);
     } catch (error) {
       console.error('Error confirming permission:', error);
+      Message.error(t('ide.agentMesh.actionFailed'));
+    } finally {
+      setIsResponding(false);
+    }
+  };
+
+  /** Denies the pending request immediately; a radio selection is not required to block. */
+  const handleBlock = async () => {
+    if (hasResponded || isResponding) return;
+
+    setIsResponding(true);
+    try {
+      if (native_core_permission_id) {
+        const resolved = await ipcBridge.conversation.resolveNativePermission.invoke({
+          permission_id: native_core_permission_id,
+          approved: false,
+        });
+        if (!resolved) throw new Error('The permission request is no longer active.');
+      } else {
+        await ipcBridge.conversation.confirmation.confirm.invoke({
+          conversation_id: message.conversation_id,
+          call_id,
+          msg_id: message.msg_id || '',
+          data: { value: 'cancel' },
+          always_allow: false,
+        });
+      }
+      setHasResponded(true);
+    } catch (error) {
+      console.error('Error blocking permission:', error);
       Message.error(t('ide.agentMesh.actionFailed'));
     } finally {
       setIsResponding(false);
@@ -110,7 +150,10 @@ const MessagePermission: React.FC<MessagePermissionProps> = React.memo(({ messag
                 <Text type='secondary'>{t('messages.noOptionsAvailable')}</Text>
               )}
             </Radio.Group>
-            <div className='flex justify-start pl-20px'>
+            <div className='flex justify-start pl-20px space-x-2'>
+              <Button size='mini' disabled={isResponding} onClick={handleBlock} data-testid='message-permission-block'>
+                {t('messages.block')}
+              </Button>
               <Button
                 type='primary'
                 size='mini'
@@ -118,7 +161,7 @@ const MessagePermission: React.FC<MessagePermissionProps> = React.memo(({ messag
                 onClick={handleConfirm}
                 data-testid='message-permission-confirm'
               >
-                {isResponding ? t('messages.processing') : t('messages.confirm')}
+                {isResponding ? t('messages.processing') : t('messages.accept')}
               </Button>
             </div>
           </>

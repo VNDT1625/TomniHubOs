@@ -21,7 +21,7 @@ import TomnyScrollArea from '@/renderer/components/base/TomnyScrollArea';
 import TomnySelect from '@/renderer/components/base/TomnySelect';
 import AddMcpServerModal from '@/renderer/pages/settings/components/AddMcpServerModal';
 import McpServerItem from '@/renderer/pages/settings/ToolsSettings/McpServerItem';
-import ExternalMcpGatewaySettings from '@/renderer/pages/settings/ToolsSettings/ExternalMcpGatewaySettings';
+import { selectExternalMcpServers } from '@/renderer/pages/settings/ToolsSettings/externalMcpServers';
 import { useMcpServers, useMcpConnection, useMcpModal, useMcpServerCRUD, useMcpOAuth } from '@/renderer/hooks/mcp';
 import classNames from 'classnames';
 import { useSettingsViewMode } from '../settingsViewContext';
@@ -232,10 +232,7 @@ const ModalMcpManagementSection: React.FC<{
 }> = ({ message, mcpServers, extensionMcpServers, setMcpServers, saveMcpServers, isPageMode }) => {
   const { t } = useTranslation();
   const { oauthStatus, loggingIn, checkOAuthStatus, markLoginRequired, clearLoginRequired, login } = useMcpOAuth();
-  const visibleMcpServers = useMemo(
-    () => mcpServers.filter((server) => !isBuiltinImageGenServer(server)),
-    [mcpServers]
-  );
+  const visibleMcpServers = useMemo(() => selectExternalMcpServers(mcpServers), [mcpServers]);
 
   const handleAuthRequired = useCallback(
     (server: IMcpServer) => {
@@ -412,6 +409,7 @@ const ModalMcpManagementSection: React.FC<{
         <div className='text-14px text-t-primary'>{t('settings.mcpSettings')}</div>
         <div>{renderAddButton()}</div>
       </div>
+      <div className='text-12px text-t-secondary'>{t('settings.mcpInAppNotice')}</div>
 
       <div className='flex-1 min-h-0'>
         {visibleMcpServers.length === 0 && extensionMcpServers.length === 0 ? (
@@ -743,7 +741,6 @@ const ToolsModalContent: React.FC = () => {
             </div>
           </div>
           {/* 图像生成 */}
-          <ExternalMcpGatewaySettings />
           <div className='px-[12px] md:px-[32px] py-[24px] bg-2 rd-12px md:rd-16px border border-border-2'>
             <div className='flex items-center justify-between mb-16px'>
               <span className='text-14px text-t-primary'>{t('settings.imageGeneration')}</span>

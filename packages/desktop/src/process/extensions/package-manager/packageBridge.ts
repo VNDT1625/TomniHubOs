@@ -7,7 +7,7 @@
 
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
-import { open, readFile, type FileHandle } from 'node:fs/promises';
+import { open, type FileHandle } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import {
@@ -16,10 +16,13 @@ import {
   dialog,
   ipcMain,
   MessageChannelMain,
+  safeStorage,
   type IpcMainInvokeEvent,
   type MessagePortMain,
   type WebContents,
 } from 'electron';
+import { disposeDefaultExtensionHostManager } from '@process/integrations/connections/hosts/exec/extensionHost';
+import { disposeProfileDownloadGate } from '@process/integrations/browserExtensions/profile';
 import { ipcBridge } from '@/common';
 import { getPlatformServices } from '@/common/platform';
 import {
@@ -32,9 +35,13 @@ import {
 } from '@/common/viu';
 import {
   PACKAGE_CAPABILITY_NATIVE_CHANNELS,
+  PACKAGE_MODEL_INVOKE_NATIVE_CHANNELS,
   PACKAGE_RUNTIME_NATIVE_CHANNELS,
   PACKAGE_SURFACE_AI_ACCESS_NATIVE_CHANNELS,
   PACKAGE_SURFACE_AI_RUNTIME_NATIVE_CHANNELS,
+  type PackageModelInvokeNativeCancelRequest,
+  type PackageModelInvokeNativeRequest,
+  type PackageModelInvokeNativeResult,
   type PackageSurfaceAiAccessChallengeDisplay,
   type PackageSurfaceAiAccessChallengeRequest,
   type PackageSurfaceAiAccessConsentListResult,
@@ -60,6 +67,7 @@ import {
   type PackageCapabilityLeaseRequest,
   type PackageCapabilityResult,
   type PackageCapabilitySyscall,
+  type PackageContributionSnapshot,
   type LinkedMicrosoftAppRecord,
   type PackageListing,
   type PackageCatalogEntry,
@@ -69,6 +77,10 @@ import {
   createPackageCapabilityBroker,
   type PackageCapabilityBroker,
 } from '@process/resources/packageCapability/broker';
+import {
+  createLocalModelInvocationBroker,
+  type LocalModelInvocationBroker,
+} from '@process/resources/packageCapability/localModelInvocationBroker';
 import {
   createJsonSurfaceAiAccessConsentAuthority,
   createSurfaceAiAccessBroker,
@@ -162,6 +174,29 @@ import {
   type DesignViuMcpRuntime,
   type DesignViuPackageActivationLifecycle,
 } from '@process/resources/packageProcessRuntime/designViuMcpRuntime';
+import { getMcpRegistry } from '@process/resources/mcpRegistry/mcpRegistryBridge';
+import { postPackageNotification } from '@process/system/hubActivity/notificationSources/packageNotificationPort';
+import type { ConnectionRegistry } from '@process/integrations/connections/core/registry';
+import {
+  createConnectionRuntime,
+  type ConnectionRuntime,
+} from '@process/integrations/connections/wiring/connectionRuntime';
+import {
+  installLocalBuiltArtifact,
+  type LocalInstallOutcome,
+} from '@process/integrations/connections/wiring/localInstall';
+import { getInstallActivationConfirm } from '@process/integrations/connections/wiring/installActivation';
+import { scheduleStartAgainApprovals } from '@process/integrations/connections/wiring/startAgainApproval';
+import {
+  createLocalKeyStore,
+  createLocalSigningKeys,
+  localKeyDirectory,
+  type LocalSigningKeys,
+} from '@process/integrations/connections/wiring/localKeys';
+import { clearSessionsOnRuntimeInvalidation } from '@process/system/liveSessions/clearOnRuntimeInvalidation';
+import { getLiveSessionRegistry } from '@process/system/liveSessions/liveSessionRegistry';
+import { reportPackageSessions } from '@process/system/liveSessions/reportPackageSessions';
+import { syncPackageMcpServers } from '@process/resources/mcpRegistry/packageMcpSync';
 import { createDesignViuNativeIpcLifecycle } from '@process/resources/packageProcessRuntime/designViuNativeBridge';
 type DesignViuSessionService = Readonly<{
   inspect: (workspaceKey: string) => ViuProjectState;
@@ -244,8 +279,15 @@ const loadBundledMicrosoftLinkedApp = (linkedAppId: string): LinkedMicrosoftAppR
   BUNDLED_MICROSOFT_LINKED_APPS.find((record) => record.id === linkedAppId);
 
 let singleton: PackageManagerService | undefined;
+let localSigningKeysSingleton: LocalSigningKeys | undefined;
+let connectionRuntimeSingleton: ConnectionRuntime | undefined;
+let unsubscribeConnections: (() => void) | undefined;
+/** Settles when the package manager finished initializing; local installs wait for it. */
+let packagePlatformReady: Promise<void> | undefined;
 let runtimeRegistrySingleton: PackageRuntimeRegistry | undefined;
 let capabilityBrokerSingleton: PackageCapabilityBroker | undefined;
+let localModelInvocationBrokerSingleton: LocalModelInvocationBroker | undefined;
+let disposeModelInvokeIpc: (() => void) | undefined;
 let surfaceAiRuntimeTransportRegistrySingleton: SurfaceAiRuntimeTransportRegistry | undefined;
 let surfaceAiAccessConsentAuthoritySingleton: SurfaceAiAccessConsentAuthority | undefined;
 let designViuContributionManagerSingleton: DesignViuContributionManager | undefined;
@@ -254,6 +296,57 @@ let disposeDesignViuNativeIpc: (() => void) | undefined;
 let designViuPackageActivationLifecycle: DesignViuPackageActivationLifecycle | undefined;
 
 let petPackageActivationLifecycle: FixedPackageActivationLifecycle | undefined;
+let browserPackageActivationLifecycle: FixedPackageActivationLifecycle | undefined;
+let idePackageActivationLifecycle: FixedPackageActivationLifecycle | undefined;
+
+/** Bound by trusted Main bootstrap, never by renderer or the package manifest. */
+let automationStudioBackgroundLifecycle: Pick<FixedPackageActivationLifecycle, 'quiesce' | 'resume'> | undefined;
+export const registerAutomationStudioBackgroundLifecycle = (
+  lifecycle: Pick<FixedPackageActivationLifecycle, 'quiesce' | 'resume'>
+): (() => void) => {
+  automationStudioBackgroundLifecycle = lifecycle;
+  return () => {
+    if (automationStudioBackgroundLifecycle === lifecycle) automationStudioBackgroundLifecycle = undefined;
+  };
+};
+
+
+/** Packages that declare an MCP connection. Their MCP server is that connection, so the legacy mirror leaves them out. */
+const packagesWithMcpConnection = async (packageIds: readonly string[]): Promise<Set<string>> => {
+  const owned = new Set<string>();
+  for (const packageId of new Set(packageIds)) {
+    try {
+      // oxlint-disable-next-line no-await-in-loop -- a handful of packages, read one at a time
+      const views = await getConnectionRegistry().view(packageId);
+      if (views.some((view) => view.connection.kind === 'mcp')) owned.add(packageId);
+    } catch {
+      // Not readable: the mirror keeps its previous behaviour for this package.
+    }
+  }
+  return owned;
+};
+
+/** Keeps the MCP catalog in step with the MCP servers that installed packages declare. Never throws. */
+const mirrorPackageMcpServers = async (service: {
+  contributions: () => Promise<{ snapshot: PackageContributionSnapshot }>;
+}): Promise<void> => {
+  try {
+    const { snapshot } = await service.contributions();
+    const packageIds = snapshot.mcpServers.map((entry) => entry.packageId);
+    const connectionOwnedPackages = await packagesWithMcpConnection(packageIds);
+    const result = await syncPackageMcpServers(getMcpRegistry(), snapshot, { connectionOwnedPackages });
+    if (result.added.length + result.updated.length + result.removed.length > 0) {
+      console.info(
+        '[PackagePlatform] MCP servers from packages: %d added, %d updated, %d removed.',
+        result.added.length,
+        result.updated.length,
+        result.removed.length
+      );
+    }
+  } catch (error) {
+    console.warn('[PackagePlatform] Could not mirror package MCP servers:', error);
+  }
+};
 
 let federationSingleton: CatalogFederationBroker | undefined;
 let microsoftStoreNativeSingleton: MicrosoftStoreNativeRuntime | undefined;
@@ -292,7 +385,15 @@ export type PackageManagerBridgeOptions = Readonly<{
 
 const LOCAL_DEV_PACKAGE_METADATA = 'first-party-package-metadata.dev.json';
 const LOCAL_DEV_PACKAGE_KEY_ID = 'tomni-store-dev-local';
-const LOCAL_DEV_PACKAGE_IDS = new Set(['com.tomni.company', 'com.tomni.knowledge', 'com.tomni.pet']);
+const LOCAL_DEV_PACKAGE_IDS = new Set([
+  'com.tomni.browser',
+  'com.tomni.ide',
+  'com.tomni.document-studio',
+  'com.tomni.automation-studio',
+  'com.tomni.company',
+  'com.tomni.knowledge',
+  'com.tomni.pet',
+]);
 const LOCAL_DEV_ARTIFACT_NAME = /^[a-z0-9.-]+\.tomni-package\.json$/;
 
 type LocalDevelopmentPackageMetadata = Readonly<{
@@ -302,8 +403,8 @@ type LocalDevelopmentPackageMetadata = Readonly<{
 }>;
 
 /**
- * Admits only Company, Knowledge, and Pet development fixtures when local
- * artifacts are explicitly enabled. This catalog is never available to packaged builds and
+  * Admits only reviewed first-party app IDs for local development fixtures,
+ * including independently built Browser/IDE and Studios, when local artifacts are explicitly enabled. This catalog is never available to packaged builds and
  * its key is a protected-namespace anchor only in that local unpackaged process, never in production.
  */
 export const loadLocalDevelopmentPackageCatalog = ():
@@ -627,7 +728,12 @@ export const registerTrustedPackageRuntimeIpcBridge = <TSender>(options: {
 };
 
 export const getPackageRuntimeRegistry = (): PackageRuntimeRegistry => {
-  runtimeRegistrySingleton ??= createPackageRuntimeRegistry();
+  if (!runtimeRegistrySingleton) {
+    runtimeRegistrySingleton = createPackageRuntimeRegistry();
+    clearSessionsOnRuntimeInvalidation(runtimeRegistrySingleton, (packageId) =>
+      getLiveSessionRegistry().clear(packageId)
+    );
+  }
   return runtimeRegistrySingleton;
 };
 
@@ -1018,8 +1124,25 @@ export const listVerifiedSurfaceAiRuntimeBindings = async (
 const getPackageCapabilityBroker = (): PackageCapabilityBroker => {
   capabilityBrokerSingleton ??= createPackageCapabilityBroker({
     isPackageActive: (packageId) => getPackageRuntimeRegistry().isActive(packageId),
+    postNotification: postPackageNotification,
+    reportSessions: (packageId, args) => reportPackageSessions(getLiveSessionRegistry(), packageId, args),
   });
   return capabilityBrokerSingleton;
+};
+
+export const getLocalModelInvocationBroker = (): LocalModelInvocationBroker => {
+  if (!localModelInvocationBrokerSingleton) {
+    const capabilityBroker = getPackageCapabilityBroker();
+    localModelInvocationBrokerSingleton = createLocalModelInvocationBroker({
+      isPackageActive: (packageId) => getPackageRuntimeRegistry().isActive(packageId),
+      verifyLease: (leaseId, packageId, runtimeId, capability) =>
+        capabilityBroker.verifyLease(leaseId, packageId, runtimeId, capability),
+    });
+    getPackageRuntimeRegistry().onInvalidated((event) => {
+      localModelInvocationBrokerSingleton?.abortRuntime(event.packageId, event.runtimeId);
+    });
+  }
+  return localModelInvocationBrokerSingleton;
 };
 
 const isCapabilityLeaseRequest = (value: unknown): value is PackageCapabilityLeaseRequest => {
@@ -1029,7 +1152,10 @@ const isCapabilityLeaseRequest = (value: unknown): value is PackageCapabilityLea
     request.version === 1 &&
     typeof request.packageId === 'string' &&
     typeof request.runtimeId === 'string' &&
-    request.capability === 'host.runtime.info'
+    (request.capability === 'host.runtime.info' ||
+      request.capability === 'notifications.post' ||
+      request.capability === 'sessions.report' ||
+      request.capability === 'model.invoke')
   );
 };
 
@@ -1041,7 +1167,35 @@ const isCapabilitySyscall = (value: unknown): value is PackageCapabilitySyscall 
     typeof request.leaseId === 'string' &&
     typeof request.packageId === 'string' &&
     typeof request.runtimeId === 'string' &&
-    request.name === 'host.runtime.info'
+    (request.name === 'host.runtime.info' ||
+      request.name === 'notifications.post' ||
+      request.name === 'sessions.report' ||
+      request.name === 'model.invoke')
+  );
+};
+
+const isPackageModelInvokeNativeRequest = (value: unknown): value is PackageModelInvokeNativeRequest => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    candidate.version === 1 &&
+    typeof candidate.packageId === 'string' &&
+    typeof candidate.runtimeId === 'string' &&
+    typeof candidate.requestId === 'string' &&
+    candidate.contract === 'ai-challenge.turn.v1' &&
+    typeof candidate.prompt === 'string'
+  );
+};
+
+const isPackageModelInvokeNativeCancelRequest = (
+  value: unknown
+): value is PackageModelInvokeNativeCancelRequest => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.packageId === 'string' &&
+    typeof candidate.runtimeId === 'string' &&
+    typeof candidate.requestId === 'string'
   );
 };
 
@@ -1085,6 +1239,18 @@ export const createVerifiedStorePublisherKeySet = (
   return Object.freeze({ trustedKeys, replaceVerifiedStorePublisherKeys });
 };
 
+/**
+ * The key that signs packages built on this machine, as the package manager trusts it. The package manager is
+ * built synchronously, so it receives one live record: it holds the pinned public key at startup (read-only) and
+ * `refresh()` replaces it from the private key before a local package is registered. The keystore (which decides
+ * the key file name) is resolved only inside `refresh()`, after the app is ready, using the same `tomny-keys`
+ * directory and protection as `/repotopackage`. Key ids start with `local:`, which the service requires.
+ */
+export const getLocalSigningKeys = (): LocalSigningKeys =>
+  (localSigningKeysSingleton ??= createLocalSigningKeys(localKeyDirectory(app.getPath('userData')), () =>
+    createLocalKeyStore(app.getPath('userData'), safeStorage)
+  ));
+
 export const getPackageManagerService = (): PackageManagerService => {
   const rootDir = path.join(app.getPath('userData'), 'tomny-packages');
   const localDevelopmentCatalog = loadLocalDevelopmentPackageCatalog();
@@ -1113,6 +1279,8 @@ export const getPackageManagerService = (): PackageManagerService => {
     catalog,
     trustedKeys: verifiedStorePublisherKeySet.trustedKeys,
     firstPartyTrustedKeys,
+    localTrustedKeys: getLocalSigningKeys().trustedKeys,
+    isRevokedLocalKey: (keyId) => getLocalSigningKeys().isRevoked(keyId),
     ...(remoteCatalogLoader
       ? { catalogLoader: async () => excludeDefaultSurfaceCatalogEntries(await remoteCatalogLoader()) }
       : {}),
@@ -1124,19 +1292,85 @@ export const getPackageManagerService = (): PackageManagerService => {
     quiescePackageRuntime: async (packageId) => {
       if (packageId === DESIGN_VIU_PACKAGE_ID) {
         await designViuMcpRuntimeSingleton?.quiesce(packageId);
-      } else if (packageId === 'com.tomni.pet') {
+            } else if (packageId === 'com.tomni.pet') {
         await petPackageActivationLifecycle?.quiesce();
+      } else if (packageId === 'com.tomni.browser') {
+        await browserPackageActivationLifecycle?.quiesce();
+            } else if (packageId === 'com.tomni.ide') {
+        await idePackageActivationLifecycle?.quiesce();
+      } else if (packageId === 'com.tomni.automation-studio') {
+        await automationStudioBackgroundLifecycle?.quiesce();
       }
+
     },
     resumePackageRuntime: async (packageId) => {
       if (packageId === DESIGN_VIU_PACKAGE_ID) {
         await designViuMcpRuntimeSingleton?.reconcile();
-      } else if (packageId === 'com.tomni.pet') {
+            } else if (packageId === 'com.tomni.pet') {
         await petPackageActivationLifecycle?.resume();
+      } else if (packageId === 'com.tomni.browser') {
+        await browserPackageActivationLifecycle?.resume();
+            } else if (packageId === 'com.tomni.ide') {
+        await idePackageActivationLifecycle?.resume();
+      } else if (packageId === 'com.tomni.automation-studio') {
+        await automationStudioBackgroundLifecycle?.resume();
       }
+
     },
   });
   return singleton;
+};
+
+/**
+ * The connection runtime (design sections 9.3-9.5): state in `<userData>/connections.json`, installed packages read
+ * from the package manager's own directory. The host list is empty until the per-kind hosts exist, so every
+ * connection is recorded as unsupported and nothing can be switched on yet.
+ */
+export const getConnectionRuntime = (): ConnectionRuntime =>
+  (connectionRuntimeSingleton ??= createConnectionRuntime({
+    stateFile: path.join(app.getPath('userData'), 'connections.json'),
+    packagesRoot: path.join(app.getPath('userData'), 'tomny-packages'),
+    packages: getPackageManagerService(),
+    hosts: [],
+  }));
+
+export const getConnectionRegistry = (): ConnectionRegistry => getConnectionRuntime().registry;
+
+/** Stops local web-embed processes during package-platform shutdown. */
+export const disposeConnectionRuntime = async (runtime = connectionRuntimeSingleton): Promise<void> => {
+  await runtime?.dispose();
+};
+
+/**
+ * Stops what the connection platform started: web apps and services (their process trees), the browser extensions it
+ * loaded, and the download gate. Every part resolves in every case; the quit cleanup bounds the whole call.
+ */
+export const disposeConnectionPlatform = async (): Promise<void> => {
+  await Promise.all([disposeConnectionRuntime(), disposeDefaultExtensionHostManager()]);
+  disposeProfileDownloadGate();
+};
+
+/**
+ * Installs the package `/repotopackage` just wrote, or one a repository source just built: register as `local-built`,
+ * install, read its connections. The archive path must be the packager's own result; nothing from a renderer reaches
+ * this function. `activateConnections` is set only by the fresh-install paths (owner decision 2026-10-15); an update
+ * never switches on a new connection by itself.
+ */
+export const installLocalBuiltPackage = async (
+  artifactPath: string,
+  options: Readonly<{ activateConnections?: boolean }> = {}
+): Promise<LocalInstallOutcome> => {
+  await packagePlatformReady;
+  const confirm = getInstallActivationConfirm();
+  return installLocalBuiltArtifact(
+    {
+      keys: getLocalSigningKeys(),
+      packages: getPackageManagerService(),
+      registry: getConnectionRegistry(),
+      ...(options.activateConnections === true ? { activation: confirm === undefined ? {} : { confirm } } : {}),
+    },
+    artifactPath
+  );
 };
 
 /**
@@ -1901,6 +2135,108 @@ const registerProductionPackageCapabilityIpc = (
   };
 };
 
+export type TrustedPackageModelInvokeIpcHost<TEvent> = {
+  handle: (channel: string, handler: (event: TEvent, payload: unknown) => Promise<unknown> | unknown) => void;
+  removeHandler: (channel: string) => void;
+};
+
+export type RegisterTrustedPackageModelInvokeIpcBridgeOptions<TEvent> = {
+  host: TrustedPackageModelInvokeIpcHost<TEvent>;
+  service: Pick<PackageManagerService, 'status'>;
+  registry: Pick<PackageRuntimeRegistry, 'ownsRuntime' | 'onInvalidated'>;
+  modelBroker: LocalModelInvocationBroker;
+  verifySender: (event: TEvent) => boolean;
+  identifySender?: (event: TEvent) => string | undefined;
+};
+
+export const registerTrustedPackageModelInvokeIpcBridge = <TEvent>(
+  options: RegisterTrustedPackageModelInvokeIpcBridgeOptions<TEvent>
+): (() => void) => {
+  const identifySender =
+    options.identifySender ?? ((event: unknown) => `electron:${(event as IpcMainInvokeEvent).sender?.id}`);
+
+  const requireTrustedRuntime = (event: TEvent, packageId: string, runtimeId: string): void => {
+    if (!options.verifySender(event)) throw new Error('PACKAGE_MODEL_INVOKE_SENDER_UNTRUSTED');
+    const ownerId = identifySender(event);
+    if (!ownerId || !options.registry.ownsRuntime(ownerId, packageId, runtimeId)) {
+      throw new Error('PACKAGE_MODEL_INVOKE_RUNTIME_UNAVAILABLE');
+    }
+  };
+
+  const unsubscribeInvalidated = options.registry.onInvalidated((event) => {
+    options.modelBroker.abortRuntime(event.packageId, event.runtimeId);
+  });
+
+  options.host.handle(
+    PACKAGE_MODEL_INVOKE_NATIVE_CHANNELS.invoke,
+    async (event, payload: unknown): Promise<PackageModelInvokeNativeResult> => {
+      if (!isPackageModelInvokeNativeRequest(payload)) {
+        return {
+          ok: false,
+          requestId: (payload as { requestId?: string })?.requestId ?? '',
+          code: 'PACKAGE_CAPABILITY_REQUEST_INVALID',
+        };
+      }
+      try {
+        requireTrustedRuntime(event, payload.packageId, payload.runtimeId);
+      } catch {
+        return {
+          ok: false,
+          requestId: payload.requestId,
+          code: 'PACKAGE_CAPABILITY_SYSCALL_DENIED',
+        };
+      }
+      const listing = await options.service.status(payload.packageId);
+      const manifest = listing.state === 'installed' && listing.enabled ? listing.installedManifest : undefined;
+      if (!manifest || listing.installedTrust !== 'signed-first-party' || manifest.publisherId !== 'com.tomni') {
+        return {
+          ok: false,
+          requestId: payload.requestId,
+          code: 'PACKAGE_CAPABILITY_PACKAGE_INACTIVE',
+        };
+      }
+      return options.modelBroker.invoke(payload);
+    }
+  );
+
+  options.host.handle(
+    PACKAGE_MODEL_INVOKE_NATIVE_CHANNELS.cancel,
+    (event, payload: unknown): boolean => {
+      if (!isPackageModelInvokeNativeCancelRequest(payload)) return false;
+      try {
+        requireTrustedRuntime(event, payload.packageId, payload.runtimeId);
+      } catch {
+        return false;
+      }
+      return options.modelBroker.cancel(payload);
+    }
+  );
+
+  return () => {
+    unsubscribeInvalidated();
+    options.host.removeHandler(PACKAGE_MODEL_INVOKE_NATIVE_CHANNELS.invoke);
+    options.host.removeHandler(PACKAGE_MODEL_INVOKE_NATIVE_CHANNELS.cancel);
+  };
+};
+
+const registerProductionPackageModelInvokeIpc = (
+  service: PackageManagerService,
+  registry: PackageRuntimeRegistry,
+  modelBroker: LocalModelInvocationBroker
+): (() => void) => {
+  const host: TrustedPackageModelInvokeIpcHost<IpcMainInvokeEvent> = {
+    handle: (channel, handler) => ipcMain.handle(channel, (event, payload: unknown) => handler(event, payload)),
+    removeHandler: (channel) => ipcMain.removeHandler(channel),
+  };
+  return registerTrustedPackageModelInvokeIpcBridge({
+    host,
+    service,
+    registry,
+    modelBroker,
+    verifySender: isTrustedPackageMutationSender,
+  });
+};
+
 const registerProductionPackageAppGroupIpc = (): (() => void) => {
   const host: TrustedPackageAppGroupIpcHost<IpcMainInvokeEvent> = {
     handle: (channel, handler) => {
@@ -2088,7 +2424,9 @@ export type PackageManagerStoreReadRuntime = Readonly<{
   /** Main-only fresh lifecycle read; it is never exposed as an orchestration IPC. */
   status: (packageId: string) => Promise<PackageListing>;
   contributions: () => ReturnType<PackageManagerService['contributions']>;
-  onContributionsChanged: PackageManagerService['onContributionsChanged'];
+    onContributionsChanged: PackageManagerService['onContributionsChanged'];
+  /** Trusted Main listeners can observe package state for optional native-host lifecycles. */
+  onStateChanged: PackageManagerService['onStateChanged'];
   /**
    * Main-only C4 facts. The facade carries no mutation, install, purchase, or
    * renderer-selected runtime authority; an action coordinator must still bind
@@ -2153,12 +2491,53 @@ export const registerPackageManagerBridge = (
           deactivatePetPackageRuntime();
         },
       });
-      await petPackageActivationLifecycle.initialize();
+            await petPackageActivationLifecycle.initialize();
+      // Native Browser/IDE services are fixed trusted hosts, never loaded from an untrusted manifest.
+      // They activate only for a verified installed + enabled package and tear down before uninstall.
+      await browserPackageActivationLifecycle?.dispose();
+            browserPackageActivationLifecycle = createFixedPackageActivationLifecycle('com.tomni.browser', {
+        packages: service,
+        canActivate: (listing) => listing.installedTrust === 'signed-first-party' &&
+          listing.installedManifest?.id === 'com.tomni.browser' &&
+          listing.installedManifest.publisherId === 'com.tomni',
+        activate: async () => {
+          const runtime = await import('@process/browser/browserHostRuntime');
+          await runtime.activate({ getMainWindow: options.getMainWindow ?? (() => null) });
+        },
+        deactivate: async () => {
+          const runtime = await import('@process/browser/browserHostRuntime');
+          await runtime.deactivate();
+        },
+      });
+      await browserPackageActivationLifecycle.initialize();
+      await idePackageActivationLifecycle?.dispose();
+            idePackageActivationLifecycle = createFixedPackageActivationLifecycle('com.tomni.ide', {
+        packages: service,
+        canActivate: (listing) => listing.installedTrust === 'signed-first-party' &&
+          listing.installedManifest?.id === 'com.tomni.ide' &&
+          listing.installedManifest.publisherId === 'com.tomni',
+        activate: async () => {
+          const runtime = await import('@process/ideTerminal/ideTerminalRuntime');
+          await runtime.startIdeTerminalRuntime();
+        },
+        deactivate: async () => {
+          const runtime = await import('@process/ideTerminal/ideTerminalRuntime');
+          runtime.stopIdeTerminalRuntime();
+        },
+      });
+      await idePackageActivationLifecycle.initialize();
+      await mirrorPackageMcpServers(service);
+      // Connections: follow package changes, then drop what belongs to packages that are gone. Never fatal.
+      unsubscribeConnections?.();
+      unsubscribeConnections = getConnectionRuntime().follow();
+      // Code connections that wait for the one-time start-again approval are asked once the main window has loaded (bootstrap).
+      scheduleStartAgainApprovals(await getConnectionRuntime().start());
     })
     .catch((error: unknown): void => {
       initializationError = error;
       console.error('[PackagePlatform] Initialization failed:', error);
     });
+  packagePlatformReady = ready;
   const ensureReady = async (): Promise<void> => {
     await ready;
     if (initializationError) throw initializationError;
@@ -2208,6 +2587,12 @@ export const registerPackageManagerBridge = (
   });
   disposeCapabilityIpc?.();
   disposeCapabilityIpc = registerProductionPackageCapabilityIpc(service, getPackageRuntimeRegistry());
+  disposeModelInvokeIpc?.();
+  disposeModelInvokeIpc = registerProductionPackageModelInvokeIpc(
+    service,
+    getPackageRuntimeRegistry(),
+    getLocalModelInvocationBroker()
+  );
   disposeMicrosoftStoreNativeIpc?.();
   disposeMicrosoftStoreNativeIpc = registerProductionMicrosoftStoreNativeIpc(getMicrosoftStoreNativeRuntime());
   disposeAppGroupIpc?.();
@@ -2261,9 +2646,10 @@ export const registerPackageManagerBridge = (
   unsubscribe?.();
   unsubscribeContributions?.();
   unsubscribe = service.onStateChanged((event) => ipcBridge.packagePlatform.stateChanged.emit(event));
-  unsubscribeContributions = service.onContributionsChanged((event) =>
-    ipcBridge.packagePlatform.contributionsChanged.emit(event)
-  );
+  unsubscribeContributions = service.onContributionsChanged((event) => {
+    ipcBridge.packagePlatform.contributionsChanged.emit(event);
+    void ready.then(() => mirrorPackageMcpServers(service));
+  });
   return {
     ensureReady,
     list: (filter) => service.list(filter),
@@ -2272,7 +2658,8 @@ export const registerPackageManagerBridge = (
       return service.status(packageId);
     },
     contributions: () => service.contributions(),
-    onContributionsChanged: (listener) => service.onContributionsChanged(listener),
+        onContributionsChanged: (listener) => service.onContributionsChanged(listener),
+    onStateChanged: (listener) => service.onStateChanged(listener),
 
     surfaceAi: Object.freeze({
       getConsent: async (consentId) => {
@@ -2308,8 +2695,13 @@ export const registerPackageManagerBridge = (
 };
 
 export const disposePackageManagerBridge = (): void => {
+  void disposeConnectionRuntime();
   designViuPackageActivationLifecycle?.dispose();
-  void petPackageActivationLifecycle?.dispose();
+    void petPackageActivationLifecycle?.dispose();
+  void browserPackageActivationLifecycle?.dispose();
+    void idePackageActivationLifecycle?.dispose();
+  automationStudioBackgroundLifecycle = undefined;
+
 
   designViuMcpRuntimeSingleton?.dispose();
   designViuContributionManagerSingleton?.dispose();
@@ -2321,6 +2713,7 @@ export const disposePackageManagerBridge = (): void => {
   disposeMicrosoftStoreNativeIpc?.();
   disposeAppGroupIpc?.();
   unsubscribe?.();
+  unsubscribeConnections?.();
   disposePublisherSubmissionIpc?.();
   unsubscribeContributions?.();
   disposeMutationIpc = undefined;
@@ -2331,17 +2724,23 @@ export const disposePackageManagerBridge = (): void => {
   disposeMicrosoftStoreNativeIpc = undefined;
   disposeAppGroupIpc = undefined;
   unsubscribe = undefined;
+  unsubscribeConnections = undefined;
   disposePublisherSubmissionIpc = undefined;
   disposeDesignViuNativeIpc = undefined;
   designViuPackageActivationLifecycle = undefined;
 
-  petPackageActivationLifecycle = undefined;
+    petPackageActivationLifecycle = undefined;
+  browserPackageActivationLifecycle = undefined;
+  idePackageActivationLifecycle = undefined;
   unsubscribeContributions = undefined;
 };
 
 export const __resetPackageManagerBridgeForTests = (): void => {
   disposePackageManagerBridge();
   singleton = undefined;
+  localSigningKeysSingleton = undefined;
+  connectionRuntimeSingleton = undefined;
+  packagePlatformReady = undefined;
   runtimeRegistrySingleton = undefined;
   capabilityBrokerSingleton = undefined;
   surfaceAiRuntimeTransportRegistrySingleton = undefined;

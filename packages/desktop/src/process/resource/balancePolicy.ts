@@ -46,7 +46,8 @@ const ALL_TASK_KINDS: readonly TaskKind[] = [
   'ocr',
   'transcription',
   'docConvert',
-  'semanticIndex',
+    'semanticIndex',
+  'workflowTool',
 ];
 
 /**
@@ -61,7 +62,8 @@ const CPU_SCALABLE_KINDS: ReadonlySet<TaskKind> = new Set<TaskKind>([
   'ocr',
   'transcription',
   'docConvert',
-  'semanticIndex',
+    'semanticIndex',
+  'workflowTool',
 ]);
 
 /** Build a full `Record<TaskKind, number>` by evaluating `fn` for every kind. */
@@ -135,7 +137,8 @@ export const PRESET_DEFINITIONS: Record<ApplicablePreset, PresetDefinition> = {
       ocr: 1,
       transcription: 1,
       docConvert: 1,
-      semanticIndex: 1,
+            semanticIndex: 1,
+      workflowTool: 2,
     },
   },
   balanced: {
@@ -151,7 +154,8 @@ export const PRESET_DEFINITIONS: Record<ApplicablePreset, PresetDefinition> = {
       ocr: 2,
       transcription: 2,
       docConvert: 2,
-      semanticIndex: 2,
+            semanticIndex: 2,
+      workflowTool: 4,
     },
   },
   performance: {
@@ -167,7 +171,8 @@ export const PRESET_DEFINITIONS: Record<ApplicablePreset, PresetDefinition> = {
       ocr: 3,
       transcription: 3,
       docConvert: 3,
-      semanticIndex: 3,
+            semanticIndex: 3,
+      workflowTool: 8,
     },
   },
 };

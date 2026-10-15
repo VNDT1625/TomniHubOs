@@ -21,6 +21,7 @@ import ManagerPopup from './manager/ManagerPopup';
 import { openRoleChat } from './companySession';
 import { useCompanyState } from './useCompanyState';
 import { resumeInterruptedCompanyRuns } from './useCompanyPipeline';
+import { useCompanyLiveSessions } from './useCompanyLiveSessions';
 
 /**
  * Agent Company content (Requirement 3 — multi-tier agent company).
@@ -43,6 +44,7 @@ const CompanyPage: React.FC = () => {
   const navigate = useNavigate();
   const [starting, setStarting] = useState(false);
   const [managerOpen, setManagerOpen] = useState(false);
+  useCompanyLiveSessions();
   useEffect(() => {
     resumeInterruptedCompanyRuns();
   }, []);

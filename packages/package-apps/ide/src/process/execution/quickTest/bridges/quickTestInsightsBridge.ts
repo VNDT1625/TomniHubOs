@@ -160,7 +160,7 @@ const errorResult = (error: unknown): UnderstandResult<never> => ({
   error: error instanceof Error ? error.message : String(error),
   code: 'error',
 });
-const insightsDir = (rootPath: string): string => path.join(rootPath, '.omni', 'quick-test');
+const insightsDir = (rootPath: string): string => path.join(rootPath, '.tomni', 'quick-test');
 const mocksPath = (rootPath: string): string => path.join(insightsDir(rootPath), 'mock-rules.json');
 
 const readMocks = async (rootPath: string): Promise<MockRuleState> => {

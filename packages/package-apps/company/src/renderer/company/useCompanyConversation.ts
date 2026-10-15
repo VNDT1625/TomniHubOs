@@ -102,7 +102,7 @@ const emptyState = (): ConversationState => ({
 });
 
 /** sessionStorage key holding the per-company conversation state (reload survival). */
-const CONVERSATION_STATE_KEY = 'github.com/VNDT1625/OmniAgentpany.conversation.state';
+const CONVERSATION_STATE_KEY = 'tomny.company.conversation.state';
 
 /** Read the persisted state map from sessionStorage (safe; empty on failure). */
 const readPersisted = (): Record<string, ConversationState> => {

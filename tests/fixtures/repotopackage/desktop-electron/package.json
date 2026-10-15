@@ -1,0 +1,11 @@
+{
+  "name": "demo-hub",
+  "version": "0.2.0",
+  "private": true,
+  "main": "dist/main.js",
+  "build": {
+    "appId": "dev.example.demohub",
+    "productName": "Demo Hub",
+    "win": { "target": "nsis" }
+  }
+}

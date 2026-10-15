@@ -1,0 +1,30 @@
+{
+  "connections": [
+    {
+      "kind": "web-embed",
+      "id": "frontend",
+      "title": "frontend",
+      "process": {
+        "services": [
+          {
+            "id": "backend",
+            "cwd": "source/backend",
+            "setup": [["pip", "install", "-e", "."]],
+            "start": ["uvicorn", "app.main:app", "--port", "8000"],
+            "ready": { "port": 8000 }
+          },
+          {
+            "id": "frontend",
+            "cwd": "source/frontend",
+            "setup": [["npm", "install"]],
+            "start": ["npm", "run", "dev"],
+            "ready": { "port": 3000 }
+          }
+        ],
+        "embed": { "service": "frontend" }
+      },
+      "origin": "framework"
+    }
+  ],
+  "openItems": []
+}

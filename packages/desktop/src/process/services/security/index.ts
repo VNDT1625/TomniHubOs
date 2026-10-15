@@ -43,7 +43,12 @@ export type {
   SafeFinding,
 } from './types';
 
-export { LayaSidecarClient, getSharedLayaSidecarClient, createLayaSidecarPredictor } from './layaSidecarClient';
+export {
+  LayaSidecarClient,
+  getSharedLayaSidecarClient,
+  createLayaSidecarPredictor,
+  createLayaPipelinePredictor,
+} from './layaSidecarClient';
 export { createLayaSemanticEgressModel } from './layaSemanticEgressModel';
 
 export { createChatTemporarySecretStore } from './chatDataProtection';

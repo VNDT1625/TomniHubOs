@@ -1,4 +1,22 @@
 {
+  "assistantAgentMd": "agent.md",
+  "assistantPluginTitle": "Plugin",
+  "assistantPluginHint": "Máy chủ MCP và công cụ gói mà trợ lý này dùng trong các cuộc trò chuyện.",
+  "assistantPluginOther": "Khác",
+  "assistantPluginEmpty": "Chưa cài plugin nào.",
+  "assistantItemOff": "Tắt",
+  "assistantHookTitle": "Hook",
+  "assistantHookHint": "Hook chỉ chạy khi bạn đã duyệt và bật chúng. Chọn một hook không tự duyệt nó.",
+  "assistantHookInactive": "Chưa hoạt động",
+  "assistantHookNeedsApproval": "Cần duyệt",
+  "assistantHookEmpty": "Chưa có hook nào.",
+  "assistantBundleExport": "Xuất",
+  "assistantBundleImport": "Nhập",
+  "assistantBundleExportFailed": "Xuất thất bại ({{code}}).",
+  "assistantBundleImportFailed": "Nhập thất bại ({{code}}).",
+  "assistantBundleImported": "Đã tải trợ lý. Hãy kiểm tra rồi lưu.",
+  
+"oneClickFeedback": "Báo cáo",
   "personalSecrets": {
     "allowedHostnamesLabel": "Hostname trình duyệt được phép",
     "allowedHostnamesPlaceholder": "example.com",
@@ -6,6 +24,13 @@
     "allowedHostnamesInvalid": "Hãy nhập 1–20 hostname chính xác, không trùng và không có giao thức, đường dẫn, cổng hoặc ký tự đại diện.",
     "allowedHostnamesTagLabel": "Host được phép",
     "legacyTargetsMissing": "Chưa có host được phép — bị chặn cho đến khi chỉnh sửa",
+    "destinationsLabel": "Nơi app được nhập",
+    "destinationsDescription": "Chọn nơi app được phép gõ bộ secret này. Hostname chỉ cần khi chọn biểu mẫu web.",
+    "destinationBrowser": "Biểu mẫu web",
+    "destinationTerminal": "Terminal",
+    "destinationProcess": "Tiến trình / triển khai",
+    "destinationsRequired": "Hãy chọn ít nhất một nơi được phép dùng bộ secret.",
+    "destinationsTagLabel": "Được dùng ở",
     "nameRequired": "Hãy nhập tên cho bộ secret.",
     "variablesInvalid": "Mỗi biến cần có tên hợp lệ, không trùng và có nội dung.",
     "createdSuccess": "Đã tạo bộ secret.",
@@ -42,7 +67,38 @@
     "variableValuePlaceholder": "Nội dung bí mật",
     "removeVariableAria": "Xóa biến"
   },
-  "title": "Cài đặt",
+    "title": "Cài đặt",
+  "assistantPromptsTitle": "Gợi ý mẫu",
+  "assistantPromptPlaceholder": "Gợi ý mẫu",
+  "assistantPromptAdd": "Thêm gợi ý",
+  "assistantPromptRemove": "Xóa gợi ý",
+  "assistantPromptsLimit": "Tối đa {{count}} gợi ý mẫu.",
+  
+"backgroundSleep": {
+    "title": "Ngủ nền & dịch vụ",
+    "refresh": "Làm mới",
+    "explainer": "Đóng xuống khay sẽ tạm dừng media. Tác vụ đang chạy tiếp tục; dịch vụ độc lập được quản lý trong cài đặt riêng.",
+    "agents": "Tác vụ Agent",
+    "agentsDesc": "Tiếp tục hoàn tất dưới nền; controller nghỉ khi hết thời gian chờ.",
+    "automatic": "Tự động",
+    "mcp": "Cổng MCP Tool",
+    "mcpDesc": "Tiếp tục chạy khi Tomni ở khay hệ thống. Quyền truy cập từ xa cài riêng.",
+    "webui": "WebUI",
+    "webuiDesc": "Chỉ chạy khi được bật. Thiết lập truy cập và thông tin đăng nhập ban đầu trong cài đặt WebUI.",
+    "notifications": "Thông báo hệ thống",
+    "notificationsDesc": "Nhận thông báo hoàn tất tác vụ khi Tomni đang ẩn.",
+    "scheduler": "Tác vụ theo lịch",
+    "schedulerDesc": "Chạy trong tiến trình desktop khi Tomni còn ở khay hệ thống.",
+    "unknown": "Chưa rõ",
+    "running": "Đang chạy · Cài đặt",
+    "configure": "Cấu hình",
+    "metricsTitle": "Tài nguyên Electron đo được",
+        "cpuChange": "CPU trước / sau Sleep",
+    "ramChange":  "Thay đổi working set sau khi ngủ",
+    "currentRam": "Tổng working set hiện tại",
+    "notMeasured": "Chưa có lần đo Sleep hoàn tất",
+    "metricsDisclaimer": "Tổng working set các tiến trình Electron, không phải RAM vật lý duy nhất. Chưa tính sidecar độc lập. Đóng xuống khay rồi mở lại để xem so sánh."
+  },
   "skillsHub": {
     "title": "Kho kỹ năng",
     "description": "Quản lý tập trung kỹ năng tác nhân AI. Cài một lần, dùng cho tất cả trợ lý.",
@@ -93,7 +149,7 @@
   "assistantsList": "Trợ lý khả dụng",
   "assistantsEmpty": "Chưa cấu hình trợ lý nào.",
   "editAssistant": "Chi tiết trợ lý",
-  "assistantNameAvatar": "Tên \u0026 Ảnh đại diện",
+  "assistantNameAvatar": "Tên & Ảnh đại diện",
   "assistantDescription": "Mô tả trợ lý",
   "assistantDescriptionPlaceholder": "Trợ lý này có thể giúp gì?",
   "assistantPrompt": "Lời nhắc",
@@ -338,7 +394,7 @@
     "accessKeyId": "Access Key ID",
     "secretAccessKey": "Secret Access Key",
     "profile": "AWS Profile",
-    "profileHint": "Tên profile từ ~/.aws/config (ví dụ: \u0027default\u0027)",
+    "profileHint": "Tên profile từ ~/.aws/config (ví dụ: 'default')",
     "testConnection": "Kiểm tra kết nối",
     "connectionSuccess": "Kết nối thành công! Thông tin xác thực AWS hợp lệ.",
     "connectionFailed": "Kết nối thất bại. Vui lòng kiểm tra thông tin xác thực.",
@@ -351,6 +407,38 @@
   "fontSize": "Tỷ lệ",
   "fontSizeDescription": "Điều chỉnh mức thu phóng giao diện theo kích thước ưa thích.",
   "fontSizeReset": "Đặt lại thu phóng",
+  "wallpaper": {
+    "label": "Ảnh nền",
+    "description": "Dùng ảnh cá nhân phía sau giao diện kính. Ảnh chỉ lưu trên thiết bị này và tạo nền hiển thị ổn định.",
+    "select": "Chọn ảnh",
+    "change": "Đổi ảnh",
+    "remove": "Xóa ảnh",
+    "saved": "Đã lưu ảnh nền.",
+    "cleared": "Đã xóa ảnh nền.",
+    "invalidType": "Hãy chọn ảnh PNG, JPEG, WebP, GIF hoặc AVIF.",
+    "tooLarge": "Hãy chọn ảnh nhỏ hơn {{size}} MB.",
+    "saveError": "Không thể cập nhật ảnh nền."
+  },
+  "markdownColors": {
+    "label": "Màu chữ",
+    "description": "Màu cho tiêu đề, chữ đậm, liên kết, đường dẫn, mã nội tuyến và trích dẫn trong tin nhắn. Thay đổi áp dụng ngay và chỉ lưu trên thiết bị này.",
+    "resetAll": "Đặt lại tất cả",
+    "resetToken": "Đặt lại",
+    "previewLabel": "Xem trước",
+    "previewBody": "Chữ thường với",
+    "tokens": {
+      "h1": "Tiêu đề 1",
+      "h2": "Tiêu đề 2",
+      "h3": "Tiêu đề 3",
+      "text": "Chữ nội dung",
+      "bold": "Chữ đậm",
+      "link": "Liên kết",
+      "path": "Đường dẫn tệp",
+      "codeFg": "Chữ mã nội tuyến",
+      "codeBg": "Nền mã nội tuyến",
+      "quote": "Trích dẫn"
+    }
+  },
   "lightMode": "Sáng",
   "darkMode": "Tối",
   "devConsole": {
@@ -373,7 +461,222 @@
   "agent": "Tác nhân",
   "tools": "Công cụ",
   "capabilities": "Khả năng",
+  "hooks": {
+    "title": "Hooks",
+    "description": "Hook là chương trình nhỏ chạy khi có sự kiện trong cuộc trò chuyện. Hook chỉ chặn hoặc thêm ghi chú, không bao giờ cấp quyền. Mỗi hook cần bạn duyệt và được ghim theo đúng nội dung.",
+    "unavailable": "Hooks không khả dụng trong cửa sổ này.",
+    "dismiss": "Đóng thông báo",
+    "loading": "Đang tải hook…",
+    "refresh": "Làm mới",
+    "runAll": "Chạy hook",
+    "allOffNote": "Mọi hook đang tắt. Không hook nào bên dưới chạy, kể cả hook đã duyệt.",
+    "sourceSwitch": "Chạy hook từ nguồn này",
+    "source": {
+      "package": "Từ gói",
+      "user": "Do bạn tạo",
+      "workspace": "Từ workspace"
+    },
+    "sourceHint": {
+      "package": "Gói đã cài có thể kèm hook. Hook chạy dưới dạng chương trình kèm đối số, không qua shell.",
+      "user": "Hook bạn tự thêm. Chúng tắt cho đến khi bạn duyệt.",
+      "workspace": "Hook từ .claude/settings.json của một dự án. Chúng tắt cho đến khi bạn cho phép workspace đó và duyệt từng hook."
+    },
+    "sourceEmpty": "Chưa có hook nào.",
+    "status": {
+      "ready": "Đang bật",
+      "needs-approval": "Cần duyệt",
+      "needs-consent": "Workspace chưa được cho phép",
+      "stale": "Đã thay đổi, đang tắt",
+      "disabled": "Đang tắt",
+      "unsupported": "Chưa hỗ trợ",
+      "forbidden": "Không được phép"
+    },
+    "statusHint": {
+      "needs-approval": "Đọc xem nó sẽ chạy gì rồi duyệt.",
+      "needs-consent": "Hãy cho phép hook cho workspace này trước.",
+      "stale": "Lệnh hoặc script đã thay đổi sau khi bạn duyệt nên hook bị tắt. Hãy xem lại.",
+      "disabled": "Đã duyệt nhưng bạn đã tắt.",
+      "unsupported": "Sự kiện này chưa được hỗ trợ nên hook không bao giờ chạy.",
+      "forbidden": "Hook của gói phải là chương trình kèm đối số, không phải một dòng shell."
+    },
+    "inactiveBySwitch": "Một công tắc ở trên đang tắt nên hook này sẽ không chạy.",
+    "row": {
+      "event": "Sự kiện",
+      "matcher": "Bộ khớp",
+      "matchAll": "mọi thứ",
+      "timeout": "Giới hạn thời gian",
+      "seconds": "{{count}} giây",
+      "command": "Lệnh chính xác",
+      "runsExec": "Chạy trực tiếp chương trình “{{program}}” với {{count}} đối số. Không qua shell.",
+      "runsShell": "Chạy dòng này qua shell của bạn. Shell chạy được mọi thứ, hãy đọc kỹ.",
+      "form": {
+        "exec": "Chương trình",
+        "shell": "Dòng shell"
+      },
+      "approvedAt": "Đã duyệt {{time}}"
+    },
+    "action": {
+      "review": "Xem và duyệt",
+      "reapprove": "Xem lại",
+      "enable": "Bật",
+      "disable": "Tắt",
+      "remove": "Xóa"
+    },
+    "dialog": {
+      "title": "Duyệt hook này?",
+      "intro": "Nếu duyệt, hook này chạy trên máy bạn mỗi khi sự kiện xảy ra. Nó chỉ chặn hoặc thêm ghi chú, không bao giờ cấp quyền.",
+      "hashNote": "Sự đồng ý của bạn gắn với đúng nội dung này. Nếu lệnh hoặc script thay đổi, hook sẽ tắt cho đến khi bạn duyệt lại.",
+      "approve": "Duyệt",
+      "cancel": "Hủy",
+      "loading": "Đang đọc nội dung sẽ chạy…"
+    },
+    "line": {
+      "source": "Nguồn",
+      "plugin": "Gói",
+      "event": "Sự kiện",
+      "matcher": "Bộ khớp",
+      "form": "Loại",
+      "command": "Lệnh",
+      "args": "Đối số",
+      "timeout": "Giới hạn thời gian (giây)",
+      "file": "Tệp script nằm trong phần duyệt",
+      "unpinned": "Không nằm trong phần duyệt",
+      "network": "Mạng"
+    },
+    "networkUnrestricted": "Phiên bản này chưa chặn mạng: script có thể dùng mạng.",
+    "confirmTitle": "Duyệt hook",
+    "confirmApprove": "Hook này sẽ chạy trên máy bạn khi sự kiện xảy ra. Duyệt?",
+    "coverage": {
+      "title": "Hook công cụ chặn được gì",
+      "summary": "Hook công cụ chỉ chặn được mọi công cụ ở tác tử Tomny. Tác tử kết nối qua ACP chỉ được chặn khi chúng hỏi quyền (chế độ hỏi). Codex không bao giờ hỏi Tomny nên hook công cụ không chặn được.",
+      "ownHooks": "Một số tác tử còn chạy hook trong cấu hình riêng của chúng. Tomny không kiểm soát các hook đó.",
+      "agent": {
+        "tomny": "Tác tử Tomny",
+        "acpAsk": "Tác tử ACP, chế độ hỏi",
+        "acpAuto": "Tác tử ACP, chế độ khác",
+        "codex": "Codex",
+        "remote": "Tác tử từ xa"
+      },
+      "preLabel": "Trước khi chạy công cụ",
+      "postLabel": "Sau khi chạy công cụ",
+      "pre": {
+        "all-tools": "Chặn được mọi công cụ",
+        "permission-requests-only": "Chỉ chặn được công cụ có hỏi quyền",
+        "none": "Không chặn được công cụ"
+      },
+      "post": {
+        "result-text": "Thấy kết quả công cụ",
+        "metadata-only": "Chỉ thấy là công cụ đã chạy",
+        "none": "Không chạy"
+      }
+    },
+    "audit": {
+      "title": "Các lần chạy gần đây",
+      "empty": "Chưa có hook nào chạy.",
+      "note": "Chỉ lưu độ dài và mã. Không bao giờ lưu đầu vào hay đầu ra.",
+      "col": {
+        "time": "Thời gian",
+        "event": "Sự kiện",
+        "source": "Nguồn",
+        "hook": "Hook",
+        "decision": "Quyết định",
+        "exit": "Mã thoát",
+        "duration": "Thời lượng",
+        "result": "Kết quả"
+      },
+      "decision": {
+        "deny": "Từ chối công cụ",
+        "ask": "Hỏi bạn",
+        "block": "Chặn",
+        "stop": "Dừng lượt",
+        "none": "Không quyết định"
+      },
+      "timedOut": "Hết giờ",
+      "stale": "Đổi sau khi duyệt; đã tắt",
+      "ok": "Hoàn tất"
+    },
+    "create": {
+      "title": "Thêm hook của bạn",
+      "event": "Sự kiện",
+      "matcher": "Bộ khớp (tùy chọn)",
+      "matcherHint": "Mẫu tên công cụ cho các sự kiện công cụ. Để trống là mọi công cụ.",
+      "command": "Chương trình hoặc dòng lệnh",
+      "args": "Đối số, mỗi dòng một đối số",
+      "argsHint": "Để trống để chạy dòng lệnh qua shell thay vì chạy như một chương trình.",
+      "timeout": "Giới hạn thời gian (giây)",
+      "submit": "Thêm hook",
+      "note": "Hook mới tắt cho đến khi bạn xem và duyệt."
+    },
+    "done": {
+      "approved": "Đã duyệt và bật hook.",
+      "created": "Đã thêm hook. Hãy xem để duyệt.",
+      "removed": "Đã xóa hook."
+    },
+    "error": {
+      "DENIED": "Cửa sổ này không được phép thay đổi hook.",
+      "INVALID_REQUEST": "Định nghĩa hook không hợp lệ.",
+      "NOT_FOUND": "Hook này không còn nữa. Danh sách đã được làm mới.",
+      "CANCELLED": "Đã hủy duyệt. Không có gì thay đổi.",
+      "UNAVAILABLE": "Hook hiện không khả dụng.",
+      "UNSUPPORTED": "Sự kiện này chưa được hỗ trợ.",
+      "FORBIDDEN": "Không thể bật hoặc xóa hook này.",
+      "NEEDS_CONSENT": "Hãy cho phép hook cho workspace này trước.",
+      "HASH_MISMATCH": "Hook đã thay đổi từ lúc bạn đọc. Hãy xem lại.",
+      "APPROVAL_REQUIRED": "Hook này cần được duyệt lại trước.",
+      "IO_ERROR": "Không lưu được thay đổi. Hãy thử lại."
+    }
+  },
   "capabilitiesTab": {
+
+    "assistants": "Trợ lý",
+    "hooks": "Hook",
+    "plugins": "Plugin",
+    "pluginsDescription": "Máy chủ MCP và gói đã cài giúp Tomny có thêm công cụ.",
+    "packagesTitle": "Gói đã cài",
+    "packagesEmpty": "Chưa cài gói nào.",
+    "externalTitle": "Cho ứng dụng bên ngoài dùng Tomny",
+    "externalDescription": "Cho phép Claude Desktop, Cursor và ứng dụng khác gọi Tomny qua MCP.",
+    "removePlugin": "Gỡ plugin",
+    "removeConfirmTitle": "Xóa mục này?",
+    "removeConfirmContent": "\"{{name}}\" sẽ bị xóa. Không thể hoàn tác.",
+    "pluginBadge": "Plugin",
+    "explainer": "Plugin = một gói trọn bộ có thể gồm MCP + kỹ năng + hook + quy tắc. MCP = một máy chủ công cụ đơn lẻ. Tool schema = mô tả từng công cụ gửi cho mô hình.",
+    "tipPlugin": "Plugin = một gói trọn bộ có thể gồm MCP + kỹ năng + hook + quy tắc.",
+    "tipMcp": "MCP = một máy chủ công cụ đơn lẻ.",
+    "tipToolSchema": "Tool schema = mô tả từng công cụ gửi cho mô hình.",
+    "typeMcp": "MCP",
+    "builtinTitle": "Có sẵn của Tomny",
+    "builtinHint": "Máy chủ công cụ đi kèm Tomny. Chỉ hiện công tắc ở nơi có thể đổi tại đây.",
+    "builtinToolsCount": "{{count}} tool",
+    "builtinImageGenHint": "Bật hoặc tắt ở mục Tạo ảnh bên dưới.",
+    "builtinEmpty": "Không có máy chủ công cụ có sẵn nào.",
+    "builtinGroupOn": "Đang bật",
+    "builtinGroupAvailable": "Có sẵn / Chưa bật",
+    "builtinGroupEmptyOn": "Chưa có máy chủ nào đang bật.",
+    "builtinGroupEmptyAvailable": "Tất cả máy chủ có sẵn đã được bật.",
+    "builtinToggleAria": "Bật hoặc tắt {{name}}",
+
+    "hubTabAvailable": "Có sẵn",
+    "hubTabInstalled": "Đã cài",
+    "hubTabCustom": "Tùy chỉnh",
+    "hubSearchPlaceholder": "Tìm theo tên hoặc mô tả",
+    "hubFilterAll": "Tất cả",
+    "hubNoMatch": "Không có mục nào khớp tìm kiếm hoặc bộ lọc.",
+    "hubEmptyCustom": "Bạn chưa có MCP server tùy chỉnh nào. Thêm bên dưới.",
+    "hubCustomHint": "MCP server do bạn tự thêm. Server thuộc plugin nằm ở tab Đã cài.",
+    "hubAutoStartCaption": "Tự bật lại khi Tomny mở, nếu việc duyệt vẫn còn hiệu lực.",
+    "hubDetails": "Xem",
+    "hubCollapse": "Ẩn",
+    "hubEnableAria": "Bật hoặc tắt {{name}}",
+    "statusOn": "Đang bật",
+    "statusOff": "Đang tắt",
+    "userMcpTitle": "MCP server của bạn",
+    "installedPluginsTitle": "Plugin đã cài",
+    "fromPluginSkills": "Từ plugin: {{name}} · {{count}} kỹ năng",
+    "fromPluginHooks": "Từ plugin: {{name}} · {{count}} hook",
+    "manageInPlugin": "Quản lý trong plugin",
+    "pluginGroupNote": "Bật hoặc tắt theo plugin. Mục này không có công tắc riêng.",
+    "viewSkill": "Xem",
     "skills": "Kỹ năng",
     "tools": "Công cụ"
   },
@@ -512,7 +815,7 @@
     "copyMcpConfig": "Sao chép cấu hình MCP"
   },
   "personalProfile": {
-    "title": "Hồ sơ cá nhân",
+    "title": "Hồ sơ người dùng",
     "description": "Giúp AI hiểu rõ bạn là ai để đặt câu hỏi phù hợp, cá nhân hóa quyết định và không bắt bạn lặp lại thông tin đã biết.",
     "actions": {
       "save": "Lưu thay đổi",
@@ -659,15 +962,15 @@
       }
     },
     "messages": {
-      "loadError": "Không thể tải hồ sơ cá nhân.",
-      "saveSuccess": "Đã lưu hồ sơ cá nhân.",
-      "saveError": "Không thể lưu hồ sơ cá nhân."
+      "loadError": "Không thể tải hồ sơ người dùng.",
+      "saveSuccess": "Đã lưu hồ sơ người dùng.",
+      "saveError": "Không thể lưu hồ sơ người dùng."
     },
     "understanding": {
       "title": "Hiểu người dùng",
-      "description": "Các sở thích đã xác nhận được lưu trong hồ sơ cá nhân cục bộ hiện có và chỉ dùng khi phù hợp với công việc.",
+      "description": "Các sở thích đã xác nhận được lưu trong hồ sơ người dùng cục bộ hiện có và chỉ dùng khi phù hợp với công việc.",
       "confirm": "Xác nhận sở thích",
-      "explanation": "Các sở thích đã xác nhận được lưu trong hồ sơ cá nhân cục bộ hiện có và chỉ dùng khi phù hợp với công việc.",
+      "explanation": "Các sở thích đã xác nhận được lưu trong hồ sơ người dùng cục bộ hiện có và chỉ dùng khi phù hợp với công việc.",
       "localOnly": "Chỉ lưu trên máy",
       "userControlled": "Bạn kiểm soát dữ liệu",
       "appliedToWork": "Dùng khi phù hợp",
@@ -678,7 +981,7 @@
   "groupAccount": "Tài khoản",
   "groupGeneral": "Hệ thống",
   "groupOther": "Khác",
-  "tabProfile": "Hồ sơ cá nhân",
+  "tabProfile": "Hồ sơ người dùng",
   "tabBilling": "Gói cước & Chi tiêu",
   "tabPersonal": "Cá nhân hóa",
   "tabAiCore": "AI Core",
@@ -693,7 +996,7 @@
   "tabSystem": "Cấu hình chung",
   "tabAbout": "Giới thiệu",
   "profileSettings": {
-    "title": "Hồ sơ cá nhân",
+    "title": "Hồ sơ người dùng",
     "localVerified": "Xác thực cục bộ",
     "admin": "Quản trị viên",
     "machineId": "ID máy",
@@ -715,7 +1018,8 @@
     "clearHistoryTitle": "Xóa sạch lịch sử trò chuyện",
     "clearHistoryDesc": "Hành động này sẽ giải phóng dung lượng và xóa toàn bộ các đoạn hội thoại trên máy.",
     "clearHistoryBtn": "Xóa lịch sử",
-    "historyClearedNotice": "Đã xóa sạch lịch sử trò chuyện cục bộ."
+    "historyClearedNotice": "Đã xóa sạch lịch sử trò chuyện cục bộ.",
+    "noAccount": "Chưa đăng nhập"
   },
   "billingSettings": {
     "title": "Gói cước & Chi tiêu",
@@ -763,7 +1067,16 @@
     "dualModelDesc": "Dùng một agent riêng biệt chuyên tìm side-effect và bảo mật để review git diff trước khi áp dụng.",
     "autoRollbackTitle": "Số lần tự sửa tối đa trước khi hỏi người dùng (Auto Rollback)",
     "autoRollbackDesc": "Nếu test thất bại, tự động nạp stack trace ngược lại cho AI tự sửa trước khi dừng lại.",
-    "triesUnit": "lần"
+    "triesUnit": "lần",
+    "defaultChainTitle": "Dây chuyền chat mặc định",
+    "defaultChainDesc": "Các bước mỗi tin nhắn đi qua trước và sau khi mô hình trả lời.",
+    "editDefault": "Sửa dây chuyền mặc định",
+    "stageOn": "Bật",
+    "stageOff": "Tắt",
+    "chainOff": "Dây chuyền đang tắt: tin nhắn đi thẳng tới mô hình.",
+    "loadFailed": "Không tải được dây chuyền.",
+    "perConversationHint": "Mỗi cuộc trò chuyện có thể đổi riêng bằng nút Dây chuyền trong ô chat; thay đổi được lưu lại sau khi khởi động lại.",
+    "plannedNotice": "Các lớp kiểm tra code bên dưới đang được lên kế hoạch, chưa nối vào luồng chat nên chưa bật được."
   },
   "aiConfigSettings": {
     "title": "Cấu hình AI",
@@ -795,7 +1108,11 @@
     "ramAlertDesc": "Báo động sớm để tránh hiện tượng tràn bộ nhớ khi chạy nhiều model hoặc browser sub-tab cùng lúc.",
     "quietHoursTitle": "Giờ Yên Tĩnh (Quiet Hours / Do Not Disturb)",
     "focusModeTitle": "Bật chế độ tập trung",
-    "focusModeDesc": "Tắt toàn bộ âm thanh và banner không khẩn cấp trong khung giờ làm việc tập trung."
+    "focusModeDesc": "Tắt toàn bộ âm thanh và banner không khẩn cấp trong khung giờ làm việc tập trung.",
+    "sourcesHint": "Hộp thư, nguồn tin và trang web gửi thông báo được quản lý trong trung tâm thông báo.",
+    "openCenter": "Mở trung tâm thông báo",
+    "quietFrom": "Từ",
+    "quietTo": "đến"
   },
   "privacySecuritySettings": {
     "title": "Bảo mật & Quyền riêng tư",
@@ -812,6 +1129,17 @@
     "loopback": "Loopback",
     "auditTitle": "Nhật Ký Kiểm Toán (Audit Trail)",
     "auditDesc": "Theo dõi toàn bộ lệnh bash, file đã bị thay đổi và token tiêu thụ của mọi phiên làm việc.",
+    "workspaceAccessTitle": "Workspace đã cấp phép",
+    "workspaceAccessDesc": "Những thư mục bạn đã chọn được ghi nhớ trên thiết bị này. Gỡ một mục để không còn hiện trong lựa chọn workspace.",
+    "workspaceAccessEmpty": "Chưa có workspace nào được cấp phép.",
     "viewAuditLog": "Xem Audit Log"
-  }
+  },
+  "notActive": {
+    "title": "Chưa hoạt động",
+    "aiConfig": "Các tham số này chưa được gửi tới mô hình nên chưa có tác dụng.",
+    "privacy": "Các công tắc ở đây chưa điều khiển gì. Việc che bí mật và kiểm tra dữ liệu gửi ra ngoài luôn bật và không thể tắt; chế độ YOLO được chọn riêng cho từng cuộc trò chuyện.",
+    "profile": "Ở đây mới chỉ đăng xuất là chạy thật. Đồng bộ, từ chối dùng dữ liệu để huấn luyện, xuất dữ liệu và xoá lịch sử chưa được nối, nên đang tắt.",
+    "billing": "Tomny chưa đếm token hay chi phí, nên không hiển thị gói, mức dùng hay giới hạn chi tiêu. Nhà cung cấp model tính tiền trực tiếp với bạn."
+  },
+  "mcpInAppNotice": "Danh sách này chỉ hiện MCP server do bạn kết nối hoặc tạo từ một repo. Công cụ tích hợp sẵn trong TomniHubOS (tomny_*) được chọn theo Surface và không phải MCP connector."
 }

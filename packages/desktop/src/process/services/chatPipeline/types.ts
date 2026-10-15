@@ -8,20 +8,31 @@ import type {
   ChatPipelineDefinition,
   ChatPipelineStageRef,
   ChatStageMetadata,
+  DecisionTaskId,
+  PipelineModelCallTrace,
+  PipelineRunTrace,
   PipelineSimulationResult,
   PipelineStageMetric,
+  PipelineStageTrace,
   StageDecision,
   StagePhase,
+  StageRole,
 } from '@/common/types/pipeline';
+import type { DecisionSession } from './decisionSession';
 
 export type {
   ChatPipelineDefinition,
   ChatPipelineStageRef,
   ChatStageMetadata,
+  DecisionTaskId,
+  PipelineModelCallTrace,
+  PipelineRunTrace,
   PipelineSimulationResult,
   PipelineStageMetric,
+  PipelineStageTrace,
   StageDecision,
   StagePhase,
+  StageRole,
 };
 
 export type ChatStageInput = Readonly<{
@@ -35,6 +46,8 @@ export type ChatStageInput = Readonly<{
   config?: Record<string, unknown>;
   signal?: AbortSignal;
   isDryRun?: boolean;
+  /** Shared decision model for this run. Absent when no model is connected; stages then use their fallback. */
+  decision?: DecisionSession;
 }>;
 
 export type ChatStageOutput = Readonly<{
@@ -55,6 +68,12 @@ export interface IChatStage {
   readonly icon?: string;
   readonly defaultEnabled: boolean;
   readonly defaultTimeoutMs?: number;
+  /** Main-vetted builtin with idempotent, read-only execution; only these may retry transient failures. */
+  readonly retrySafe?: boolean;
+  /** `guard` stages fail closed. Defaults to `standard`. */
+  readonly role?: StageRole;
+  /** Tasks asked of the shared decision model; the first request answers all planned tasks at once. */
+  readonly decisionTasks?: readonly DecisionTaskId[];
   execute(input: ChatStageInput): Promise<ChatStageOutput>;
 }
 
@@ -65,6 +84,8 @@ export type StageExecutionTelemetry = Readonly<{
   durationMs: number;
   evidence?: Record<string, unknown>;
   error?: string;
+  /** Model calls (and cache hits) this stage made, by id. */
+  modelCallIds?: readonly string[];
 }>;
 
 export type PipelineExecutionResult = Readonly<{
@@ -77,6 +98,7 @@ export type PipelineExecutionResult = Readonly<{
   executedStages: readonly StageExecutionTelemetry[];
   blockedReasonCode?: string;
   totalDurationMs: number;
+  modelCalls?: readonly PipelineModelCallTrace[];
 }>;
 
 export type SimulatePipelineParams = Readonly<{

@@ -177,4 +177,49 @@ describe('native MCP bootstrap lifecycle', () => {
     expect(result.registered).toEqual(['healthy']);
     expect(result.failed).toEqual([{ name: 'broken', error: 'port unavailable' }]);
   });
+
+  it('creates chrome-devtools enabled, and a later startup never reverts a user switch', async () => {
+    mocks.registry.list.mockResolvedValueOnce([]);
+    await ensureNativeDefaultMcpServers();
+    const drafts = mocks.registry.importMany.mock.calls.map(([batch]) => batch[0] as Partial<IMcpServer>);
+    expect(drafts.find((draft) => draft.name === 'chrome-devtools')?.enabled).toBe(true);
+    expect(drafts.find((draft) => draft.name === BUILTIN_IMAGE_GEN_NAME)?.enabled).toBe(false);
+
+    const userTurnedOff: IMcpServer = {
+      id: 'chrome-1',
+      name: 'chrome-devtools',
+      description: 'old',
+      enabled: false,
+      builtin: true,
+      transport: { type: 'stdio', command: 'npx', args: ['-y', 'chrome-devtools-mcp@0.0.1'] },
+      original_json: '{}',
+      created_at: 1,
+      updated_at: 1,
+    };
+    mocks.registry.list.mockResolvedValueOnce([userTurnedOff]);
+    await ensureNativeDefaultMcpServers();
+
+    expect(mocks.registry.update).toHaveBeenCalledWith('chrome-1', expect.anything());
+    expect(mocks.registry.toggle).not.toHaveBeenCalledWith('chrome-1');
+    const update = mocks.registry.update.mock.calls.find(([id]) => id === 'chrome-1')?.[1];
+    expect(update).not.toHaveProperty('enabled');
+  });
+
+  it('keeps the image-generation server forced off even when a legacy row is enabled', async () => {
+    const legacyImage: IMcpServer = {
+      id: 'image-1',
+      name: BUILTIN_IMAGE_GEN_NAME,
+      description: 'legacy',
+      enabled: true,
+      builtin: true,
+      transport: { type: 'stdio', command: 'node', args: ['legacy.js'] },
+      original_json: '{}',
+      created_at: 1,
+      updated_at: 1,
+    };
+    mocks.registry.list.mockResolvedValueOnce([legacyImage]);
+    await ensureNativeDefaultMcpServers();
+
+    expect(mocks.registry.toggle).toHaveBeenCalledWith('image-1');
+  });
 });

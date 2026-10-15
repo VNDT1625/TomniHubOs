@@ -5,6 +5,7 @@
  */
 
 import { ipcBridge } from '@/common';
+import type { WorkspaceReferenceRequest } from '@/common/chat/workspaceReference';
 import { isBackendHttpError } from '@/common/adapter/httpBridge';
 import type { AgentStreamErrorInfo } from '@/common/chat/chatLib';
 import type { TMessage } from '@/common/chat/chatLib';
@@ -74,6 +75,9 @@ export const useAcpInitialMessage = ({
         const initialMessage = JSON.parse(storedMessage);
         const input = typeof initialMessage.input === 'string' ? initialMessage.input : '';
         const files = Array.isArray(initialMessage.files) ? initialMessage.files : [];
+        const workspace_references = Array.isArray(initialMessage.workspace_references)
+          ? (initialMessage.workspace_references as WorkspaceReferenceRequest[])
+          : undefined;
         const displayMessage = buildDisplayMessage(input, files, workspacePath || '');
 
         setAiProcessing(true);
@@ -96,6 +100,7 @@ export const useAcpInitialMessage = ({
           input: outgoingMessage,
           conversation_id: conversation_id,
           files,
+          workspace_references,
         });
 
         // Use add=false (compose mode) so composeMessageWithIndex can de-dup

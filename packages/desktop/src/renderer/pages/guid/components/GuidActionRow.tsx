@@ -7,6 +7,7 @@
 import { ipcBridge } from '@/common';
 import type { IMcpServer } from '@/common/config/storage';
 import AgentModeSelector from '@/renderer/components/agent/AgentModeSelector';
+import { rememberApprovedWorkspace } from '@/renderer/components/workspace';
 import { supportsModeSwitch, type AgentModeOption } from '@/renderer/utils/model/agentModes';
 import { useLayoutContext } from '@/renderer/hooks/context/LayoutContext';
 import { getCleanFileNames, FileService } from '@/renderer/services/FileService';
@@ -15,7 +16,11 @@ import { isElectronDesktop } from '@/renderer/utils/platform';
 import type { AvailableAgent } from '../types';
 import type { Assistant } from '@/common/types/agent/assistantTypes';
 import PresetAgentTag, { type AgentSwitcherItem } from './PresetAgentTag';
-import { Button, Checkbox, Dropdown, Menu, Message, Tooltip } from '@arco-design/web-react';
+import AssistantPickerButton, {
+  type AssistantPickerButtonProps,
+} from '@/renderer/components/agent/AssistantPickerButton';
+import ToolsSelectMenu from '@/renderer/components/media/attachMenu/ToolsSelectMenu';
+import { Button, Dropdown, Menu, Message, Tooltip } from '@arco-design/web-react';
 import {
   ArrowUp,
   Code,
@@ -28,7 +33,6 @@ import {
   Plus,
   Robot,
   Shield,
-  UploadOne,
 } from '@icon-park/react';
 import React, { useCallback, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -37,7 +41,7 @@ import styles from '../index.module.css';
 type GuidActionRowProps = {
   // File handling
   files: string[];
-  onFilesUploaded: (paths: string[]) => void;
+  onFilesUploaded: (paths: string[], selections?: ReadonlyArray<{ attachmentId: string; path: string }>) => void;
 
   // Model selector node (rendered by parent)
   modelSelectorNode: React.ReactNode;
@@ -56,6 +60,8 @@ type GuidActionRowProps = {
    * the ACP engine-config list (custom agents from the AgentRegistry).
    */
   assistants: Assistant[];
+  /** Chat-bar assistant picker button. Omitted when the host does not offer assistants. */
+  assistantPicker?: AssistantPickerButtonProps;
   localeKey: string;
   onClosePresetTag: () => void;
   agentLogo?: string | null;
@@ -71,6 +77,9 @@ type GuidActionRowProps = {
   mcpServers: IMcpServer[];
   selectedMcpServerIds: string[];
   onToggleMcpServer: (serverId: string) => void;
+  /** Auto mode for the tools menu; the switch row renders only when onToggleAutoSelect is provided. */
+  autoSelect?: boolean;
+  onToggleAutoSelect?: () => void;
 
   /** Whether the Browser-Control (Super) server is registered/available. */
   superAvailable?: boolean;
@@ -84,6 +93,10 @@ type GuidActionRowProps = {
   onOpenCapabilities?: () => void;
   onOpenCodeApp?: () => void;
   onSelectWorkspace?: (dir: string) => void;
+
+  attachmentCount?: number;
+  attachmentExpanded?: boolean;
+  onToggleAttachments?: () => void;
 
   // Send button
   loading: boolean;
@@ -101,6 +114,7 @@ const GuidActionRow: React.FC<GuidActionRowProps> = ({
   selectedMode,
   onModeSelect,
   is_presetAgent,
+  assistantPicker,
   selectedAgentInfo,
   assistants,
   localeKey,
@@ -115,6 +129,8 @@ const GuidActionRow: React.FC<GuidActionRowProps> = ({
   mcpServers,
   selectedMcpServerIds,
   onToggleMcpServer,
+  autoSelect = false,
+  onToggleAutoSelect,
   superAvailable = false,
   superEnabled = false,
   onToggleSuper,
@@ -124,6 +140,9 @@ const GuidActionRow: React.FC<GuidActionRowProps> = ({
   onOpenCodeApp,
   onSelectWorkspace,
   hidePresetTag = false,
+  attachmentCount = 0,
+  attachmentExpanded = false,
+  onToggleAttachments,
   loading,
   isButtonDisabled,
   speechInputNode,
@@ -167,11 +186,6 @@ const GuidActionRow: React.FC<GuidActionRowProps> = ({
 
   const isWebUI = !isElectronDesktop();
 
-  const isSkillChecked = (skill: { name: string; isAuto: boolean }) =>
-    skill.isAuto ? !disabledBuiltinSkills.includes(skill.name) : enabledSkills.includes(skill.name);
-
-  const activeSkillCount = allSkills.filter(isSkillChecked).length;
-  const activeMcpCount = selectedMcpServerIds.length;
   const currentAgentItem = agentSwitcherItems?.find((item) => item.isCurrent) ?? agentSwitcherItems?.[0];
 
   const combinedAgentModelMenu =
@@ -212,137 +226,54 @@ const GuidActionRow: React.FC<GuidActionRowProps> = ({
       .invoke({ properties: ['openDirectory'] })
       .then((directories) => {
         const selectedDirectory = directories?.[0];
-        if (selectedDirectory) onSelectWorkspace?.(selectedDirectory);
+        if (selectedDirectory) {
+          rememberApprovedWorkspace(selectedDirectory);
+          onSelectWorkspace?.(selectedDirectory);
+        }
       })
       .catch((error) => {
         console.error('Failed to open workspace dialog:', error);
       });
   }, [onSelectWorkspace]);
 
-  const menuContent = (
-    <Menu
-      className='min-w-200px'
-      onClickMenuItem={(key) => {
-        if (key === 'file') {
-          ipcBridge.dialog.showOpen
-            .invoke({ properties: ['openFile', 'multiSelections'] })
-            .then((uploadedFiles) => {
-              if (uploadedFiles && uploadedFiles.length > 0) {
-                onFilesUploaded(uploadedFiles);
-              }
-            })
-            .catch((error) => {
-              console.error('Failed to open file dialog:', error);
-            });
-        } else if (key === 'device') {
-          fileInputRef.current?.click();
-        }
-      }}
-    >
-      {isWebUI ? (
-        <>
-          <Menu.Item key='file'>
-            <div className='flex items-center gap-8px'>
-              <UploadOne theme='outline' size='16' fill={iconColors.secondary} style={{ lineHeight: 0 }} />
-              <span>{t('common.fileAttach.addFiles')}</span>
-            </div>
-          </Menu.Item>
-          <Menu.Item key='device'>
-            <div className='flex items-center gap-8px'>
-              <UploadOne theme='outline' size='16' fill={iconColors.secondary} style={{ lineHeight: 0 }} />
-              <span>{t('common.fileAttach.myDevice')}</span>
-            </div>
-          </Menu.Item>
-        </>
-      ) : (
-        <Menu.Item key='file'>
-          <div className='flex items-center gap-8px'>
-            <UploadOne theme='outline' size='16' fill={iconColors.secondary} style={{ lineHeight: 0 }} />
-            <span>{t('common.fileAttach.addFiles')}</span>
-          </div>
-        </Menu.Item>
-      )}
-      {allSkills.length > 0 && (
-        <Menu.SubMenu
-          key='skills'
-          title={
-            <div className='flex items-center gap-8px'>
-              <Lightning theme='filled' size='16' fill={iconColors.primary} style={{ lineHeight: 0 }} />
-              <span>
-                {t('settings.capabilitiesTab.skills')} ({activeSkillCount}/{allSkills.length})
-              </span>
-            </div>
+  const handleAddFiles = useCallback(() => {
+    const selectFiles = isWebUI
+      ? ipcBridge.dialog.showOpen
+          .invoke({ properties: ['openFile', 'multiSelections'] })
+          .then((paths) => {
+            if (paths?.length) onFilesUploaded(paths);
+          })
+      : ipcBridge.fs.attachmentSelect.invoke({}).then((selections) => {
+          if (selections.length > 0) {
+            onFilesUploaded(
+              selections.map((selection) => selection.path),
+              selections
+            );
           }
-          triggerProps={{
-            popupStyle: {
-              maxHeight: 360,
-              overflowY: 'auto',
-              overflowX: 'hidden',
-            },
-          }}
-        >
-          {allSkills.map((skill) => (
-            <Menu.Item
-              key={`skill-${skill.name}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                onToggleSkill(skill.name, skill.isAuto);
-              }}
-            >
-              <Checkbox
-                checked={isSkillChecked(skill)}
-                onClick={(e: React.MouseEvent) => e.stopPropagation()}
-                onChange={() => onToggleSkill(skill.name, skill.isAuto)}
-              >
-                <span className='text-13px'>{skill.name}</span>
-              </Checkbox>
-            </Menu.Item>
-          ))}
-        </Menu.SubMenu>
-      )}
-      {mcpServers.length > 0 && (
-        <Menu.SubMenu
-          key='mcp'
-          title={
-            <div className='flex items-center gap-8px'>
-              <Shield theme='outline' size='16' fill={iconColors.primary} style={{ lineHeight: 0 }} />
-              <span>
-                {t('mcp.label')} ({activeMcpCount}/{mcpServers.length})
-              </span>
-            </div>
-          }
-          triggerProps={{
-            popupStyle: {
-              maxHeight: 360,
-              overflowY: 'auto',
-              overflowX: 'hidden',
-            },
-          }}
-        >
-          {mcpServers.map((server) => (
-            <Menu.Item
-              key={`mcp-${server.id}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                onToggleMcpServer(server.id);
-              }}
-            >
-              <Checkbox
-                checked={selectedMcpServerIds.includes(server.id)}
-                onClick={(e: React.MouseEvent) => e.stopPropagation()}
-                onChange={() => onToggleMcpServer(server.id)}
-              >
-                <span className='text-13px'>
-                  {server.name}
-                  {server.tools?.length ? ` (${server.tools.length} ${t('mcp.tools')})` : ''}
-                </span>
-              </Checkbox>
-            </Menu.Item>
-          ))}
-        </Menu.SubMenu>
-      )}
-    </Menu>
-  );
+        });
+    void selectFiles.catch((error) => {
+      console.error('Failed to open file dialog:', error);
+    });
+  }, [isWebUI, onFilesUploaded]);
+
+  const handleMyDevice = useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
+
+  /** Shared by the "+" and "..." triggers: one click-only menu with skill and MCP columns. */
+  const toolsMenuProps = {
+    allSkills,
+    disabledBuiltinSkills,
+    enabledSkills,
+    onToggleSkill,
+    mcpServers,
+    selectedMcpServerIds,
+    onToggleMcpServer,
+    onAddFiles: handleAddFiles,
+    onMyDevice: isWebUI ? handleMyDevice : undefined,
+    autoSelect,
+    onToggleAutoSelect,
+  };
 
   if (variant === 'hub') {
     return (
@@ -361,6 +292,7 @@ const GuidActionRow: React.FC<GuidActionRowProps> = ({
               size='small'
               type='primary'
               className={styles.actionHubSuper}
+              data-spotlight-id='super'
               icon={<Lightning theme={superEnabled ? 'filled' : 'outline'} size='14' />}
               onClick={superAvailable ? onToggleSuper : onOpenCapabilities}
             >
@@ -411,6 +343,7 @@ const GuidActionRow: React.FC<GuidActionRowProps> = ({
         </div>
 
         <div className={styles.actionHubSecondary}>
+          {assistantPicker && <AssistantPickerButton {...assistantPicker} />}
           <Tooltip content={t('guid.hubHome.shell.nav.company')}>
             <Button
               type='text'
@@ -455,7 +388,7 @@ const GuidActionRow: React.FC<GuidActionRowProps> = ({
               aria-label={t('guid.workspace.specifyWorkspace')}
             />
           </Tooltip>
-          <Dropdown trigger='hover' droplist={menuContent}>
+          <ToolsSelectMenu {...toolsMenuProps}>
             <Button
               type='text'
               shape='circle'
@@ -464,7 +397,7 @@ const GuidActionRow: React.FC<GuidActionRowProps> = ({
               icon={<More theme='outline' size='15' fill='currentColor' />}
               aria-label={t('guid.hubHome.shell.more')}
             />
-          </Dropdown>
+          </ToolsSelectMenu>
           {isWebUI && (
             <input
               ref={fileInputRef}
@@ -473,6 +406,23 @@ const GuidActionRow: React.FC<GuidActionRowProps> = ({
               style={{ display: 'none' }}
               onChange={handleLocalFileChange}
             />
+          )}
+          {attachmentCount > 0 && onToggleAttachments && (
+            <button
+              type='button'
+              className='attachment-inventory__toggle'
+              onClick={onToggleAttachments}
+              aria-expanded={attachmentExpanded}
+              aria-controls='attachment-inventory-rail'
+              aria-label={t(
+                attachmentExpanded
+                  ? 'common.attachmentQuickView.hideAttachments'
+                  : 'common.attachmentQuickView.showAttachments',
+                { count: attachmentCount }
+              )}
+            >
+              📎 {attachmentCount} {attachmentExpanded ? '⌃' : '⌄'}
+            </button>
           )}
           {speechInputNode}
           <Button
@@ -495,7 +445,7 @@ const GuidActionRow: React.FC<GuidActionRowProps> = ({
     <div className={styles.actionRow}>
       <div className={styles.actionTools}>
         <div className={styles.actionEntry}>
-          <Dropdown trigger='hover' onVisibleChange={setIsPlusDropdownOpen} droplist={menuContent}>
+          <ToolsSelectMenu {...toolsMenuProps} onVisibleChange={setIsPlusDropdownOpen}>
             <span className='flex items-center gap-4px cursor-pointer lh-[1]'>
               <Button
                 type='secondary'
@@ -515,7 +465,7 @@ const GuidActionRow: React.FC<GuidActionRowProps> = ({
                 </Tooltip>
               )}
             </span>
-          </Dropdown>
+          </ToolsSelectMenu>
           {isWebUI && (
             <input
               ref={fileInputRef}
@@ -557,6 +507,7 @@ const GuidActionRow: React.FC<GuidActionRowProps> = ({
           </div>
         )}
 
+        {assistantPicker && <AssistantPickerButton {...assistantPicker} />}
         {!hidePresetTag && is_presetAgent && selectedAgentInfo && (
           <div className={styles.actionPresetAgent}>
             <PresetAgentTag

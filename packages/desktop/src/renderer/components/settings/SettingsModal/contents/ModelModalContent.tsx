@@ -414,7 +414,7 @@ const ModelModalContent: React.FC = () => {
             </div>
           )}
         </div>
-        <div className='flex items-center gap-8px'>
+        <div className='flex flex-wrap items-center gap-8px'>
           <Button
             size='small'
             type={connectionView === 'direct' ? 'primary' : 'outline'}

@@ -140,6 +140,11 @@ export type SuperMemoryRecall = {
   pinned: SuperMemoryItem[];
   /** The most relevant recent / matching notes, within the recall token budget. */
   recent: SuperMemoryItem[];
+  /**
+   * The newest ordinary notes that were asked for with `latest`. They are already part of `recent`; callers
+   * that filter `recent` by relevance keep these, because a short follow-up ("do it") has nothing to match.
+   */
+  latest: SuperMemoryItem[];
   /** Secret KEY names available this session (values fetched via getSecret only). */
   secretKeys: string[];
   /** Estimated tokens of the returned block (so callers can verify it stays lean). */
@@ -232,8 +237,13 @@ export type RememberResult = {
 export type ISessionMemoryStore = {
   /** Record a note; de-dups against near-identical notes and auto-compacts at budget. */
   remember(sessionId: string, input: RememberInput): Promise<RememberResult>;
-  /** Read back a compact, token-bounded context block (summaries + pinned + relevant). */
-  recall(sessionId: string, opts?: { query?: string; limit?: number }): SuperMemoryRecall;
+  /**
+   * Read back a compact, token-bounded context block (summaries + pinned + relevant). `latest` always includes
+   * that many of the newest ordinary notes, whatever their relevance to the query.
+   */
+  recall(sessionId: string, opts?: { query?: string; limit?: number; latest?: number }): SuperMemoryRecall;
+  /** Change the budgets at run time (for example when the user picks a different context size). */
+  configure(policy: Partial<SuperMemoryPolicy>): SuperMemoryPolicy;
   /** Forget a single note by id. Returns whether it existed. */
   forget(sessionId: string, id: string): boolean;
   /** Store a session-only secret (e.g. an API key) — RAM only, gone on clear. */
@@ -450,7 +460,7 @@ export const createSessionMemoryStore = (options: SessionMemoryStoreOptions): IS
             lastCompactedAt: Number.isFinite(snapshot.lastCompactedAt) ? snapshot.lastCompactedAt! : null,
             tail: Promise.resolve(),
           };
-          if (embedder) for (const item of items) state.embeddings.set(item.id, embedder.embed(item.text));
+          // Embeddings are computed on first recall, so opening the app does not embed every saved note.
           sessions.set(sessionId, state);
         }
       }
@@ -711,7 +721,7 @@ export const createSessionMemoryStore = (options: SessionMemoryStoreOptions): IS
   const recall: ISessionMemoryStore['recall'] = (sessionId, opts) => {
     const id = requireSessionId(sessionId);
     const state = sessions.get(id);
-    if (!state) return { summaries: [], pinned: [], recent: [], secretKeys: [], tokens: 0 };
+    if (!state) return { summaries: [], pinned: [], recent: [], latest: [], secretKeys: [], tokens: 0 };
     state.recalls++;
 
     const query = opts?.query?.trim().toLowerCase() ?? '';
@@ -734,7 +744,11 @@ export const createSessionMemoryStore = (options: SessionMemoryStoreOptions): IS
       if (query.length === 0) return salience(item);
       let score = 0;
       if (useSemantic && qVec && embedder) {
-        const vec = state.embeddings.get(item.id) ?? embedder.embed(item.text);
+        let vec = state.embeddings.get(item.id);
+        if (!vec) {
+          vec = embedder.embed(item.text);
+          state.embeddings.set(item.id, vec);
+        }
         score += cosineSimilarity(qVec, vec) * SCORE_SEMANTIC_WEIGHT;
       }
       if (queryTokens.size > 0) score += (overlapCount(queryTokens, item) / queryTokens.size) * SCORE_LEXICAL_WEIGHT;
@@ -750,23 +764,34 @@ export const createSessionMemoryStore = (options: SessionMemoryStoreOptions): IS
     const matched = query.length === 0 ? ordinary : ordinary.filter((item) => (scores.get(item.id) ?? 0) > matchFloor);
 
     // Rank by score (relevance/salience) desc; recency breaks ties.
-    const ranked = matched.toSorted((a, b) => {
+    const byRelevance = matched.toSorted((a, b) => {
       const diff = (scores.get(b.id) ?? 0) - (scores.get(a.id) ?? 0);
       if (diff !== 0) return diff;
       return b.createdAt - a.createdAt || b.id.localeCompare(a.id);
     });
 
+    // The newest notes always lead, so a follow-up with nothing to match ("do it") still gets the exchange it
+    // answers. Creation time can tie within a millisecond, so the counter in the id breaks the tie.
+    const latestWanted = Math.max(0, Math.min(Math.floor(opts?.latest ?? 0), limit));
+    const newestFirst = (a: SuperMemoryItem, b: SuperMemoryItem): number =>
+      b.createdAt - a.createdAt || Number.parseInt(b.id.slice(1), 10) - Number.parseInt(a.id.slice(1), 10);
+    const forced = ordinary.toSorted(newestFirst).slice(0, latestWanted);
+    const forcedIds = new Set(forced.map((item) => item.id));
+    const ranked = [...forced, ...byRelevance.filter((item) => !forcedIds.has(item.id))];
+
     // Token-bounded selection: fill up to recallTokenBudget (minus what pinned +
-    // summaries already cost) and the recallRecent count cap.
+    // summaries already cost) and the recallRecent count cap. A forced note is kept even when it alone
+    // exceeds the budget, because it is the exchange the new message continues.
     const baseTokens = [...summaries, ...pinned].reduce((sum, it) => sum + it.tokens, 0);
     let budget = Math.max(0, policy.recallTokenBudget - baseTokens);
     const recent: SuperMemoryItem[] = [];
     for (const item of ranked) {
       if (recent.length >= limit) break;
-      if (item.tokens > budget && recent.length > 0) continue; // keep filling smaller notes
+      const isForced = forcedIds.has(item.id);
+      if (!isForced && item.tokens > budget && recent.length > 0) continue; // keep filling smaller notes
       recent.push(item);
       budget -= item.tokens;
-      if (budget <= 0) break;
+      if (budget <= 0 && recent.length >= forced.length) break;
     }
 
     // Restore chronological order for readability + bump salience on what we surfaced.
@@ -778,7 +803,23 @@ export const createSessionMemoryStore = (options: SessionMemoryStoreOptions): IS
     }
 
     const tokens = [...summaries, ...pinned, ...recent].reduce((sum, it) => sum + it.tokens, 0);
-    return { summaries, pinned, recent, secretKeys: Array.from(state.secrets.keys()), tokens };
+    const latest = recent.filter((item) => forcedIds.has(item.id));
+    return { summaries, pinned, recent, latest, secretKeys: Array.from(state.secrets.keys()), tokens };
+  };
+
+  const MIN_BUDGET_TOKENS = 500;
+  const configure: ISessionMemoryStore['configure'] = (next) => {
+    const accepted: Partial<SuperMemoryPolicy> = {};
+    for (const key of ['tokenBudget', 'recallTokenBudget', 'keepRecent', 'maxItems', 'recallRecent'] as const) {
+      const value = next[key];
+      if (typeof value !== 'number' || !Number.isFinite(value)) continue;
+      accepted[key] = Math.max(
+        key === 'tokenBudget' || key === 'recallTokenBudget' ? MIN_BUDGET_TOKENS : 1,
+        Math.floor(value)
+      );
+    }
+    Object.assign(policy, accepted);
+    return { ...policy };
   };
 
   const forget: ISessionMemoryStore['forget'] = (sessionId, id) => {
@@ -862,6 +903,7 @@ export const createSessionMemoryStore = (options: SessionMemoryStoreOptions): IS
   return {
     remember,
     recall,
+    configure,
     forget,
     setSecret,
     getSecret,

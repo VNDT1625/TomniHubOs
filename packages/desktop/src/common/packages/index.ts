@@ -16,3 +16,5 @@ export * from './manifest';
 export * from './studioCompatibility';
 export * from './types';
 export * from './repoClassifier';
+export * from './adapter';
+export * from './serviceDetector';

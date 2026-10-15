@@ -104,7 +104,8 @@ export class ModelRoutingStage implements IChatStage {
           recommendedTier,
           recommendedModel,
           selectedModel: isAutoMode ? selectedModel : undefined,
-          autoSwitched: isAutoMode,
+          autoSwitched: false, // The stage proposes only; Main may reject the model before runtime dispatch.
+          autoProposed: isAutoMode,
           complexity,
         },
         ...(isAutoMode ? { selectedModel } : {}),
@@ -115,7 +116,8 @@ export class ModelRoutingStage implements IChatStage {
         recommendedTier,
         recommendedModel,
         selectedModel: isAutoMode ? selectedModel : undefined,
-        autoSwitched: isAutoMode,
+        autoSwitched: false,
+        autoProposed: isAutoMode,
         method,
       },
     };

@@ -1,4 +1,113 @@
 {
+  "pipeline": {
+    "title": "Chat pipeline",
+    "button": "Pipeline",
+    "buttonTooltip": "Chat pipeline: {{count}} active stages",
+    "stagesTitle": "Stages, in order",
+    "stageCount": "{{count}} stages",
+    "addStage": "Add stage",
+    "addStagePlaceholder": "Choose a stage to add",
+    "emptyStages": "No stages yet. Messages go straight to the model.",
+    "moveUp": "Move up",
+    "moveDown": "Move down",
+    "duplicate": "Add another copy",
+    "remove": "Remove",
+    "enable": "Turn on or off",
+    "phase": {
+      "pre_query": "Before query",
+      "retrieve": "Retrieve",
+      "pre_model": "Before model",
+      "post_model": "After model"
+    },
+    "role": {
+      "guard": "Security guard",
+      "authorized": "Authorized",
+      "unverified": "Not authorized"
+    },
+    "inspector": {
+      "empty": "Select a stage to see how it works.",
+      "model": "Decision model",
+      "modelName": "Laya",
+      "noModel": "This stage does not use a model.",
+      "tasks": "Questions asked of the model",
+      "sharedCall": "Security, understand and tool schema share one model pass when they run on the same text.",
+      "settings": "Settings",
+      "mode": "When a secret is found",
+      "modeRewrite": "Hide it and continue",
+      "modeBlock": "Stop the message",
+      "apply": "Apply the selection",
+      "applyHint": "Off: the choice is shown but every tool group stays loaded.",
+      "source": "Show",
+      "lastRun": "Last message",
+      "dryRun": "Dry run",
+      "noRun": "Nothing to show yet. Send a message or wait for the dry run.",
+      "input": "Input to the model",
+      "output": "Model answers",
+      "latency": "{{ms}} ms",
+      "sharedWith": "Shared from the call made by {{stage}}",
+      "decision": "Decision",
+      "error": "Error",
+      "errorCode": {
+        "starting": "Laya is still starting; the fast built-in checks answered instead.",
+        "timeout": "Laya took too long to answer; the fast built-in checks answered instead.",
+        "cancelled": "The request was cancelled before Laya answered.",
+        "unavailable": "No decision model is connected; the fast built-in checks are used.",
+        "failed": "Laya could not answer; the fast built-in checks answered instead."
+      },
+      "masked": "Secrets are masked before they are shown here.",
+      "questions": "{{count}} questions in one pass"
+    },
+    "task": {
+      "security": "Security risk",
+      "understand": "What the user wants",
+      "toolSchema": "Tool groups needed"
+    },
+    "decision": {
+      "continue": "Continue",
+      "rewrite": "Rewrote",
+      "block": "Blocked",
+      "skip": "Skipped",
+      "direct_action": "Direct action"
+    },
+    "health": {
+      "checking": "Checking the pipeline…",
+      "ok": "Pipeline healthy",
+      "failed": "Pipeline problem"
+    },
+    "warnings": {
+      "title": "Heads up",
+      "unguardedRetrieve": "“{{stage}}” adds context, but no security stage runs after it.",
+      "noGuard": "No authorized security stage is on. Before anything goes to a cloud model, the default scan still runs."
+    },
+    "actions": {
+      "save": "Save",
+      "cancel": "Cancel",
+      "reset": "Restore default"
+    },
+    "messages": {
+      "loadFailed": "Could not load the chat pipeline.",
+      "saveFailed": "Could not save the chat pipeline.",
+      "saved": "Chat pipeline saved.",
+      "resetDone": "Default restored. Save to apply.",
+      "added": "Added {{name}}."
+    },
+    "stageName": {
+      "security": "Security guard",
+      "understand": "Understand",
+      "directAction": "Direct action",
+      "toolSchema": "Tool schema",
+      "rtk": "Live knowledge",
+      "modelRouter": "Model router"
+    },
+    "stageDesc": {
+      "security": "Finds secrets and prompt injection in the message and in retrieved text, then hides or stops them.",
+      "understand": "Works out what the user is asking for, once, and shares it with the next stages.",
+      "directAction": "Runs simple commands such as opening a link or packaging a repository without calling a model.",
+      "toolSchema": "Chooses which tool groups to load for this message. Tool search stays available as a fallback.",
+      "rtk": "Adds fresh facts when the message asks about something recent.",
+      "modelRouter": "Suggests the model that fits the task."
+    }
+  },
   "welcome": {
     "title": "Hi, what's your plan for today?",
     "placeholder": "Send a message, upload files, open a folder, or create a scheduled task...",
@@ -418,9 +527,12 @@
     "verifyFailed": "Independent verification failed — the agent must fix and retry."
   },
   "interruptionRecovery": {
-    "interrupted": "The conversation was interrupted and could not be resumed automatically. Please send your message again.",
-    "retryScheduled": "Connection interrupted — retrying in {{seconds}}s (retry {{retry}}/{{max}}).",
-    "retrying": "Retrying now… (retry {{retry}}/{{max}})."
+    "countdownTitle": "Connection interrupted. Resuming in {{seconds}}s (attempt {{attempt}}/{{max}}).",
+    "askTitle": "The work did not resume. Trying again in {{seconds}}s — you can cancel.",
+    "exhaustedTitle": "Tried {{max}} times without success. Asking again in {{time}}.",
+    "retryNow": "Retry now",
+    "cancel": "Cancel",
+    "dismiss": "Dismiss"
   },
   "sideQuestion": {
     "title": "Side Question",
@@ -496,6 +608,31 @@
   "skills": {
     "loaded": "Loaded Skills"
   },
+  "attachMenu": {
+
+    "hookLabel": "Hook",
+    "hookCount": "{{count}} hook",
+    "hookNote": "Hooks run on events. Turn them on or off in Settings.",
+    "hookEmpty": "No active hooks",
+    "autoSelectOffHint": "Turn on to let Laya choose plugins, skills and hooks",
+    "mcpCount": "{{count}} MCP",
+    "skillCount": "{{count}} skill",
+    "viewSkill": "View",
+    "back": "Back",
+    "skillSourcePackage": "Package: {{name}}",
+    "skillSourceStandalone": "Added by you or built in",
+    "skillDocNotFound": "This skill file is no longer available.",
+    "skillDocTooLarge": "This SKILL.md is too large to show here.",
+    "skillDocFailed": "The skill could not be read.",
+    "otherGroup": "Other",
+    "selectAllInPackage": "Select all in package",
+    "pluginLabel": "Plugin",
+    "pluginCount": "{{count}} plugin",
+    "mcpTag": "MCP",
+    "autoSelect": "Auto",
+    "autoSelectHint": "Laya will pick the matching plugins, skills and hooks"
+  },
+
   "mcp": {
     "loaded": "Loaded MCP",
     "managementHint": "If an MCP looks abnormal, it is usually caused by the MCP JSON configuration. Go to Tools settings and test it there.",

@@ -8,7 +8,17 @@ TomniHubOS ships a small trusted base that owns governance and an open package p
 
 The target is not a rewrite of every subsystem. It is a consolidation of the strongest existing components behind one boundary, followed by physical removal of optional application code from the base artifact.
 
+## Background Sleep and Satellite runtime (TARGET)
+
+- **Close to Tray** pauses every owned media surface, applies safe render/timer throttling to idle package tabs, and leaves governed active jobs untouched. Hub opening restores the UI without restarting paused media.
+- **Background Manager** is a small trusted lifecycle/permission registry, not another package implementation. It permits explicit opt-in keep-alive for MCP servers, the notification channel, scheduled jobs, WebUI and approved agent workers; packages expose register/suspend/resume/dispose/status hooks with resource leases. A user choosing Quit can also stop all retained services.
+- **Independent Satellite** is a separate minimal process required before the desktop renderer can be terminated or Electron can fully exit while services continue. It must reuse the same authenticated capability contracts, encrypted credential boundaries, durable job receipts and service ownership; desktop starts/attaches to it without handing off plaintext secrets or silently exposing internet listeners. Only the user may enable external access.
+- **Browser-specific rule:** never destroy a page under an active agent, interactive form, download or WebUI embedding without a recoverable checkpoint. Hidden idle user tabs may be throttled; full renderer disposal and tab restoration are separate, verified operations. Embedded Electron WebContents do not survive a full Electron Quit, so agent web work must move to an independently supervised Browser worker first.
+- **Evidence gate:** record process working-set sums and CPU both before/after sleep and across a representative idle/agent/browser workload; also record wake latency, foreground usability, job completion, crash recovery and packaged Windows startup. Distinguish process sums from unique physical RAM and include independent satellite processes in full-lifecycle measurements.
+
 ## MVP release boundaries
+
+
 
 The architecture supports two separately reported checkpoints:
 
@@ -41,7 +51,7 @@ The base may contain:
 - provider-neutral cloud-compute request, queue, provisioning, isolation, metering, cleanup, and orphan-recovery contracts;
 - package catalog, downloader, verifier, installer, registry, contribution broker, sandbox supervisor, update, rollback, and uninstall;
 - IPC/preload contracts, database foundation, logging, telemetry consent, updater, crash recovery, and platform integration;
-- shared design tokens, accessibility primitives, and i18n infrastructure used by the base.
+- accessibility primitives and i18n infrastructure used by the base.
 
 Base inclusion is denied when the only reason is convenience, shared ownership history, or a static import from an optional feature.
 
@@ -49,14 +59,14 @@ Base inclusion is denied when the only reason is convenience, shared ownership h
 
 The following are not base modules:
 
-- optional code editor, terminal workspace, debugger, and source-control UI; the default IDE surface and its integrated Terminal capability are base surfaces;
-- web automation studios, downloads UI, and browser-specific data services; the default Browser surface is a base surface;
+- optional code editor, terminal workspace, debugger, and source-control UI; IDE ships as a signed default-choice package while Core retains only generic workspace/permission brokers;
+- web automation studios, downloads UI, and browser-specific data services; Browser ships as a signed default-choice package while Core retains only bounded platform browser IPC contracts;
 - Office, documents, spreadsheets, slides, PDF editors, and email/calendar surfaces;
 - Studio pages, Music, MakeVideo, media/design editors, optional Terminal workspaces, Testing, Monitor, visual labs, dashboards, and specialized developer tools;
 - provider-specific configuration UI beyond a generic adapter form;
 - package-owned routes, translations, icons, workers, databases, preload methods, and binaries.
 
-Studio is a Store category and compatibility redirect. Each optional application is independently installable, updateable, disableable, and uninstallable. Browser and IDE are default, always-on base surfaces; Terminal is an IDE capability.
+Studio is a Store category and compatibility redirect. Each optional application is independently installable, updateable, disableable, and uninstallable. Browser and IDE are default *choices* pinned in the Hub and offered during onboarding, not permanently embedded application UIs; Terminal is an IDE capability. Availability depends on a verified signed release, and uninstall must withdraw package UI/runtime without affecting Core.
 
 ## Dependency direction
 
@@ -190,6 +200,13 @@ Data is separated by owner and purpose:
 - generated artifacts and user workspace files.
 
 Packages receive dedicated storage namespaces and cannot query another package or core private context directly. Context projection is purpose-bound and records which fields left which boundary.
+
+## Workspace metadata and workspace-reference boundary
+
+Workspace metadata has one canonical root: .tomni. Legacy roots may be recognized only by a versioned, lock-protected migration that validates containment without following links, preserves known owner data under the matching canonical area, retains unknown data under a non-active recovery namespace, and records conflicts rather than overwriting canonical bytes. .tomnyrules and .omni-sidecar are compatibility/state artifacts, not legacy roots. A migration must become durably resumable and shared by Node and MTUI before it may retire a source root under concurrent access.
+
+Explorer attachment data is untrusted renderer input, not filesystem authority. Main resolves bounded workspace-relative references against the provisioned root, verifies real containment and actual type, and projects only bounded text or published Understanding summaries into a delimited untrusted prompt section. Folders remain references; no drag action grants recursive reads, tool access, permissions, egress, or a mutation capability. A rejected reference must not create a visible durable turn or start a runtime.
+
 
 ## C0-C6 migration strategy
 

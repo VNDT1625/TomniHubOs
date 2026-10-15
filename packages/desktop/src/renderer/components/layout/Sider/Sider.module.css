@@ -39,8 +39,9 @@
 }
 
 .navButtonActive {
-  background: color-mix(in srgb, var(--color-primary) 14%, transparent) !important;
-  color: var(--color-primary) !important;
+  background: var(--text-primary) !important;
+  color: var(--bg-base) !important;
+  font-weight: 600 !important;
 }
 
 .appItemWrapper {

@@ -1,5 +1,10 @@
 import { ipcBridge } from '@/common';
 import type { PersonalSecretSetSaveRequest } from '@/common/adapter/ipcBridge';
+import {
+  SECRET_DESTINATION_ORDER,
+  destinationsOfBinding,
+  type SecretDestinationId,
+} from '@/common/types/platform/sessionSecrets';
 import type {
   ContextFact,
   PersonalContext,
@@ -8,6 +13,7 @@ import type {
 } from '@process/agentRuntime/contextTypes';
 import {
   Button,
+  Checkbox,
   Empty,
   Input,
   Message,
@@ -51,8 +57,17 @@ type SecretEditorState = {
   name: string;
   note: string;
   targets: string[];
+  destinations: SecretDestinationId[];
   variables: SecretVariableDraft[];
 };
+// A new set can be typed into a web form or handed to a process; the person opts in to the terminal.
+const DEFAULT_SECRET_DESTINATIONS: SecretDestinationId[] = ['browser', 'process'];
+const DESTINATION_LABEL_KEYS: Record<SecretDestinationId, string> = {
+  browser: 'settings.personalSecrets.destinationBrowser',
+  terminal: 'settings.personalSecrets.destinationTerminal',
+  process: 'settings.personalSecrets.destinationProcess',
+};
+
 type LearningCorrectionState = {
   visible: boolean;
   saving: boolean;
@@ -422,6 +437,7 @@ const PersonalSettings: React.FC = () => {
     name: '',
     note: '',
     targets: [],
+    destinations: DEFAULT_SECRET_DESTINATIONS,
     variables: [createVariable('USERNAME'), createVariable('PASSWORD')],
   });
 
@@ -689,6 +705,7 @@ const PersonalSettings: React.FC = () => {
       name: '',
       note: '',
       targets: [],
+      destinations: DEFAULT_SECRET_DESTINATIONS,
       variables: [createVariable('USERNAME'), createVariable('PASSWORD')],
     });
   };
@@ -701,6 +718,7 @@ const PersonalSettings: React.FC = () => {
       name: secret.label,
       note: secret.note ?? '',
       targets: secret.binding.targets ?? [],
+      destinations: destinationsOfBinding(secret.binding).destinations,
       // Values are intentionally never returned. Replacing a set requires re-entry.
       variables: secret.fields.map((field) => createVariable(field)),
     });
@@ -727,17 +745,25 @@ const PersonalSettings: React.FC = () => {
     const targets = secretEditor.targets.map((target) => target.trim().toLowerCase()).filter(Boolean);
     const invalidName = variables.some((variable) => !/^[A-Za-z_][A-Za-z0-9_]{0,127}$/.test(variable.name));
     const duplicateNames = new Set(variables.map((variable) => variable.name)).size !== variables.length;
+    const { destinations } = secretEditor;
+    const needsHostnames = destinations.includes('browser');
+    // Hostnames bind a set to exact web origins, so they are only checked when a web form is a destination.
     const invalidTargets =
-      targets.length === 0 ||
-      targets.length > MAX_SECRET_TARGETS ||
-      new Set(targets).size !== targets.length ||
-      targets.some((target) => !EXACT_HOSTNAME.test(target));
+      needsHostnames &&
+      (targets.length === 0 ||
+        targets.length > MAX_SECRET_TARGETS ||
+        new Set(targets).size !== targets.length ||
+        targets.some((target) => !EXACT_HOSTNAME.test(target)));
     if (!name) {
       message.warning(t('settings.personalSecrets.nameRequired'));
       return;
     }
     if (variables.length === 0 || invalidName || duplicateNames || variables.some((variable) => !variable.value)) {
       message.warning(t('settings.personalSecrets.variablesInvalid'));
+      return;
+    }
+    if (destinations.length === 0) {
+      message.warning(t('settings.personalSecrets.destinationsRequired'));
       return;
     }
     if (invalidTargets) {
@@ -750,7 +776,8 @@ const PersonalSettings: React.FC = () => {
         handle: secretEditor.handle,
         name,
         note: secretEditor.note.trim() || undefined,
-        targets,
+        targets: needsHostnames ? targets : [],
+        destinations,
         variables,
       };
       await ipcBridge.personal.saveSecretSet.invoke(input);
@@ -1265,18 +1292,30 @@ const PersonalSettings: React.FC = () => {
                       </div>
                       <div className='mt-10px flex flex-wrap items-center gap-6px'>
                         <span className='mr-2px text-11px text-t-tertiary'>
-                          {t('settings.personalSecrets.allowedHostnamesTagLabel')}
+                          {t('settings.personalSecrets.destinationsTagLabel')}
                         </span>
-                        {secret.binding.targets?.length ? (
-                          secret.binding.targets.map((target) => (
-                            <Tag key={target} bordered>
-                              {target}
-                            </Tag>
-                          ))
-                        ) : (
-                          <Tag bordered>{t('settings.personalSecrets.legacyTargetsMissing')}</Tag>
-                        )}
+                        {destinationsOfBinding(secret.binding).destinations.map((destination) => (
+                          <Tag key={destination} bordered color='arcoblue'>
+                            {t(DESTINATION_LABEL_KEYS[destination])}
+                          </Tag>
+                        ))}
                       </div>
+                      {destinationsOfBinding(secret.binding).destinations.includes('browser') ? (
+                        <div className='mt-10px flex flex-wrap items-center gap-6px'>
+                          <span className='mr-2px text-11px text-t-tertiary'>
+                            {t('settings.personalSecrets.allowedHostnamesTagLabel')}
+                          </span>
+                          {secret.binding.targets?.length ? (
+                            secret.binding.targets.map((target) => (
+                              <Tag key={target} bordered>
+                                {target}
+                              </Tag>
+                            ))
+                          ) : (
+                            <Tag bordered>{t('settings.personalSecrets.legacyTargetsMissing')}</Tag>
+                          )}
+                        </div>
+                      ) : null}
                       <div className='mt-14px border-0 border-t border-solid border-border-1 pt-10px text-11px text-t-tertiary'>
                         {t('settings.personalSecrets.updatedAt', {
                           date: formatUpdatedAt(secret.updatedAt),
@@ -1331,26 +1370,47 @@ const PersonalSettings: React.FC = () => {
               onChange={(note) => setSecretEditor((current) => ({ ...current, note }))}
             />
           </label>
-          <label className='flex flex-col gap-6px text-13px text-t-secondary'>
-            {t('settings.personalSecrets.allowedHostnamesLabel')}
-            <Select
-              mode='multiple'
-              allowCreate
-              showSearch
-              value={secretEditor.targets}
-              options={secretEditor.targets.map((target) => ({ label: target, value: target }))}
-              placeholder={t('settings.personalSecrets.allowedHostnamesPlaceholder')}
-              onChange={(targets) =>
+          <div className='flex flex-col gap-6px text-13px text-t-secondary'>
+            {t('settings.personalSecrets.destinationsLabel')}
+            <Checkbox.Group
+              value={secretEditor.destinations}
+              options={SECRET_DESTINATION_ORDER.map((destination) => ({
+                label: t(DESTINATION_LABEL_KEYS[destination]),
+                value: destination,
+              }))}
+              onChange={(values) =>
                 setSecretEditor((current) => ({
                   ...current,
-                  targets: (Array.isArray(targets) ? targets : [targets]).map(String).slice(0, MAX_SECRET_TARGETS),
+                  destinations: SECRET_DESTINATION_ORDER.filter((destination) => values.includes(destination)),
                 }))
               }
             />
             <span className='text-12px leading-18px text-t-tertiary'>
-              {t('settings.personalSecrets.allowedHostnamesDescription')}
+              {t('settings.personalSecrets.destinationsDescription')}
             </span>
-          </label>
+          </div>
+          {secretEditor.destinations.includes('browser') ? (
+            <label className='flex flex-col gap-6px text-13px text-t-secondary'>
+              {t('settings.personalSecrets.allowedHostnamesLabel')}
+              <Select
+                mode='multiple'
+                allowCreate
+                showSearch
+                value={secretEditor.targets}
+                options={secretEditor.targets.map((target) => ({ label: target, value: target }))}
+                placeholder={t('settings.personalSecrets.allowedHostnamesPlaceholder')}
+                onChange={(targets) =>
+                  setSecretEditor((current) => ({
+                    ...current,
+                    targets: (Array.isArray(targets) ? targets : [targets]).map(String).slice(0, MAX_SECRET_TARGETS),
+                  }))
+                }
+              />
+              <span className='text-12px leading-18px text-t-tertiary'>
+                {t('settings.personalSecrets.allowedHostnamesDescription')}
+              </span>
+            </label>
+          ) : null}
 
           <div>
             <div className='mb-8px flex items-center justify-between'>

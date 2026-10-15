@@ -99,7 +99,7 @@ export const AccountPage: React.FC = () => {
   }, [loadData, ready, user?.id]);
 
   const accountInitial = useMemo(() => {
-    const raw = (fullName || user?.username || 'Tomni').trim();
+  const raw = (fullName || user?.username || 'Tomny').trim();
     return raw[0]?.toUpperCase() || 'T';
   }, [fullName, user?.username]);
 
@@ -185,7 +185,7 @@ export const AccountPage: React.FC = () => {
 
         <div className={styles.infoCol}>
           <div className={styles.nameRow}>
-            <span className={styles.displayName}>{fullName || user?.username || 'Người dùng Tomni'}</span>
+              <span className={styles.displayName}>{fullName || user?.username || 'Người dùng Tomny'}</span>
 
             {/* Badges */}
             <div className={styles.badgesRow}>
@@ -306,7 +306,7 @@ export const AccountPage: React.FC = () => {
               <label className={styles.label}>Tên công ty / Tổ chức (company_name)</label>
               <Input
                 prefix={<Briefcase theme='outline' size={14} />}
-                placeholder='Ví dụ: Tomni AI Corp, Đại học NTT...'
+              placeholder='Ví dụ: Tomny AI Corp, Đại học NTT...'
                 value={companyName}
                 onChange={setCompanyName}
                 allowClear

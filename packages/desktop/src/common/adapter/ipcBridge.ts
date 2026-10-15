@@ -13,10 +13,13 @@
  */
 
 import type { IConfirmation } from '@/common/chat/chatLib';
+import type { CliCommandDiscovery, PackageCommandSummary } from '@/common/chat/slash/types';
+import type { WorkspaceReferenceRequest } from '@/common/chat/workspaceReference';
 import { bridge } from '@office-ai/platform';
 import './bridgeErrorWrapper';
 import type { OpenDialogOptions } from 'electron';
 import type {
+  CapabilityMode,
   ICssTheme,
   IMcpServer,
   ISessionMcpServer,
@@ -26,7 +29,12 @@ import type {
 import { assistantChannels } from '../types/agent/assistantChannels';
 import { agentChannels } from '../types/agent/agentChannels';
 import { sessionChannels } from '../types/agent/sessionChannels';
-import type { ChatPipelineDefinition, ChatStageMetadata, PipelineSimulationResult } from '../types/pipeline';
+import type {
+  ChatPipelineDefinition,
+  ChatStageMetadata,
+  PipelineRunTrace,
+  PipelineSimulationResult,
+} from '../types/pipeline';
 import type { PreviewHistoryTarget, PreviewSnapshotInfo } from '../types/office/preview';
 import type { PricingRecommendation } from '../pricing/modelPricingAdvisor';
 import type {
@@ -91,6 +99,8 @@ import type {
   ResolvePermissionRequest,
   RunConversationBridgeRequest,
   RunConversationBridgeResult,
+  RouteGroupMessageRequest,
+  RouteGroupMessageResponse,
   SetAssignmentRequest,
   SetRulesRequest,
   UpdateStructureRequest,
@@ -117,6 +127,7 @@ import {
 } from './httpBridge';
 import { fromApiSearchResult, type ApiMessageSearchItem } from './searchMapper';
 import type { IAddTeamAgentParams, ICreateTeamParams } from './teamMapper';
+import type { SecretDestinationId } from '../types/platform/sessionSecrets';
 
 import { absoluteToRelativePath, fromBackendWorkspaceList } from './workspaceMapper';
 
@@ -201,22 +212,50 @@ export type TomnyAgenticContextSnapshot = {
 
 export type TomnyAgenticContextResult = { ok: true; data: TomnyAgenticContextSnapshot } | { ok: false; error: string };
 
+export type SessionContextTokenEstimate = {
+  conversation_context: number;
+  saved_memory: number;
+  total: number;
+};
+
+export type SessionContextBranch = TomnyAgenticContextBranch;
+
+export type SessionContextSnapshot = {
+  conversation_id: string;
+  model: string;
+  target: string;
+  app: {
+    custom_context: string;
+    context_branches: SessionContextBranch[];
+    rendered_conversation_context: string;
+    saved_memory_context: string;
+    token_estimate: SessionContextTokenEstimate;
+    minimum_next_turn_tokens: number;
+  };
+  archive: {
+    message_count: number;
+    token_estimate: number;
+  };
+  inspection: { kind: 'app-only'; disclosure: string } | { kind: 'native'; snapshot: TomnyAgenticContextSnapshot };
+};
+
+export type SessionContextResult = { ok: true; data: SessionContextSnapshot } | { ok: false; error: string };
+
 export const conversation = {
   create: bridge.buildProvider<TChatConversation, ICreateConversationParams>('conversation.native.create'),
   createWithConversation: bridge.buildProvider<TChatConversation, { conversation: TChatConversation }>(
     'conversation.native.clone'
   ),
-  get: bridge.buildProvider<TChatConversation | undefined, { id: string }>('conversation.native.get'),
+    get: bridge.buildProvider<TChatConversation | undefined, { id: string }>('conversation.native.get'),
+  fork: bridge.buildProvider<TChatConversation, { id: string }>('conversation.native.fork'),
   getAssociateConversation: withResponseMap(
     httpGet<TChatConversation[], { conversation_id: string }>(
       (p) => `/api/conversations/${p.conversation_id}/associated`
     ),
     (list) => list.map(fromApiConversation)
   ),
-  listByCronJob: withResponseMap(
-    httpGet<TChatConversation[], { cron_job_id: string }>((p) => `/api/cron/jobs/${p.cron_job_id}/conversations`),
-    (list) => list.map(fromApiConversation)
-  ),
+  /** Conversations opened by a scheduled task's runs, newest first (served by the in-process scheduler). */
+  listByCronJob: bridge.buildProvider<TChatConversation[], { cron_job_id: string }>('cron.list-run-conversations'),
   remove: bridge.buildProvider<boolean, { id: string }>('conversation.native.remove'),
   update: bridge.buildProvider<boolean, { id: string; updates: Partial<TChatConversation>; merge_extra?: boolean }>(
     'conversation.native.update'
@@ -230,8 +269,19 @@ export const conversation = {
     TomnyAgenticContextResult,
     { conversation_id: string; custom_context: string; context_branches: TomnyAgenticContextBranch[] }
   >('conversation.native.context.update'),
+  getSessionContext: bridge.buildProvider<SessionContextResult, { conversation_id: string }>(
+    'conversation.native.session-context.get'
+  ),
+  updateSessionContext: bridge.buildProvider<
+    SessionContextResult,
+    { conversation_id: string; custom_context: string; context_branches: SessionContextBranch[] }
+  >('conversation.native.session-context.update'),
 
   stop: bridge.buildProvider<void, { conversation_id: string }>('conversation.native.cancel'),
+  readLiveImageOutput: bridge.buildProvider<
+    LiveImageOutputReadResult | null,
+    { conversation_id: string; output_id: string; output_ref: string }
+  >('conversation.native.live-image.read'),
   activeCount: bridge.buildProvider<{ count: number }, void>('conversation.native.active-count'),
   sendMessage: bridge.buildProvider<ISendMessageResult, ISendMessageParams>('conversation.native.send'),
   resolveNativePermission: bridge.buildProvider<
@@ -256,9 +306,19 @@ export const conversation = {
     PipelineSimulationResult,
     { definition: ChatPipelineDefinition; probe_query?: string; initial_context?: string }
   >('conversation.native.pipeline.simulate'),
+  getPipelineLastRun: bridge.buildProvider<PipelineRunTrace | null, { conversation_id?: string }>(
+    'conversation.native.pipeline.last-run'
+  ),
   getSlashCommands: httpGet<Array<{ command: string; description: string }>, { conversation_id: string }>(
     (p) => `/api/conversations/${p.conversation_id}/slash-commands`
   ),
+    /** Read-only provider-advertised CLI command discovery scoped by Main to this conversation. */
+    getCliCommands: bridge.buildProvider<CliCommandDiscovery, { conversation_id: string }>('conversation.native.cli-commands'),
+  cliCommandsUpdated: bridge.buildEmitter<{ conversation_id: string; catalog: CliCommandDiscovery }>(
+    'conversation.native.cli-commands-updated'
+  ),
+  /** Prompt commands of enabled packages for the `/` menu. Names and hints only; templates stay in Main. */
+  packageCommands: bridge.buildProvider<PackageCommandSummary[], void>('conversation.native.package-commands'),
   askSideQuestion: httpPost<ConversationSideQuestionResult, { conversation_id: string; question: string }>(
     (p) => `/api/conversations/${p.conversation_id}/side-question`,
     (p) => ({ question: p.question })
@@ -496,6 +556,14 @@ export const fs = {
   getImageBase64: bridge.buildProvider<string | null, { path: string; workspace?: string }>('native-fs.image-base64'),
   fetchRemoteImage: bridge.buildProvider<string, { url: string }>('native-fs.fetch-remote-image'),
   readFile: bridge.buildProvider<string | null, { path: string; workspace?: string }>('native-fs.read'),
+  attachmentQuickView: bridge.buildProvider<
+    import('@/common/chat/attachmentQuickView').AttachmentQuickView,
+    { attachment_id: string }
+  >('native-fs.attachment-quick-view'),
+  attachmentSelect: bridge.buildProvider<
+    import('@/common/chat/attachmentQuickView').AttachmentQuickViewSelection[],
+    Record<string, never>
+  >('native-fs.attachment-select'),
   readFileBuffer: bridge.buildProvider<string | null, { path: string; workspace?: string }>('native-fs.read-buffer'),
   createTempFile: bridge.buildProvider<string, { file_name: string }>('native-fs.temp'),
   writeFile: bridge.buildProvider<boolean, { path: string; data: string }>('native-fs.write'),
@@ -542,7 +610,8 @@ export const fs = {
       location: string;
       relative_location?: string;
       is_custom: boolean;
-      source: 'builtin' | 'custom' | 'extension';
+      source: 'builtin' | 'custom' | 'extension' | 'package';
+      packageId?: string;
     }>,
     void
   >('native-skills.list'),
@@ -724,8 +793,10 @@ export type PersonalSecretSetSaveRequest = {
   handle?: string;
   name: string;
   note?: string;
-  /** One to twenty exact browser hostnames; values are normalized and validated in Main. */
+  /** Exact browser hostnames; required only when `browser` is a destination. Normalized and validated in Main. */
   targets: string[];
+  /** Where the app may type this set. Absent keeps the original web-form-plus-firewall binding. */
+  destinations?: SecretDestinationId[];
   variables: PersonalSecretVariableInput[];
 };
 
@@ -903,8 +974,16 @@ export type PaginatedResult<T> = {
 
 export const database = {
   getConversationMessages: bridge.buildProvider<
-    PaginatedResult<import('@/common/chat/chatLib').TMessage>,
-    { conversation_id: string; page?: number; page_size?: number; order?: string; content_mode?: 'compact' | 'full' }
+    PaginatedResult<import('@/common/chat/chatLib').TMessage> & { revision?: number; unchanged?: boolean },
+    {
+      conversation_id: string;
+      page?: number;
+      page_size?: number;
+      order?: string;
+      content_mode?: 'compact' | 'full';
+      /** Revision the caller already holds; when it matches, the reply is { unchanged: true } with no items. */
+      known_revision?: number;
+    }
   >('conversation.native.history'),
   getConversationMessage: bridge.buildProvider<
     import('@/common/chat/chatLib').TMessage,
@@ -1020,6 +1099,7 @@ export const windowControls = {
 // ---------------------------------------------------------------------------
 
 export const systemSettings = {
+  getBackgroundSleepMetrics: bridge.buildProvider<import('@/common/types/platform/backgroundSleep').BackgroundSleepMetrics, void>('system-settings:get-background-sleep-metrics'),
   getCloseToTray: bridge.buildProvider<boolean, void>('system-settings:get-close-to-tray'),
   setCloseToTray: bridge.buildProvider<void, { enabled: boolean }>('system-settings:set-close-to-tray'),
   getNotificationEnabled: bridge.buildProvider<boolean, void>('system-settings:get-notification-enabled'),
@@ -1209,6 +1289,34 @@ export type { OmniGatewayProgressEvent, OmniGatewayProgressPhase } from '@proces
 // Dashboard UI reads/writes the budget here and subscribes to live state
 // pushes via the `stateChanged` emitter (Requirement 5.2).
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Storage Center — Main-owned inventory and cleanup planning. The renderer
+// receives only aggregate usage, opaque root IDs, and preview candidates.
+// ---------------------------------------------------------------------------
+
+export const storageCenter = {
+  getSummary: bridge.buildProvider<
+    import('../types/platform/storageCenter').StorageCenterSummary,
+    void
+  >('storage-center.get-summary'),
+  getPolicy: bridge.buildProvider<
+    import('../types/platform/storageCenter').StorageCenterPolicy,
+    void
+  >('storage-center.get-policy'),
+  updatePolicy: bridge.buildProvider<
+    import('../types/platform/storageCenter').StorageCenterPolicy,
+    { policy: import('../types/platform/storageCenter').StorageCenterPolicy }
+  >('storage-center.update-policy'),
+  previewCleanup: bridge.buildProvider<
+    import('../types/platform/storageCenter').StorageCenterCleanupPreview,
+    void
+  >('storage-center.preview-cleanup'),
+  runCleanup: bridge.buildProvider<
+    import('../types/platform/storageCenter').StorageCenterCleanupResult,
+    { planId: string }
+  >('storage-center.run-cleanup'),
+};
 
 export const resource = {
   getState: bridge.buildProvider<ResourceState, void>('resource.get-state'),
@@ -1437,6 +1545,8 @@ interface ISendMessageParams {
   model_input?: string;
   conversation_id: string;
   files?: string[];
+  /** Workspace-relative file/folder references resolved only by main process. */
+  workspace_references?: WorkspaceReferenceRequest[];
   loading_id?: string;
   inject_skills?: string[];
 }
@@ -1497,9 +1607,12 @@ export interface ICreateConversationParams {
     /** Transient: MCP server ids selected on the Guid page. Consumed by the
      *  backend create handler and snapshotted into conversation.extra. */
     selected_mcp_server_ids?: string[];
+    assistant_default_tools?: string[];
     /** Transient: session-scoped MCP server configs that are not stored in the
      *  backend catalog (currently built-in MCP servers). */
     selected_session_mcp_servers?: ISessionMcpServer[];
+    /** Skill, plugin and hook choice. Only `auto` is stored; a missing value means manual. */
+    capabilityMode?: CapabilityMode;
     preset_context?: string;
     preset_assistant_id?: string;
     session_mode?: string;
@@ -1561,6 +1674,14 @@ export type IWorkspaceFlatFile = {
   fullPath: string;
   relativePath: string;
 };
+
+export type LiveImageOutputReadResult = Readonly<{
+  dataUrl: string;
+  mimeType: 'image/png';
+  width: number;
+  height: number;
+}>;
+
 
 export interface IResponseMessage {
   type: string;
@@ -1985,5 +2106,49 @@ export const company = {
   cancelConversation: bridge.buildProvider<CompanyResult<void>, CancelConversationRequest>(
     'company.cancel-conversation'
   ),
+  routeGroupMessage: bridge.buildProvider<CompanyResult<RouteGroupMessageResponse>, RouteGroupMessageRequest>(
+    'company.route-group-message'
+  ),
   conversationEvent: bridge.buildEmitter<ConversationEventEnvelope>('company.conversation-event'),
 };
+
+// ---------------------------------------------------------------------------
+// Social Hub — typed Electron IPC for Unified Feed, Reels, Messenger, Multi-Account
+// ---------------------------------------------------------------------------
+
+import type {
+  SocialAccount,
+  UnifiedPost,
+  UnifiedReel,
+  UnifiedConversation,
+  UnifiedMessage,
+  SocialStorageStats,
+  SocialPermissions,
+} from '../types/social';
+import { socialChannels } from '../types/social/socialChannels';
+
+export const social = {
+  listAccounts: bridge.buildProvider<SocialAccount[], void>(socialChannels.LIST_ACCOUNTS),
+    addAccount: bridge.buildProvider<SocialAccount, { platform: string; username?: string; displayName?: string; permissions?: Partial<SocialPermissions> }>(socialChannels.ADD_ACCOUNT),
+  connectAccount: bridge.buildProvider<SocialAccount, { platform: string }>(socialChannels.CONNECT_ACCOUNT),
+  removeAccount: bridge.buildProvider<{ success: boolean }, { accountId: string }>(socialChannels.REMOVE_ACCOUNT),
+  updatePermissions: bridge.buildProvider<SocialAccount, { accountId: string; permissions: SocialPermissions }>(socialChannels.UPDATE_PERMISSIONS),
+    openLoginWindow: bridge.buildProvider<{ success: boolean }, { accountId: string }>(socialChannels.OPEN_LOGIN_WINDOW),
+  showWeb: bridge.buildProvider<void, { accountId: string; section: 'feed' | 'reels' | 'messages'; bounds: { x: number; y: number; width: number; height: number } }>(socialChannels.SHOW_WEB),
+    hideWeb: bridge.buildProvider<void, { accountId: string }>(socialChannels.HIDE_WEB),
+  reloadWeb: bridge.buildProvider<void, { accountId: string }>(socialChannels.RELOAD_WEB),
+  getFeedQueue: bridge.buildProvider<UnifiedPost[], { accountId?: string; platform?: 'facebook' | 'x' | 'reddit' | 'threads'; limit?: number; offset?: number }>(socialChannels.GET_FEED_QUEUE),
+  refreshFeed: bridge.buildProvider<{ count: number }, { accountId?: string }>(socialChannels.REFRESH_FEED),
+  markPostViewed: bridge.buildProvider<{ success: boolean }, { postId: string }>(socialChannels.MARK_POST_VIEWED),
+    getReelsQueue: bridge.buildProvider<UnifiedReel[], { accountId?: string; limit?: number; offset?: number }>(socialChannels.GET_REELS_QUEUE),
+  refreshReels: bridge.buildProvider<{ count: number }, { accountId?: string }>(socialChannels.REFRESH_REELS),
+  markReelViewed: bridge.buildProvider<{ success: boolean }, { reelId: string }>(socialChannels.MARK_REEL_VIEWED),
+    getConversations: bridge.buildProvider<UnifiedConversation[], { accountId?: string }>(socialChannels.GET_CONVERSATIONS),
+  refreshConversations: bridge.buildProvider<{ count: number }, { accountId?: string }>(socialChannels.REFRESH_CONVERSATIONS),
+    getThread: bridge.buildProvider<UnifiedMessage[], { conversationId: string }>(socialChannels.GET_THREAD),
+  refreshThread: bridge.buildProvider<{ count: number }, { conversationId: string }>(socialChannels.REFRESH_THREAD),
+  sendMessage: bridge.buildProvider<UnifiedMessage, { conversationId: string; content: string }>(socialChannels.SEND_MESSAGE),
+  getStorageStats: bridge.buildProvider<SocialStorageStats, void>(socialChannels.GET_STORAGE_STATS),
+  clearCache: bridge.buildProvider<{ freedBytes: number }, void>(socialChannels.CLEAR_CACHE),
+};
+

@@ -1,7 +1,7 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { SecretDescriptor, SecretResolveRequest } from './contextTypes';
+import type { SecretCaller, SecretDescriptor, SecretResolveRequest, SecretScope } from './contextTypes';
 
 export type SecretPayload = Record<string, string>;
 export type SecretDescriptorInput = Omit<SecretDescriptor, 'handle' | 'createdAt' | 'updatedAt'>;
@@ -54,6 +54,32 @@ const targetAllowed = (allowed: string[] | undefined, value: string | undefined)
   !allowed || allowed.length === 0 || (Boolean(value) && allowed.includes(value!));
 
 const SECRET_FIELD = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/;
+const SCOPE_ID = /^[A-Za-z0-9][A-Za-z0-9._:@-]{0,127}$/u;
+const SESSION_HANDLE_PREFIX = 'secret://session/';
+
+/** Whether a set may be seen or used by a caller. Missing identity never matches a scoped set. */
+export const secretVisibleTo = (descriptor: { scope?: SecretScope }, caller: SecretCaller | undefined): boolean => {
+  const scope = descriptor.scope;
+  if (!scope || scope.kind === 'app') return true;
+  if (scope.kind === 'company') return caller?.companyId === scope.companyId;
+  if (scope.kind === 'package') return caller?.packageId === scope.packageId;
+  return caller?.sessionId === scope.sessionId;
+};
+
+type ScopePolicy = 'persistent' | 'ephemeral';
+
+const normalizeScope = (scope: SecretScope | undefined, policy: ScopePolicy): SecretScope | undefined => {
+  const kind = scope?.kind ?? 'app';
+  if (policy === 'persistent' && kind === 'session') throw new Error('Session secrets are never persisted.');
+  if (policy === 'ephemeral' && kind !== 'session')
+    throw new Error('Only session-scoped secrets can be kept in memory.');
+  if (!scope || scope.kind === 'app') return undefined;
+  const id = scope.kind === 'company' ? scope.companyId : scope.kind === 'package' ? scope.packageId : scope.sessionId;
+  if (typeof id !== 'string' || !SCOPE_ID.test(id.trim())) throw new Error('A secret scope needs a valid identifier.');
+  if (scope.kind === 'company') return { kind: 'company', companyId: id.trim() };
+  if (scope.kind === 'package') return { kind: 'package', packageId: id.trim() };
+  return { kind: 'session', sessionId: id.trim() };
+};
 const EXACT_HOSTNAME =
   /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/u;
 const MAX_SECRET_TARGET_HOSTNAMES = 20;
@@ -88,8 +114,10 @@ const boundedUniqueList = (values: string[], label: string, maxItems = 100): str
 const normalizeDescriptor = (
   input: SecretDescriptorInput,
   payload: SecretPayload,
-  timestamp: number
+  timestamp: number,
+  scopePolicy: ScopePolicy
 ): { input: SecretDescriptorInput; payload: SecretPayload } => {
+  const scope = normalizeScope(input.scope, scopePolicy);
   const label = input.label.trim().slice(0, 120);
   const note = input.note?.trim().slice(0, 1_000) || undefined;
   const fields = boundedUniqueList(input.fields, 'Secret fields', 50);
@@ -115,9 +143,11 @@ const normalizeDescriptor = (
     throw new Error('Secret expiry must be in the future.');
   }
   if (input.revokedAt !== undefined) throw new Error('A saved secret cannot start revoked.');
+  const { scope: _ignoredScope, ...rest } = structuredClone(input);
   return {
     input: {
-      ...structuredClone(input),
+      ...rest,
+      ...(scope ? { scope } : {}),
       label,
       note,
       fields,
@@ -139,7 +169,8 @@ export const createSecretVault = (
   repository: SecretVaultRepository,
   codec: SecretVaultCodec,
   newHandle: () => string = () => `secret://${randomUUID()}`,
-  now: () => number = Date.now
+  now: () => number = Date.now,
+  scopePolicy: ScopePolicy = 'persistent'
 ): SecretVault => {
   let mutation = Promise.resolve();
   const mutate = <T>(operation: () => Promise<T>): Promise<T> => {
@@ -161,7 +192,7 @@ export const createSecretVault = (
         const values = await repository.list();
         if (values.length >= MAX_STORED_SECRETS) throw new Error('Secret vault capacity has been reached.');
         const timestamp = now();
-        const normalized = normalizeDescriptor(input, payload, timestamp);
+        const normalized = normalizeDescriptor(input, payload, timestamp, scopePolicy);
         const stored: StoredSecret = {
           ...normalized.input,
           handle: newHandle(),
@@ -181,7 +212,11 @@ export const createSecretVault = (
         if (!existing) throw new Error('Unknown secret capability handle.');
         if (existing.revokedAt !== undefined) throw new Error('Secret capability has been revoked.');
         const timestamp = now();
-        const normalized = normalizeDescriptor(input, payload, timestamp);
+        const normalized = normalizeDescriptor(input, payload, timestamp, scopePolicy);
+        // A set never moves between scopes: re-saving a package, company or session key cannot make it an app key.
+        if (JSON.stringify(existing.scope ?? null) !== JSON.stringify(normalized.input.scope ?? null)) {
+          throw new Error('A secret set cannot change scope.');
+        }
         const stored: StoredSecret = {
           ...normalized.input,
           handle: existing.handle,
@@ -202,7 +237,7 @@ export const createSecretVault = (
         if (existing) return { descriptor: metadata(existing), created: false };
         if (values.length >= MAX_STORED_SECRETS) throw new Error('Secret vault capacity has been reached.');
         const timestamp = now();
-        const normalized = normalizeDescriptor(input, payload, timestamp);
+        const normalized = normalizeDescriptor(input, payload, timestamp, scopePolicy);
         const stored: StoredSecret = {
           ...normalized.input,
           handle,
@@ -224,6 +259,7 @@ export const createSecretVault = (
       if (stored.revokedAt !== undefined) throw new Error('Secret capability has been revoked.');
       if (stored.expiresAt !== undefined && stored.expiresAt <= now())
         throw new Error('Secret capability has expired.');
+      if (!secretVisibleTo(stored, request.caller)) throw new Error('Secret capability is not allowed in this scope.');
       if (!stored.binding.surfaces.includes(request.surface))
         throw new Error('Secret capability is not allowed on this surface.');
       if (!stored.binding.purposes.includes(request.purpose))
@@ -259,6 +295,92 @@ export const createSecretVault = (
         await repository.save(next);
         return true;
       });
+    },
+  };
+};
+
+export type SessionSecretVault = SecretVault & {
+  /** Forget every set of one conversation. Returns how many were removed. */
+  removeSession(sessionId: string): Promise<number>;
+};
+
+/** AES-256-GCM under a key that exists only in this process, so a RAM dump of the store alone reveals nothing. */
+const createEphemeralCodec = (): SecretVaultCodec => {
+  const key = randomBytes(32);
+  return {
+    available: () => true,
+    encrypt: (plainText) => {
+      const iv = randomBytes(12);
+      const cipher = createCipheriv('aes-256-gcm', key, iv);
+      const body = Buffer.concat([cipher.update(plainText, 'utf8'), cipher.final()]);
+      return Buffer.concat([iv, cipher.getAuthTag(), body]).toString('base64');
+    },
+    decrypt: (cipherText) => {
+      const buffer = Buffer.from(cipherText, 'base64');
+      const decipher = createDecipheriv('aes-256-gcm', key, buffer.subarray(0, 12));
+      decipher.setAuthTag(buffer.subarray(12, 28));
+      return Buffer.concat([decipher.update(buffer.subarray(28)), decipher.final()]).toString('utf8');
+    },
+  };
+};
+
+/**
+ * Temporary secrets for one conversation each. Nothing here is ever written to disk: the records live in this
+ * process only and are lost on exit, which is the intended lifetime.
+ */
+export const createSessionSecretVault = (options: { now?: () => number } = {}): SessionSecretVault => {
+  let records: StoredSecret[] = [];
+  const repository: SecretVaultRepository = {
+    list: async () => structuredClone(records),
+    save: async (values) => {
+      records = structuredClone(values);
+    },
+  };
+  const vault = createSecretVault(
+    repository,
+    createEphemeralCodec(),
+    () => `${SESSION_HANDLE_PREFIX}${randomUUID()}`,
+    options.now ?? Date.now,
+    'ephemeral'
+  );
+  return {
+    ...vault,
+    async removeSession(sessionId) {
+      const keep = records.filter((item) => item.scope?.kind !== 'session' || item.scope.sessionId !== sessionId);
+      const removed = records.length - keep.length;
+      records = keep;
+      return removed;
+    },
+  };
+};
+
+export type ScopedSecretVault = SessionSecretVault & {
+  /** Forget every set of one Package App, for example when it is uninstalled. Returns how many were removed. */
+  removePackage(packageId: string): Promise<number>;
+};
+
+/** One vault interface over the permanent store and the per-conversation RAM store, routed by scope and handle. */
+export const createScopedSecretVault = (persistent: SecretVault, session: SessionSecretVault): ScopedSecretVault => {
+  const isSession = (handle: string): boolean => handle.startsWith(SESSION_HANDLE_PREFIX);
+  return {
+    put: (input, payload) =>
+      input.scope?.kind === 'session' ? session.put(input, payload) : persistent.put(input, payload),
+    replace: (handle, input, payload) =>
+      isSession(handle) ? session.replace(handle, input, payload) : persistent.replace(handle, input, payload),
+    recover: (handle, input, payload) => persistent.recover(handle, input, payload),
+    list: async () => [...(await persistent.list()), ...(await session.list())],
+    resolve: (request) => (isSession(request.handle) ? session.resolve(request) : persistent.resolve(request)),
+    remove: (handle) => (isSession(handle) ? session.remove(handle) : persistent.remove(handle)),
+    removeSession: (sessionId) => session.removeSession(sessionId),
+    async removePackage(packageId) {
+      const owned = (await persistent.list()).filter(
+        (item) => item.scope?.kind === 'package' && item.scope.packageId === packageId
+      );
+      let removed = 0;
+      for (const item of owned) {
+        if (await persistent.remove(item.handle)) removed += 1;
+      }
+      return removed;
     },
   };
 };
@@ -309,10 +431,26 @@ export const recoverSecretSource = async (
 
 type RepositoryFs = Pick<typeof fs.promises, 'readFile' | 'writeFile' | 'rename' | 'mkdir'>;
 const isMissing = (error: unknown): boolean => (error as NodeJS.ErrnoException | undefined)?.code === 'ENOENT';
+const hasScopeId = (value: unknown): boolean => typeof value === 'string' && SCOPE_ID.test(value);
+/** A stored scope must be one of the known shapes with a valid owner id, or the record is ignored. */
+const isStoredScope = (scope: unknown): boolean => {
+  if (scope === undefined) return true;
+  if (!scope || typeof scope !== 'object') return false;
+  const item = scope as Record<string, unknown>;
+  if (item.kind === 'company') return hasScopeId(item.companyId);
+  if (item.kind === 'package') return hasScopeId(item.packageId);
+  if (item.kind === 'session') return hasScopeId(item.sessionId);
+  return item.kind === 'app';
+};
 const isStoredSecret = (value: unknown): value is StoredSecret => {
   if (!value || typeof value !== 'object') return false;
   const item = value as Partial<StoredSecret>;
-  return typeof item.handle === 'string' && typeof item.encryptedPayload === 'string' && Array.isArray(item.fields);
+  return (
+    typeof item.handle === 'string' &&
+    typeof item.encryptedPayload === 'string' &&
+    Array.isArray(item.fields) &&
+    isStoredScope(item.scope)
+  );
 };
 
 /** Atomic 0600 persistence for encrypted records only. */

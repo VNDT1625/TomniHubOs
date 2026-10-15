@@ -33,6 +33,7 @@ import WecomConfigForm from './WecomConfigForm';
 
 type ChannelModelConfigKey =
   | 'assistant.telegram.defaultModel'
+  | 'assistant.telegram.sttModel'
   | 'assistant.lark.defaultModel'
   | 'assistant.dingtalk.defaultModel'
   | 'assistant.weixin.defaultModel'
@@ -182,6 +183,7 @@ const ChannelModalContent: React.FC = () => {
   const telegramModelSelection = useChannelModelSelection('assistant.telegram.defaultModel', {
     refreshExternalChanges: true,
   });
+  const telegramVoiceSelection = useChannelModelSelection('assistant.telegram.sttModel');
   const larkModelSelection = useChannelModelSelection('assistant.lark.defaultModel');
   const dingtalkModelSelection = useChannelModelSelection('assistant.dingtalk.defaultModel');
   const weixinModelSelection = useChannelModelSelection('assistant.weixin.defaultModel');
@@ -655,6 +657,7 @@ const ChannelModalContent: React.FC = () => {
         <TelegramConfigForm
           pluginStatus={pluginStatus}
           modelSelection={telegramModelSelection}
+          voiceModelSelection={telegramVoiceSelection}
           onStatusChange={setPluginStatus}
           onTokenChange={(token) => {
             telegramTokenRef.current = token;

@@ -306,7 +306,7 @@ const isFileNotFound = (error: unknown): boolean => (error as NodeJS.ErrnoExcept
 const graphArtifactPaths = (rootPath: string) => ({
   graphPath: path.join(resolveStorageDir(), graphFileName(rootPath)),
   summaryPath: path.join(rootPath, '.tomni', 'understand', 'summary.json'),
-  staleMarkerPaths: ['.tomni', '.omni', '.tomny'].map((dir) => path.join(rootPath, dir, 'understand', 'stale.json')),
+  staleMarkerPaths: [path.join(rootPath, '.tomni', 'understand', 'stale.json')],
 });
 
 /** Publish the graph + canonical MTUI summary, then clear migration stale markers. */

@@ -6,16 +6,25 @@
 
 /**
  * Per-conversation Super switch. Super is a Core runtime policy: on the next
- * turn it builds one unified `tomny_*` ToolMap from all registered Surface
- * capabilities. It must not be coupled to Browser-Control (or any other
- * individual MCP server), otherwise every new surface would need UI changes.
+ * turn it builds one unified capability set from every registered and eligible
+ * Surface. Browser Control is additionally attached to the conversation while
+ * enabled so existing CLI sessions receive its live loopback endpoint.
  */
 
 import { ipcBridge } from '@/common';
+import { ensureBrowserControlSession, removeBrowserControlSession } from '@/renderer/hooks/mcp/catalog';
 import { useCallback, useEffect, useState } from 'react';
 
 /** @deprecated Import from `superGuidance`; retained for existing callers. */
 export { BROWSER_CONTROL_MCP_NAME } from './superGuidance';
+
+/**
+ * What Super grants: the `portable` capabilities, specialised tools that work without their surface. Surface-only
+ * capabilities (IDE, Make Film, Music) are never granted here; they load only inside their own surface.
+ */
+const SUPER_PORTABLE_SCOPES = ['browser.control', 'office.read', 'office.write'];
+const SUPER_PORTABLE_CAPABILITIES = ['surface.browser', 'surface.office'];
+import { withSuperBrowserRules, withoutSuperBrowserRules } from './superGuidance';
 
 const SUPER_KEY_PREFIX = 'tomny.super.';
 
@@ -87,9 +96,35 @@ export function useSuperMode(conversationId: string | undefined): UseSuperMode {
       setPending(true);
       setError(null);
       try {
+        const conversation = await ipcBridge.conversation.get.invoke({ id: conversationId });
+        if (!conversation) throw new Error('The conversation could not be loaded.');
+        const extra = (conversation.extra ?? {}) as {
+          preset_rules?: string;
+          permission_scopes?: string[];
+          capability_grants?: string[];
+          available_capabilities?: string[];
+        };
+        const browserReady = next
+          ? await ensureBrowserControlSession(conversationId, { attachIfMissing: true })
+          : await removeBrowserControlSession(conversationId);
+        if (!browserReady) throw new Error('The Browser capability could not be updated.');
         const ok = await ipcBridge.conversation.update.invoke({
           id: conversationId,
-          updates: { super_mode: next } as never,
+          updates: {
+            super_mode: next,
+            preset_rules: next
+              ? withSuperBrowserRules(extra.preset_rules)
+              : withoutSuperBrowserRules(extra.preset_rules),
+            ...(next
+              ? {
+                  permission_scopes: [...new Set([...(extra.permission_scopes ?? []), ...SUPER_PORTABLE_SCOPES])],
+                  capability_grants: [...new Set([...(extra.capability_grants ?? []), ...SUPER_PORTABLE_CAPABILITIES])],
+                  available_capabilities: [
+                    ...new Set([...(extra.available_capabilities ?? []), ...SUPER_PORTABLE_CAPABILITIES]),
+                  ],
+                }
+              : {}),
+          } as never,
           merge_extra: true,
         });
         if (!ok) throw new Error('The conversation could not be updated.');

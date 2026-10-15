@@ -352,7 +352,7 @@ export class AgentJobOrchestrator {
   private readonly maxJobsPerSession: number;
   private readonly maxSessions: number;
   private readonly maxEventsPerSession: number;
-  private readonly idleHibernateMs?: number;
+    private idleHibernateMs?: number;
   private readonly stateStore?: AgentJobStateStore;
   private readonly sessions = new Map<string, SessionRuntime>();
   private readonly idempotency = new Map<string, IdempotencyEntry>();
@@ -380,7 +380,16 @@ export class AgentJobOrchestrator {
       options.idleHibernateMs === false
         ? undefined
         : positiveInteger(options.idleHibernateMs ?? DEFAULT_IDLE_HIBERNATE_MS, 'idleHibernateMs');
-    this.stateStore = options.stateStore;
+        this.stateStore = options.stateStore;
+  }
+
+  /** Apply Settings idle timeout to existing sessions without stopping an active job. */
+  setIdleHibernateMinutes(minutes: number): void {
+    if (!Number.isSafeInteger(minutes) || minutes < 1 || minutes > 60) {
+      throw new RangeError('Agent idle timeout must be between 1 and 60 minutes.');
+    }
+    this.idleHibernateMs = minutes * 60_000;
+    for (const runtime of this.sessions.values()) this.scheduleHibernation(runtime);
   }
 
   async initialize(): Promise<void> {
@@ -876,7 +885,11 @@ export class AgentJobOrchestrator {
   private scheduleHibernation(runtime: SessionRuntime): void {
     this.clearHibernationTimer(runtime.sessionId);
     if (this.idleHibernateMs === undefined || runtime.hibernated) return;
-    const delay = Math.max(1, runtime.lastActivityAt + this.idleHibernateMs - this.now());
+            // Preserve short configured timers (including test harnesses). Only use
+    // a slower retry when an active job has already passed its idle deadline.
+    const untilIdle = runtime.lastActivityAt + this.idleHibernateMs - this.now();
+    const busy = [...runtime.statuses.values()].some((status) => !TERMINAL_STATUSES.has(status));
+    const delay = Math.max(busy && untilIdle <= 0 ? 1_000 : 1, untilIdle);
     const timer = setTimeout(() => {
       this.hibernationTimers.delete(runtime.sessionId);
       void this.hibernateSession(runtime.sessionId).then(

@@ -5,7 +5,7 @@ import { configService } from '@/common/config/configService';
 import { ThemeProvider } from '@renderer/hooks/context/ThemeContext';
 import '@renderer/services/i18n';
 import '@renderer/styles/arco-override.css';
-import '@renderer/styles/themes/index.css';
+import '@renderer/styles/tomni-ui.css';
 import { ConfigProvider } from '@arco-design/web-react';
 import '@arco-design/web-react/es/_util/react-19-adapter';
 import '@arco-design/web-react/dist/css/arco.css';

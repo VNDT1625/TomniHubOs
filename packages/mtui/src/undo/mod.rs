@@ -81,7 +81,7 @@ pub fn undo_operation(
 
     Ok(UndoResult {
         operation_id: operation.operation_id.clone(),
-        file: file_path.display().to_string(),
+        file: crate::ops::display_path(file_path),
         restored: true,
     })
 }

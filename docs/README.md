@@ -1,5 +1,7 @@
 # Canonical documentation
 
+The focused Laya training/runtime annex is [requirements](core/laya/requirements.md), [design](core/laya/design.md), [tasks](core/laya/tasks.md), and [minimum expectations](core/laya/minimum-expectations.md). It supplements AI runtime and existing release governance. Generated action/benchmark history lives in ignored output at out/laya/action-history.md.
+
 This directory is the single design and execution source for TomniHubOS. Do not add parallel plans, session memory, subsystem READMEs, or tool-specific rule sets.
 
 The model topology is defined in [AI runtime](core/ai-runtime.md): Generative autoregressive Qwen models are replaced by the Laya Decision Engine (~33ms non-autoregressive encoder) for local security, user-understanding, and semantic classification. Orchestration uses an API LLM.
@@ -26,12 +28,20 @@ A document can describe current and target behavior together only when it labels
 | Security, private context, preferences, user control             | [Trust and user understanding](core/trust-and-understanding.md)                                                                         |
 | Provider APIs, CLIs, local models, cloud models, routing         | [AI runtime](core/ai-runtime.md)                                                                                                        |
 | Chat pipeline, realtime pre-query stages, package workflow hooks | [Chat pipeline](core/chat-pipeline.md)                                                                                                  |
+| Tool names, MTUI mapping, permission classes, load groups        | [Tool vocabulary](core/tool-vocabulary.md)                                                                                              |
 | Chat execution flow, code traces, tool dispatch lifecycle        | [Chat execution flow](core/chat-execution-flow.md)                                                                                      |
 | Credit, rate cards, reservations, settlement, refunds            | [Credits and billing](platform/credits-and-billing.md)                                                                                  |
 | Cloud compute, provisioning, queue, isolation, pools             | [Cloud execution](platform/cloud-execution.md)                                                                                          |
 | Manifest, ABI, sandbox, package extraction                       | [Packages](platform/packages.md)                                                                                                        |
 
 | Package taxonomy, archetypes, and permissions matrix | [Package taxonomy](platform/package-taxonomy.md) |
+| Standard package layout (adapter shell + source) | [Package shell layout](platform/package-shell-layout.md) |
+| Extension model (store tab, bridge, per-app connection point) | [Extension model](platform/extension-model.md) |
+| Repotopackage handoff brief (decisions, status, docs to read) | [Repotopackage brief](platform/repotopackage-brief.md) |
+| Repotopackage v2 design and task breakdown (every repo kind, connection hosts, hooks, browser extensions, surfaces) | [Repotopackage design](platform/repotopackage-design.md) |
+| Social Hub design and subagent task breakdown (Unified Feed, Reels, Messenger, Multi-account, Smart Eviction) | [Social Hub design](superpowers/specs/2026-10-09-social-hub-design.md) |
+| AI Challenge Game design and subagent task breakdown (Mech Arena, Weight Classes, Coach Tactics, Game Adapter) | [AI Challenge Game design](superpowers/specs/2026-10-09-ai-challenge-game-design.md) |
+| Realtime Hub design and subagent task breakdown (1-3-1 News Stream, Sticky Widgets, Article Reader, Collapsed AI Chat) | [Realtime Hub design](platform/realtime-hub-design.md) |
 | Store fees, payouts, developer programs, sponsorship | [Store commerce](platform/store-commerce.md) |
 
 | Strategic architectural breakthroughs and next-gen proposals | [5 Breakthrough Ideas](future/5-y-tuong-kien-truc-dot-pha.md), [Laya Engine](future/kien-truc-laya-decision-engine.md), [Chat Artifacts & Mermaid](future/thiet-ke-chat-ui-artifacts-va-mermaid.md), [Laya Omni Notification Hub & UI Audit](future/laya-omni-notification-hub-and-ui-audit.md) |

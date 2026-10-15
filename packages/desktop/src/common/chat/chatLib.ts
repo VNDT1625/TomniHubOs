@@ -5,6 +5,7 @@
  */
 
 import type { AcpPermissionRequest, PlanUpdate, ToolCallUpdate } from '@/common/types/platform/acpTypes';
+import { mergeLiveImageOutputUpdate, parseLiveImageOutputUpdate, type LiveImageOutputUpdate } from './liveImageOutput';
 import type { IResponseMessage } from '../adapter/ipcBridge';
 import { uuid } from '../utils';
 
@@ -64,6 +65,7 @@ type TMessageType =
   | 'acp_tool_call'
   | 'plan'
   | 'thinking'
+  | 'image_output'
   | 'available_commands';
 
 interface IMessage<T extends TMessageType, Content extends Record<string, any>> {
@@ -125,6 +127,8 @@ export type IMessageText = IMessage<
     senderConversationId?: string;
     canonicalOverride?: boolean;
     edited?: boolean;
+    /** Set by a `/repotopackage` run: running, done, or interrupted when the app closed mid-run. */
+    repoRun?: 'running' | 'done' | 'interrupted';
   }
 >;
 
@@ -224,8 +228,13 @@ export type IMessageToolGroup = IMessage<
           relative_path: string;
         };
     status: 'Executing' | 'Success' | 'Error' | 'Canceled' | 'Pending' | 'Confirming';
-    /** Structured arguments sent to the tool. Older records may omit this field. */
+            /** Structured arguments sent to the tool. Older records may omit this field. */
     input?: unknown;
+            /** Latency measured by runtime, when a corresponding start event was observed. */
+    duration_ms?: number;
+    /** Wall-clock boundaries for display; not used for measured duration. */
+    started_at_ms?: number;
+    finished_at_ms?: number;
     confirmationDetails?:
       | IMessageToolGroupConfirmationDetailsBase<
           'edit',
@@ -429,6 +438,9 @@ export type IMessageAvailableCommands = IMessage<
   }
 >;
 
+export type IMessageLiveImageOutput = IMessage<'image_output', LiveImageOutputUpdate>;
+
+
 // eslint-disable-next-line max-len
 export type TMessage =
   | IMessageText
@@ -442,6 +454,7 @@ export type TMessage =
   | IMessageAcpToolCall
   | IMessagePlan
   | IMessageThinking
+  | IMessageLiveImageOutput
   | IMessageAvailableCommands;
 
 // 统一所有需要用户交互的用户类型
@@ -754,6 +767,20 @@ export const transformMessage = (message: IResponseMessage): TMessage | undefine
         },
       };
     }
+    case 'image_output': {
+      const output = parseLiveImageOutputUpdate(message.data);
+      if (output === undefined || output.conversationId !== message.conversation_id) return undefined;
+      return {
+        id: uuid(),
+        type: 'image_output',
+        msg_id: message.msg_id,
+        position: 'left',
+        conversation_id: message.conversation_id,
+        created_at,
+        content: output,
+      };
+    }
+
     // Disabled: available_commands messages are too noisy and distracting in the chat UI
     case 'available_commands':
       return undefined;
@@ -888,6 +915,18 @@ export const composeMessage = (
     return pushMessage(message);
     // If no existing plan found, add new one
   }
+
+  if (message.type === 'image_output') {
+    for (let i = 0, len = list.length; i < len; i++) {
+      const existing = list[i];
+      if (existing.type !== 'image_output' || existing.content.outputId !== message.content.outputId) continue;
+      const merged = mergeLiveImageOutputUpdate(existing.content, message.content);
+      if (merged === existing.content) return list;
+      return updateMessage(i, { ...existing, ...message, content: merged });
+    }
+    return pushMessage(message);
+  }
+
 
   // Handle thinking message merging — only merge contiguous streaming chunks
   if (message.type === 'thinking') {

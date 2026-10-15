@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { BoundedSessionPool } from '../../../packages/desktop/src/process/experimentalCore/sessionPool';
 import {
@@ -13,7 +15,6 @@ import {
 } from '../../../packages/desktop/src/process/agentRuntime/retryPolicy';
 
 import {
-  APP_PROVIDER_CHILD_CREDENTIAL_ENVIRONMENT_UNSUPPORTED,
   appProviderEnvironment,
   appProviderNetworkHost,
   isTomnyControlPlaneTool,
@@ -118,11 +119,9 @@ describe('Tomny JSON stream adapter', () => {
     expect(prompt).toContain('[TomnyToolCatalog] surface');
     expect(prompt).toContain('[TomnyToolPatterns] ide_*,tomny_*');
     expect(prompt).toContain('You are Tomny Agentic in Tomny ide; project: C:/workspace');
-    expect(prompt).toContain('only for tool/external turns');
-    expect(prompt).toContain('never casual chat');
-    expect(prompt).not.toContain('Open the current user action exactly once with StartAction');
-    expect(prompt).toContain('Once open, do not nest it');
-    expect(prompt).toContain('Use ToolSearch only for another exact schema');
+    expect(prompt).toContain('Casual chat: answer directly');
+    expect(prompt).not.toContain('StartAction');
+    expect(prompt).toContain('ONE ToolSearch');
     expect(prompt).toContain('ide_research once');
     expect(prompt).toContain('flow/bug/logic/purpose');
     expect(prompt).toContain('fresh Wiki test profile');
@@ -131,7 +130,7 @@ describe('Tomny JSON stream adapter', () => {
     expect(prompt).toContain('identical script as post-fix');
     expect(prompt).toContain('Use ide_quick_test only for hard/runtime-only');
     expect(prompt).toContain('follow up only for explicit gaps');
-    expect(prompt).toContain('call loaded tools directly');
+    expect(prompt).toContain('then call them');
     expect(prompt).toContain('ToolMap');
     expect(prompt).toContain('Save is sole historical conversation context');
     expect(prompt).toContain('action journal');
@@ -141,8 +140,52 @@ describe('Tomny JSON stream adapter', () => {
     expect(prompt).toContain('use them when named or clearly specialized');
     expect(prompt).not.toContain('Before execution, find skills');
     expect(prompt).toContain('Secret Context values stay hidden');
-    expect(prompt?.trim().split(/\s+/u).length).toBeLessThan(200);
-    expect(tomnySurfaceSystemPrompt('chat', 'C:/workspace')).toContain('You are Tomny Agentic in Tomny chat');
+    expect(tomnySurfaceSystemPrompt('ide', 'C:/workspace')?.trim().split(/\s+/u).length).toBeLessThan(200);
+        expect(tomnySurfaceSystemPrompt('chat', 'C:/workspace')).toContain('You are Tomny Agentic in Tomny chat');
+    expect(tomnySurfaceSystemPrompt('chat', 'C:/workspace')).toContain('tomni-ui JSON fences');
+    expect(tomnySurfaceSystemPrompt('ide', 'C:/workspace')).not.toContain('tomni-ui JSON fences');
+  });
+
+  it('keeps the repository rules out of a prompt whose surface cannot load IDE tools', () => {
+    const chat = tomnySurfaceSystemPrompt('chat', 'C:/workspace', {
+      mode: 'surface',
+      patterns: ['tomny_read', 'tomny_secret_*'],
+    });
+    const ide = tomnySurfaceSystemPrompt('ide', 'C:/workspace', { mode: 'surface', patterns: ['ide_*', 'tomny_*'] });
+
+    for (const rule of ['ide_research', 'ide_test_script', 'ide_quick_test', 'Bug root-cause gate', 'rootPath=']) {
+      expect(chat).not.toContain(rule);
+      expect(ide).toContain(rule);
+    }
+    expect(chat).toContain('tomny_secret_*');
+    expect(chat.length).toBeLessThan(ide.length);
+  });
+
+  it('lists the exact tools the surface allows and tells the model to load them with one search', () => {
+    const patterns = ['tomny_read', 'tomny_glob', 'tomny_search'];
+    const prompt = tomnySurfaceSystemPrompt('chat', 'C:/workspace', { mode: 'surface', patterns });
+    expect(prompt).toContain('ONE ToolSearch');
+        expect(prompt).toContain('space-separated');
+        expect(prompt).toContain('Preloaded tools');
+        expect(prompt).not.toContain('workflow_run');
+    expect(prompt).toContain('call directly, no ToolSearch');
+    const workflowPrompt = tomnySurfaceSystemPrompt('chat', 'C:/workspace', {
+      mode: 'surface', patterns: [...patterns, 'workflow_run'],
+    });
+    expect(workflowPrompt).toContain('workflow_run is already eagerly loaded');
+        expect(workflowPrompt).toContain('Prefer one workflow_run');
+    expect(workflowPrompt).toContain('ANY authorized MCP tools');
+    expect(workflowPrompt).toContain('fileCount:1');
+    expect(workflowPrompt).toContain('select:"singleFile"');
+    expect(workflowPrompt).toContain('without ToolSearch');
+    expect(prompt).toContain('Tool guide (exact names):');
+    for (const name of patterns) expect(prompt).toContain(name);
+    expect(prompt).not.toContain('browser_open');
+    // The same surface always gives the same text, so the prompt can be cached.
+    expect(tomnySurfaceSystemPrompt('chat', 'C:/workspace', { mode: 'surface', patterns })).toBe(prompt);
+    expect(tomnySurfaceSystemPrompt('chat', 'C:/workspace', { mode: 'surface', patterns: [] })).not.toContain(
+      'Tool guide'
+    );
   });
 
   it('never exposes typed credentials in permission details', () => {
@@ -563,6 +606,24 @@ model = "qwen3:30b"
     });
   });
 
+      it('passes the focused attachment tools to Tomny CLI as eager schemas, not deferred ToolSearch', () => {
+    expect(tomnyMcpServerCommand({
+      name: 'tomny-attached-file-tools', transport: 'sse', url: 'http://127.0.0.1:4100/sse', deferred: false,
+    })).toMatchObject({
+      type: 'add_mcp_server', name: 'tomny-attached-file-tools', deferred: false,
+    });
+  });
+
+    it('registers workflow_run as an eager MCP server, not through a separate ToolSearch', () => {
+    expect(tomnyMcpServerCommand({
+      name: 'tomny-workflow', transport: 'sse', url: 'http://127.0.0.1:4321/sse', deferred: false,
+      headers: [{ name: 'Authorization', value: 'Bearer placeholder-test-token' }],
+    })).toMatchObject({
+      type: 'add_mcp_server', name: 'tomny-workflow', deferred: false,
+      transport: 'sse', headers: { Authorization: 'Bearer placeholder-test-token' },
+    });
+  });
+
   it('preserves stdio MCP commands and secret environment values inside the process boundary', () => {
     expect(
       tomnyMcpServerCommand({
@@ -617,8 +678,8 @@ model = "qwen3:30b"
     expect(tomnyToolAccessForPermission('read-only', 'tomny_team_status', 'mcp')).toBe('approve');
     expect(tomnyToolAccessForPermission('read-only', 'agent_track', 'mcp')).toBe('approve');
     expect(tomnyToolAccessForPermission('read-only', 'agent_spawn', 'mcp')).toBe('deny');
-    expect(tomnyToolAccessForPermission('read-only', 'test_report', 'mcp')).toBe('approve');
-    expect(tomnyToolAccessForPermission('read-only', 'test_run', 'mcp')).toBe('deny');
+    expect(tomnyToolAccessForPermission('read-only', 'ide_quick_test_status', 'mcp')).toBe('approve');
+    expect(tomnyToolAccessForPermission('read-only', 'ide_quick_test_run', 'mcp')).toBe('deny');
     expect(tomnyToolAccessForPermission('read-only', 'browser_screenshot', 'mcp')).toBe('approve');
     expect(tomnyToolAccessForPermission('read-only', 'browser_secret_type', 'mcp')).toBe('deny');
     expect(tomnyToolAccessForPermission('read-only', 'tomny_edit', 'mcp')).toBe('deny');
@@ -942,5 +1003,49 @@ describe('persistent agent retry policy', () => {
     await expect(pending).resolves.toBe('completed');
     expect(removeListener).toHaveBeenCalledWith('abort', expect.any(Function));
     vi.useRealTimers();
+  });
+});
+
+describe('config update notices', () => {
+  const info = (message: string) => normalizeTomnyStreamEvent({ type: 'info', message });
+
+  it('splits updates the CLI ran together into one line each', () => {
+    expect(info('config updated: model: ag/a → ag/bmode updated: plan')).toEqual({
+      type: 'notice',
+      text: 'config updated: model: ag/a → ag/b\nmode updated: plan',
+    });
+  });
+
+  it('drops a model change that changed nothing and keeps the rest (the line seen in the thinking block)', () => {
+    expect(
+      info('config updated: model: ag/gemini-3.8-flash-high → ag/gemini-3.8-flash-highmode updated: default')
+    ).toEqual({ type: 'notice', text: 'mode updated: default' });
+  });
+
+  it('shows nothing at all when nothing changed', () => {
+    expect(info('config updated: model: ag/a → ag/a')).toBeNull();
+  });
+
+  it('is a notice, never a step, so it cannot end up inside the thinking text', () => {
+    expect(info('mode updated: default')).toMatchObject({ type: 'notice' });
+    expect(info('Reading three files')).toMatchObject({ type: 'step' });
+  });
+});
+
+describe('the ready handler injects MCP servers whatever the ready flag says', () => {
+  it('does not gate injection on capabilities.mcp, which the bundled CLI reports as false', () => {
+    // The CLI says `mcp: false` and still accepts add_mcp_server (its tools then reach the ToolMap). A handler that
+    // skipped injection on that flag left every surface without its tools, even tools_search.
+    const source = readFileSync(
+      join(process.cwd(), 'packages/desktop/src/process/experimentalCore/adapters/tomnyCoreAdapter.ts'),
+      'utf8'
+    );
+    const handler = source.slice(
+      source.indexOf("if (event.type === 'ready')"),
+      source.indexOf("if (event.type === 'mcp_ready')")
+    );
+    expect(handler).toContain('tomnyShouldInitializeMcpServers(event, mcpServers)');
+    expect(handler).not.toMatch(/capabilities[^;]*\.mcp/u);
+    expect(handler).not.toContain('mcpSupported');
   });
 });

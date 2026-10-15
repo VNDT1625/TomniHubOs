@@ -15,6 +15,8 @@ import type {
 import type { AgentMeshService } from '@process/agentRuntime/agentMesh/service';
 import type { AgentMeshEvent, AgentMessageKind } from '@process/agentRuntime/agentMesh/mesh';
 import type { JsonTeamStore } from './teamStore';
+import { getHubActivityRegistry } from '@process/system/hubActivity/hubActivityRegistry';
+import { reportTeamAgentStatus } from '@process/system/hubActivity/hubActivitySources';
 
 const ALL_MESSAGE_KINDS: AgentMessageKind[] = ['task', 'question', 'progress', 'result', 'handoff', 'control'];
 const PEER_MESSAGE_KINDS: AgentMessageKind[] = ['question', 'progress', 'result', 'handoff'];
@@ -82,6 +84,15 @@ export const createTeamBridgeHandlers = (deps: TeamBridgeDependencies) => {
           agent.status = status;
           current.updated_at = now();
         }
+        // Home lists the team while any member works.
+        reportTeamAgentStatus(getHubActivityRegistry(), {
+          teamId,
+          teamName: current?.name,
+          slotId: event.task.agentId,
+          agentName: agent?.agent_name,
+          status,
+          detail: event.detail,
+        });
       });
       return;
     }

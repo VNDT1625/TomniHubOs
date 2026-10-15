@@ -42,7 +42,7 @@ A change is expected to include:
 - cancellation and terminal-state behavior for asynchronous work;
 - no new imports from base core into an optional package implementation.
 
-User-visible text must use i18n. Renderer controls use Arco Design, Icon Park, and semantic UnoCSS or CSS-variable tokens.
+User-visible text must use i18n. Renderer styling follows `docs/product/tomni-design-system.md`.
 
 ## Verification
 

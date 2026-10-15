@@ -6,18 +6,19 @@
 
 /**
  * IDE spec-lifecycle bridge — manages Kiro-style planning directories under
- * `.tomny/specs/<slug>/` so Planning Mode has observable state instead of
+ * `.tomni/specs/<slug>/` so Planning Mode has observable state instead of
  * being only prompt text.
  *
  * Process boundary: Main-process (Node.js) module. No DOM APIs.
  */
 
 import { bridge } from '@office-ai/platform';
-import { existsSync, promises as fsp } from 'node:fs';
+import { promises as fsp } from 'node:fs';
 import type { Dirent } from 'node:fs';
 import * as path from 'node:path';
 import { analyzeSpec } from '@/common/spec';
 import type { SpecAnalysis } from '@/common/spec';
+import { ensureCanonicalWorkspaceMetadata } from '@package-apps/ide/process/workspace/workspaceMetadataMigration';
 
 export const SPEC_CHANNELS = {
   status: 'ide.spec-status',
@@ -56,7 +57,7 @@ export const SPEC_PHASE_ORDER: readonly SpecLifecyclePhase[] = [
 /** Which phase each approval gate unlocks (approving `requirements` opens `design`, …). */
 export type SpecApprovalGate = 'requirements' | 'design' | 'tasks';
 
-/** Per-spec manifest persisted at `.tomny/specs/<slug>/spec.json`. */
+/** Per-spec manifest persisted at `.tomni/specs/<slug>/spec.json`. */
 export type SpecManifest = {
   /** Schema version for forward compatibility. */
   version: number;
@@ -222,22 +223,15 @@ const emptyTaskCounts = (): SpecTaskCounts => ({
   blocked: 0,
 });
 
-const workspaceMetaChildRoot = (rootPath: string, childDir: 'specs'): string => {
-  const next = path.join(rootPath, '.omni', childDir);
-  if (existsSync(next)) return next;
-  const legacy = path.join(rootPath, '.tomny', childDir);
-  return existsSync(legacy) ? legacy : next;
+const ensureWorkspaceMetadata = async (rootPath: string): Promise<void> => {
+  const migration = await ensureCanonicalWorkspaceMetadata(rootPath);
+  if (migration.status === 'failed' || migration.status === 'conflicted') {
+    throw new Error(`Workspace metadata migration ${migration.status}: ${migration.manifestPath}`);
+  }
 };
 
-const specsRoot = (rootPath: string): string => workspaceMetaChildRoot(rootPath, 'specs');
-const understandRoot = (rootPath: string): string => {
-  const canonical = path.join(rootPath, '.tomni', 'understand');
-  if (existsSync(canonical)) return canonical;
-  const migration = path.join(rootPath, '.omni', 'understand');
-  if (existsSync(migration)) return migration;
-  const legacy = path.join(rootPath, '.tomny', 'understand');
-  return existsSync(legacy) ? legacy : canonical;
-};
+const specsRoot = (rootPath: string): string => path.join(rootPath, '.tomni', 'specs');
+const understandRoot = (rootPath: string): string => path.join(rootPath, '.tomni', 'understand');
 
 const slugify = (title: string): string => {
   const slug = title
@@ -453,6 +447,7 @@ const parseSemanticRefreshEntries = (text: string | null): unknown[] => {
 };
 
 export const listSpecDirectories = async (rootPath: string): Promise<SpecListEntry[]> => {
+  await ensureWorkspaceMetadata(rootPath);
   const root = specsRoot(rootPath);
   const dirents = await fsp.readdir(root, { withFileTypes: true }).catch((): Dirent[] => []);
   const activeSlug = await readActiveSlug(rootPath);
@@ -609,6 +604,7 @@ const syncTasksMarkdown = async (rootPath: string, slug: string, tasks: readonly
 };
 
 export const buildSpecTaskRunbook = async (rootPath: string, requestedSlug?: string): Promise<SpecTaskRunbook> => {
+  await ensureWorkspaceMetadata(rootPath);
   const slug = await resolveActiveSlug(rootPath, requestedSlug);
   if (!slug) {
     throw new Error('No active spec. Set one as active before working its tasks.');
@@ -721,6 +717,7 @@ export const updateSpecTask = async (req: SpecTaskUpdateRequest): Promise<SpecTa
 };
 
 export const buildSpecStatus = async (rootPath: string, requestedSlug?: string): Promise<SpecLifecycleStatus> => {
+  await ensureWorkspaceMetadata(rootPath);
   const slug = await resolveActiveSlug(rootPath, requestedSlug);
   if (!slug) {
     const hasAnySpec = (await listSpecDirectories(rootPath)).length > 0;
@@ -814,6 +811,7 @@ const templateFor = (file: SpecFileName, title: string): string => {
 };
 
 export const initSpecDirectory = async (rootPath: string, title: string): Promise<SpecLifecycleStatus> => {
+  await ensureWorkspaceMetadata(rootPath);
   const slug = slugify(title);
   const dir = safeSpecPath(rootPath, slug);
   await fsp.mkdir(dir, { recursive: true });
@@ -846,6 +844,7 @@ export const initSpecDirectory = async (rootPath: string, title: string): Promis
 
 /** Set (or clear) the workspace's active spec, returning the resulting status. */
 export const setActiveSpec = async (rootPath: string, slug: string | null): Promise<SpecLifecycleStatus> => {
+  await ensureWorkspaceMetadata(rootPath);
   if (slug && !(await specDirExists(rootPath, slug))) {
     throw new Error(`Spec not found: ${slug}`);
   }
@@ -865,6 +864,7 @@ export const advanceSpecPhase = async (
   gate: SpecApprovalGate,
   requestedSlug?: string
 ): Promise<SpecLifecycleStatus> => {
+  await ensureWorkspaceMetadata(rootPath);
   const slug = await resolveActiveSlug(rootPath, requestedSlug);
   if (!slug) {
     throw new Error('No active spec to advance.');
@@ -888,6 +888,7 @@ export const advanceSpecPhase = async (
  * traceability + phase-gate / Definition-of-Done readiness) for one spec.
  */
 export const buildSpecAnalysis = async (rootPath: string, requestedSlug?: string): Promise<SpecAnalysis> => {
+  await ensureWorkspaceMetadata(rootPath);
   const slug = await resolveActiveSlug(rootPath, requestedSlug);
   if (!slug) {
     throw new Error('No active spec. Set one as active before analyzing it.');

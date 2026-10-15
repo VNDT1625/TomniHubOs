@@ -26,7 +26,10 @@ export const createFixedPackageActivationLifecycle = (
   deps: Readonly<{
     packages: FixedPackageLifecycleSource;
     activate: () => Promise<void>;
-    deactivate: () => Promise<void>;
+        deactivate: () => Promise<void>;
+    /** Extra fixed-host admission; manifests cannot select privileged native implementations. */
+    canActivate?: (listing: PackageListing) => boolean;
+
   }>
 ): FixedPackageActivationLifecycle => {
   let disposed = false;
@@ -50,7 +53,9 @@ export const createFixedPackageActivationLifecycle = (
           }
           return;
         }
-        const shouldActivate = listing.state === 'installed' && listing.enabled && !listing.revoked;
+                const shouldActivate = listing.state === 'installed' && listing.enabled && !listing.revoked &&
+          listing.compatible !== false && listing.installedTrust !== 'unsigned-revoked' &&
+          (deps.canActivate?.(listing) ?? true);
         if (shouldActivate && !active) {
           await deps.activate();
           active = true;

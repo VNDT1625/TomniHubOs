@@ -77,12 +77,11 @@ See [docs/architecture/target.md](docs/architecture/target.md).
 
 For renderer work:
 
-- Use Arco Design components for interactive controls and Icon Park for icons.
-- Use UnoCSS semantic tokens or CSS variables; do not hardcode theme colors.
-- Put global styles only in the renderer styles area and isolate complex component styles in CSS Modules.
+- Styling lives in the single global stylesheet `packages/desktop/src/renderer/styles/tomni-ui.css`; layout and page markup carry no CSS of their own.
 - Route every user-visible string through the configured i18n system.
 
 See [docs/engineering/conventions.md](docs/engineering/conventions.md).
+The UI standard is [docs/product/tomni-design-system.md](docs/product/tomni-design-system.md); its reference is `mockup/home-wireframe-v3.html`. Update both in the same change when the look changes.
 
 ## 6. Security and package rules
 

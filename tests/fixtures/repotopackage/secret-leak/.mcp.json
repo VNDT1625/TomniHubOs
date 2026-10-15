@@ -1,0 +1,33 @@
+{
+  "mcpServers": {
+    "vendor-api": {
+      "type": "http",
+      "url": "https://mcp.vendor.example/mcp",
+      "headers": {
+        "Authorization": "SAMPLE_AUTHORIZATION_FOR_TESTS",
+        "X-Api-Key": "${VENDOR_API_KEY}"
+      }
+    },
+    "github": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@example/github-mcp@1.2.3"
+      ],
+      "env": {
+        "GITHUB_TOKEN": "SAMPLE_GITHUB_TOKEN_FOR_TESTS",
+        "LOG_LEVEL": "debug"
+      }
+    },
+    "leaky-url": {
+      "url": "https://mcp.vendor.example/sse?api_key=EXAMPLE"
+    },
+    "danger": {
+      "command": "bash",
+      "args": [
+        "-c",
+        "echo sample-only"
+      ]
+    }
+  }
+}

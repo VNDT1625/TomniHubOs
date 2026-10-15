@@ -2082,5 +2082,53 @@
       "confirm": "I approve this blueprint and authorize the coding phase.",
       "handoffHint": "After approval, Build0 structures the product model, normalizes the design, and sends a traceable implementation plan to the agent."
     }
+  },
+  "social": {
+    "title": "Social Hub",
+    "tabs": {
+      "feed": "Feed",
+      "reels": "Reels",
+      "messages": "Messages",
+      "settings": "Settings"
+    },
+    "feed": {
+      "all": "All",
+      "empty": "No new posts in feed.",
+      "loadMore": "Load more posts",
+      "like": "Like",
+      "comment": "Comment",
+      "openOriginal": "Open original",
+      "likesCount": "{{count}} likes",
+      "commentsCount": "{{count}} comments"
+    },
+    "reels": {
+      "mute": "Mute",
+      "unmute": "Unmute",
+      "empty": "No short videos in queue.",
+      "commentsTitle": "Comments",
+      "addCommentPlaceholder": "Add a comment...",
+      "send": "Send"
+    },
+    "messages": {
+      "title": "Messages",
+      "searchPlaceholder": "Search conversations...",
+      "emptyConversations": "No conversations found",
+      "selectConversation": "Select a conversation to start chatting",
+      "inputPlaceholder": "Type a message..."
+    },
+    "settings": {
+      "accountsTitle": "Connected Accounts",
+      "accountsDesc": "Manage multiple accounts per platform with isolated sessions and cookies.",
+      "noAccounts": "No accounts connected yet.",
+      "addNew": "Add new account",
+      "logout": "Log out",
+      "syncFeed": "Sync Feed",
+      "syncMessages": "Direct Messages",
+      "storageTitle": "Storage & Cache Management",
+      "storageDesc": "Viewed posts and reels are automatically purged after 48 hours to preserve disk space.",
+      "clearCache": "Clear storage cache now",
+      "permissionModalTitle": "Authorize Access",
+      "continueLogin": "Continue to Login"
+    }
   }
 }

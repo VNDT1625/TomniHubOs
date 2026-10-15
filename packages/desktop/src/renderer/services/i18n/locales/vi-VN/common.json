@@ -1,4 +1,93 @@
 {
+  "superSearch": {
+    "placeholder": {
+      "hub": "Tìm kiếm…",
+      "browser": "Tìm bằng {{engine}}…"
+    },
+    "ariaLabel": "Siêu tìm kiếm",
+    "scopeLabel": "Phạm vi tìm kiếm",
+    "scope": {
+      "all": "Tất cả"
+    },
+    "source": {
+      "local": "Trong ứng dụng",
+      "apps": "Ứng dụng",
+      "web": "Web"
+    },
+    "state": {
+      "loading": "Đang tìm…",
+      "empty": "Không có kết quả",
+      "error": "Nguồn này gặp lỗi, các nguồn khác vẫn hoạt động",
+      "timeout": "Nguồn này phản hồi quá chậm",
+      "unavailable": "Nguồn chưa sẵn sàng",
+      "noBridge": "Đã kết nối nhưng chưa có cầu thực thi tìm kiếm",
+      "disabled": "Nguồn này đang tắt. Hãy bật trong phần cấu hình nguồn."
+    },
+    "hint": {
+      "empty": "Gõ để tìm. Dùng tiền tố như fb: abc để tìm trong một nguồn.",
+      "scopeOnly": "Đang tìm trong {{source}} — gõ nội dung cần tìm."
+    },
+    "rank": "#{{rank}} · top {{percent}}%",
+    "rankTitle": "Hạng {{rank}}/{{count}} trong {{source}} — top {{percent}}%",
+    "resultCount": "{{count}} kết quả",
+    "footer": "↑↓ chọn · Enter mở · Esc đóng",
+    "close": "Đóng",
+    "clear": "Xóa",
+    "engineLabel": "Công cụ tìm kiếm",
+    "config": {
+      "title": "Nguồn tìm kiếm",
+      "source": "Nguồn",
+      "remove": "Xóa",
+      "addCustom": "Thêm nơi tìm kiếm từ liên kết",
+      "customHelp": "Dán link tìm kiếm của một trang web và đặt {q} vào chỗ từ khóa, ví dụ https://www.google.com/maps/search/{q}",
+      "customName": "Tên",
+      "customUrl": "Link tìm kiếm có {q}",
+      "customInvalid": "Cần có tên, bí danh không trùng và link http(s) chứa {q}",
+      "add": "Thêm",
+      "open": "Cấu hình nguồn",
+      "enabled": "Bật",
+      "inAll": "Trong Tất cả",
+      "alias": "Bí danh",
+      "aliasInvalid": "Bí danh không hợp lệ hoặc đã được dùng",
+      "connectedNote": "Nguồn bên thứ ba đã kết nối mặc định tắt cho tới khi bạn bật; truy vấn chỉ được gửi tới nguồn đã bật.",
+      "reset": "Khôi phục mặc định",
+      "done": "Xong",
+      "none": "Chưa có công cụ tìm kiếm nào được kết nối"
+    },
+    "web": {
+      "searchWith": "Tìm {{engine}} cho “{{query}}”",
+      "openSite": "Mở {{site}}"
+    },
+    "local": {
+      "untitledConversation": "Cuộc trò chuyện chưa đặt tên",
+      "restartApp": "Khởi động lại ứng dụng",
+      "actionSubtitle": "Hành động",
+      "pageSubtitle": "Trang",
+      "settings": "Cài đặt",
+      "page": {
+        "home": "Trang chủ",
+        "history": "Lịch sử",
+        "scheduled": "Tác vụ đã lên lịch",
+        "store": "Cửa hàng",
+        "browser": "Trình duyệt",
+        "ide": "IDE",
+        "company": "Công ty",
+        "git": "Git",
+        "account": "Tài khoản",
+        "settings": "Cài đặt"
+      }
+    },
+    "settings": {
+      "theme": "Chủ đề & bảng màu",
+      "cssTheme": "Chủ đề CSS tùy chỉnh",
+      "wallpaper": "Hình nền",
+      "interfaceLanguage": "Ngôn ngữ giao diện",
+      "modelProviders": "Nhà cung cấp mô hình & API key",
+      "mcpServers": "Máy chủ MCP & kết nối",
+      "skills": "Kỹ năng",
+      "webui": "Truy cập từ xa / WebUI"
+    }
+  },
   "send": "Gửi",
   "cancel": "Hủy",
   "save": "Lưu",
@@ -11,6 +100,7 @@
   "skills": "Kỹ năng",
   "workspace": "Dự án",
   "settings": "Cài đặt",
+  "home": "Trang chủ",
   "system": "Hệ thống",
   "about": "Giới thiệu",
   "back": "Quay lại trò chuyện",
@@ -23,6 +113,7 @@
   "loading": "Vui lòng chờ...",
   "copy": "Sao chép",
   "reply": "Trả lời",
+  "copiedInline": "Đã chép",
   "copySuccess": "Đã sao chép",
   "copyFailed": "Sao chép thất bại",
   "download": "Tải xuống",
@@ -93,6 +184,17 @@
   "fileAttach.uploading": "Đang tải lên...",
   "fileAttach.uploadSuccess": "Tải lên thành công",
   "fileAttach.cancelUpload": "Hủy tải lên",
+  "attachmentQuickView": {
+    "showAttachments": "Hiện tệp đính kèm ({{count}})",
+    "hideAttachments": "Ẩn tệp đính kèm ({{count}})",
+    "remove": "Xóa {{label}}",
+    "label": "Xem nhanh {{label}}",
+    "loading": "Đang tải bản xem trước…",
+    "unsupported": "Không thể xem nhanh loại tệp này.",
+    "directory": "Không thể xem nhanh thư mục tại đây.",
+    "too-large": "Tệp quá lớn để xem nhanh.",
+    "unavailable": "Tệp này không còn khả dụng."
+  },
   "expand": "Mở rộng",
   "name": "Tên",
   "added": "Đã thêm",
@@ -106,5 +208,267 @@
   "unit": {
     "minute_short": "ph",
     "second_short": "s"
+  },
+  "notificationHub": {
+    "title": "Thông báo",
+    "summary": "{{p0}} khẩn · {{p1}} quan trọng · {{filtered}} đã lọc bớt",
+    "layaOn": "Laya đang phân loại thông báo mới.",
+    "layaOff": "Laya chưa chạy; đang phân loại bằng quy tắc có sẵn.",
+    "taskCreated": "Đã tạo việc",
+    "taskFailed": "Không tạo được việc",
+    "tabs": {
+      "focus": "Tập trung",
+      "digest": "Tổng hợp",
+      "filtered": "Đã lọc",
+      "sources": "Nguồn"
+    },
+    "empty": {
+      "focus": "Hiện không có gì cần bạn.",
+      "digest": "Chưa có cập nhật.",
+      "filtered": "Chưa có gì bị lọc."
+    },
+    "level": {
+      "P0": "Khẩn",
+      "P1": "Quan trọng",
+      "P2": "Tổng hợp",
+      "P3": "Lọc bớt"
+    },
+    "by": {
+      "laya": "Laya phân loại",
+      "rules": "phân loại theo quy tắc",
+      "user": "bạn đã chọn",
+      "llm": "model của bạn phân loại"
+    },
+    "actions": {
+      "open": "Mở",
+      "createTask": "Tạo việc",
+      "move": "Chuyển mức",
+      "markRead": "Đã đọc",
+      "remove": "Xóa",
+      "alwaysImportant": "Người gửi này luôn khẩn",
+      "alwaysMute": "Luôn lọc người gửi này",
+      "syncAll": "Kiểm tra nguồn ngay",
+      "markAllRead": "Đánh dấu đã đọc hết",
+      "clearTab": "Xóa tab này",
+      "boostSender": "Người này luôn khẩn",
+      "muteSender": "Luôn lọc người này",
+      "muteSource": "Tắt tiếng {{name}}",
+      "unmuteSource": "Bật lại {{name}}",
+      "settings": "Cài đặt thông báo"
+    },
+    "event": {
+      "needsInput": "{{name}} đang chờ bạn trả lời",
+      "failed": "{{name}} bị lỗi",
+      "done": "{{name}} đã xong",
+      "scheduleFailed": "Lịch {{name}} bị lỗi",
+      "scheduleDone": "Lịch {{name}} đã chạy xong",
+      "webUnread": "{{name}}: {{count}} chưa đọc (+{{added}})",
+      "ramHigh": "Bộ nhớ sắp đầy",
+      "ramHighBody": "RAM đang dùng {{percent}}% ({{used}}/{{total}} GB). Hãy đóng bớt mô hình hoặc tab không cần."
+    },
+    "errors": {
+      "label": "Hãy nhập tên.",
+      "host": "Địa chỉ máy chủ không hợp lệ.",
+      "user": "Hãy nhập email hoặc tên đăng nhập.",
+      "port": "Cổng phải từ 1 đến 65535.",
+      "password": "Mật khẩu quá dài.",
+      "url": "Hãy dùng địa chỉ feed http hoặc https.",
+      "origin": "Hãy nhập trang như facebook.com.",
+      "kind": "Loại nguồn không hợp lệ.",
+      "missing": "Nguồn này không còn nữa.",
+      "limit": "Đã đạt giới hạn 30 nguồn.",
+      "busy": "Nguồn này đang đồng bộ.",
+      "unknown": "Có lỗi xảy ra. Hãy thử lại.",
+      "channel": "Nhập link kênh YouTube, @handle hoặc mã kênh.",
+      "unsupported": "Không hỗ trợ trên hệ thống này."
+    },
+    "sources": {
+      "title": "Nguồn đã kết nối",
+      "add": "Thêm nguồn",
+      "intro": "Tomny chỉ đọc những gì bạn cho phép: tiêu đề thư mà không đánh dấu đã đọc, feed công khai, thông báo Windows của các ứng dụng bạn chọn, và với trang được phép thì số chưa đọc trên tiêu đề tab cùng thông báo của chính trang đó.",
+      "none": "Chưa có nguồn. Hãy thêm hộp thư, feed hoặc trang web.",
+      "kind": {
+        "imap": "Email",
+        "feed": "Feed",
+        "web": "Trang web",
+        "youtube": "YouTube",
+        "os": "Ứng dụng máy tính"
+      },
+      "lastError": "Lỗi: {{error}}",
+      "lastSync": "Kiểm tra lúc {{time}}",
+      "webPassive": "Cập nhật khi bạn mở trang trong trình duyệt tích hợp",
+      "neverSynced": "Chưa kiểm tra",
+      "noPassword": "chưa lưu mật khẩu",
+      "enabled": "Bật",
+      "syncNow": "Kiểm tra",
+      "edit": "Sửa",
+      "remove": "Xóa",
+      "removeConfirm": "Xóa nguồn này và mật khẩu đã lưu?",
+      "provider": "Nhà cung cấp",
+      "presets": {
+        "gmail": "Gmail",
+        "outlook": "Outlook / Microsoft 365",
+        "yahoo": "Yahoo Mail",
+        "icloud": "iCloud Mail",
+        "custom": "Máy chủ IMAP khác"
+      },
+      "presetHint": {
+        "gmail": "Bật Xác minh 2 bước, rồi tạo mật khẩu ứng dụng tại myaccount.google.com/apppasswords và dán vào đây. IMAP phải được bật trong cài đặt Gmail.",
+        "outlook": "Dùng mật khẩu ứng dụng ở trang bảo mật tài khoản Microsoft nếu bật đăng nhập 2 bước. Một số tài khoản công ty chặn IMAP.",
+        "yahoo": "Tạo mật khẩu ứng dụng trong Bảo mật tài khoản Yahoo và dán vào đây.",
+        "icloud": "Tạo mật khẩu riêng cho ứng dụng tại account.apple.com và dán vào đây.",
+        "custom": "Nhập máy chủ IMAP của nhà cung cấp. Chỉ dùng kết nối TLS."
+      },
+      "user": "Email hoặc tên đăng nhập",
+      "password": "Mật khẩu ứng dụng",
+      "passwordKeep": "Để trống để giữ mật khẩu đã lưu",
+      "host": "Máy chủ IMAP",
+      "port": "Cổng",
+      "mailbox": "Thư mục",
+      "url": "Địa chỉ feed (RSS hoặc Atom)",
+      "webHint": "Chọn trang bạn đăng nhập trong trình duyệt tích hợp. Tomny theo dõi số chưa đọc trên tiêu đề tab và, nếu bạn cho phép, thông báo mà trang tự bật; không đọc nội dung trang.",
+      "origin": "Trang web",
+      "label": "Tên",
+      "interval": "Kiểm tra mỗi (phút)",
+      "cancel": "Hủy",
+      "save": "Lưu",
+      "saved": "Đã lưu nguồn",
+      "syncOk": "Đã kiểm tra: {{count}} mới",
+      "syncFailed": "Kiểm tra thất bại: {{error}}",
+      "cardTitle": "Nguồn và tài khoản",
+      "osApps": "Ứng dụng được lấy",
+      "osHint": "Đọc thông báo mà các ứng dụng Windows khác đã hiện (Zalo, Telegram, Discord, Outlook, trình duyệt). Chọn ứng dụng, hoặc không chọn gì để lấy mọi ứng dụng trừ Tomny.",
+      "osNone": "Chưa thấy thông báo ứng dụng nào, hoặc đây không phải Windows.",
+      "osAllApps": "Mọi ứng dụng",
+      "preview": "Giữ đoạn xem trước ngắn",
+      "previewHint": "Tắt: chỉ đọc người gửi và tiêu đề.",
+      "youtubeHint": "Dán link kênh, @handle hoặc mã kênh. Video mới lấy từ feed công khai của YouTube; không cần đăng nhập hay API key.",
+      "channel": "Kênh YouTube",
+      "capture": "Nhận thông báo của chính trang",
+      "captureHint": "Khi trang bật thông báo (AI trả lời xong, có tin nhắn mới), thông báo đi vào hub và chỉ báo nếu thật sự quan trọng."
+    },
+    "rules": {
+      "title": "Quy tắc lọc",
+      "useLaya": "Để Laya phân loại thông báo",
+      "layaRunning": "Laya đang chạy trên máy này.",
+      "layaStopped": "Laya chưa chạy; Tomny sẽ không tự bật chỉ vì việc này.",
+      "systemAlerts": "Cảnh báo hệ thống cho thông báo khẩn",
+      "vip": "Người gửi luôn khẩn",
+      "muted": "Người gửi luôn lọc bớt",
+      "urgent": "Từ khóa khẩn",
+      "vipPlaceholder": "Mỗi dòng một mục: sep@congty.vn hoặc congty.vn",
+      "mutedPlaceholder": "Mỗi dòng một mục: news@shop.vn hoặc shop.vn",
+      "urgentPlaceholder": "Mỗi dòng một từ, ví dụ: hạn chót",
+      "save": "Lưu quy tắc",
+      "saved": "Đã lưu quy tắc"
+    },
+    "delivery": {
+      "interrupt": "Đã báo",
+      "digest": "Trong bảng tin",
+      "silent": "Đã ẩn"
+    },
+    "view": {
+      "toolbar": "Lọc thông báo",
+      "search": "Tìm thông báo",
+      "groupBy": "Nhóm theo",
+      "group": {
+        "time": "Mới nhất trước",
+        "level": "Theo mức độ",
+        "source": "Theo nguồn",
+        "account": "Theo tài khoản"
+      },
+      "source": "Nguồn",
+      "allSources": "Tất cả nguồn",
+      "unreadOnly": "Chỉ chưa đọc",
+      "noAccount": "Khác"
+    },
+    "sourceKind": {
+      "agent": "Agent Tomny",
+      "schedule": "Lịch chạy",
+      "team": "Nhóm",
+      "system": "Tomny",
+      "email": "Email",
+      "feed": "Feed",
+      "web": "Trang web",
+      "youtube": "YouTube",
+      "os": "Ứng dụng máy tính",
+      "app": "Ứng dụng Tomny"
+    },
+    "missed": {
+      "title": "Bạn đã bỏ lỡ gì",
+      "period": {
+        "today": "Hôm nay",
+        "24h": "24 giờ",
+        "7d": "7 ngày"
+      },
+      "none": "Không có gì mới trong khoảng này.",
+      "counts": "{{total}} thông báo, {{unread}} chưa đọc · {{p0}} khẩn · {{p1}} quan trọng · {{p2}} bản tin · {{p3}} đã lọc",
+      "askAgent": "Hỏi bất kỳ agent Tomny nào \"tôi đã bỏ lỡ gì?\" để có bản tóm tắt viết sẵn."
+    },
+    "catalog": {
+      "title": "Những gì kết nối được",
+      "intro": "Chạy được: Tomny tự lấy. Theo phiên web: chạy khi bạn đăng nhập trang đó trong trình duyệt tích hợp. Mới có adapter: đã lên kế hoạch, cần tích hợp với nhà cung cấp trước.",
+      "support": {
+        "working": "chạy được",
+        "session": "theo phiên web",
+        "adapter-ready": "mới có adapter"
+      },
+      "group": {
+        "mail": "Email",
+        "ai": "Trợ lý AI",
+        "social": "Mạng xã hội",
+        "messages": "Tin nhắn",
+        "video": "Video",
+        "desktop": "Máy tính",
+        "apps": "Ứng dụng"
+      }
+    },
+    "triage": {
+      "cardTitle": "Laya phân loại",
+      "title": "Điều gì được phép làm phiền bạn",
+      "intro": "Quy tắc, danh sách của bạn và những gì bạn mở hay bỏ qua được xét trước, ngay trên máy và không tốn phí. Laya hỗ trợ khi đang chạy sẵn.",
+      "interrupt": "Báo ngay cho",
+      "interruptHint": "Mọi thứ khác chờ trong bảng tin.",
+      "p0p1": "Khẩn + quan trọng",
+      "learn": "Học từ những gì tôi mở hoặc bỏ qua",
+      "learnHint": "Đẩy một người gửi lên hoặc xuống một mức; không bao giờ tự biến thứ gì thành khẩn.",
+      "packageApps": "Thông báo từ ứng dụng Tomny",
+      "packageAppsHint": "Ứng dụng đã cài có khai báo notifications.show được gửi thông báo; chúng không thể tự đánh dấu là khẩn.",
+      "retention": "Giữ thông báo (ngày)",
+      "muted": "Nguồn đã tắt tiếng",
+      "mutedNone": "Chưa tắt tiếng nguồn nào."
+    },
+    "llm": {
+      "title": "Hỏi model về mục chưa rõ",
+      "enable": "Dùng model cho mục chưa rõ",
+      "intro": "Mặc định tắt. Chỉ gửi những mục quy tắc không xếp được, theo lô nhỏ, đã xóa mã, số, link và địa chỉ. Không bao giờ vượt giới hạn mỗi ngày.",
+      "model": "Model",
+      "modelPlaceholder": "Mã một model nhỏ, rẻ",
+      "dailyLimit": "Tối đa mục mỗi ngày",
+      "includeSnippet": "Gửi cả đoạn xem trước đã che",
+      "includeSnippetHint": "Tắt: chỉ gửi loại nguồn, tên miền người gửi và tiêu đề đã che.",
+      "usage": "Hôm nay đã dùng: {{used}}/{{limit}}",
+      "inactive": "Chưa bật",
+      "lastRun": "lô gần nhất {{time}}",
+      "error": {
+        "budget": "đã chạm giới hạn hôm nay",
+        "no-model": "không nhà cung cấp nào phục vụ model này",
+        "unparsed": "không đọc được câu trả lời của model"
+      },
+      "errorGeneric": "lỗi gần nhất: {{error}}"
+    },
+    "flash": {
+      "title": "Thông báo nhanh",
+      "empty": "Chưa có gì cần xem.",
+      "viewAll": "Xem tất cả",
+      "viewAllMore": "Xem tất cả (+{{count}})"
+    },
+    "page": {
+      "subtitle": "Mọi thứ đã đến với bạn, các nguồn và cài đặt Laya.",
+      "tabs": {
+        "feed": "Thông báo",
+        "triage": "Laya & ngân sách"
+      }
+    }
   }
 }

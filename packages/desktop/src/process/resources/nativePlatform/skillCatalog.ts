@@ -1,5 +1,21 @@
-﻿import { cp, lstat, mkdir, readFile, readdir, readlink, realpath, rm, symlink, writeFile } from 'node:fs/promises';
+﻿import { createHash } from 'node:crypto';
+import {
+  cp,
+  lstat,
+  mkdir,
+  open,
+  readFile,
+  readdir,
+  readlink,
+  realpath,
+  rm,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
 import path from 'node:path';
+
+import { SKILL_DOCUMENT_MAX_BYTES, type SkillDocumentData } from '@/common/skills/skillDocument';
+import { skillLookupKey, unknownSkillMessage } from '@process/resources/skillDocument/nameMatch';
 
 export type SkillSummary = {
   name: string;
@@ -7,7 +23,8 @@ export type SkillSummary = {
   location: string;
   relative_location?: string;
   is_custom: boolean;
-  source: 'builtin' | 'custom' | 'extension';
+  source: 'builtin' | 'custom' | 'extension' | 'package';
+  packageId?: string;
 };
 export type DetectedSkill = { name: string; description: string; path: string };
 export type SkillResource = {
@@ -18,6 +35,39 @@ export type SkillResource = {
 };
 
 const MAX_SKILL_RESOURCE_BYTES = 128 * 1024;
+/** Only the front matter and first lines of a SKILL.md are read while listing; the full file is read on demand. */
+const SKILL_HEAD_BYTES = 16 * 1024;
+/** Directory entries one catalog scan may visit. Bounds a pathological tree or a link loop. */
+const MAX_SCAN_ENTRIES = 20_000;
+const PACKAGE_DIR = '.tomny-packages';
+const SAFE_PACKAGE_ID = /^[a-z0-9][a-z0-9._-]{0,127}$/u;
+const PACKAGE_SKILL_LIMIT = 2000;
+const PACKAGE_SKILL_BYTES = 20 * 1024 * 1024;
+
+/** Stable, package-owned folder that cannot collide with a person's skill directory. */
+const packageSkillKey = (connectionKey: string): string =>
+  createHash('sha256').update(connectionKey).digest('hex').slice(0, 32);
+
+/** Never follow links or special files into a package skill copied into the catalog. */
+const inspectPackageSkillTree = async (source: string): Promise<void> => {
+  let count = 0;
+  let total = 0;
+  const visit = async (directory: string): Promise<void> => {
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      const target = path.join(directory, entry.name);
+      const info = await lstat(target);
+      if (++count > PACKAGE_SKILL_LIMIT) throw new Error('Package skill has too many files.');
+      if (info.isSymbolicLink() || (!info.isDirectory() && !info.isFile()))
+        throw new Error('Package skill cannot contain links or special files.');
+      if (info.isFile()) {
+        total += info.size;
+        if (total > PACKAGE_SKILL_BYTES) throw new Error('Package skill exceeds its size limit.');
+      }
+      if (info.isDirectory()) await visit(target);
+    }
+  };
+  await visit(source);
+};
 
 const parseMetadata = (content: string, fallback: string): { name: string; description: string } => {
   const frontmatter = content.match(/^---\s*\r?\n([\s\S]*?)\r?\n---/);
@@ -34,8 +84,21 @@ const parseMetadata = (content: string, fallback: string): { name: string; descr
   return { name, description };
 };
 
+/** Reads the first {@link SKILL_HEAD_BYTES} of a file as text. Listing needs only the front matter, not a large body. */
+const readSkillHead = async (file: string): Promise<string> => {
+  const handle = await open(file, 'r');
+  try {
+    const buffer = Buffer.alloc(SKILL_HEAD_BYTES);
+    const { bytesRead } = await handle.read(buffer, 0, SKILL_HEAD_BYTES, 0);
+    return buffer.subarray(0, bytesRead).toString('utf8');
+  } finally {
+    await handle.close();
+  }
+};
+
 const scanRoot = async (root: string, maxDepth = 4): Promise<DetectedSkill[]> => {
   const found: DetectedSkill[] = [];
+  const budget = { left: MAX_SCAN_ENTRIES };
   const visit = async (directory: string, depth: number): Promise<void> => {
     if (depth > maxDepth) return;
     let entries;
@@ -45,9 +108,10 @@ const scanRoot = async (root: string, maxDepth = 4): Promise<DetectedSkill[]> =>
       return;
     }
     for (const entry of entries) {
+      if (--budget.left < 0) return;
       const target = path.join(directory, entry.name);
       if (entry.isFile() && entry.name.toLowerCase() === 'skill.md') {
-        const metadata = parseMetadata(await readFile(target, 'utf8'), path.basename(directory));
+        const metadata = parseMetadata(await readSkillHead(target), path.basename(directory));
         found.push({ ...metadata, path: directory });
       } else if (entry.isDirectory()) await visit(target, depth + 1);
     }
@@ -77,15 +141,20 @@ export class NativeSkillCatalog {
           is_custom: false,
           source: 'builtin',
         });
-    for (const skill of await scanRoot(this.userRoot))
+    for (const skill of await scanRoot(this.userRoot)) {
+      const relative = path.relative(this.userRoot, skill.path);
+      const segments = relative.split(path.sep);
+      const packageId = segments[0] === PACKAGE_DIR && segments.length === 3 ? segments[1] : undefined;
       all.push({
         name: skill.name,
         description: skill.description,
         location: skill.path,
-        relative_location: path.relative(this.userRoot, skill.path),
-        is_custom: true,
-        source: 'custom',
+        relative_location: relative,
+        is_custom: packageId === undefined,
+        source: packageId === undefined ? 'custom' : 'package',
+        ...(packageId === undefined ? {} : { packageId }),
       });
+    }
     return [...new Map(all.map((skill) => [skill.name.toLowerCase(), skill])).values()];
   }
   async info(skillPath: string): Promise<{ name: string; description: string }> {
@@ -94,9 +163,15 @@ export class NativeSkillCatalog {
       path.basename(skillPath)
     );
   }
+  /**
+   * Reads one skill resource. Accepts the bare skill name or the catalog id `skill:<name>`; a miss names close
+   * candidates so the agent can retry with an exact name.
+   */
   async read(name: string, resource = 'SKILL.md'): Promise<SkillResource> {
-    const skill = (await this.list()).find((candidate) => candidate.name.toLowerCase() === name.trim().toLowerCase());
-    if (!skill) throw new Error(`Unknown skill: ${name}`);
+    const skills = await this.list();
+    const key = skillLookupKey(name);
+    const skill = skills.find((candidate) => candidate.name.toLowerCase() === key);
+    if (!skill) throw new Error(unknownSkillMessage(name, skills.map((item) => item.name)));
     const root = await realpath(skill.location);
     const requested = path.resolve(root, resource.trim() || 'SKILL.md');
     let target: string;
@@ -120,6 +195,37 @@ export class NativeSkillCatalog {
       content: await readFile(target, 'utf8'),
     };
   }
+  /**
+   * Reads the SKILL.md of one catalog skill for the read-only viewer. Only skills that `list()` returns can resolve,
+   * so no renderer-supplied path is ever opened; links that leave the skill folder and oversized files are refused.
+   * Errors are thrown as the stable codes NOT_FOUND, UNREADABLE or TOO_LARGE.
+   */
+  async readDocument(name: string, packageId?: string): Promise<SkillDocumentData> {
+    const wanted = name.trim().toLowerCase();
+    const skill = wanted ? (await this.list()).find((candidate) => candidate.name.toLowerCase() === wanted) : undefined;
+    if (!skill || (packageId !== undefined && skill.packageId !== packageId)) throw new Error('NOT_FOUND');
+    const root = await realpath(skill.location);
+    let target: string | undefined;
+    for (const file of ['SKILL.md', 'skill.md']) {
+      try {
+        target = await realpath(path.join(root, file));
+        break;
+      } catch {
+        // Try the other casing; a missing file is reported below.
+      }
+    }
+    if (!target || !target.startsWith(`${root}${path.sep}`)) throw new Error('NOT_FOUND');
+    const info = await lstat(target);
+    if (!info.isFile()) throw new Error('UNREADABLE');
+    if (info.size > SKILL_DOCUMENT_MAX_BYTES) throw new Error('TOO_LARGE');
+    return {
+      name: skill.name,
+      description: skill.description,
+      ...(skill.packageId === undefined ? {} : { packageId: skill.packageId }),
+      content: await readFile(target, 'utf8'),
+    };
+  }
+
   scan(folderPath: string): Promise<DetectedSkill[]> {
     return scanRoot(folderPath);
   }
@@ -135,6 +241,55 @@ export class NativeSkillCatalog {
     else await cp(source, destination, { recursive: true, errorOnExist: true });
     return { skill_name: metadata.name };
   }
+  /** Installs an isolated, source-labeled copy without ever replacing a user or built-in skill. */
+  async importPackage(packageId: string, connectionKey: string, source: string): Promise<{ skill_name: string }> {
+    if (!SAFE_PACKAGE_ID.test(packageId) || !connectionKey.startsWith('skill:'))
+      throw new Error('Invalid package skill.');
+    const metadata = await this.info(source);
+    const folder = path.join(this.userRoot, PACKAGE_DIR, packageId, packageSkillKey(connectionKey));
+    const resolved = path.resolve(source);
+    await inspectPackageSkillTree(resolved);
+    const existing = (await this.list()).find(
+      (item) =>
+        item.name.toLowerCase() === metadata.name.toLowerCase() && path.resolve(item.location) !== path.resolve(folder)
+    );
+    if (existing) throw new Error(`Skill "${metadata.name}" already exists; choose whether to keep it or replace it.`);
+    const previous = await lstat(folder).catch((): undefined => undefined);
+    if (previous) {
+      if (!previous.isDirectory() || previous.isSymbolicLink()) throw new Error('Invalid package skill destination.');
+      await rm(folder, { recursive: true, force: true });
+    }
+    await mkdir(path.dirname(folder), { recursive: true });
+    await cp(resolved, folder, { recursive: true, errorOnExist: true, force: false, dereference: false });
+    return { skill_name: metadata.name };
+  }
+
+  async removePackageSkill(packageId: string, connectionKey: string): Promise<void> {
+    if (!SAFE_PACKAGE_ID.test(packageId) || !connectionKey.startsWith('skill:')) return;
+    const folder = path.join(this.userRoot, PACKAGE_DIR, packageId, packageSkillKey(connectionKey));
+    const info = await lstat(folder).catch((): undefined => undefined);
+    if (info?.isDirectory() && !info.isSymbolicLink()) await rm(folder, { recursive: true, force: true });
+  }
+
+  /** Reconcile only our dedicated package tree; never remove user or built-in skills. */
+  async reconcilePackageSkills(keep: ReadonlySet<string>): Promise<void> {
+    const root = path.join(this.userRoot, PACKAGE_DIR);
+    const packages = await readdir(root, { withFileTypes: true }).catch((): import('node:fs').Dirent[] => []);
+    for (const pkg of packages) {
+      if (!pkg.isDirectory() || !SAFE_PACKAGE_ID.test(pkg.name)) continue;
+      const dir = path.join(root, pkg.name);
+      const valid = new Set(
+        [...keep]
+          .filter((key) => key.startsWith(`${pkg.name}\u0000skill:`))
+          .map((key) => packageSkillKey(key.slice(pkg.name.length + 1)))
+      );
+      for (const folder of await readdir(dir, { withFileTypes: true })) {
+        if (folder.isDirectory() && /^[0-9a-f]{32}$/u.test(folder.name) && !valid.has(folder.name))
+          await rm(path.join(dir, folder.name), { recursive: true, force: true });
+      }
+    }
+  }
+
   async remove(name: string): Promise<void> {
     const target = path.resolve(this.userRoot, name);
     const root = path.resolve(this.userRoot);

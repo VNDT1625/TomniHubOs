@@ -1,7 +1,8 @@
 import type { Assistant } from '@/common/types/agent/assistantTypes';
 
 // Skill info type
-export type SkillSource = 'builtin' | 'custom' | 'extension';
+/** 'package' skills come from installed packages; the list shows them as read-only, like extension skills. */
+export type SkillSource = 'builtin' | 'custom' | 'extension' | 'package';
 
 export type SkillInfo = {
   name: string;

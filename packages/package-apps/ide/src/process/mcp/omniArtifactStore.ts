@@ -9,7 +9,7 @@
  *
  * The ChatGPT connector can pass a local temp-file path instead of embedding a
  * long text/media payload directly in tool arguments. This store validates the
- * file, records small metadata, stores text artifacts under `.omni/artifacts`,
+ * file, records small metadata, stores text artifacts under `.tomni/artifacts`,
  * and applies imported text through safe workspace-bound operations.
  */
 
@@ -316,7 +316,7 @@ const downloadFileReference = async (rootPath: string, file: ArtifactFileObject,
     }
   })();
   const ext = path.extname(hintedName || urlPath).toLowerCase();
-  const dir = path.join(rootPath, '.omni', 'artifacts', '_incoming');
+  const dir = path.join(rootPath, '.tomni', 'artifacts', '_incoming');
   await mkdir(dir, { recursive: true });
   const idPart = fileObjectId(file) ?? sha256(`${url}:${now().toISOString()}`).slice(0, 24);
   const localPath = path.join(dir, `${idPart}${ext}`);
@@ -376,7 +376,7 @@ export const createOmniArtifactStore = (deps: OmniArtifactStoreDeps): OmniArtifa
   };
   const artifacts = new Map<string, ImportedArtifact>();
 
-  const artifactDir = (sessionId: string): string => path.join(rootPath, '.omni', 'artifacts', sessionId);
+  const artifactDir = (sessionId: string): string => path.join(rootPath, '.tomni', 'artifacts', sessionId);
 
   const readArtifact = async (
     artifactId: string,

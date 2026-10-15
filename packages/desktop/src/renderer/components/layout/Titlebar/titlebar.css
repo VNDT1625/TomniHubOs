@@ -270,3 +270,163 @@
 .app-titlebar__no-drag {
   -webkit-app-region: no-drag;
 }
+
+/* ===== Mobile header (isMobile): the centred title must never overlap the side
+   clusters, and the toolbar sheds items the mobile chrome already covers. ===== */
+@media (max-width: 768px) {
+  /* In-flow flex centring instead of absolute positioning: with menu and
+     toolbar as fixed clusters, flex guarantees the brand can only shrink,
+     never collide. The JS optical-centring offset becomes a no-op. */
+  .app-titlebar--mobile .app-titlebar__brand--centered {
+    position: static;
+    transform: none;
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: none;
+    margin: 0 4px;
+  }
+
+  /* The avatar dropdown already carries settings/account on mobile. */
+  .app-titlebar--mobile .app-titlebar__settings-btn {
+    display: none;
+  }
+}
+
+/* Home header: keep the keyboard hint in sync with the page header. */
+@media (max-width: 1100px) {
+  .app-titlebar--home .app-titlebar__omni-search-btn kbd {
+    display: none;
+  }
+}
+
+/* ===== Page header (non-Home routes): styles extracted from inline JSX so the
+   breakpoints below can shrink them. Keep in sync with Titlebar/index.tsx. ===== */
+
+/* Search field centred over the content card on page routes. */
+.app-titlebar__search-container--page {
+  flex: 1 1 0;
+  display: flex;
+  width: min(360px, 100%);
+  min-width: 0;
+  margin: 0 auto;
+}
+
+.app-titlebar__omni-search-btn--page {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid var(--color-border-2, rgba(255, 255, 255, 0.12));
+  background: var(--color-fill-2, rgba(255, 255, 255, 0.05));
+  color: var(--color-text-3, #94a3b8);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Compact round icon buttons (notification bell, settings) on page routes. */
+.app-titlebar__pill-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #e2e8f0;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin: 0 2px;
+}
+
+.app-titlebar__pill-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.app-titlebar__pill-btn--alert {
+  color: #f87171;
+}
+
+/* Brand wordmark next to the logo on page routes; hidden on narrow screens. */
+.app-titlebar__brand-tag-text {
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--color-text-1, #f8fafc);
+  letter-spacing: 0.02em;
+}
+
+/* --- Responsive breakpoints for the page header --- */
+
+/* Laptop: narrower search field. */
+@media (max-width: 1280px) {
+  .app-titlebar__search-container--page {
+    width: min(280px, 100%);
+  }
+}
+
+/* Wide window: a longer field on page routes too. */
+@media (min-width: 1281px) {
+  .app-titlebar__search-container--page {
+    width: min(clamp(420px, 38vw, 760px), 100%);
+  }
+}
+
+/* Small laptop / large tablet: drop the keyboard hint, brand wordmark and
+   balance amount, and tighten the header rhythm. */
+@media (max-width: 1100px) {
+  .app-titlebar.app-titlebar--page {
+    gap: 4px;
+    padding-inline: 8px;
+  }
+
+  .app-titlebar--page .app-titlebar__omni-search-btn kbd {
+    display: none;
+  }
+
+  .app-titlebar__brand-tag-text {
+    display: none;
+  }
+
+  /* Balance widget collapses to its coin icon. */
+  .tom-balance-widget__value,
+  .tom-balance-widget__symbol {
+    display: none;
+  }
+
+  .tom-balance-widget__currency {
+    padding: 0 3px;
+    justify-content: center;
+  }
+}
+
+/* Tablet: history arrows and the whole balance widget give way. */
+@media (max-width: 900px) {
+  .app-titlebar__button--nav {
+    display: none;
+  }
+
+  .tom-balance-widget {
+    display: none;
+  }
+
+  .app-titlebar__search-container--page {
+    width: min(180px, 100%);
+  }
+}
+
+
+@media (max-width: 900px) {
+  .app-titlebar--desktop:not(.app-titlebar--mac) {
+    padding-left: 12px;
+  }
+
+  .app-titlebar__button {
+    width: 32px;
+    height: 32px;
+    align-self: center;
+  }
+}

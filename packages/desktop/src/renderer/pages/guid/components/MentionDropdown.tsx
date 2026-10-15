@@ -91,6 +91,7 @@ export const MentionSelectorBadge: React.FC<MentionSelectorBadgeProps> = ({
     <div className='flex items-center gap-8px mb-8px'>
       <Dropdown
         trigger='click'
+        position='tl'
         popupVisible={open}
         onVisibleChange={(v) => {
           onOpenChange(v);

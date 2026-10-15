@@ -7,6 +7,7 @@
 import { bridge } from '@office-ai/platform';
 import '@/common/adapter/bridgeErrorWrapper';
 import {
+  conversation as conversationChannels,
   cron,
   telegramChannel,
   type PersonalContextExport,
@@ -17,14 +18,18 @@ import {
   type PersonalLearningRecordIdRequest,
   type PersonalSecretSetSaveRequest,
 } from '@/common/adapter/ipcBridge';
-import { app } from 'electron';
-import { mkdir } from 'node:fs/promises';
+import { app, ipcMain } from 'electron';
+import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
+import { registerCoreWorkspaceMutationPort } from '@process/agentRuntime/agentMesh/mcp/coreWorkspaceServer';
 import { createFoundationConversationRuntime, createFoundationRunLifecycle } from '@process/bridge/foundationBridge';
+import { createTeamMutationPort } from '@process/resources/nativeFile/coreMutationPort';
+import { getTeamEditService } from '@package-apps/ide/process/collaboration/teamEdit/teamEditService';
 import {
   guardAccountExecution,
   registerNativeConversationBridge,
+  type NativeConversationRuntime,
   type RequireAuthenticatedAccount,
 } from '@process/services/database/nativeConversation';
 import type { TChatConversation } from '@/common/config/storage';
@@ -33,8 +38,20 @@ import {
   registerTomniRemoteConversations,
   subscribeTomniRemoteEvents,
 } from '@process/services/remoteGateway/registry';
+import { getHubActivityRegistry } from '@process/system/hubActivity/hubActivityRegistry';
+import { registerHubActivityBridge } from '@process/system/hubActivity/hubActivityBridge';
+import { getLiveSessionRegistry } from '@process/system/liveSessions/liveSessionRegistry';
+import { registerLiveSessionsBridge } from '@process/system/liveSessions/liveSessionsBridge';
+import { attachConversationActivity, reportScheduledRun } from '@process/system/hubActivity/hubActivitySources';
+import { restoreHubActivityGrid } from '@process/system/hubActivity/hubActivityStore';
 import { registerTelegramChannelBridge } from '@process/services/telegram/bridge';
 import { TelegramChannelService } from '@process/services/telegram/service';
+import { createOpenAiCompatibleTranscriber } from '@process/services/telegram/voice';
+import {
+  createLocalWhisperTranscriber,
+  findLocalWhisperModel,
+  localWhisperModelDirs,
+} from '@process/services/telegram/localWhisper';
 
 import { discoverLegacyDatabasePaths } from '@process/services/database/runLegacyDatabaseMigrations';
 import { getCompanyServices } from '@process/company/companyBridge';
@@ -64,13 +81,15 @@ import type {
 import type { UserUnderstandingConsumer } from '@process/userUnderstanding/userUnderstandingConsumer';
 import type { LocalInferenceBroker } from './adapters/sidecar/localInferenceBroker';
 import type { TomniGatewayModelService } from '@process/tomnigateway';
-import { normalizeExactSecretHostnames } from '@process/agentRuntime/secretVault';
+import { bindingForPersonalSet, parseSecretDestinations } from '@process/resources/sessionSecrets/destinations';
+import { packageIdOfSurface } from '@process/resources/sessionSecrets/packageOfSurface';
+import { getSecretRequestStore } from '@process/agentRuntime/agentMesh/mcp/secret-context/requests';
 import {
-  bindScheduledCoreRuntime,
   configureLegacyCronAdapter,
   createCoreScheduledTaskIpcHandlers,
   createCoreScheduledTaskService,
-  createScheduledCoreRuntimeRunner,
+  createRunConversationTracker,
+  createScheduledConversationRunner,
   JsonCoreScheduleStore,
   LegacyCronAdapter,
   type CoreScheduleAuditEvent,
@@ -118,6 +137,13 @@ import { createElectronRemoteCoreServices } from './remoteElectronServices';
 import { getCronSkillsDir, ProcessConfig } from '@process/utils/initStorage';
 import { listReadyProviders } from '@process/services/tomnyProviderBridge';
 import { BenchmarkService, BenchmarkStore, registerBenchmarkBridge } from '@process/testing/benchmark';
+import { createLiveImageOutputStore } from '@process/services/liveImageOutputStore';
+import { createLiveImageOutputCoordinator } from '@process/services/liveImageOutputCoordinator';
+import { createRunScopedScreenshotPublisher } from '@process/services/runScopedScreenshotMcp';
+import { getBrowserControlDeps } from '@process/browser/browserControlWiring';
+import { getApplicationMainWindow } from '@process/bridge/applicationBridge';
+import { stopRunScopedBrowserControlMcpHost } from '@process/browser/browserControlMcpHost';
+import { resolveCoreMcpServers } from '@process/resources/mcpRegistry/packageMcpLaunch';
 
 export const EXPERIMENTAL_CORE_CHANNELS = {
   listTargets: 'experimental-core.list-targets',
@@ -439,8 +465,36 @@ const channels = {
 
 let registeredRuntime: ExperimentalCoreRuntime | undefined;
 
+type E2ENativeConversationCapture = {
+  requests: Array<{
+    conversationId: string;
+    files: string[];
+    workspaceReferences: Array<{ relativePath: string; kind: 'file' | 'folder' }>;
+    prompt: string;
+  }>;
+  explorerActionCount: number;
+};
+
+const e2eNativeConversationCapture: E2ENativeConversationCapture = { requests: [], explorerActionCount: 0 };
+
+export const recordE2EExplorerAction = (): void => {
+  if (process.env.TOMNY_E2E_TEST === '1') e2eNativeConversationCapture.explorerActionCount += 1;
+};
+
+const registerE2ENativeConversationCapture = (): void => {
+  if (process.env.TOMNY_E2E_TEST !== '1') return;
+  ipcMain.handle('e2e.native-conversation-capture.reset', () => {
+    e2eNativeConversationCapture.requests.length = 0;
+    e2eNativeConversationCapture.explorerActionCount = 0;
+    return true;
+  });
+  ipcMain.handle('e2e.native-conversation-capture.get', () => structuredClone(e2eNativeConversationCapture));
+};
+
 export type ExperimentalCoreBridgeOptions = Readonly<{
   requireAuthenticatedAccount?: RequireAuthenticatedAccount;
+  /** Integrator-owned native human memory port, initialized after the conversation service. */
+  onConversationReady?: (getConversation: (id: string) => Promise<TChatConversation | undefined>) => void;
   /** Main-owned account identity; never supplied by a renderer payload. */
   accountId?: () => string;
   /** Main-owned Telegram egress admission; absence deliberately leaves transport inert. */
@@ -453,6 +507,11 @@ export type ExperimentalCoreBridgeOptions = Readonly<{
   localInferenceBroker?: LocalInferenceBroker;
   /** Optional Main-owned consumer-scoped model ingress for the native gateway. */
   modelService?: TomniGatewayModelService;
+  /**
+   * Main-owned shared block list used by the human Explorer. Agent writes and edits whose target
+   * lies inside a blocked tree are refused. Absence leaves agent mutations unguarded by blocks.
+   */
+  isAgentTargetBlocked?: (workspace: string, relPath: string) => Promise<boolean>;
   registerAccountExecutionLease?: (lease: AccountExecutionLease) => void;
   /**
    * Main-owned Package lifecycle facts. Package Apps are mirrored as metadata
@@ -467,6 +526,7 @@ export const registerExperimentalCoreBridge = (
   options: ExperimentalCoreBridgeOptions = {}
 ): ExperimentalCoreRuntime => {
   if (registeredRuntime) return registeredRuntime;
+  registerE2ENativeConversationCapture();
   const sessionStore = new JsonCoreSessionStore(
     path.join(app.getPath('userData'), 'tomny-core', 'session-checkpoints.json')
   );
@@ -524,7 +584,11 @@ export const registerExperimentalCoreBridge = (
   configureSecretContextStoredCallback(async ({ descriptor }) => {
     await (await getPersonalMutations()).bindSecret(descriptor);
   });
-  const capabilityHosts = createElectronSurfaceCapabilityHosts(contextServices.vault);
+  let publishLiveImageOutput: ((update: unknown) => void) | undefined;
+  const capabilityHosts = createElectronSurfaceCapabilityHosts(contextServices.vault, {
+    packageIdOfSurface: (surfaceId) => packageIdOfSurface(surfaceRegistry.get(surfaceId)),
+    publishLiveImageOutput: (update) => publishLiveImageOutput?.(update),
+  });
   const remoteServices = createElectronRemoteCoreServices(
     contextServices.vault,
     path.join(app.getPath('userData'), 'tomny-core', 'remote-targets.json')
@@ -549,6 +613,12 @@ export const registerExperimentalCoreBridge = (
     ...(await remoteServices.detectTargets()),
     await detectLoopbackOpenAiTarget(),
   ];
+  // Chat agents write and edit through the same lease table as IDE agents, saved via MTUI.
+  registerCoreWorkspaceMutationPort(
+    createTeamMutationPort(() => getTeamEditService(), {
+      isBlocked: options.isAgentTargetBlocked,
+    })
+  );
   const adapters = [
     new TomnyCoreAdapter(undefined, sessionActionHistory),
     new CodexAppServerAdapter(),
@@ -558,6 +628,7 @@ export const registerExperimentalCoreBridge = (
   ];
   const coreEventListeners = new Set<(event: ExperimentalCoreEvent) => void>();
   const emitCoreEvent = (event: ExperimentalCoreEvent): void => {
+    if (event.type === 'started') activeLiveImageRuns.add(event.requestId);
     channels.event.emit(event);
     publishTomniRemoteEvent({ kind: 'core', payload: event });
     for (const listener of coreEventListeners) listener(event);
@@ -573,8 +644,10 @@ export const registerExperimentalCoreBridge = (
     companyRunner: createCompanyCoreRunner(),
     agentMeshService,
     contextComposer: contextServices.composer,
-    resolveCapabilityHosts: (serverNames, sessionServers, context) =>
-      capabilityHosts.resolve(serverNames, sessionServers, context),
+    // Package connection servers keep `package-secret://` placeholders everywhere else; the values are filled here,
+    // in Main, for the run that is about to launch them (docs/platform/repotopackage-design.md section 10.2).
+    resolveCapabilityHosts: async (serverNames, sessionServers, context) =>
+      resolveCoreMcpServers(await capabilityHosts.resolve(serverNames, sessionServers, context)),
     availableCapabilityHostNames: () => capabilityHosts.names(),
   });
   registeredRuntime = runtime;
@@ -583,9 +656,6 @@ export const registerExperimentalCoreBridge = (
   });
   const benchmarkFoundationLifecycle = createFoundationRunLifecycle(runtime, {
     origin: 'tomny://benchmark',
-  });
-  const scheduledFoundationLifecycle = createFoundationRunLifecycle(runtime, {
-    origin: 'tomny://scheduler',
   });
   const benchmarkService = new BenchmarkService({
     store: new BenchmarkStore(path.join(app.getPath('userData'), 'testing', 'benchmarks', 'catalog.json')),
@@ -617,11 +687,80 @@ export const registerExperimentalCoreBridge = (
     },
   });
   registerBenchmarkBridge(benchmarkService);
+  const liveImageOutputStore = createLiveImageOutputStore({
+    indexPath: path.join(app.getPath('userData'), 'tomny-core', 'live-image-outputs.json'),
+  });
+  let liveImageOutputs: ReturnType<typeof createLiveImageOutputCoordinator> | undefined;
+  const activeLiveImageRuns = new Set<string>();
+  publishLiveImageOutput = async (raw: unknown): Promise<void> => {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('LIVE_IMAGE_OUTPUT_REQUEST_INVALID');
+    const request = raw as Record<string, unknown>;
+    const outputId = typeof request.outputId === 'string' ? request.outputId : '';
+    const tabId = typeof request.tabId === 'string' ? request.tabId : '';
+    const requestId = typeof request.requestId === 'string' ? request.requestId : '';
+        const conversationId = typeof request.conversationId === 'string' ? request.conversationId : '';
+    const accountId = options.accountId?.();
+    const workspace = typeof request.workspace === 'string' ? request.workspace : '';
+        if (!/^[A-Za-z0-9._:@-]{1,200}$/u.test(outputId) || !/^[A-Za-z0-9._:@-]{1,200}$/u.test(conversationId) || !accountId || !tabId || !activeLiveImageRuns.has(requestId)) {
+      throw new Error('LIVE_IMAGE_OUTPUT_REQUEST_INVALID');
+    }
+    const publisher = createRunScopedScreenshotPublisher({
+            runId: requestId,
+      accountId,
+      conversationId,
+      workspace,
+      pagePerception: getBrowserControlDeps(getApplicationMainWindow).pagePerception,
+      outputs: liveImageOutputs ?? (() => { throw new Error('LIVE_IMAGE_OUTPUT_UNAVAILABLE'); })(),
+      isRunActive: () => activeLiveImageRuns.has(requestId),
+    });
+    await publisher.capture({ outputId, tabId });
+  };
+  const conversationRuntime: NativeConversationRuntime =
+    process.env.TOMNY_E2E_TEST === '1'
+      ? {
+          start: (requestId, _targetId, _prompt, _workspace, _modelKey, _permissionMode, sessionId) => ({
+            requestId,
+            sessionId,
+            terminal: Promise.resolve({ type: 'cancelled' as const, text: 'E2E fake runtime completed.' }),
+          }),
+          cancel: async () => true,
+          inspectContext: (input) => runtime.inspectContext(input),
+          resolvePermission: (permissionId, approved, lifetime) => runtime.resolvePermission(permissionId, approved, lifetime),
+          resolveOrchestrationProposal: (proposalId, approved) => runtime.resolveOrchestrationProposal(proposalId, approved),
+          getSession: (sessionId) => runtime.getSession(sessionId),
+          updateSessionConfig: (sessionId, config) => runtime.updateSessionConfig(sessionId, config),
+                    listModels: (targetId, workspace) => runtime.listModels(targetId, workspace),
+                    listCommands: (targetId, workspace, logicalSessionId, onUpdate) =>
+            runtime.listCommands(targetId, workspace, logicalSessionId, onUpdate),
+          releaseCommands: (logicalSessionId) => runtime.releaseCommands(logicalSessionId),
+        }
+      : createFoundationConversationRuntime(runtime, {
+          onTerminalReceipt: async (receipt) => {
+            await liveImageOutputs?.finishRun({
+              runId: receipt.runId,
+              receiptId: receipt.receiptId,
+              status: receipt.status === 'approval_required' ? 'failed' : receipt.status,
+            });
+            activeLiveImageRuns.delete(receipt.runId);
+            await stopRunScopedBrowserControlMcpHost(receipt.runId);
+          },
+        });
+
   const conversationService = registerNativeConversationBridge({
     filePath: path.join(app.getPath('userData'), 'tomny-core', 'conversations.json'),
 
     legacyDatabasePath: discoverLegacyDatabasePaths(),
-    runtime: createFoundationConversationRuntime(runtime),
+    runtime: conversationRuntime,
+    onSessionEnded: (sessionId) => {
+      getSecretRequestStore().clearSession(sessionId);
+      void contextServices.vault.removeSession(sessionId).catch((): undefined => undefined);
+    },
+    e2eCapture:
+      process.env.TOMNY_E2E_TEST === '1'
+        ? (record) => {
+            e2eNativeConversationCapture.requests.push(structuredClone(record));
+          }
+        : undefined,
     workspaceProvisioner: async (conversation: TChatConversation) => {
       const candidate = (conversation.extra as Record<string, unknown>).surface;
       const surface = typeof candidate === 'string' && candidate.trim() ? candidate.trim() : 'chat';
@@ -634,16 +773,45 @@ export const registerExperimentalCoreBridge = (
         conversation.id
       );
       await mkdir(workspace, { recursive: true });
+      if (process.env.TOMNY_E2E_TEST === '1') {
+        await mkdir(path.join(workspace, '.tomni', 'understand'), { recursive: true });
+        await mkdir(path.join(workspace, 'src'), { recursive: true });
+        await mkdir(path.join(workspace, 'docs'), { recursive: true });
+        await writeFile(path.join(workspace, 'src', 'a.ts'), 'export const answer = 42;\n', 'utf8');
+        await writeFile(
+          path.join(workspace, '.tomni', 'understand', 'summary.json'),
+          JSON.stringify({ modules: [{ id: 'docs', summary: 'Canonical docs summary.' }] }),
+          'utf8'
+        );
+      }
       return workspace;
     },
     subscribeCore: (listener) => {
       coreEventListeners.add(listener);
       return () => coreEventListeners.delete(listener);
     },
-    requireAuthenticatedAccount: options.requireAuthenticatedAccount,
+        requireAuthenticatedAccount: options.requireAuthenticatedAccount,
+    accountId: options.accountId,
+    liveImageOutputStore,
     userUnderstandingConsumer: options.userUnderstandingConsumer,
   });
+  liveImageOutputs = createLiveImageOutputCoordinator({
+    store: liveImageOutputStore,
+    emit: (update) => conversationService.publishLiveImageOutput(update),
+  });
+
+  options.onConversationReady?.((id) => conversationService.get(id));
   registerTomniRemoteConversations(conversationService);
+  // Home shows every running agent turn; it observes the same event stream the remote gateway reads.
+  const hubActivity = getHubActivityRegistry();
+    registerHubActivityBridge(hubActivity, options.requireAuthenticatedAccount, (id) => conversationService.get(id));
+  registerLiveSessionsBridge(getLiveSessionRegistry(), options.requireAuthenticatedAccount);
+  attachConversationActivity(hubActivity, subscribeTomniRemoteEvents, conversationService);
+  // Home must show the previous grid right after boot, not only work from this run.
+  restoreHubActivityGrid(hubActivity, path.join(app.getPath('userData'), 'tomny-core', 'runs', 'hub-activity.json'));
+  // The local Whisper sidecar starts on the first voice message and stops itself after a quiet period.
+  let localWhisper: ReturnType<typeof createLocalWhisperTranscriber> | undefined;
+  let localWhisperKey = '';
   const telegramService = new TelegramChannelService({
     statePath: path.join(app.getPath('userData'), 'tomny-core', 'channels', 'telegram.json'),
     vault: contextServices.vault,
@@ -666,6 +834,37 @@ export const registerExperimentalCoreBridge = (
         agent,
       };
     },
+    resolveVoiceTranscriber: async () => {
+      const local = await ProcessConfig.get('assistant.telegram.sttLocal');
+      if (local?.enabled) {
+        const size = local.size ?? 'base';
+        // A missing model is reported to the user by the sidecar's setup message, so the path is passed either way.
+        const modelDir =
+          findLocalWhisperModel(size, app.getPath('userData')) ??
+          localWhisperModelDirs(size, app.getPath('userData'))[0];
+        const key = `${size}:${modelDir}:${local.prompt ?? ''}`;
+        if (!localWhisper || localWhisperKey !== key) {
+          localWhisper?.stop();
+          localWhisper = createLocalWhisperTranscriber({
+            modelDir,
+            scriptPath: path.resolve(process.cwd(), 'scripts/whisper_sidecar.py'),
+            language: 'vi',
+            initialPrompt: local.prompt?.trim() || undefined,
+          });
+          localWhisperKey = key;
+        }
+        return localWhisper;
+      }
+      const selection = await ProcessConfig.get('assistant.telegram.sttModel');
+      if (!selection?.id || !selection.use_model) return undefined;
+      const provider = (await listReadyProviders()).find((candidate) => candidate.id === selection.id);
+      if (!provider?.base_url || !provider.api_key) return undefined;
+      return createOpenAiCompatibleTranscriber({
+        baseUrl: provider.base_url,
+        model: selection.use_model,
+        getApiKey: async () => provider.api_key,
+      });
+    },
     requireAuthenticatedAccount: options.requireAuthenticatedAccount,
     isExternalAuthorityGranted: options.isTelegramExternalAuthorityGranted,
     subscribeExternalAuthorityRevocation: options.subscribeTelegramExternalAuthorityRevocation,
@@ -679,45 +878,35 @@ export const registerExperimentalCoreBridge = (
     start: () => telegramService.resume(),
     stop: () => telegramService.suspendPolling(),
   });
-  const scheduledPort = bindScheduledCoreRuntime(
-    {
-      start: (
-        requestId,
-        targetId,
-        prompt,
-        workspace,
-        modelKey,
-        permissionMode,
-        sessionId,
-        _companyId,
-        contextIdentity
-      ) => {
+  // Each scheduled run is a turn of a real conversation (tagged with the task id), so its answer is kept and shown.
+  const runConversations = createRunConversationTracker();
+  const scheduledRunner = createScheduledConversationRunner({
+    port: {
+      get: (id) => conversationService.get(id),
+      create: (params) => conversationService.create(params),
+      send: async (params) => {
         options.requireAuthenticatedAccount?.();
-        return scheduledFoundationLifecycle.start({
-          requestId,
-          targetId,
-          prompt,
-          workspace,
-          modelKey,
-          permissionMode,
-          sessionId,
-          contextIdentity,
-        });
+        return conversationService.send(params);
       },
-      cancel: (requestId) => scheduledFoundationLifecycle.cancel(requestId),
-      resolvePermission: (permissionId, approved) => runtime.resolvePermission(permissionId, approved),
+      cancel: (conversationId) => conversationService.cancel(conversationId),
+      resolvePermission: (permissionId, approved) => conversationService.resolvePermission(permissionId, approved),
+      subscribe: (listener) => subscribeTomniRemoteEvents(listener),
     },
-    (listener) => {
-      coreEventListeners.add(listener);
-      return () => coreEventListeners.delete(listener);
-    }
-  );
+    describe: (taskId) => scheduledService.get(taskId),
+    skillFor: (taskId) => legacyCronAdapter.readSkill({ job_id: taskId }),
+    onConversation: (taskId, conversationId) => runConversations.started(taskId, conversationId),
+  });
   let legacyCronAdapter!: LegacyCronAdapter;
   const scheduledService = createCoreScheduledTaskService({
     store: new JsonCoreScheduleStore(path.join(app.getPath('userData'), 'tomny-core', 'scheduled-tasks.json')),
-    runner: createScheduledCoreRuntimeRunner(scheduledPort),
+    runner: scheduledRunner,
     onAudit: (event) => {
       if (!legacyCronAdapter || !event.kind.startsWith('run.')) return;
+      reportScheduledRun(
+        hubActivity,
+        event,
+        async (taskId) => (await legacyCronAdapter?.getJob({ job_id: taskId }))?.name
+      );
       setTimeout(() => {
         void legacyCronAdapter?.getJob({ job_id: event.taskId }).then((job) => {
           if (!job) return;
@@ -733,6 +922,7 @@ export const registerExperimentalCoreBridge = (
       }, 0);
     },
   });
+  hubActivity.registerController('schedule', { stop: (taskId) => scheduledService.cancel(taskId) });
   let resolveScheduledReady: (() => void) | undefined;
   const scheduledReady = new Promise<void>((resolve) => {
     resolveScheduledReady = resolve;
@@ -781,6 +971,7 @@ export const registerExperimentalCoreBridge = (
     ready: scheduledReady,
     skillsDirectory: getCronSkillsDir(),
     defaultWorkspace: app.getPath('home'),
+    awaitRunConversation: (taskId) => runConversations.next(taskId),
     events: {
       created: (job) => cron.onJobCreated.emit(job),
       updated: (job) => cron.onJobUpdated.emit(job),
@@ -889,7 +1080,7 @@ export const registerExperimentalCoreBridge = (
     const allowedHandles = new Set(profile.secretReferences.map((reference) => reference.handle));
     return (await contextServices.vault.list()).filter((descriptor) => allowedHandles.has(descriptor.handle));
   });
-  registerAuthenticated(channels.personalSecretsSave, async ({ handle, name, note, targets, variables }) => {
+  registerAuthenticated(channels.personalSecretsSave, async ({ handle, name, note, targets, destinations, variables }) => {
     const profile = await getPersonalProfile();
     if (handle && !profile.secretReferences.some((reference) => reference.handle === handle)) {
       throw new Error('ACCOUNT_PERSONAL_SECRET_NOT_FOUND');
@@ -908,7 +1099,8 @@ export const registerExperimentalCoreBridge = (
     ) {
       throw new Error('Every secret variable requires a unique name and a value.');
     }
-    const normalizedTargets = normalizeExactSecretHostnames(targets);
+    // Without destinations this is the original web-plus-firewall binding; a terminal-only set needs no hostname.
+    const binding = bindingForPersonalSet(parseSecretDestinations(destinations), targets);
     const fields = normalized.map((item) => item.name);
     const payload = Object.fromEntries(normalized.map((item) => [item.name, item.value]));
     const descriptorInput = {
@@ -916,11 +1108,7 @@ export const registerExperimentalCoreBridge = (
       note,
       kind: 'credential' as const,
       fields,
-      binding: {
-        surfaces: ['browser', 'secret-firewall'],
-        purposes: ['browser-fill', 'opaque-use'],
-        targets: normalizedTargets,
-      },
+      binding,
     };
     const descriptor = handle
       ? await contextServices.vault.replace(handle, descriptorInput, payload)
@@ -947,6 +1135,12 @@ export const registerExperimentalCoreBridge = (
   registerAuthenticated(cron.saveSkill, (input) => legacyCronAdapter.saveSkill(input));
   registerAuthenticated(cron.hasSkill, (input) => legacyCronAdapter.hasSkill(input));
   registerAuthenticated(cron.deleteSkill, (input) => legacyCronAdapter.deleteSkill(input));
+  registerAuthenticated(conversationChannels.listByCronJob, async ({ cron_job_id: job_id }) => {
+    const { items } = await conversationService.list(undefined, 200);
+    return items
+      .filter((conversation) => (conversation.extra as Record<string, unknown>)?.cron_job_id === job_id)
+      .toSorted((a, b) => (b.modified_at ?? 0) - (a.modified_at ?? 0));
+  });
   registerAuthenticated(channels.scheduledList, async () => {
     await scheduledReady;
     return scheduledHandlers.list();

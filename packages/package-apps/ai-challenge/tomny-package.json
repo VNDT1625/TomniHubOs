@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "id": "com.tomni.ai-challenge",
+  "publisherId": "com.tomni",
+  "name": "AI Challenge",
+  "description": "The first AI Arena game package on TomniHubOS featuring autonomous agent battles and real-time coach tactical directives.",
+  "type": "app",
+  "bundleKind": "single",
+  "version": "1.0.0",
+  "engines": {
+    "tomni": ">=0.0.0"
+  },
+  "modules": [
+    {
+      "id": "arena",
+      "title": "AI Challenge: Mech Arena",
+      "surface": "apps/ai-challenge",
+      "pinnable": true,
+      "runtime": "sandboxed-web",
+      "entrypoint": "index.html"
+    }
+  ],
+  "contributions": {
+    "version": 1,
+    "apps": [
+      {
+        "id": "arena",
+        "title": "AI Challenge: Mech Arena",
+        "moduleId": "arena"
+      }
+    ]
+  },
+  "permissions": [
+    "sidebar.sessions",
+    "model.invoke"
+  ],
+  "dependencies": [],
+  "tags": [
+    "game",
+    "ai-arena",
+    "mech",
+    "decision-model",
+    "sports",
+    "season-1"
+  ]
+}

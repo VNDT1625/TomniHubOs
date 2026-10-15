@@ -127,19 +127,17 @@ export const normalizeUrl = (input: string): string => {
  * on mount. Tabs are ephemeral, Main-process-owned views, so this is a plain
  * in-memory hand-off rather than persisted storage.
  */
-let requestedActiveTabId: string | null = null;
+/** The page a new tab (and a Browser app opened with no tab) starts on. */
+export const BROWSER_HOME_URL = 'https://www.google.com';
 
-/** Ask the Browser page to focus `id` the next time it mounts. */
-export const requestActiveTab = (id: string): void => {
-  requestedActiveTabId = id;
-};
-
-/** Read and clear the pending active-tab request (returns `null` when none). */
-export const consumeRequestedActiveTab = (): string | null => {
-  const id = requestedActiveTabId;
-  requestedActiveTabId = null;
-  return id;
-};
+/** Host-owned quick-session requests keep the Browser implementation out of the base renderer graph. */
+export {
+  requestActiveTab,
+  subscribeActiveTabRequests,
+  requestTabsRefresh,
+  subscribeTabsRefresh,
+  consumeRequestedActiveTab,
+} from '@renderer/pages/guid/shell/browserTabHandoff';
 
 /**
  * Whether the Browser page should open its AI chat dock on the next mount.

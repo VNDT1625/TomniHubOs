@@ -9,7 +9,21 @@ import type { ComponentType } from 'react';
 export type PackageType = 'app' | 'ui' | 'agent-capsule';
 export type PackageBundleKind = 'single' | 'suite';
 export type PackageDeliveryMode = 'bundled-legacy' | 'bundled-package' | 'downloaded-package';
-export type PackageTrust = 'trusted-first-party' | 'signed-first-party' | 'signed-store';
+/**
+ * Trust tier of an installed package. `local-built` marks a package built and signed on this machine with its local
+ * key (for example by /repotopackage); it is verified only against local keys, never against Store keys, and can never
+ * claim a protected namespace or the trusted-react runtime.
+ *
+ * `unsigned-revoked` is a `local-built` package whose local signing key was revoked (docs/platform/repotopackage-design.md
+ * section 9.1). It stays installed, is never trusted as signed, and its code-running connections are switched off until it
+ * is rebuilt and reinstalled with the new key and approved again.
+ */
+export type PackageTrust =
+  | 'trusted-first-party'
+  | 'signed-first-party'
+  | 'signed-store'
+  | 'local-built'
+  | 'unsigned-revoked';
 
 /**
  * Versioned renderer-only editor ABI that an optional Surface may consume
@@ -181,9 +195,25 @@ export type PackageThemeContribution = {
   css: string;
 };
 
+/**
+ * A launch recipe for an MCP tool server that runs on the user's machine. The package carries no code:
+ * it only names a published command, and the host registers it disabled until the user approves it.
+ */
+export type PackageMcpServerContribution = {
+  id: string;
+  title: string;
+  description?: string;
+  /** Only launchers that fetch a published package are accepted. */
+  command: 'npx' | 'uvx';
+  args: string[];
+  /** Names of environment variables the server needs; the user supplies the values. */
+  envKeys?: string[];
+};
+
 export type PackageContributionContract = {
   version: 1;
   apps?: PackageAppContribution[];
+  mcpServers?: PackageMcpServerContribution[];
 
   themes?: PackageThemeContribution[];
   ide?: {
@@ -219,6 +249,7 @@ export type PackageContributionSnapshot = {
   subtabs: Array<RegisteredPackageContribution<PackageIdeSubtabContribution>>;
   commands: Array<RegisteredPackageContribution<PackageCommandContribution>>;
   settings: Array<RegisteredPackageContribution<PackageSettingContribution>>;
+  mcpServers: Array<RegisteredPackageContribution<PackageMcpServerContribution>>;
 };
 
 export type PackageContributionDiagnosticCode =

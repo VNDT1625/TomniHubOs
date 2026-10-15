@@ -1,0 +1,21 @@
+{
+  "name": "context7-marketplace",
+  "owner": {
+    "name": "Example Docs Team"
+  },
+  "plugins": [
+    {
+      "name": "context7",
+      "description": "Library documentation lookup",
+      "source": "./plugins/claude/context7"
+    },
+    {
+      "name": "remote-helper",
+      "description": "Lives in another repository",
+      "source": {
+        "source": "github",
+        "repo": "example-org/remote-helper"
+      }
+    }
+  ]
+}

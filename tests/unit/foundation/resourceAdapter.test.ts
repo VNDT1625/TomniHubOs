@@ -24,6 +24,8 @@ describe('Foundation ResourceAdapter', () => {
     expect(coordinator.requestLease).toHaveBeenCalledWith(
       expect.objectContaining({ kind: 'agent', estCostMB: 128, priority: 3, requestId: 'foundation:run_1:task_1' })
     );
+    const request = coordinator.requestLease.mock.calls[0]?.[0] as { deadlineAt?: number };
+    expect(request.deadlineAt).toBeGreaterThan(Date.now());
     await expect(adapter.releaseLease(lease.leaseId)).resolves.toBe(true);
     expect(releaseLease).toHaveBeenCalledWith('shared_lease_1');
   });

@@ -19,16 +19,41 @@ const AGENT_ORCHESTRATOR_TOOLS = [
 
 const createSecretContextCapability = (): SurfaceCapabilityBinding => ({
   id: 'core.secret-context',
-  label: 'Tomny Core Secret Firewall',
+  label: 'Tomny Secrets',
   kind: 'mcp',
   providerId: 'builtin.secret-context',
   serverName: 'tomny-secret-context',
-  toolPatterns: ['agent_secret_context_use', 'secret_context_capture', 'secret_context_generate'],
+  toolPatterns: [
+    'tomny_secret_use',
+    'tomny_secret_capture',
+    'tomny_secret_generate',
+    'tomny_secret_list',
+    'tomny_secret_request',
+    'tomny_secret_request_access',
+  ],
+  availability: 'core',
   optional: true,
   minimumPermissionMode: 'workspace-write',
   // The trusted host enforces exact source/destination policies. Repeated UI
   // approval would make unattended workflows impossible without adding a
   // second security boundary.
+  requireExplicitGrant: false,
+});
+
+/**
+ * Read-only access to the user's notification hub ("what did I miss"). Output is local, redacted and
+ * contains no connector settings or secrets, so it needs no grant beyond read-only.
+ */
+const createNotificationHubCapability = (): SurfaceCapabilityBinding => ({
+  id: 'core.notification-hub',
+  label: 'Tomny notification hub (read-only)',
+  kind: 'mcp',
+  providerId: 'builtin.notification-hub',
+  serverName: 'tomny-notification-hub',
+  toolPatterns: ['notifications_recent', 'notifications_summary'],
+  availability: 'core',
+  optional: true,
+  minimumPermissionMode: 'read-only',
   requireExplicitGrant: false,
 });
 
@@ -39,7 +64,20 @@ const createCoreCapabilities = (options: { requireOrchestrator?: boolean } = {})
     kind: 'mcp',
     providerId: 'builtin.tool-selector',
     serverName: 'tomny-tool-selector',
-    toolPatterns: ['tools_search', 'tools_recall', 'skills_*'],
+    toolPatterns: ['tools_search', 'tools_recall', 'tools_guide', 'skills_*', 'plugin'],
+    availability: 'core',
+    optional: true,
+    minimumPermissionMode: 'read-only',
+    requireExplicitGrant: false,
+  },
+    {
+    id: 'core.tool-workflow',
+    label: 'Tomny multi-tool workflow',
+    kind: 'mcp',
+    providerId: 'builtin.workflow',
+    serverName: 'tomny-workflow',
+    toolPatterns: ['workflow_run', 'workflow_result_get', 'workflow_adapter_get', 'workflow_mailbox_poll'],
+    availability: 'core',
     optional: true,
     minimumPermissionMode: 'read-only',
     requireExplicitGrant: false,
@@ -51,23 +89,40 @@ const createCoreCapabilities = (options: { requireOrchestrator?: boolean } = {})
     providerId: 'builtin.agent-orchestrator',
     serverName: 'tomny-agent-orchestrator',
     toolPatterns: AGENT_ORCHESTRATOR_TOOLS,
+    availability: 'core',
     optional: !options.requireOrchestrator,
     minimumPermissionMode: 'read-only',
     requireExplicitGrant: false,
   },
-  {
-    id: 'core.testing',
-    label: 'Tomny Core testing',
-    kind: 'mcp',
-    providerId: 'builtin.testing',
-    serverName: 'tomny-testing',
-    toolPatterns: ['test_*'],
-    optional: true,
-    minimumPermissionMode: 'read-only',
-    requireExplicitGrant: false,
-  },
   createSecretContextCapability(),
+  createNotificationHubCapability(),
 ];
+
+/**
+ * Read, search and list files of the conversation's workspace. Only surfaces without their own project tools get
+ * it: the IDE surface already serves tomny_* names, and two servers must not offer the same tool.
+ */
+const createWorkspaceReadCapability = (): SurfaceCapabilityBinding => ({
+  id: 'core.workspace-read',
+  label: 'Tomny Core workspace (read-only)',
+  kind: 'mcp',
+  providerId: 'builtin.core-workspace-read',
+  serverName: 'tomny-core-workspace',
+  toolPatterns: [
+    'tomny_read',
+    'tomny_glob',
+    'tomny_search',
+    'tomny_wiki',
+    'tomny_compass',
+    'tomny_diff',
+    'tomny_compact',
+    'tomny_library_search',
+  ],
+  availability: 'core',
+  optional: true,
+  minimumPermissionMode: 'read-only',
+  requireExplicitGrant: false,
+});
 
 const createIdeCapability = (): SurfaceCapabilityBinding => ({
   id: 'surface.ide',
@@ -75,7 +130,8 @@ const createIdeCapability = (): SurfaceCapabilityBinding => ({
   kind: 'mcp',
   providerId: 'builtin.ide',
   serverName: 'tomny-ide',
-  toolPatterns: ['ide_*', 'tomny_*', 'terminal_*', 'test_*', 'git_*', 'team_*', 'db_*', 'exp_*'],
+  toolPatterns: ['ide_*', 'tomny_*', 'terminal_*', 'git_*', 'team_*', 'db_*', 'exp_*'],
+  availability: 'surface-only',
   minimumPermissionMode: 'workspace-write',
   requiredPermissionScopes: ['workspace.read', 'workspace.write'],
   requireExplicitGrant: true,
@@ -88,6 +144,7 @@ const createBrowserCapability = (): SurfaceCapabilityBinding => ({
   providerId: 'builtin.browser-control',
   serverName: 'tomny-browser-control',
   toolPatterns: ['browser_*', 'quick_test_*', 'extract_content', 'editor_*'],
+  availability: 'portable',
   minimumPermissionMode: 'full-access',
   requiredPermissionScopes: ['browser.control'],
   requireExplicitGrant: true,
@@ -100,6 +157,7 @@ const createOfficeCapability = (): SurfaceCapabilityBinding => ({
   providerId: 'builtin.office-editor',
   serverName: 'tomny-office-editor',
   toolPatterns: ['office_*'],
+  availability: 'portable',
   minimumPermissionMode: 'workspace-write',
   requiredPermissionScopes: ['office.read', 'office.write'],
   requireExplicitGrant: true,
@@ -123,7 +181,7 @@ export const BUILTIN_SURFACE_MANIFESTS: SurfaceManifest[] = [
       allowedModes: [...ALL_PERMISSION_MODES],
       requireExplicitGrant: false,
     },
-    capabilities: createCoreCapabilities(),
+    capabilities: [...createCoreCapabilities(), createWorkspaceReadCapability()],
   },
   {
     schemaVersion: 1,
@@ -245,6 +303,7 @@ export const BUILTIN_SURFACE_MANIFESTS: SurfaceManifest[] = [
         providerId: 'builtin.make-film',
         serverName: 'tomny-make-film',
         toolPatterns: ['make_film_*', 'image_*', 'video_*'],
+        availability: 'surface-only',
         minimumPermissionMode: 'workspace-write',
         requiredPermissionScopes: ['make-film.read', 'make-film.write'],
         requireExplicitGrant: true,
@@ -279,6 +338,7 @@ export const BUILTIN_SURFACE_MANIFESTS: SurfaceManifest[] = [
         providerId: 'builtin.music',
         serverName: 'tomny-music',
         toolPatterns: ['music_*'],
+        availability: 'surface-only',
         minimumPermissionMode: 'workspace-write',
         requiredPermissionScopes: ['music.read', 'music.write'],
         requireExplicitGrant: true,

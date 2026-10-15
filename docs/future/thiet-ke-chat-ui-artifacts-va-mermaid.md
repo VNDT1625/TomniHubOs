@@ -2,12 +2,18 @@
 
 ## Bản Đặc Tả Kỹ Thuật Chuẩn Hóa Toàn Diện Hệ Thống Trải Nghiệm Chat UI & Agent OS Thế Hệ Mới
 
-- **Trạng thái:** TARGET / Đề xuất nâng cấp kiến trúc & trải nghiệm người dùng
+- **Trạng thái:** TARGET (27 trụ cột tổng thể) / PARTIAL (rich message UI, 2026-10-14) / Đề xuất nâng cấp kiến trúc & trải nghiệm người dùng
 - **Phân loại:** Chat UI, Data Interaction, In-place Editing, Hierarchical Outline, Context Menu, Smart Citations, Voice 2-Way, Auto-Scroll Lock, Reasoning Engine, Command Palette (/ @ # \*), Chat Pipeline Packages (Repo to Subchat)
 - **Tác giả/Chủ sở hữu:** Core UI/UX & Renderer Engineering
 - **Tài liệu liên quan:** [docs/README.md](../README.md), [docs/product/vision.md](../product/vision.md), [docs/future/5-y-tuong-kien-truc-dot-pha.md](5-y-tuong-kien-truc-dot-pha.md)
 
 ---
+
+### Rich UI blocks — implemented subset (2026-10-14)
+
+**CURRENT (source/focused tests):** Fenced `tomni-ui`/`rich-ui` JSON version 1 renders metrics, flow with parallel steps, cards and tables through an allowlisted parser; blocks require a text fallback and never execute AI-authored HTML, JS or actions. See `packages/desktop/src/renderer/components/Markdown/richUi/` and `CodeBlock.tsx`; focused tests are `tests/unit/chat/richUiSpec.test.ts`, `richUiBlock.dom.test.tsx`, and `codeBlockPreview.dom.test.tsx`.
+
+**PARTIAL:** `/visual` and Tomny Agentic chat guidance expose the feature, but not all providers, clients or packaged builds have end-to-end proof. The remaining 27-pillar design remains TARGET. A 2026-10-14 follow-up added a sandboxed interactive HTML preview/source switch, readable scrollable Mermaid layouts, responsive card typography with bounded semantic colors, and shared native-conversation presentation guidance. Browser-run and all-provider parity remain PARTIAL.
 
 ## 1. Tổng Quan Kiến Trúc Toàn Diện (27 Trụ Cột)
 
@@ -279,6 +285,8 @@ graph TD
 
 ### 4.3. Trụ cột 16: Menu Chuột Phải Ngữ Cảnh Thông Minh (Smart Context Right-Click Menu)
 
+> **Hiện trạng (CURRENT, một phần):** bôi đen chữ trong tin nhắn rồi bấm chuột phải mở menu hai tầng (`SelectionContextMenu`). Tầng 1: sao chép, tìm Google/GitHub/X, dịch sang tiếng Việt. Tầng 2: hỏi về đoạn này. Chưa có: chuyển thành task cho subagent, lưu vào ghi chú phiên, đánh dấu bí mật, chạy trong terminal.
+
 - Click chuột phải vào vùng chat hoặc đoạn văn bản bôi đen, hiển thị menu 2 tầng rõ rệt:
   - **Tầng 1 (Tra cứu nhanh):** Google Search, X/Twitter Search, GitHub Code Search, Dịch sang tiếng Việt, Định dạng chữ.
   - **Tầng 2 (Năng lực đặc thù Hub Agent OS):**
@@ -315,7 +323,7 @@ graph TD
 
 ### 5.1. Trụ cột 20: Định Dạng Văn Bản & Chuẩn Thơ Lục Bát 6-8 Việt Nam
 
-- Hỗ trợ thẻ màu an toàn, `==highlight==` và GitHub Alerts. Tự động nhận diện và căn lề so le truyền thống câu 6 thụt 2.5rem nghiêng, câu 8 thụt 1.25rem đứng; hỗ trợ căn giữa trục nghệ thuật `.poem-luc-bat`.
+- Hỗ trợ thẻ màu an toàn, `==highlight==` và GitHub Alerts. **CURRENT:** `==highlight==` và GitHub Alerts (`> [!NOTE]`, `TIP`, `IMPORTANT`, `WARNING`, `CAUTION`) đã chạy qua `remarkRichText`; thẻ màu chưa có. Tự động nhận diện và căn lề so le truyền thống câu 6 thụt 2.5rem nghiêng, câu 8 thụt 1.25rem đứng; hỗ trợ căn giữa trục nghệ thuật `.poem-luc-bat`.
 
 ### 5.2. Trụ cột 21: Đàm Thoại Giọng Nói 2 Chiều (Speech-to-Text Micro & Text-to-Speech Loa)
 
@@ -338,6 +346,8 @@ graph TD
 ## 6. Nhóm V: Điều Khiển Phím Tắt & Hệ Sinh Thái Subchat Pipeline
 
 ### 6.1. Trụ cột 25: Hệ Thống Bộ Tứ Tiền Tố Bàn Phím (`/`, `@`, `#`, `*`)
+
+> **Hiện trạng (CURRENT, một phần):** ô nhập ở trang chủ và trong cuộc trò chuyện dùng chung một danh mục (`utils/chat/commandPalette.ts`) và cùng một menu (`SlashCommandMenu`) cho `/`, `#`, `*`; `@` chọn agent ở trang chủ và chọn tệp workspace trong cuộc trò chuyện. Chưa có: tiền tố `!` (không có trong thiết kế), dữ liệu thật cho `#` (ký ức Laya, quy chuẩn, nhãn) và `*` (pipeline cài từ Store) — hai menu này hiện là danh sách tĩnh, chọn chỉ chèn chữ; phần lớn lệnh `/` chỉ chèn chữ vào ô nhập, chưa có hành vi riêng. `/repotopackage` là ngoại lệ: chạy thẳng không qua LLM.
 
 Chuẩn hóa hệ thống kích hoạt phím tắt nhanh ngay trong ô nhập liệu (SendBox):
 
@@ -447,7 +457,7 @@ graph TD
 | :---------- | :-------------: | :--------------------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Phase 1** |  **HOÀN TẤT**   | **Khắc phục Toàn diện Khối Suy Nghĩ (Thinking Block Engine)**    | Đã bóc tách `<think>`, đọc `reasoning_content`, lưu SQLite DB bền vững, Markdown/KaTeX, nút Copy và accordion êm ái.                                      |
 | **Phase 2** |   **KẾ TIẾP**   | **Mục Lục Vạch Gạch 3 Cấp & Khóa Cuộn Thông Minh**               | Minimap vạch gạch ở mép phải, hover mở card 3 cấp (Turn $\rightarrow$ H2 $\rightarrow$ H3); khóa cuộn khi đang đọc và nút Jump to bottom.                 |
-| **Phase 3** | **ĐÃ THIẾT KẾ** | **Bộ Tứ Tiền Tố Bàn Phím (`/`, `@`, `#`, `*`) & Kho Lệnh Slash** | Điều khiển phím tắt siêu tốc: `/` (hành động `/goal`, `/browser`), `@` (ngữ cảnh), `#` (bộ nhớ), `*` (Chat Pipeline Packages từ Repo to Package).         |
+| **Phase 3** |  **MỘT PHẦN**   | **Bộ Tứ Tiền Tố Bàn Phím (`/`, `@`, `#`, `*`) & Kho Lệnh Slash** | Điều khiển phím tắt siêu tốc: `/` (hành động `/goal`, `/browser`), `@` (ngữ cảnh), `#` (bộ nhớ), `*` (Chat Pipeline Packages từ Repo to Package).         |
 | **Phase 4** | **ĐÃ THIẾT KẾ** | **Form Secret An Toàn & Soạn Thảo Thành Ngữ Cảnh Chính**         | Form nhập mật khẩu đa tài khoản tự học ngữ cảnh mục đích; bấm Lưu biến đoạn sửa thành Canonical Context cho lượt chat kế tiếp.                            |
 | **Phase 5** | **ĐÃ THIẾT KẾ** | **Checklist Ràng Buộc DAG & Bảng Dữ Liệu Tương Tác**             | Checklist thông minh 2 loại có liên kết phụ thuộc DAG (dừng bước 1 thì khóa bước phụ thuộc); Bảng dữ liệu Sort/Filter/Xuất Excel; Zoom ảnh Ctrl+V.        |
 | **Phase 6** | **ĐÃ THIẾT KẾ** | **Đàm Thoại Giọng Nói, Thơ Lục Bát & Code Diff View**            | Micro STT $\leftrightarrow$ Loa TTS; Thơ lục bát chuẩn so le 6-8; So sánh code diff 2 cột 1-Click Apply; Nguồn tham chiếu Web ẩn/hiện và copy thông minh. |

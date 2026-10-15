@@ -5,7 +5,7 @@
  */
 
 import { createHash, sign } from 'node:crypto';
-import { lstat, mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import JSZip from 'jszip';
 import {
@@ -18,8 +18,10 @@ import { loadExplicitPackageSigningKey } from './signing.js';
 
 const MANIFEST_FILE = 'tomny-package.json';
 const PAYLOAD_DIRECTORY = 'payload';
+const ADAPTER_DIRECTORY = 'adapter';
 const MAX_FILES = 4_096;
 const MAX_PAYLOAD_BYTES = 200 * 1024 * 1024;
+const INLINE_SCRIPT_MARKER = /<!--\s*tomni:inline\s+([A-Za-z0-9._/-]+)\s*-->/gu;
 
 export type PackageBuildOptions = {
   projectDirectory: string;
@@ -39,29 +41,96 @@ type PayloadFile = {
   content: Buffer;
 };
 
-const collectPayload = async (payloadRoot: string): Promise<PayloadFile[]> => {
+const assertSafeArchivePath = (value: string): string => {
+  const normalized = value.replaceAll('\\', '/');
+  if (
+    !normalized ||
+    normalized.startsWith('/') ||
+    normalized.includes('\0') ||
+    normalized.split('/').some((segment) => !segment || segment === '.' || segment === '..')
+  ) {
+    throw new Error(`Package file has an unsafe archive path: ${value}`);
+  }
+  return normalized;
+};
+
+const isMissingDirectory = (error: unknown): boolean => (error as NodeJS.ErrnoException | undefined)?.code === 'ENOENT';
+
+const collectDirectory = async (directory: string, archivePrefix: string): Promise<PayloadFile[]> => {
+  try {
+    const metadata = await stat(directory);
+    if (!metadata.isDirectory()) throw new Error(`Package root is not a directory: ${directory}`);
+  } catch (error) {
+    if (isMissingDirectory(error)) return [];
+    throw error;
+  }
+
   const files: PayloadFile[] = [];
-  let payloadBytes = 0;
-  const visit = async (directory: string): Promise<void> => {
-    for (const entry of await readdir(directory, { withFileTypes: true })) {
-      const absolutePath = path.join(directory, entry.name);
+  const visit = async (current: string): Promise<void> => {
+    for (const entry of await readdir(current, { withFileTypes: true })) {
+      const absolutePath = path.join(current, entry.name);
       const entryStat = await lstat(absolutePath);
-      if (entryStat.isSymbolicLink()) throw new Error(`Package payload cannot contain symlinks: ${entry.name}`);
+      if (entryStat.isSymbolicLink()) throw new Error(`Package files cannot contain symlinks: ${entry.name}`);
       if (entryStat.isDirectory()) {
         await visit(absolutePath);
         continue;
       }
-      if (!entryStat.isFile()) throw new Error(`Unsupported package payload entry: ${entry.name}`);
-      const relativePath = path.relative(payloadRoot, absolutePath).replaceAll(path.sep, '/');
+      if (!entryStat.isFile()) throw new Error(`Unsupported package file: ${entry.name}`);
+      const relativePath = assertSafeArchivePath(
+        path.posix.join(archivePrefix, path.relative(directory, absolutePath).replaceAll(path.sep, '/'))
+      );
       if (relativePath === MANIFEST_FILE) throw new Error(`${MANIFEST_FILE} is reserved for the signed manifest.`);
-      payloadBytes += entryStat.size;
-      if (payloadBytes > MAX_PAYLOAD_BYTES) throw new Error('Package payload exceeds 200 MB.');
       files.push({ relativePath, content: await readFile(absolutePath) });
-      if (files.length > MAX_FILES) throw new Error(`Package payload exceeds ${MAX_FILES} files.`);
     }
   };
-  await visit(payloadRoot);
-  return files.toSorted((left, right) => left.relativePath.localeCompare(right.relativePath));
+  await visit(directory);
+  return files;
+};
+
+const collectPackageFiles = async (projectRoot: string): Promise<PayloadFile[]> => {
+  const [payload, adapter] = await Promise.all([
+    collectDirectory(path.join(projectRoot, PAYLOAD_DIRECTORY), ''),
+    collectDirectory(path.join(projectRoot, ADAPTER_DIRECTORY), ADAPTER_DIRECTORY),
+  ]);
+  const files = [...payload, ...adapter].toSorted((left, right) => left.relativePath.localeCompare(right.relativePath));
+  if (files.length > MAX_FILES) throw new Error(`Package files exceed ${MAX_FILES} entries.`);
+  const paths = new Set<string>();
+  let bytes = 0;
+  for (const file of files) {
+    if (paths.has(file.relativePath)) throw new Error(`Package contains duplicate file: ${file.relativePath}`);
+    paths.add(file.relativePath);
+    bytes += file.content.byteLength;
+    if (bytes > MAX_PAYLOAD_BYTES) throw new Error('Package files exceed 200 MB.');
+  }
+  return files;
+};
+
+/**
+ * Sandboxed package hosts remove script[src], so reviewed package scripts can opt
+ * into deterministic build-time inlining. The marker refers only to another
+ * signed package file; no URL or filesystem path can be resolved at runtime.
+ */
+const inlineMarkedScripts = (files: readonly PayloadFile[]): PayloadFile[] => {
+  const byPath = new Map(files.map((file) => [file.relativePath, file]));
+  return files.map((file) => {
+    if (!file.relativePath.endsWith('.html')) return file;
+    const source = file.content.toString('utf8');
+    if (!source.includes('tomni:inline')) return file;
+    const content = source.replace(INLINE_SCRIPT_MARKER, (_marker, rawPath: string) => {
+      const pathValue = assertSafeArchivePath(rawPath);
+      const script = byPath.get(pathValue);
+      if (!script || !script.relativePath.endsWith('.js')) {
+        throw new Error(`Inline script marker references a missing JavaScript package file: ${pathValue}`);
+      }
+      const scriptText = script.content.toString('utf8');
+      if (scriptText.includes('</script')) {
+        throw new Error(`Inline script contains a closing script tag: ${pathValue}`);
+      }
+      return `<script>\n${scriptText}\n</script>`;
+    });
+    if (content.includes('tomni:inline')) throw new Error(`Package HTML has an invalid inline script marker: ${file.relativePath}`);
+    return { ...file, content: Buffer.from(content, 'utf8') };
+  });
 };
 
 const integrityFor = (files: readonly PayloadFile[]): { integrity: string; sizeBytes: number } => {
@@ -99,10 +168,9 @@ export const buildPackageProject = async ({
   keyId,
 }: PackageBuildOptions): Promise<PackageBuildResult> => {
   const projectRoot = path.resolve(projectDirectory);
-  const payloadRoot = path.join(projectRoot, PAYLOAD_DIRECTORY);
   const manifestValue = JSON.parse(await readFile(path.join(projectRoot, MANIFEST_FILE), 'utf8')) as unknown;
   const parsedManifest = parsePackageManifest(manifestValue);
-  const files = await collectPayload(payloadRoot);
+  const files = inlineMarkedScripts(await collectPackageFiles(projectRoot));
   ensureEntrypointsExist(parsedManifest, files);
 
   const unsignedManifest: PackageManifest = {

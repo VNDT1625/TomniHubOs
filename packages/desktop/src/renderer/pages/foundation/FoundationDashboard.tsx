@@ -110,7 +110,7 @@ export const FoundationDashboard: React.FC = () => {
       <Title heading={3}>
         <Space>
           <Cpu theme='outline' size='28' fill='#165DFF' />
-          TomniHubOS 3-Core Foundation Dashboard
+          Tomny 3-Core Foundation Dashboard
         </Space>
       </Title>
       <Paragraph type='secondary'>

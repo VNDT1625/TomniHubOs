@@ -1,0 +1,8 @@
+{
+  "demo-lsp": {
+    "command": "demo-language-server",
+    "extensionToLanguage": {
+      ".demo": "demo"
+    }
+  }
+}

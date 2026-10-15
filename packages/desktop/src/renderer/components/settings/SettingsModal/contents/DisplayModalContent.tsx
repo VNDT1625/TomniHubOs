@@ -10,6 +10,8 @@ import { Switch } from '@arco-design/web-react';
 import FontSizeControl from '@/renderer/components/settings/FontSizeControl';
 import { ThemeSwitcher } from '@/renderer/components/settings/ThemeSwitcher';
 import CssThemeSettings from '@renderer/pages/settings/DisplaySettings/CssThemeSettings';
+import WallpaperControl from '@renderer/pages/settings/DisplaySettings/WallpaperControl';
+import MarkdownTextColorSettings from '@renderer/pages/settings/DisplaySettings/MarkdownTextColorSettings';
 import TomnyScrollArea from '@/renderer/components/base/TomnyScrollArea';
 import TomnyCollapse from '@/renderer/components/base/TomnyCollapse';
 import { Down, Up } from '@icon-park/react';
@@ -46,6 +48,7 @@ const PreferenceRow: React.FC<{
  * @features
  * - 主题切换：亮色/暗色/跟随系统 / Theme: light/dark/system
  * - 缩放比例控制 / Zoom scale control
+ * - 壁纸选择 / Wallpaper selection
  * - 自定义CSS编辑器 / Custom CSS editor
  */
 const DisplayModalContent: React.FC = () => {
@@ -80,6 +83,12 @@ const DisplayModalContent: React.FC = () => {
   const displayItems = [
     { key: 'theme', label: t('settings.theme'), component: <ThemeSwitcher /> },
     { key: 'fontSize', label: t('settings.fontSize'), component: <FontSizeControl /> },
+    {
+      key: 'wallpaper',
+      label: t('settings.wallpaper.label'),
+      description: t('settings.wallpaper.description'),
+      component: <WallpaperControl />,
+    },
   ];
 
   return (
@@ -91,12 +100,20 @@ const DisplayModalContent: React.FC = () => {
           <div className='px-16px md:px-24px lg:px-28px py-14px md:py-16px bg-2 rd-16px space-y-10px md:space-y-12px'>
             <div className='w-full flex flex-col divide-y divide-border-2'>
               {displayItems.map((item) => (
-                <PreferenceRow key={item.key} label={item.label}>
+                <PreferenceRow key={item.key} label={item.label} description={item.description}>
                   {item.component}
                 </PreferenceRow>
               ))}
             </div>
           </div>
+
+          {/* 文字颜色 / Markdown text colors */}
+          <div className='px-16px md:px-24px lg:px-28px py-14px md:py-16px bg-2 rd-16px space-y-10px md:space-y-12px'>
+            <div className='text-14px text-t-primary leading-22px'>{t('settings.markdownColors.label')}</div>
+            <div className='text-12px text-t-tertiary leading-18px'>{t('settings.markdownColors.description')}</div>
+            <MarkdownTextColorSettings />
+          </div>
+
 
           {/* CSS 主题设置 / CSS Theme Settings - Collapsible */}
           <TomnyCollapse

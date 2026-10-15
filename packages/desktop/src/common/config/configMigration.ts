@@ -47,6 +47,8 @@ const ALL_LEGACY_KEYS: ConfigKey[] = [
   'system.autoPreviewOfficeFiles',
   'browser.openLinksInApp',
   'assistant.telegram.defaultModel',
+  'assistant.telegram.sttModel',
+  'assistant.telegram.sttLocal',
   'assistant.telegram.agent',
 
   'assistant.telegram.permissionMode',

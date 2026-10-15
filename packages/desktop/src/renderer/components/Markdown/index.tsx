@@ -22,10 +22,12 @@ import React, { useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { convertLatexDelimiters } from '@renderer/utils/chat/latexDelimiters';
 import LocalImageView from '@renderer/components/media/LocalImageView';
+import RemoteImageView from './RemoteImageView';
 import CodeBlock from './CodeBlock';
+import { remarkRichText } from './remarkRichText';
 import ShadowView from './ShadowView';
 
-const REMARK_PLUGINS = [remarkGfm, remarkMath, remarkBreaks];
+const REMARK_PLUGINS = [remarkGfm, remarkMath, remarkBreaks, remarkRichText];
 
 const isLocalFilePath = (src: string): boolean => {
   if (src.startsWith('http://') || src.startsWith('https://')) return false;
@@ -90,10 +92,26 @@ type MarkdownViewProps = {
   onRef?: (el?: HTMLDivElement | null) => void;
   /** Enable raw HTML rendering in markdown content. Use with caution — only for trusted sources. */
   allowHtml?: boolean;
+  /** Use dense typography for constrained surfaces such as Hub activity tiles. */
+  compact?: boolean;
+  /** Set by active agent tiles so previews can communicate ongoing code generation. */
+  streaming?: boolean;
+  /** Stable Hub tile id for linking an HTML Preview to full streamed code. */
+  previewSourceId?: string;
 };
 
 const MarkdownView: React.FC<MarkdownViewProps> = React.memo(
-  ({ hiddenCodeCopyButton, codeStyle, className, onRef, allowHtml, children: childrenProp }) => {
+  ({
+    hiddenCodeCopyButton,
+    codeStyle,
+    className,
+    onRef,
+    allowHtml,
+    compact = false,
+    streaming = false,
+    previewSourceId,
+    children: childrenProp,
+  }) => {
     const { t } = useTranslation();
 
     const normalizedChildren = useMemo(() => {
@@ -125,9 +143,26 @@ const MarkdownView: React.FC<MarkdownViewProps> = React.memo(
       [t]
     );
 
-    // Memoize components so React preserves component identity across re-renders.
-    // Without this, every streaming update creates new function references → React
-    // unmounts/remounts all custom components → hooks & DOM state are lost.
+    // Keep the Markdown component map stable across streaming token updates.
+    // Code renderer reads current values from a ref, rather than capturing the
+    // ever-changing Markdown text or streaming status in a new component type.
+    // Recreating the `code` component for each token remounted live HTML iframes.
+    const liveCodeProps = React.useRef({
+      codeStyle,
+      hiddenCodeCopyButton,
+      streaming,
+      previewSourceId,
+      normalizedChildren,
+      handleLinkClick,
+    });
+    liveCodeProps.current = {
+      codeStyle,
+      hiddenCodeCopyButton,
+      streaming,
+      previewSourceId,
+      normalizedChildren,
+      handleLinkClick,
+    };
     const components = useMemo(
       () => ({
         span: ({ node: _node, className: cn, children: ch, ...rest }: Record<string, unknown>) => (
@@ -135,19 +170,35 @@ const MarkdownView: React.FC<MarkdownViewProps> = React.memo(
             {ch as React.ReactNode}
           </span>
         ),
-        code: (props: Record<string, unknown>) => (
-          <CodeBlock
-            {...(props as Parameters<typeof CodeBlock>[0])}
-            codeStyle={codeStyle}
-            hiddenCodeCopyButton={hiddenCodeCopyButton}
-          />
-        ),
+        code: (props: Record<string, unknown>) => {
+          const current = liveCodeProps.current;
+          const offset = (props.node as { position?: { start?: { offset?: number } } } | undefined)?.position?.start
+            ?.offset;
+          const blockIndex =
+            typeof offset === 'number'
+              ? (current.normalizedChildren
+                  .slice(0, offset)
+                  .match(/^ {0,3}`{3,}[ \t]*(?:html|htm)(?::[^\s`]+)?[ \t]*$/gim)?.length ?? 0)
+              : 0;
+          return (
+            <CodeBlock
+              {...(props as Parameters<typeof CodeBlock>[0])}
+              codeStyle={current.codeStyle}
+              hiddenCodeCopyButton={current.hiddenCodeCopyButton}
+              streaming={current.streaming}
+              previewSourceId={current.previewSourceId}
+              previewBlockIndex={blockIndex}
+            />
+          );
+        },
         a: ({ node: _node, ...rest }: Record<string, unknown>) => (
           <a
             {...(rest as React.AnchorHTMLAttributes<HTMLAnchorElement>)}
             target='_blank'
             rel='noreferrer'
-            onClick={handleLinkClick}
+            onClick={(event) => {
+              void liveCodeProps.current.handleLinkClick(event);
+            }}
           />
         ),
         table: ({ node: _node, ...rest }: Record<string, unknown>) => (
@@ -180,10 +231,17 @@ const MarkdownView: React.FC<MarkdownViewProps> = React.memo(
             const src = decodeURIComponent(imgProps.src || '');
             return <LocalImageView src={src} alt={imgProps.alt || ''} className={imgProps.className} />;
           }
-          return <img {...imgProps} />;
+          // Preserve existing embedded raster screenshots; only remote links get source badges.
+          if (
+            /^data:image\/(?:png|jpeg|gif|webp);base64,/i.test(imgProps.src || '') &&
+            (imgProps.src?.length ?? 0) < 2_000_000
+          ) {
+            return <img src={imgProps.src} alt={imgProps.alt || ''} />;
+          }
+          return <RemoteImageView src={imgProps.src || ''} alt={imgProps.alt || ''} />;
         },
       }),
-      [codeStyle, hiddenCodeCopyButton, handleLinkClick]
+      []
     );
 
     const rehypePlugins = useMemo(() => (allowHtml ? [rehypeRaw, rehypeKatex] : [rehypeKatex]), [allowHtml]);
@@ -191,7 +249,7 @@ const MarkdownView: React.FC<MarkdownViewProps> = React.memo(
     return (
       <div className={classNames('relative w-full', className)}>
         <ShadowView>
-          <div ref={onRef} className='markdown-shadow-body'>
+          <div ref={onRef} className={classNames('markdown-shadow-body', 'tomni-md-body', compact && 'markdown-shadow-body--compact')}>
             <ReactMarkdown remarkPlugins={REMARK_PLUGINS} rehypePlugins={rehypePlugins} components={components}>
               {normalizedChildren}
             </ReactMarkdown>

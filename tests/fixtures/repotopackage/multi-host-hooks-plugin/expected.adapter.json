@@ -1,0 +1,87 @@
+{
+  "connections": [
+    {
+      "kind": "cli",
+      "id": "statusline.mjs",
+      "title": "statusline.mjs",
+      "command": "node",
+      "args": [
+        "bin/statusline.mjs"
+      ],
+      "display": "terminal",
+      "source": "source",
+      "cwd": "source",
+      "plugin": "source",
+      "origin": "claude-plugin"
+    },
+    {
+      "kind": "hook",
+      "id": "posttooluse-2-4fd7cd47",
+      "event": "PostToolUse",
+      "matcher": "Write|Edit",
+      "command": "node",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/hooks/posttooluse.mjs"
+      ],
+      "plugin": "source",
+      "origin": "claude-plugin"
+    },
+    {
+      "kind": "hook",
+      "id": "pretooluse-1-7e17c987",
+      "event": "PreToolUse",
+      "matcher": "Bash",
+      "command": "node",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/hooks/pretooluse.mjs"
+      ],
+      "plugin": "source",
+      "origin": "claude-plugin"
+    },
+    {
+      "kind": "hook",
+      "id": "sessionstart-0-4420a63c",
+      "event": "SessionStart",
+      "command": "node",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/hooks/sessionstart.mjs"
+      ],
+      "plugin": "source",
+      "origin": "claude-plugin"
+    },
+    {
+      "kind": "knowledge",
+      "id": "docs",
+      "title": "docs",
+      "paths": [
+        "source/docs/api.md",
+        "source/docs/guide.md"
+      ],
+      "origin": "classifier"
+    },
+    {
+      "kind": "mcp",
+      "id": "context-mode",
+      "title": "context-mode",
+      "command": "node",
+      "args": [
+        "start.mjs"
+      ],
+      "cwd": "source",
+      "plugin": "source",
+      "origin": "claude-plugin"
+    }
+  ],
+  "openItems": [
+    {
+      "kind": "unrecognized",
+      "note": "hook config for jetbrains-copilot, not used (Claude Code format only)",
+      "path": "source/configs/jetbrains-copilot/hooks.json"
+    },
+    {
+      "kind": "unrecognized",
+      "note": "hook config for vscode-copilot, not used (Claude Code format only)",
+      "path": "source/configs/vscode-copilot/hooks.json"
+    }
+  ]
+}

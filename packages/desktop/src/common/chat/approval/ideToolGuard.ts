@@ -149,15 +149,14 @@ const TOOL_REMAP: ReadonlyArray<{ from: readonly string[]; to: string }> = [
       'edit_file',
       'editfile',
       'str_replace',
-      'apply_patch',
-      'applypatch',
-      'patch',
       'sed',
       'awk',
-      'multiedit',
     ],
     to: 'tomny_team_edit',
   },
+  // A whole diff or several edits at once go to the batch tools, which hold every lease and undo as one.
+  { from: ['apply_patch', 'applypatch', 'patch'], to: 'tomny_team_apply_patch' },
+  { from: ['multiedit'], to: 'tomny_team_edit_many' },
 ];
 
 /**

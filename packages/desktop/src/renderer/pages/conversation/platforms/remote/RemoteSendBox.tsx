@@ -5,6 +5,7 @@
  */
 
 import { ipcBridge } from '@/common';
+import type { WorkspaceReferenceRequest } from '@/common/chat/workspaceReference';
 import type { TMessage } from '@/common/chat/chatLib';
 import { transformMessage } from '@/common/chat/chatLib';
 import CommandQueuePanel from '@/renderer/components/chat/CommandQueuePanel';
@@ -260,7 +261,11 @@ const RemoteSendBox: React.FC<{ conversation_id: string }> = ({ conversation_id 
 
       try {
         sessionStorage.setItem(processedKey, 'true');
-        const { input, files = [] } = JSON.parse(stored) as { input: string; files?: string[] };
+        const { input, files = [], workspace_references } = JSON.parse(stored) as {
+          input: string;
+          files?: string[];
+          workspace_references?: WorkspaceReferenceRequest[];
+        };
         const initialDisplayMessage = buildDisplayMessage(input, files, workspacePath);
 
         setAiProcessing(true);
@@ -282,6 +287,7 @@ const RemoteSendBox: React.FC<{ conversation_id: string }> = ({ conversation_id 
           input: withGoalSteeringDirective(initialModelInput, conversation_id),
           conversation_id,
           files,
+          workspace_references,
         });
         const { msg_id } = sendResult;
 

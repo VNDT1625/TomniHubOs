@@ -171,8 +171,11 @@ export const BUILTIN_SYSTEM_NAME = 'tomny-system';
 /** Historic names that may appear in stored configs; treated as the same server. */
 export const BUILTIN_SYSTEM_LEGACY_NAMES = ['tomny-system', 'Tomny System', BUILTIN_SYSTEM_ID] as const;
 
-/** Name of the single read-only tool the System Insight MCP server exposes. */
+/** Name of the one-shot host profile + live status tool of the System Insight MCP server. */
 export const BUILTIN_SYSTEM_TOOL_NAME = 'system_status';
+
+/** Name of the realtime monitor tool: per-core CPU, RAM, disk/net/GPU, trend, freshness, alerts. */
+export const BUILTIN_SYSTEM_MONITOR_TOOL_NAME = 'system_monitor';
 
 /**
  * Environment variable carrying the directory that holds `system-snapshot.json`.

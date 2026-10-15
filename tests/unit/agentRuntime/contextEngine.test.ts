@@ -135,7 +135,7 @@ describe('Context prompt security boundaries', () => {
     expect(prompt).toContain('- displayName: Thuan');
     expect(prompt).not.toContain('accountPassword');
     expect(prompt).not.toContain(RAW_PASSWORD);
-    expect(snapshot.agent).toContain('Identity: A surface-aware agent');
+    expect(snapshot.agent).toContain('A surface-aware agent');
     expect(snapshot.personal).toContain('displayName: Thuan');
     expect(snapshot.personal).not.toContain(RAW_PASSWORD);
   });
@@ -311,7 +311,7 @@ describe('Context prompt security boundaries', () => {
     expect(withoutPolicy).not.toContain('secret://gmail');
     expect(disabled).not.toContain('secret://gmail');
   });
-  it('renders every structured profile category as personal context', async () => {
+  it('writes only the basic profile fields that exist and keeps richer profile data out of the prompt', async () => {
     const composer = createCoreContextComposer(
       contextStore(
         personal({
@@ -324,6 +324,7 @@ describe('Context prompt security boundaries', () => {
             aestheticTaste: [fact({ key: 'visualStyle', value: 'Editorial minimalism' })],
             pastContext: [fact({ key: 'lesson', value: 'Prototype before implementation' })],
           }),
+          habits: [fact({ key: 'rhythm', value: 'Works at night' })],
         })
       )
     );
@@ -335,17 +336,43 @@ describe('Context prompt security boundaries', () => {
       prompt: 'Design the product.',
     });
 
-    for (const expected of [
-      'Personal information:\n- location: Da Nang',
-      'Psychology (self-described, non-diagnostic):\n- motivation: Visible progress',
-      'Personality:\n- collaborationStyle: Direct',
-      'Interests:\n- hobby: Photography',
-      'Profession:\n- role: Product designer',
-      'Aesthetic taste:\n- visualStyle: Editorial minimalism',
-      'Past context:\n- lesson: Prototype before implementation',
-    ]) {
-      expect(prompt).toContain(expected);
+    expect(prompt).toContain('## User profile');
+    expect(prompt).toContain('- location: Da Nang');
+    expect(prompt).toContain('- role: Product designer');
+    for (const withheld of ['motivation', 'collaborationStyle', 'hobby', 'visualStyle', 'lesson', 'rhythm']) {
+      expect(prompt).not.toContain(withheld);
     }
+    for (const heading of ['Psychology', 'Personality', 'Interests', 'Aesthetic taste', 'Past context', 'Habits']) {
+      expect(prompt).not.toContain(heading);
+    }
+  });
+
+  it('adds nothing for an empty profile and writes no boilerplate for fields that were never set', async () => {
+    const composer = createCoreContextComposer(
+      contextStore(
+        personal({
+          // The policy a new account starts with.
+          decisionPolicy: {
+            autonomy: 'minor-only',
+            mayDecideCategories: [],
+            alwaysAskCategories: ['secrets', 'payments'],
+          },
+        })
+      )
+    );
+    const snapshot = await composer.inspectContext!({ agentId: 'tomny', personalId: 'default', surface: 'ide' });
+    const prompt = await composer.composePrompt({
+      agentId: 'tomny',
+      personalId: 'default',
+      surface: 'ide',
+      prompt: 'Hello.',
+    });
+
+    expect(snapshot.personal).toBeUndefined();
+    expect(prompt).not.toContain('## User profile');
+    expect(prompt).not.toContain('Decision autonomy');
+    expect(prompt).not.toContain('Secret Firewall policy');
+    expect(prompt).not.toContain('Traits:');
   });
 
   it('filters private and low-confidence inferred structured facts from prompts', async () => {
@@ -353,7 +380,7 @@ describe('Context prompt security boundaries', () => {
       contextStore(
         personal({
           structuredProfile: structuredProfile({
-            psychology: [
+            personalInformation: [
               fact({ key: 'learningStyle', value: 'Visual examples' }),
               fact({ key: 'privateTrigger', value: 'Never render this', sensitivity: 'private' }),
               fact({ key: 'weakGuess', value: 'Unconfirmed guess', source: 'inferred', confidence: 0.64 }),
@@ -377,12 +404,12 @@ describe('Context prompt security boundaries', () => {
     expect(prompt).not.toContain('Unconfirmed guess');
   });
 
-  it('distinguishes confirmed context from tentative observations without diagnosing the user', async () => {
+  it('distinguishes confirmed context from tentative observations', async () => {
     const composer = createCoreContextComposer(
       contextStore(
         personal({
           structuredProfile: structuredProfile({
-            psychology: [
+            personalInformation: [
               fact({ key: 'confirmedStyle', value: 'Visual examples', lastConfirmedAt: NOW }),
               fact({ key: 'observedRhythm', value: 'Morning focus', source: 'observed', confidence: 0.8 }),
             ],
@@ -400,10 +427,7 @@ describe('Context prompt security boundaries', () => {
 
     expect(prompt).toContain('- confirmedStyle: Visual examples');
     expect(prompt).toContain('- observedRhythm: Morning focus [observed; confidence=0.8; unconfirmed]');
-    expect(prompt).toContain('already-known context; do not ask the user to repeat them');
-    expect(prompt).toContain('observed, imported, and inferred facts as tentative guidance');
-    expect(prompt).toContain('current explicit user request overrides this context');
-    expect(prompt).toContain('Never infer or diagnose psychological or mental-health attributes');
+    expect(prompt).toContain('do not ask again; the current request wins');
   });
 });
 

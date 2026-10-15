@@ -1,4 +1,33 @@
 {
+  "downloadGate": {
+    "title": "İndirme isteği",
+    "message": "\"{{filename}}\" dosyası {{source}} adresinden kaydedilsin mi?",
+    "detail": "Dosya türü: {{extension}}. Boyut: {{size}}.",
+    "sizeUnknown": "boyut bilinmiyor",
+    "noExtension": "yok",
+    "save": "Kaydet",
+    "cancel": "İptal"
+  },
+  "extensionStrip": {
+    "button": "Uzantılar",
+    "popupTitle": "Uzantılar",
+    "fullAccess": "Tam erişim",
+    "accessRequested": "Bu site için erişim istendi",
+    "empty": "Henüz açık uzantı yok.",
+    "loadError": "Uzantılar yüklenemedi.",
+    "pin": "Araç çubuğuna sabitle",
+    "unpin": "Araç çubuğundan kaldır",
+    "more": "Daha fazla",
+    "siteAccess": "Site erişimi",
+    "siteOnClick": "Tıklandığında",
+    "siteOnSite": "Belirli sitelerde",
+    "siteAllSites": "Tüm sitelerde",
+    "allowSite": "Bu sitede izin ver",
+    "uninstall": "Eklentiyi kaldır",
+    "actionFailed": "Değişiklik kaydedilemedi.",
+    
+"manage": "Uzantıları yönet"
+  },
   "navTitle": "Tarayıcı",
   "title": "Tarayıcı",
   "subtitle": "Web'de uygulama içinde gezinin ve bir yapay zeka modelinin sayfayı web aracısı olarak yönetmesini sağlayın.",

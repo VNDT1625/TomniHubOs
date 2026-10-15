@@ -15,9 +15,8 @@ TomniHubOS tuân thủ nghiêm ngặt mô hình **Single Source of Truth Shell**
   - Widget số dư thời gian thực **Ví TOM Coin**.
   - **Chuông Thông báo Tập trung (Laya Omni-Notification Bell)** kèm Badge thông minh.
   - Phím tắt Cài đặt nhanh (`/settings`).
-  - Menu hồ sơ tài khoản kính mờ **Settings & Account Glassmorphism Dropdown**.
+  - Menu hồ sơ tài khoản **Settings & Account Dropdown**.
   - Bộ nút điều khiển cửa sổ hệ điều hành (Minimize, Maximize, Close, Restart).
-- **Thiết kế Đồng bộ (Design System Harmony)**: Chuẩn hóa trên nền tảng **Modern Glassmorphism** (`backdrop-filter: blur(24px) saturate(190%)`, viền sáng vi mô `rgba(255, 255, 255, 0.12)`, bo góc tiêu chuẩn `12px` - `16px`).
 
 ---
 
@@ -57,7 +56,7 @@ flowchart TD
 flowchart TD
     UserAction([Tương tác Người dùng]) --> ShellHeader[Universal Titlebar Header]
 
-    ShellHeader --> ActionSearch["Ctrl + K / Bấm ô Tìm kiếm"] --> OmniModal[GlobalSearchModal: Tìm hội thoại, app, cài đặt]
+    ShellHeader --> ActionSearch["Ctrl + K / Bấm ô Tìm kiếm"] --> OmniModal[SuperSearch: Local + Web + nguồn kết nối, panel giữa màn hình]
     ShellHeader --> ActionTOM["Click [ 5.00 TOM ]"] --> WalletModal[Mở TomWalletModal / Chuyển sang /account]
     ShellHeader --> ActionBell["Click Chuông Thông Báo"] --> NotifDrawer[Mở NotificationCenterDrawer: Lọc Laya P0-P3]
     ShellHeader --> ActionSettings["Click Icon Cài đặt"] --> RouteSettings["/settings/* (Model, Agent, System...)"]
@@ -73,6 +72,34 @@ flowchart TD
 ```
 
 ---
+
+### Luồng 2b: Siêu tìm kiếm trên Header (Super Search) — **CURRENT** (renderer), **PARTIAL** (nguồn kết nối)
+
+Thanh tìm kiếm ở Header là một ô nhập thật (`components/layout/SuperSearch`), thay cho `GlobalSearchModal` cũ. Gõ hoặc `Ctrl + K` mở panel kết quả ở giữa màn hình.
+
+**Nguồn (provider).** Mỗi nguồn là một `SearchProvider` (`engine/types.ts`): `source` (id, loại, alias mặc định) + `search({ query, limit, signal })`. Kết quả là dữ liệu thuần (`route` / `url` / `command`), renderer tự thực thi sau khi kiểm tra lại (`engine/actions.ts`).
+
+| Nguồn          | Loại        | Nội dung                                                                                                                          | Alias mặc định |
+| -------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------- | -------------- |
+| Trong ứng dụng | `local`     | Trang, Settings (tab + mục chi tiết), gói ứng dụng, hội thoại, hành động                                                          | `l`            |
+| Web            | `web`       | Gợi ý như thanh địa chỉ: URL gõ vào, site quen thuộc, tìm trên công cụ mặc định                                                   | `w`            |
+| Từng site      | `site`      | Google `g`, Bing `b`, DuckDuckGo `ddg`, Yahoo `y`, Facebook `fb`, X `x`, YouTube `yt`, GitHub `gh`, Reddit `rd`, Wikipedia `wiki` | theo từng site |
+| Kết nối        | `connected` | Máy chủ MCP đã bật, kết nối thành công và có công cụ tên `search/find/query/lookup`                                               | tự sinh từ tên |
+
+Truy vấn Web/Site chỉ tính URL cục bộ; không có yêu cầu mạng nào được gửi cho tới khi người dùng mở kết quả trong Browser.
+
+**Hạn mức 30 kết quả** (`engine/aggregate.ts`): mỗi nguồn nhận `floor(30 / số nguồn)`; slot mà nguồn ít kết quả không dùng được chia lại cho nguồn còn kết quả (3 nguồn → 10/10/10, 10 nguồn → 3 mỗi nguồn), phần dư chia dần cho các nguồn đứng trước. Mỗi dòng hiện `#hạng · top %` với `top % = ceil(hạng / số kết quả nguồn trả về × 100)`.
+
+**Phạm vi và alias** (`engine/aliases.ts`): tab `Tất cả` / `Trong ứng dụng` / từng nguồn, hoặc tiền tố `fb: abc` (không phân biệt hoa thường, cho phép khoảng trắng quanh dấu `:`; chấp nhận cả id nguồn đầy đủ). Alias cấu hình được theo nguồn trong nút "Cấu hình nguồn" của panel; alias sai định dạng, trùng hoặc dành riêng (`all`) bị bỏ qua. Cấu hình lưu `localStorage` (`tomny:super-search:v1`) chỉ như tiện ích từng máy.
+
+**Chính sách truy vấn.** Nguồn `connected` mặc định **tắt** và chỉ được gọi sau khi người dùng bật; nguồn bị tắt không bao giờ được gọi. Mỗi nguồn có timeout 4 giây, huỷ khi gõ tiếp, lỗi một nguồn không ảnh hưởng nguồn khác; thông báo lỗi chỉ dùng chuỗi cục bộ, không in nội dung lỗi thô của nhà cung cấp.
+
+**Chế độ Browser** (`/browser`): header đổi thành `[Engine] : truy vấn` (Google/Bing/DuckDuckGo/Yahoo) trong cùng kích thước ô, `yahoo : abc` đổi engine, Enter mở kết quả trong tab đang hoạt động (`emitter` `browser.openUrl` / `requestBrowserUrl`). Panel mở thì `browser.overlay` tạm ẩn view native của Browser.
+
+**Giới hạn đã biết (PARTIAL/TARGET).** Nguồn `connected` chỉ khám phá công cụ tìm kiếm; thực thi công cụ cần một cầu main-process có phê duyệt, egress và audit (hợp đồng IPC thuộc Integrator) nên hiện báo "chưa sẵn sàng" (`ProviderUnavailableError('no-bridge')`). Mục Settings chi tiết dẫn tới tab chứa mục đó, chưa cuộn/đánh dấu tới điều khiển cụ thể.
+
+Kiểm chứng: `tests/unit/renderer/superSearch/*` (quota, alias, engine, provider, config, hook, action).
+
 
 ### Luồng 3: Trung Tâm Thông Báo Đa Kênh & Bộ Lọc Laya Engine (Laya Omni-Notification Flow)
 

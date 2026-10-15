@@ -10,6 +10,7 @@ import { createInterface } from 'node:readline';
 import { withPersistentAgentRetry } from '@process/agentRuntime/retryPolicy';
 
 import { withCodexTurnInput } from './attachmentPayload';
+import type { CliCommandDiscovery } from '@/common/chat/slash/types';
 import {
   dedupeCoreMcpServers,
   formatSpawnLabel,
@@ -83,6 +84,7 @@ export const codexMcpConfig = (servers: CoreRunInput['mcpServers']): Record<stri
             ? {
                 command: server.command,
                 args: server.args ?? [],
+                ...(server.cwd ? { cwd: server.cwd } : {}),
                 ...(server.env?.length
                   ? { env: Object.fromEntries(server.env.map((entry) => [entry.name, entry.value])) }
                   : {}),
@@ -117,7 +119,10 @@ export class CodexAppServerAdapter implements CoreAdapter {
   private nextId = 1;
   private readonly pending = new Map<number, PendingRequest>();
   private activeTurn?: ActiveTurn;
-  private stderrTail = '';
+    private stderrTail = '';
+    private readonly skillsByWorkspace = new Map<string, Map<string, string>>();
+  private readonly skillListeners = new Map<string, Map<string, (catalog: CliCommandDiscovery) => void>>();
+  private readonly threadsBySession = new Map<string, string>();
 
   public async listModels(target: DetectedCoreTarget): Promise<ExperimentalCoreModel[]> {
     await this.ensureStarted(target);
@@ -149,6 +154,57 @@ export class CodexAppServerAdapter implements CoreAdapter {
     return models;
   }
 
+    /** Codex exposes skills through skills/list (not a TUI slash-command registry).
+   * Give them explicit /skill:<name> aliases rather than inventing unsupported built-in slash commands. */
+    public async listCommands(
+    target: DetectedCoreTarget, workspace: string, logicalSessionId = '',
+    onUpdate?: (catalog: CliCommandDiscovery) => void
+  ): Promise<CliCommandDiscovery> {
+        const cwd = requireWorkspace(workspace);
+    try {
+      await this.ensureStarted(target);
+      // Process initialization clears stale subscribers from the previous Codex instance.
+      if (onUpdate) {
+        const subscribers = this.skillListeners.get(cwd) ?? new Map();
+        subscribers.set(logicalSessionId, onUpdate);
+        this.skillListeners.set(cwd, subscribers);
+      }
+      const response = await this.request('skills/list', { cwds: [cwd], forceReload: true });
+      if (!isRecord(response) || !Array.isArray(response.data)) return { status: 'unsupported', commands: [] };
+      const paths = new Map<string, string>();
+      const commands: Array<{ name: string; description: string }> = [];
+      for (const group of response.data.slice(0, 64)) {
+        if (!isRecord(group) || group.cwd !== cwd || !Array.isArray(group.skills)) continue;
+        for (const raw of group.skills.slice(0, 2_048)) {
+          if (!isRecord(raw) || raw.enabled === false) continue;
+          const name = typeof raw.name === 'string' ? raw.name : '';
+          const skillPath = typeof raw.path === 'string' ? raw.path : '';
+          if (!/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,71}$/u.test(name) || !skillPath || paths.has(name)) continue;
+          paths.set(name, skillPath);
+          const description = typeof raw.description === 'string' ? raw.description.slice(0, 300) : '';
+          commands.push({ name: `skill:${name}`, description: `Codex skill: ${description}` });
+          if (commands.length >= 1_024) break;
+        }
+        if (commands.length >= 1_024) break;
+      }
+      this.skillsByWorkspace.set(cwd, paths);
+            return { status: 'available', commands, origin: 'codex-app-server' };
+    } catch {
+      return { status: 'unavailable', commands: [] };
+    }
+  }
+
+    public releaseCommands(logicalSessionId: string): void {
+    for (const [cwd, subscribers] of this.skillListeners) {
+      subscribers.delete(logicalSessionId);
+      if (subscribers.size === 0) this.skillListeners.delete(cwd);
+    }
+    for (const key of this.threadsBySession.keys()) {
+      const identity: unknown = JSON.parse(key);
+      if (Array.isArray(identity) && identity[1] === logicalSessionId) this.threadsBySession.delete(key);
+    }
+  }
+
   public async run(input: CoreRunInput): Promise<void> {
     await runCodexWithRetry(input, () => this.runAttempt(input));
   }
@@ -159,26 +215,39 @@ export class CodexAppServerAdapter implements CoreAdapter {
     if (this.activeTurn) throw new Error('Codex app-server is already processing a turn.');
 
     const cwd = requireWorkspace(input.workspace);
-    const selected = parseModelKey(input.modelKey);
-    input.emit({ type: 'status', text: 'Starting a stateless Codex thread...' });
-    const started = await this.request('thread/start', {
-      cwd,
-      model: selected.model,
-      approvalPolicy: 'never',
-      sandbox: codexSandboxForPermission(input.permissionMode),
-      ephemeral: true,
-      config: codexMcpConfig(input.mcpServers),
-    });
-    if (!isRecord(started) || !isRecord(started.thread) || typeof started.thread.id !== 'string') {
-      throw new Error('Codex app-server returned an invalid thread/start response.');
+        const selected = parseModelKey(input.modelKey);
+    const key = JSON.stringify([cwd, input.sessionId]);
+    let threadId = input.persistentSession ? this.threadsBySession.get(key) : undefined;
+    if (!threadId) {
+      input.emit({ type: 'status', text: 'Starting a Codex app-server thread...' });
+      const started = await this.request('thread/start', {
+        cwd,
+        model: selected.model,
+        approvalPolicy: 'never',
+        sandbox: codexSandboxForPermission(input.permissionMode),
+        ephemeral: true,
+        config: codexMcpConfig(input.mcpServers),
+      });
+      if (!isRecord(started) || !isRecord(started.thread) || typeof started.thread.id !== 'string') {
+        throw new Error('Codex app-server returned an invalid thread/start response.');
+      }
+      threadId = started.thread.id;
+      if (input.persistentSession) this.threadsBySession.set(key, threadId);
     }
-    const threadId = started.thread.id;
+    const skillMatch = /^\/skill:([a-zA-Z0-9][a-zA-Z0-9_.-]{0,71})(?=\s|$)/u.exec(input.prompt);
+    const skill = skillMatch?.[1];
+    const skillPath = skill ? this.skillsByWorkspace.get(cwd)?.get(skill) : undefined;
+    if (skill && !skillPath) throw new Error('CODEX_SKILL_NOT_DISCOVERED');
+    const codexPrompt = skill
+      ? `$${skill}${input.prompt.slice(skillMatch![0].length)}`
+      : input.prompt;
 
     await withCodexTurnInput(
-      input.prompt,
+            codexPrompt,
       input.attachments,
       (turnInput) =>
         new Promise<void>((resolve, reject) => {
+          if (skill && skillPath) turnInput.push({ type: 'skill', name: skill, path: skillPath });
           let turn: ActiveTurn;
           const onAbort = (): void => {
             if (turn.turnId)
@@ -193,8 +262,9 @@ export class CodexAppServerAdapter implements CoreAdapter {
               cleanup();
               resolve();
             },
-            reject: (error) => {
+                        reject: (error) => {
               cleanup();
+              this.threadsBySession.delete(key);
               reject(error);
             },
           };
@@ -221,7 +291,10 @@ export class CodexAppServerAdapter implements CoreAdapter {
     this.failAll(new Error('Codex app-server was disposed.'));
     this.child?.kill();
     this.child = undefined;
-    this.initialized = undefined;
+        this.initialized = undefined;
+    this.threadsBySession.clear();
+        this.skillsByWorkspace.clear();
+    this.skillListeners.clear();
   }
 
   private async ensureStarted(target: DetectedCoreTarget): Promise<void> {
@@ -296,8 +369,19 @@ export class CodexAppServerAdapter implements CoreAdapter {
       }
       return;
     }
-    const method = typeof message.method === 'string' ? message.method : '';
+        const method = typeof message.method === 'string' ? message.method : '';
     const params = isRecord(message.params) ? message.params : {};
+    if (method === 'skills/changed' && this.target) {
+      const target = this.target;
+      for (const [cwd, subscribers] of this.skillListeners) {
+        void this.listCommands(target, cwd).then((catalog) => {
+          for (const listener of subscribers.values()) {
+            try { listener(catalog); } catch (error) { console.warn('[Codex skills] listener failed', error); }
+          }
+        }).catch((error) => console.warn('[Codex skills] refresh failed', error));
+      }
+      return;
+    }
     const turn = this.activeTurn;
     if (!turn) return;
     if (method === 'item/agentMessage/delta' && typeof params.delta === 'string') {

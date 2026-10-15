@@ -53,9 +53,9 @@ export const ensureBrowserControlMcpRegistered = async (): Promise<boolean> => {
         {
           name: BUILTIN_BROWSER_CONTROL_NAME,
           description: BROWSER_CONTROL_MCP_DESCRIPTION,
-          // Available but not auto-attached: the per-conversation "Super"
-          // toggle opts a chat in. Default-off avoids surprising every new chat.
-          enabled: false,
+          // Enabled by default in Settings (user can switch it off). Chats still opt in per conversation
+          // through the "Super" toggle.
+          enabled: true,
           builtin: true,
           transport,
           original_json,

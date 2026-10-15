@@ -1,0 +1,52 @@
+# Bộ câu lệnh tiếng Việt để đo Whisper (50 câu). Cột: tên file ghi âm <TAB> lời nói chuẩn <TAB> từ khóa ý định (cách nhau bằng dấu ;)
+# Đọc tự nhiên, mỗi câu một file cau01.ogg ... cau50.ogg (hoặc .wav/.m4a). Câu 41-50 nên đọc nhanh hoặc ở nơi có tiếng ồn nền.
+cau01.ogg	mở trình duyệt chrome	mở;chrome
+cau02.ogg	chụp màn hình hiện tại	chụp;màn hình
+cau03.ogg	tăng âm lượng lên	tăng;âm lượng
+cau04.ogg	giảm âm lượng xuống	giảm;âm lượng
+cau05.ogg	tạm dừng bài hát	tạm dừng
+cau06.ogg	phát bài hát tiếp theo	tiếp theo
+cau07.ogg	đóng cửa sổ telegram	đóng;telegram
+cau08.ogg	mở thư mục tải xuống	mở;tải xuống
+cau09.ogg	tìm tệp báo cáo quý ba	tìm;báo cáo
+cau10.ogg	xóa tệp báo cáo cũ	xóa;báo cáo
+cau11.ogg	mở visual studio code	mở;visual studio code
+cau12.ogg	mở thư mục dự án tomny trong visual studio code	tomny
+cau13.ogg	gõ xin chào cả nhóm bản dựng đã xong	xin chào;bản dựng
+cau14.ogg	tắt máy tính sau mười phút nữa	tắt máy;mười phút
+cau15.ogg	khởi động lại máy tính	khởi động lại
+cau16.ogg	khóa màn hình	khóa;màn hình
+cau17.ogg	mở ứng dụng ghi chú	mở;ghi chú
+cau18.ogg	tạo thư mục mới tên là tài liệu	tạo;tài liệu
+cau19.ogg	chuyển sang cửa sổ trước đó	chuyển;cửa sổ
+cau20.ogg	thu nhỏ tất cả cửa sổ	thu nhỏ
+cau21.ogg	mở file excel doanh thu tháng này	excel;doanh thu
+cau22.ogg	tìm kiếm thời tiết hà nội ngày mai	thời tiết;hà nội
+cau23.ogg	mở youtube và tìm nhạc lofi	youtube;lofi
+cau24.ogg	dừng phát nhạc	dừng
+cau25.ogg	bật chế độ không làm phiền	không làm phiền
+cau26.ogg	mở cài đặt âm thanh	cài đặt;âm thanh
+cau27.ogg	chụp màn hình và gửi cho tôi	chụp;gửi
+cau28.ogg	mở trang github của dự án	github
+cau29.ogg	đóng trình duyệt	đóng;trình duyệt
+cau30.ogg	mở máy tính bỏ túi	máy tính bỏ túi
+cau31.ogg	sao chép tệp báo cáo sang thư mục sao lưu	sao chép;sao lưu
+cau32.ogg	đổi tên tệp này thành bản cuối	đổi tên;bản cuối
+cau33.ogg	mở terminal trong thư mục hiện tại	terminal
+cau34.ogg	chạy lệnh npm install trong dự án	npm install
+cau35.ogg	mở tài liệu word đề cương khóa luận	word;đề cương
+cau36.ogg	cho tôi xem dung lượng ổ đĩa còn trống	dung lượng;ổ đĩa
+cau37.ogg	mở zalo	zalo
+cau38.ogg	gửi tin nhắn cho mẹ là tối nay con về muộn	tin nhắn;về muộn
+cau39.ogg	đặt báo thức lúc sáu giờ rưỡi sáng	báo thức;sáu giờ rưỡi
+cau40.ogg	mở lịch làm việc hôm nay	lịch;hôm nay
+cau41.ogg	mở chrome rồi vào trang facebook	chrome;facebook
+cau42.ogg	tắt ngay máy tính	tắt;máy tính
+cau43.ogg	xóa hết thư mục tạm	xóa;thư mục tạm
+cau44.ogg	mở file pdf trong thư mục tài liệu	pdf;tài liệu
+cau45.ogg	tăng độ sáng màn hình lên tám mươi phần trăm	độ sáng;tám mươi
+cau46.ogg	mở microsoft teams vào họp lúc ba giờ chiều	teams;ba giờ
+cau47.ogg	phát danh sách nhạc yêu thích trên spotify	spotify;yêu thích
+cau48.ogg	tìm tệp có tên hợp đồng trên ổ d	hợp đồng
+cau49.ogg	mở cửa sổ mới và đưa lên màn hình thứ hai	cửa sổ mới;màn hình thứ hai
+cau50.ogg	dừng mọi tác vụ đang chạy	dừng;tác vụ

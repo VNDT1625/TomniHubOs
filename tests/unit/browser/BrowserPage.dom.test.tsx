@@ -17,7 +17,8 @@
 
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import { emitter } from '@/renderer/utils/emitter';
 import userEvent from '@testing-library/user-event';
 import { ConfigProvider } from '@arco-design/web-react';
 import type { BrowserTabInfo } from '@package-apps/browser/renderer/browser/browserBridgeClient';
@@ -103,8 +104,10 @@ const renderPage = () => render(<ConfigProvider>{<BrowserPage />}</ConfigProvide
 
 /** Reveal the agent-controls row (collapsed by default for a compact browser bar). */
 const expandControls = async () => {
-  const chevron = await screen.findByLabelText('browser.toolbar.expandControls');
-  await userEvent.click(chevron);
+  await waitFor(() => expect(bridgeMocks.listTabs).toHaveBeenCalled());
+  act(() => {
+    emitter.emit('browser.command', 'controls');
+  });
 };
 
 /** Apply the default "bridge is wired, one tab open, agent mode off" stubs. */
@@ -157,11 +160,9 @@ describe('BrowserPage — perception layers + agent mode (Requirement 1, criteri
     primeReadyBridge();
     renderPage();
 
-    // Header / title region.
-    expect(await screen.findByRole('heading', { name: 'browser.title' })).toBeInTheDocument();
-    // Address bar (URL input + reload control).
-    expect(screen.getByPlaceholderText('browser.address.placeholder')).toBeInTheDocument();
-    expect(screen.getByLabelText('browser.address.reload')).toBeInTheDocument();
+    // The page has no heading of its own; the address bar is the top of the page.
+    await waitFor(() => expect(bridgeMocks.listTabs).toHaveBeenCalled());
+    expect(screen.queryByRole('heading', { name: 'browser.title' })).not.toBeInTheDocument();
     // The agent controls row is collapsed by default — reveal it.
     await expandControls();
     // Tab strip (new-tab control).
@@ -187,10 +188,13 @@ describe('BrowserPage — perception layers + agent mode (Requirement 1, criteri
     const user = userEvent.setup();
     renderPage();
 
-    await screen.findByRole('heading', { name: 'browser.title' });
-    await user.click(screen.getByLabelText('browser.address.reload'));
-
-    await waitFor(() => expect(bridgeMocks.reload).toHaveBeenCalledWith({ id: 'tab-1' }));
+    // The active tab is selected asynchronously after the first listing; retry until it is.
+    await waitFor(() => {
+      act(() => {
+        emitter.emit('browser.command', 'reload');
+      });
+      expect(bridgeMocks.reload).toHaveBeenCalledWith({ id: 'tab-1' });
+    });
     expect(bridgeMocks.navigate).not.toHaveBeenCalled();
   });
   it('shows the empty viewport state and opens a tab when no tabs exist', async () => {
@@ -242,15 +246,19 @@ describe('BrowserPage — perception layers + agent mode (Requirement 1, criteri
     renderPage();
 
     // Overlay is hidden until the feature is switched on.
-    await screen.findByRole('heading', { name: 'browser.title' });
+    await waitFor(() => expect(bridgeMocks.listTabs).toHaveBeenCalled());
     expect(screen.queryByText('browser.subtitle_overlay.idle')).not.toBeInTheDocument();
 
     // Enable → overlay (idle hint) appears.
-    await user.click(await screen.findByLabelText('browser.subtitle_overlay.enable'));
+    act(() => {
+      emitter.emit('browser.command', 'subtitles');
+    });
     expect(await screen.findByText('browser.subtitle_overlay.idle')).toBeInTheDocument();
 
     // Disable → overlay disappears.
-    await user.click(await screen.findByLabelText('browser.subtitle_overlay.disable'));
+    act(() => {
+      emitter.emit('browser.command', 'subtitles');
+    });
     await waitFor(() => expect(screen.queryByText('browser.subtitle_overlay.idle')).not.toBeInTheDocument());
   });
 

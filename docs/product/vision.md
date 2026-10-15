@@ -182,6 +182,7 @@ The shell contains only trusted-base navigation. IDE, Browser, Office, Studio-re
 
 - **Account gate:** no product workspace is usable before a valid account session or an explicitly valid offline-local grace session.
 - **Hub:** starts from the person's goal, then exposes the selected capabilities, placement, permissions, cost, progress, evidence, and recovery. It does not start from a provider-specific chat surface.
+- **Human Terminal Workspace (PARTIAL UI, TARGET packaging):** the Home footer can switch the centre from Agent Overview/Chat Composer to Human Terminal Overview/interactive PTY; shell sessions are independently created and controlled by the person, not Agent tool runs. The existing right rail offers Console as a read-only tab so the user can inspect a chosen shell while chatting. No human terminal is tied to a single Agent/tool invocation; full optional package isolation remains a separate launch acceptance gate.
 - **Store:** owns discovery, product facts, acquisition, lifecycle, publication, review, and ordinary-payment commerce. Payment can unlock acquisition but cannot alter technical trust.
 - **Installed Surfaces:** remain directly usable by the person. AI access is a separate, revocable grant for exact operations.
 - **Settings and Trust:** expose account, model/provider metadata, permissions, secrets, audit, User Intelligence, resources, and separately gated managed usage.
@@ -308,7 +309,7 @@ Progress is not authored by a screen. The UI consumes the canonical acceptance s
 ### Interaction and visual quality bar
 
 - Use one calm operational hierarchy: goal and current decision first, evidence and advanced detail progressively disclosed.
-- Use semantic design tokens, Arco Design controls, Icon Park icons, and the configured i18n system; no hard-coded theme colors or user-visible strings.
+- Use the configured i18n system; no hard-coded user-visible strings.
 - Never use color alone for trust, money, failure, or availability. Pair icon, label, and explanatory text.
 - Keyboard navigation, visible focus, screen-reader names, reduced-motion behavior, 200 percent zoom, and contrast must be verified for every release surface.
 - Destructive actions state scope and consequence, require deliberate confirmation, and leave a receipt or recovery path.

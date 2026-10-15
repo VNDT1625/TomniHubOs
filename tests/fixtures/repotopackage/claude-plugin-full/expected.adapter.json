@@ -1,0 +1,226 @@
+{
+  "schemaVersion": 1,
+  "generatedBy": "classifier",
+  "connections": [
+    {
+      "kind": "agent",
+      "id": "reviewer",
+      "title": "reviewer",
+      "description": "Reviews code changes for defects",
+      "path": "source/agents/reviewer.md",
+      "format": "claude-md",
+      "tools": [
+        "Read",
+        "Grep",
+        "Glob"
+      ],
+      "model": "sonnet",
+      "plugin": "source",
+      "origin": "claude-plugin"
+    },
+    {
+      "kind": "cli",
+      "id": "statusline.mjs",
+      "title": "statusline.mjs",
+      "command": "node",
+      "args": [
+        "bin/statusline.mjs"
+      ],
+      "display": "terminal",
+      "source": "source",
+      "cwd": "source",
+      "plugin": "source",
+      "origin": "claude-plugin"
+    },
+    {
+      "kind": "command",
+      "id": "deploy",
+      "title": "deploy",
+      "description": "Deploy the current branch",
+      "path": "source/commands/deploy.md",
+      "format": "markdown",
+      "argumentHint": "[environment]",
+      "plugin": "source",
+      "origin": "claude-plugin"
+    },
+    {
+      "kind": "command",
+      "id": "tools-lint",
+      "title": "tools-lint",
+      "description": "Lint the workspace",
+      "path": "source/commands/tools/lint.md",
+      "format": "markdown",
+      "plugin": "source",
+      "origin": "claude-plugin"
+    },
+    {
+      "kind": "hook",
+      "id": "posttooluse-0-a6619a5f",
+      "event": "PostToolUse",
+      "matcher": "Write|Edit",
+      "command": "${CLAUDE_PLUGIN_ROOT}/scripts/format.sh",
+      "args": [],
+      "timeoutSec": 30,
+      "plugin": "source",
+      "origin": "claude-plugin"
+    },
+    {
+      "kind": "hook",
+      "id": "precompact-2-47c542eb",
+      "event": "PreCompact",
+      "command": "${CLAUDE_PLUGIN_ROOT}/scripts/save.sh",
+      "args": [],
+      "plugin": "source",
+      "origin": "claude-plugin"
+    },
+    {
+      "kind": "hook",
+      "id": "pretooluse-1-9f1ff446",
+      "event": "PreToolUse",
+      "matcher": "Bash",
+      "command": "python",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/scripts/guard.py"
+      ],
+      "plugin": "source",
+      "origin": "claude-plugin"
+    },
+    {
+      "kind": "mcp",
+      "transport": "http",
+      "id": "docs",
+      "title": "docs",
+      "url": "https://docs.example.com/mcp",
+      "headers": [
+        {
+          "name": "X-Api-Key",
+          "fromEnv": "DOCS_X_API_KEY"
+        }
+      ],
+      "plugin": "source",
+      "origin": "claude-plugin"
+    },
+    {
+      "kind": "mcp",
+      "id": "local-tool",
+      "title": "local-tool",
+      "command": "node",
+      "args": [
+        "dist/index.js"
+      ],
+      "cwd": "source",
+      "setup": [
+        [
+          "npm",
+          "install"
+        ]
+      ],
+      "env": [
+        {
+          "name": "API_TOKEN",
+          "required": true
+        },
+        {
+          "name": "LOG_LEVEL",
+          "required": false
+        }
+      ],
+      "plugin": "source",
+      "origin": "claude-plugin"
+    },
+    {
+      "kind": "mcp",
+      "id": "search",
+      "title": "search",
+      "command": "uvx",
+      "args": [
+        "demo-search-mcp"
+      ],
+      "plugin": "source",
+      "origin": "claude-plugin"
+    },
+    {
+      "kind": "skill",
+      "path": "source/skills/review-code",
+      "plugin": "source",
+      "origin": "claude-plugin"
+    },
+    {
+      "kind": "skill",
+      "path": "source/skills/write-docs",
+      "plugin": "source",
+      "origin": "claude-plugin"
+    }
+  ],
+  "openItems": [
+    {
+      "kind": "unrecognized",
+      "note": "MCP \"custom\": lệnh không thuộc danh sách cho phép (npx, uvx, docker, node, python, uv, bun)",
+      "connection": "custom",
+      "path": "source/.mcp.json"
+    },
+    {
+      "kind": "env-value",
+      "note": "MCP \"docs\": header X-Api-Key có giá trị viết thẳng trong repo; giá trị không được sao chép, hãy điền vào biến này",
+      "connection": "docs",
+      "path": "source/.mcp.json",
+      "name": "DOCS_X_API_KEY",
+      "required": true
+    },
+    {
+      "kind": "needs-runtime",
+      "note": "MCP \"local-tool\" chạy từ mã nguồn của plugin nhưng tệp dist/index.js chưa có: cần build hoặc cài đặt trước",
+      "connection": "local-tool",
+      "path": "source/.mcp.json"
+    },
+    {
+      "kind": "env-value",
+      "note": "Plugin source cần giá trị nhạy cảm \"api_token\" do người dùng điền",
+      "path": "source/.claude-plugin/plugin.json",
+      "name": "API_TOKEN",
+      "required": true
+    },
+    {
+      "kind": "needs-runtime",
+      "note": "Hook cho sự kiện \"FutureEvent\" không nằm trong danh sách Tomny hỗ trợ; không tạo kết nối",
+      "path": "source/hooks/hooks.json"
+    },
+    {
+      "kind": "needs-runtime",
+      "note": "Lệnh bin helper.sh không phải script JavaScript hay Python; cần runtime để chạy",
+      "path": "source/bin/helper.sh"
+    },
+    {
+      "kind": "needs-runtime",
+      "note": "Lệnh bin tool không phải script JavaScript hay Python; cần runtime để chạy",
+      "path": "source/bin/tool"
+    },
+    {
+      "kind": "needs-runtime",
+      "note": "Plugin source khai báo lspServers; Tomny chưa có runtime cho loại này, phần đó được giữ trong source và không bật",
+      "path": "source/.lsp.json"
+    },
+    {
+      "kind": "needs-runtime",
+      "note": "Plugin source khai báo monitors; Tomny chưa có runtime cho loại này, phần đó được giữ trong source và không bật",
+      "path": "source/monitors/monitors.json"
+    },
+    {
+      "kind": "needs-runtime",
+      "note": "Plugin source khai báo outputStyles; Tomny chưa có runtime cho loại này, phần đó được giữ trong source và không bật",
+      "path": "source/output-styles"
+    },
+    {
+      "kind": "needs-runtime",
+      "note": "Sự kiện hook \"PreCompact\" chưa được hỗ trợ; các hook của sự kiện này được giữ trong gói và đang tắt"
+    },
+    {
+      "kind": "needs-runtime",
+      "note": "Trình xử lý hook hooks.Stop[0].hooks[0] cần runtime Tomny chưa có (chỉ hỗ trợ type command)",
+      "path": "source/hooks/hooks.json"
+    }
+  ],
+  "detectors": [
+    "agent-plugins@1"
+  ]
+}

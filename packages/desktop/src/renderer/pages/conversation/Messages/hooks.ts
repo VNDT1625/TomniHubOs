@@ -274,27 +274,6 @@ function composeMessageWithIndex(message: TMessage | undefined, list: TMessage[]
       return newList;
     }
 
-    const existingIdx = index.msgIdIndex.get(thinkingKey);
-    if (existingIdx !== undefined && existingIdx < list.length) {
-      const existingMsg = list[existingIdx];
-      if (existingMsg.type === 'thinking') {
-        const newList = list.slice();
-        newList[existingIdx] = {
-          ...existingMsg,
-          content: {
-            ...existingMsg.content,
-            content: message.content.content
-              ? existingMsg.content.content + message.content.content
-              : existingMsg.content.content,
-            subject: message.content.subject || existingMsg.content.subject,
-            status: message.content.status,
-            duration: message.content.duration ?? existingMsg.content.duration,
-          },
-        };
-        return newList;
-      }
-    }
-
     const newIdx = list.length;
     index.msgIdIndex.set(thinkingKey, newIdx);
     return list.concat(message);

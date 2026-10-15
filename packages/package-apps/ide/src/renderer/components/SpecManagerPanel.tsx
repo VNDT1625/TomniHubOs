@@ -7,7 +7,7 @@
 /**
  * `SpecManagerPanel` — the spec-driven workflow command center for the IDE.
  *
- * Reads the active `.tomny/specs/<slug>/` directory and renders a Kiro-grade
+ * Reads the active `.tomni/specs/<slug>/` directory and renders a Kiro-grade
  * health view across three dimensions:
  *  1. EARS requirements validation (how normative + well-shaped each criterion is),
  *  2. Req↔Task↔Test traceability (which requirements a task covers / verifies),
@@ -273,7 +273,7 @@ const SpecManagerPanel: React.FC<SpecManagerPanelProps> = ({ rootPath }) => {
                 {t(`ide.spec.health.${status}`)}
               </Tag>
             </div>
-            <span className='text-12px text-t-secondary truncate'>{`.omni/specs/${analysis.slug}/`}</span>
+            <span className='text-12px text-t-secondary truncate'>{`.tomni/specs/${analysis.slug}/`}</span>
             <p className='text-12px text-t-tertiary m-0 mt-2px leading-snug'>{t('ide.spec.scoreHint')}</p>
           </div>
           <Button

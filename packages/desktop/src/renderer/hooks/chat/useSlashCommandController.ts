@@ -4,7 +4,10 @@ import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 
 // Match slash followed by command name (alphanumeric, underscore, hyphen only)
 // 匹配斜杠后跟命令名（仅允许字母数字、下划线、连字符）
-const SLASH_QUERY_RE = /^\/([a-zA-Z0-9_-]*)$/;
+// A package command may be `<plugin>:<name>`, so `:` and `.` are part of the word.
+const SLASH_QUERY_RE = /^\/([a-zA-Z0-9_:.-]*)$/;
+/** Keep the live menu bounded while still filtering the full provider command catalog. */
+export const MAX_VISIBLE_SLASH_COMMANDS = 80;
 
 export function matchSlashQuery(input: string): string | null {
   const match = input.match(SLASH_QUERY_RE);
@@ -71,11 +74,17 @@ export function useSlashCommandController(options: UseSlashCommandControllerOpti
       return [];
     }
     const keyword = query.trim().toLowerCase();
-    if (!keyword) {
-      return commands;
+        if (!keyword) {
+      return commands.slice(0, MAX_VISIBLE_SLASH_COMMANDS);
     }
-    return commands.filter((command) => command.name.toLowerCase().startsWith(keyword));
+    return commands.filter((command) => command.name.toLowerCase().startsWith(keyword))
+      .slice(0, MAX_VISIBLE_SLASH_COMMANDS);
   }, [commands, query]);
+
+    // Live provider updates can shrink the filtered list while the menu stays open.
+  useEffect(() => {
+    setActiveIndex((index) => Math.min(index, Math.max(0, filteredCommands.length - 1)));
+  }, [filteredCommands.length]);
 
   const isOpen = query !== null && !dismissed && filteredCommands.length > 0;
 

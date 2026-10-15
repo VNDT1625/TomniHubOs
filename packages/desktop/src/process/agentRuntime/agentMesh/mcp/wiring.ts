@@ -1,3 +1,4 @@
+
 import { app } from 'electron';
 import path from 'node:path';
 
@@ -5,6 +6,7 @@ import { detectCoreTargets } from '@process/experimentalCore/coreRegistry';
 import type { DetectedCoreTarget } from '@process/experimentalCore/adapters';
 import { makeCliModelId, runAgentChatMessages } from '@process/services/agentChat';
 import { getResourceCoordinator } from '@process/resource/resourceCoordinator';
+import { ProcessConfig } from '@process/utils/initStorage';
 import type { AgentMeshService } from '../service';
 import { disposeSharedAgentMeshService, getSharedAgentMeshService } from './meshService';
 import { AgentJobOrchestrator, type AgentJob, type AgentJobExecutorContext } from '../orchestrator';
@@ -19,6 +21,7 @@ export type AgentOrchestratorServices = {
 };
 
 let sharedServices: AgentOrchestratorServices | undefined;
+let serviceCreation: Promise<AgentOrchestratorServices> | undefined;
 let targetCache: { expiresAt: number; values: DetectedCoreTarget[] } | undefined;
 
 const listTargets = async (): Promise<DetectedCoreTarget[]> => {
@@ -121,19 +124,38 @@ const executeAgentJob = async (job: AgentJob, context: AgentJobExecutorContext) 
 /** Resolve the one process-wide orchestrator and initialize durable sessions. */
 export const getAgentOrchestratorServices = async (): Promise<AgentOrchestratorServices> => {
   if (!sharedServices) {
-    const meshService = getSharedAgentMeshService();
-    const orchestrator = new AgentJobOrchestrator({
-      maxJobsPerBatch: 96,
-      executor: executeAgentJob,
-      service: meshService,
-      stateStore: new JsonAgentJobStateStore(
-        path.join(app.getPath('userData'), 'tomny-core', 'agent-orchestrator', 'sessions.json')
-      ),
+    serviceCreation ??= (async () => {
+      const idleMinutes = await ProcessConfig.get('acp.agentIdleTimeout');
+      const idleHibernateMs =
+        Number.isSafeInteger(idleMinutes) && idleMinutes !== undefined && idleMinutes >= 1 && idleMinutes <= 60
+          ? idleMinutes * 60_000
+          : 5 * 60_000;
+      const meshService = getSharedAgentMeshService();
+      const orchestrator = new AgentJobOrchestrator({
+        idleHibernateMs,
+        maxJobsPerBatch: 96,
+        executor: executeAgentJob,
+        service: meshService,
+        stateStore: new JsonAgentJobStateStore(
+          path.join(app.getPath('userData'), 'tomny-core', 'agent-orchestrator', 'sessions.json')
+        ),
+      });
+      sharedServices = { meshService, orchestrator, listTargets };
+      return sharedServices;
+    })().catch((error: unknown) => {
+      serviceCreation = undefined;
+      throw error;
     });
-    sharedServices = { meshService, orchestrator, listTargets };
   }
-  await sharedServices.orchestrator.initialize();
-  return sharedServices;
+  const services = sharedServices ?? (await serviceCreation);
+  if (!services) throw new Error('Agent orchestrator services are unavailable.');
+  await services.orchestrator.initialize();
+  return services;
+};
+
+/** Update only an already-started orchestrator; changing Settings must not launch a worker. */
+export const updateActiveAgentIdleTimeout = (minutes: number): void => {
+  sharedServices?.orchestrator.setIdleHibernateMinutes(minutes);
 };
 
 /** Persist the latest job state without disrupting Team/Company users of the shared mesh. */
@@ -143,9 +165,11 @@ export const flushAgentOrchestratorServices = async (): Promise<void> => {
 
 /** Flush durable results and stop mesh controllers during deterministic teardown. */
 export const disposeAgentOrchestratorServices = async (): Promise<void> => {
+  await serviceCreation?.catch((): undefined => undefined);
   if (!sharedServices) return;
   await sharedServices.orchestrator.flush();
   await disposeSharedAgentMeshService();
   sharedServices = undefined;
+  serviceCreation = undefined;
   targetCache = undefined;
 };

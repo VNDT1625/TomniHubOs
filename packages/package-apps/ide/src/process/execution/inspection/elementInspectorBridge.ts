@@ -115,7 +115,7 @@ const MANAGED_EVIDENCE_PATTERN = /^(shot-(?:full-page|viewport)-|recording-)\d+\
  * Evidence remains available for 24 hours after it is sent to an agent.
  */
 export const pruneInspectEvidence = async (rootPath: string, now = Date.now()): Promise<number> => {
-  const dir = path.join(rootPath, '.omni', 'inspect');
+  const dir = path.join(rootPath, '.tomni', 'inspect');
   const entries = await fsp.readdir(dir, { withFileTypes: true }).catch((): Dirent[] => []);
   let removed = 0;
   await Promise.all(
@@ -223,7 +223,7 @@ export const captureInspectScreenshot = async (
     png = captured;
     dataUrl = `data:image/png;base64,${captured.toString('base64')}`;
   }
-  const dir = path.join(rootPath, '.omni', 'inspect');
+  const dir = path.join(rootPath, '.tomni', 'inspect');
   const filePath = path.join(dir, `shot-${mode === 'fullPage' ? 'full-page' : 'viewport'}-${Date.now()}.png`);
   if (options.persist !== false) {
     trackInspectEvidenceRoot(rootPath);
@@ -466,7 +466,7 @@ export function registerElementInspectorBridge(deps: ElementInspectorBridgeDeps)
     try {
       trackInspectEvidenceRoot(rootPath);
       await pruneInspectEvidence(rootPath);
-      const dir = path.join(rootPath, '.omni', 'inspect');
+      const dir = path.join(rootPath, '.tomni', 'inspect');
       await fsp.mkdir(dir, { recursive: true });
       const webmPath = path.join(dir, `recording-${Date.now()}.webm`);
       const recording: InspectVideoResult = {

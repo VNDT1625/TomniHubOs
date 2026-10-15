@@ -17,14 +17,13 @@ import {
   Lightning,
   MessageOne,
   Right,
+  ShareTwo,
 } from '@icon-park/react';
-import React, { Suspense, useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import type { NavigateOptions } from 'react-router-dom';
 import styles from './Sider.module.css';
-
-const SettingsSider = React.lazy(() => import('@renderer/pages/settings/components/SettingsSider'));
 
 type SiderProps = {
   onSessionClick?: () => void;
@@ -35,6 +34,8 @@ type SiderProps = {
 
 const PRIMARY_NAV = [
   { id: 'home', key: 'guid.hubHome.shell.nav.home', path: '/guid', Icon: Home },
+  { id: 'realtime', key: 'guid.hubHome.shell.nav.realtime', path: '/realtime', Icon: Lightning },
+  { id: 'social', key: 'guid.hubHome.shell.nav.social', path: '/social', Icon: ShareTwo },
   { id: 'store', key: 'guid.hubHome.shell.store', path: '/store', Icon: AllApplication },
   { id: 'history', key: 'guid.hubHome.shell.nav.history', path: '/history', Icon: History },
   { id: 'company', key: 'guid.hubHome.shell.nav.company', path: '/company', Icon: BuildingTwo },
@@ -90,7 +91,6 @@ const Sider: React.FC<SiderProps> = ({ onSessionClick, onNavigate, showAccount =
   const layout = useLayoutContext();
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const isSettings = pathname.startsWith('/settings');
   const accountName = user?.username || 'Tomny';
   const accountInitial = accountName.trim().charAt(0).toUpperCase() || 'T';
 
@@ -143,14 +143,6 @@ const Sider: React.FC<SiderProps> = ({ onSessionClick, onNavigate, showAccount =
     setShowAllWorkspaceChats((prev) => ({ ...prev, [ws]: !prev[ws] }));
   }, []);
 
-  if (isSettings) {
-    return (
-      <Suspense fallback={<div className='size-full' />}>
-        <SettingsSider collapsed={collapsed} tooltipEnabled={collapsed && !layout?.isMobile} />
-      </Suspense>
-    );
-  }
-
   const renderNavButton = (
     key: string,
     label: string,
@@ -166,6 +158,7 @@ const Sider: React.FC<SiderProps> = ({ onSessionClick, onNavigate, showAccount =
         className={`${styles.navButton} ${active ? styles.navButtonActive : ''}`}
         icon={<Icon theme='outline' size={16} fill='currentColor' />}
         aria-label={label}
+        data-spotlight-id={`nav-${key}`}
         onClick={() => navigateTo(path)}
       >
         <span className={styles.sidebarCopy}>{label}</span>

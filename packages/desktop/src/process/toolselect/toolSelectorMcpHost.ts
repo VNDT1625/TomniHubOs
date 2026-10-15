@@ -3,6 +3,7 @@ import { randomUUID, timingSafeEqual } from 'node:crypto';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import type { ToolSelectorServerDeps } from '@process/resources/builtinMcp/toolSelectorServer';
 import { BUILTIN_TOOL_SELECTOR_NAME, createToolSelectorServer } from '@process/resources/builtinMcp/toolSelectorServer';
+import { getToolScope } from './toolScope';
 
 const SSE_PATH = '/sse';
 const MESSAGE_PATH = '/message';
@@ -42,7 +43,11 @@ const createHost = async (deps: ToolSelectorServerDeps): Promise<ToolSelectorMcp
       transports.set(transport.sessionId, transport);
       // oxlint-disable-next-line unicorn/prefer-add-event-listener -- MCP transport exposes onclose only.
       transport.onclose = () => transports.delete(transport.sessionId);
-      await createToolSelectorServer(deps).connect(transport);
+      await createToolSelectorServer(
+        deps,
+        getToolScope(url.searchParams.get('scope')),
+        url.searchParams.get('conversation')?.slice(0, 200) || undefined
+      ).connect(transport);
       return;
     }
     if (request.method === 'POST' && url.pathname === MESSAGE_PATH) {

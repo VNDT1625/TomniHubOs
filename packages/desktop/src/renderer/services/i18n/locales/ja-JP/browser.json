@@ -1,4 +1,33 @@
 {
+  "downloadGate": {
+    "title": "ダウンロードの確認",
+    "message": "\"{{filename}}\" を {{source}} から保存しますか？",
+    "detail": "ファイル形式: {{extension}}。サイズ: {{size}}。",
+    "sizeUnknown": "サイズ不明",
+    "noExtension": "なし",
+    "save": "保存",
+    "cancel": "キャンセル"
+  },
+  "extensionStrip": {
+    "button": "拡張機能",
+    "popupTitle": "拡張機能",
+    "fullAccess": "すべてのアクセス",
+    "accessRequested": "このサイトへのアクセスを要求中",
+    "empty": "有効な拡張機能はまだありません。",
+    "loadError": "拡張機能を読み込めませんでした。",
+    "pin": "ツールバーにピン留め",
+    "unpin": "ツールバーからピン留めを解除",
+    "more": "その他",
+    "siteAccess": "サイトへのアクセス",
+    "siteOnClick": "クリック時",
+    "siteOnSite": "特定のサイト",
+    "siteAllSites": "すべてのサイト",
+    "allowSite": "このサイトで許可",
+    "uninstall": "拡張機能を削除",
+    "actionFailed": "変更を保存できませんでした。",
+    
+"manage": "拡張機能を管理"
+  },
   "navTitle": "ブラウザ",
   "title": "ブラウザ",
   "subtitle": "アプリ内でウェブを閲覧し、AI モデルにウェブエージェントとしてページを操作させます。",

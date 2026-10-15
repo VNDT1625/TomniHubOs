@@ -127,6 +127,10 @@ export type RepoSecretCrypto = {
 
 const normalizeRepository = (repository: string): string => path.resolve(repository.trim()).toLowerCase();
 
+/** Keys are per repository here but become one flat list in the app vault, so the label names the repository. */
+const recoveryLabel = (label: string, repository: string): string =>
+  `${label} · ${path.basename(repository) || repository}`.slice(0, 120);
+
 const normalizeAlias = (alias: string): string => {
   const normalized = alias
     .trim()
@@ -510,7 +514,7 @@ export const createRepoSecretStore = (options?: {
           candidates.push({
             sourceId: `repo-secret-context\0${combo.repository}\0combo\0${combo.comboId}`,
             input: {
-              label: combo.comboLabel,
+              label: recoveryLabel(combo.comboLabel, combo.repository),
               note: combo.description,
               kind: 'credential',
               fields,
@@ -532,7 +536,7 @@ export const createRepoSecretStore = (options?: {
         candidates.push({
           sourceId: `repo-secret-context\0${entry.repository}\0entry\0${entry.alias}`,
           input: {
-            label: entry.alias,
+            label: recoveryLabel(entry.alias, entry.repository),
             note: entry.description,
             kind: 'credential',
             fields: [field],

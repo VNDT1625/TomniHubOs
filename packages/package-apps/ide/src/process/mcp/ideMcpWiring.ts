@@ -66,8 +66,11 @@ import { buildWikiTestProfile } from '@package-apps/ide/process/knowledge/graph/
 import { getDbService } from '@package-apps/ide/process/data/db/dbWiring';
 import { getSessionMemoryStore } from '@process/userUnderstanding/sessionMemoryStore';
 import { getRepoSecretStore } from '@package-apps/ide/process/data/memory/repoSecretStore';
+import { createPackageBackedRepoSecrets } from '@package-apps/ide/process/data/memory/packageBackedRepoSecrets';
+import { getPackageSecretPort } from '@process/resources/packageSecrets/packageSecretPort';
 import { getTeamEditService } from '@package-apps/ide/process/collaboration/teamEdit/teamEditService';
 import { runMtuiInRoot } from '@process/resources/nativeFile/mtuiBridge';
+import { ensureUnderstandCache, readsUnderstandCache } from '@process/resources/nativeFile/mtuiUnderstand';
 import { runCommand } from '@package-apps/ide/process/coding/command/commandRunner';
 import {
   createQuickTestTracer,
@@ -181,6 +184,8 @@ const isBinaryBuffer = (buf: Buffer): boolean => {
 // MTUI helper
 // ---------------------------------------------------------------------------
 const runMtui = async (rootPath: string, args: string[]): Promise<Record<string, unknown>> => {
+  // Understand queries must not depend on the IDE having built the graph first.
+  if (readsUnderstandCache(args)) await ensureUnderstandCache(rootPath);
   const result = await runMtuiInRoot(['--json', ...args], rootPath);
   return result as Record<string, unknown>;
 };
@@ -786,7 +791,7 @@ export const getQuickTestScenarioAgentService = (): QuickTestScenarioAgentServic
   const runner = getSavedScenarioRunner();
   return {
     list: async ({ rootPath, platform, limit }) => {
-      const assetPath = path.join(path.resolve(rootPath), '.omni', 'quick-test', 'assets.json');
+      const assetPath = path.join(path.resolve(rootPath), '.tomni', 'quick-test', 'assets.json');
       const parsed = JSON.parse(await fsp.readFile(assetPath, 'utf8')) as ScenarioAssetFile;
       const ids = Array.isArray(parsed.scenarios)
         ? parsed.scenarios.map((item) => (typeof item?.id === 'string' ? item.id : '')).filter((id) => id.length > 0)
@@ -1015,7 +1020,8 @@ export const buildIdeServer = (): McpServer => {
       quickTestScenarios: getQuickTestScenarioAgentService(),
       db: getDbService() as DbAgentService,
       memory: getSessionMemoryStore(),
-      repoSecrets: getRepoSecretStore(),
+      // Older per-repository keys, the IDE's own space in the app vault, and the app keys the person granted it.
+      repoSecrets: createPackageBackedRepoSecrets(getRepoSecretStore(), getPackageSecretPort('com.tomni.ide')),
       experience: experienceAgentService,
       wikiTestIntelligence: {
         plan: async ({ rootPath, intent, targetFiles, symbols, graphFresh }) => {

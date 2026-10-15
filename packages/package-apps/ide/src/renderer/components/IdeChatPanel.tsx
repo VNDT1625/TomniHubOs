@@ -57,6 +57,7 @@ import {
   type SpecListEntry,
   type SpecTaskRunbook,
 } from '@package-apps/ide/renderer/services/ideClient';
+import { publishIdeChatTabs } from '@package-apps/ide/renderer/liveSessions/ideLiveSessions';
 import { useIdeChat, type IdeChatTab } from '@package-apps/ide/renderer/hooks/useIdeChat';
 import type { CloudWorkspaceConnection } from '@package-apps/ide/renderer/teamEdit/cloud/useCloudWorkspace';
 import MemorySessionDrawer from '@package-apps/ide/renderer/memory/MemorySessionDrawer';
@@ -92,6 +93,10 @@ const IdeChatPanel: React.FC<IdeChatPanelProps> = ({ rootPath, activeFile, repoF
     [cloudWorkspace]
   );
   const chat = useIdeChat(rootPath, { cloudWorkspace: cloudChatWorkspace });
+  // Share the open chats with the workspace so the Hub keeps listing them when another mode is shown.
+  useEffect(() => {
+    publishIdeChatTabs(rootPath, chat.tabs);
+  }, [rootPath, chat.tabs]);
   const { cliAgents, presetAssistants, isLoading: loadingAgents } = useConversationAgents();
   const { addToSendBox, activeTab } = usePreviewContext();
 
@@ -348,7 +353,7 @@ const IdeChatPanel: React.FC<IdeChatPanelProps> = ({ rootPath, activeFile, repoF
   );
 };
 
-const executeCommandFor = (slug?: string): string => (slug ? `/execute @.omni/specs/${slug}/ ` : '/execute @');
+const executeCommandFor = (slug?: string): string => (slug ? `/execute @.tomni/specs/${slug}/ ` : '/execute @');
 
 /** The approval gate the user can act on while in a given phase (null = none). */
 const gateForPhase = (phase: SpecLifecyclePhase | null): SpecApprovalGate | null =>
@@ -469,7 +474,7 @@ const PlanningStatusBar: React.FC<{ rootPath: string }> = ({ rootPath }) => {
               <div className='flex flex-col flex-1 min-w-0'>
                 <span className='text-12px font-600 truncate'>{spec.title}</span>
                 <span className='text-11px text-t-tertiary truncate'>
-                  {`.omni/specs/${spec.slug}/`}
+                  {`.tomni/specs/${spec.slug}/`}
                   {` · ${t(`ide.chat.planningStatus.phase.${spec.phase}`)}`}
                 </span>
               </div>
@@ -608,7 +613,7 @@ const PlanningStatusBarView: React.FC<PlanningStatusBarViewProps> = ({
               className='inline-flex items-center gap-4px min-w-0 text-12px text-t-secondary cursor-pointer hover:text-primary transition-colors'
             >
               <span className='truncate'>
-                {status?.slug ? `.omni/specs/${status.slug}/` : t('ide.chat.planningStatus.noActiveSpec')}
+                {status?.slug ? `.tomni/specs/${status.slug}/` : t('ide.chat.planningStatus.noActiveSpec')}
               </span>
               <Down theme='outline' size={11} className='shrink-0' />
             </span>

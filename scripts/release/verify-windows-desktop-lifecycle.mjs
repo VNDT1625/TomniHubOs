@@ -25,11 +25,18 @@ const readArgument = (name) => {
   if (!value) fail(`${name} is required.`);
   return resolve(value);
 };
-const terminateProcessTree = (child) => {
+const terminateProcessTree = async (child) => {
   if (!child.pid || child.exitCode !== null) return;
   const command = process.platform === 'win32' ? 'taskkill' : 'kill';
-  const args = process.platform === 'win32' ? ['/pid', String(child.pid), '/t', '/f'] : ['-TERM', String(child.pid)];
-  spawn(command, args, { stdio: 'ignore', windowsHide: true }).unref();
+  const args = process.platform === 'win32' ? ['/PID', String(child.pid), '/T', '/F'] : ['-TERM', String(child.pid)];
+  await new Promise((resolveKill) => {
+    const killer = spawn(command, args, { stdio: 'ignore', windowsHide: true });
+    killer.once('error', resolveKill);
+    killer.once('close', resolveKill);
+  });
+  // Windows Electron can leave child-process handles active even after successful
+  // taskkill; they must not prevent the independent clean-machine verifier exiting.
+  child.unref();
 };
 const waitForReadyReceipt = async (path, child) => {
   const deadline = Date.now() + READY_TIMEOUT_MS;
@@ -89,7 +96,7 @@ const main = async () => {
     }
     process.stdout.write(`[windows-desktop-lifecycle] PASSED ${receiptPath}\n`);
   } finally {
-    terminateProcessTree(child);
+        await terminateProcessTree(child);
   }
 };
 main().catch((error) => {

@@ -159,7 +159,7 @@ export const TomBalanceWidget: React.FC = () => {
     <div className='tom-balance-popover'>
       <div className='tom-balance-popover__title'>
         <TomCoinIcon size={16} />
-        <span>Tomni Balance & Identity</span>
+          <span>Tomny Balance & Identity</span>
       </div>
       <div className='tom-balance-popover__row'>
         <span className='tom-balance-popover__label'>Số dư khả dụng:</span>

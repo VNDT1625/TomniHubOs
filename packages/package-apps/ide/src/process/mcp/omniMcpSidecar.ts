@@ -104,11 +104,7 @@ const parseMode = (args: string[]): ParsedMode => {
 
 const resolvePaths = (repoRoot: string): SidecarPaths => {
   const stateDir = path.join(repoRoot, '.omni-sidecar');
-  const logDir = existsSync(path.join(repoRoot, '.omni'))
-    ? path.join(repoRoot, '.omni', 'logs')
-    : existsSync(path.join(repoRoot, '.tomny'))
-      ? path.join(repoRoot, '.tomny', 'logs')
-      : path.join(stateDir, 'logs');
+  const logDir = path.join(repoRoot, '.tomni', 'logs');
   return {
     repoRoot,
     stateDir,
@@ -355,15 +351,28 @@ const startExternalRescue = async (
     newId: () => 'omni-rescue-' + randomBytes(16).toString('hex'),
   });
 
+  const remoteConfig = savedConfig.remote as
+    | { mode?: 'quick' | 'setup'; stableMcpBaseUrl?: string; stableWebuiBaseUrl?: string }
+    | undefined;
+  const isSetupMode = remoteConfig?.mode === 'setup';
+
   await runtime.start(
     {
       port: gatewayPort,
       rootPath: str(savedConfig.rootPath) ?? paths.repoRoot,
       allowDangerous,
       externalMode: {
-        enabled:
-          options.tunnel || bool((savedConfig.externalMode as { enabled?: unknown } | undefined)?.enabled, false),
+        enabled: isSetupMode
+          ? false
+          : options.tunnel || bool((savedConfig.externalMode as { enabled?: unknown } | undefined)?.enabled, false),
       },
+      remote: remoteConfig
+        ? {
+            mode: remoteConfig.mode === 'setup' ? 'setup' : 'quick',
+            stableMcpBaseUrl: str(remoteConfig.stableMcpBaseUrl),
+            stableWebuiBaseUrl: str(remoteConfig.stableWebuiBaseUrl),
+          }
+        : undefined,
     },
     bearer.token
   );
@@ -371,7 +380,11 @@ const startExternalRescue = async (
 
   const snapshot = runtime.snapshot();
   const gateway = snapshot.live?.host;
-  const publicMcpUrl = snapshot.liveExternal ? snapshot.liveExternal.tunnelUrl + '/ide/mcp' : undefined;
+  const publicMcpUrl = snapshot.liveExternal
+    ? snapshot.liveExternal.tunnelUrl + '/ide/mcp'
+    : isSetupMode && remoteConfig?.stableMcpBaseUrl
+      ? remoteConfig.stableMcpBaseUrl + '/ide/mcp'
+      : undefined;
   const saved = await readState(paths.statePath);
   if (saved && gateway) {
     await writeFile(
@@ -398,6 +411,9 @@ const startExternalRescue = async (
   console.log('MCP Streamable HTTP: ' + (gateway?.ideMcpUrl ?? 'not running'));
   console.log('MCP local SSE:       ' + (gateway?.ideSseUrl ?? 'not running'));
   if (publicMcpUrl) console.log('MCP public URL:      ' + publicMcpUrl);
+  if (isSetupMode && remoteConfig?.stableMcpBaseUrl) {
+    console.log('OAuth discovery:     ' + remoteConfig.stableMcpBaseUrl + '/.well-known/oauth-authorization-server');
+  }
   console.log('Authorization:       Bearer ' + bearer.token);
   console.log('Required path:       /ide/mcp');
   console.log('Bootstrap tool:      omni_bootstrap_session');

@@ -1,0 +1,8 @@
+[package]
+name = "demo-rs"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "demo-rs-admin"
+path = "src/admin.rs"

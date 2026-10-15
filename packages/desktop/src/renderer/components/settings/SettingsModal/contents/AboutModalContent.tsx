@@ -74,11 +74,6 @@ const AboutModalContent: React.FC = () => {
       icon: <Right theme='outline' size='16' />,
     },
     {
-      title: t('settings.contactMe'),
-      url: 'https://github.com/VNDT1625/tomni-hub-agent-os',
-      icon: <Right theme='outline' size='16' />,
-    },
-    {
       title: t('settings.officialWebsite'),
       url: 'https://github.com/VNDT1625/tomni-hub-agent-os',
       icon: <Right theme='outline' size='16' />,

@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { UserHooksStage } from './stages/userHooksStage';
 import type { ChatPipelineDefinition, ChatStageMetadata, IChatStage } from './types';
 
 type RegisteredStageEntry = {
@@ -14,6 +15,10 @@ type RegisteredStageEntry = {
 
 export class ChatStageRegistry {
   private readonly stages = new Map<string, RegisteredStageEntry>();
+  /** Old stage ids that still resolve, so saved pipelines keep working after a stage is renamed. */
+  private readonly aliases = new Map<string, string>();
+  /** Packages whose guard stages Main accepts as a stand-in for the built-in security stage. */
+  private readonly authorizedGuardPackages = new Set<string>();
 
   public registerBuiltin(stage: IChatStage): void {
     if (this.stages.has(stage.id)) {
@@ -28,6 +33,11 @@ export class ChatStageRegistry {
   public registerPackageStage(stage: IChatStage, packageId: string): void {
     if (!packageId.trim()) {
       throw new Error('Package ID is required to register a package chat stage.');
+    }
+    // A Store package cannot impersonate or replace a security-critical built-in,
+    // or steal another package's registered identity.
+    if (stage.id.startsWith('builtin:') || this.stages.has(stage.id)) {
+      throw new Error('CHAT_PACKAGE_STAGE_ID_RESERVED');
     }
     this.stages.set(stage.id, {
       stage,
@@ -44,8 +54,22 @@ export class ChatStageRegistry {
     }
   }
 
+  public registerAlias(alias: string, target: string): void {
+    this.aliases.set(alias, target);
+  }
+
+  /** Called by Main after it has verified a package (signature, review); a manifest cannot do this itself. */
+  public authorizeGuardPackage(packageId: string): void {
+    this.authorizedGuardPackages.add(packageId);
+  }
+
   public getStage(id: string): IChatStage | undefined {
-    return this.stages.get(id)?.stage;
+    return (this.stages.get(id) ?? this.stages.get(this.aliases.get(id) ?? ''))?.stage;
+  }
+
+  /** Package code cannot grant itself the builtin-only retry privilege. */
+  public isBuiltinStage(id: string): boolean {
+    return (this.stages.get(id) ?? this.stages.get(this.aliases.get(id) ?? ''))?.isBuiltin === true;
   }
 
   public listStages(): readonly IChatStage[] {
@@ -63,6 +87,11 @@ export class ChatStageRegistry {
       defaultTimeoutMs: stage.defaultTimeoutMs,
       isBuiltin,
       packageId,
+      role: stage.role ?? 'standard',
+      ...(stage.decisionTasks ? { decisionTasks: stage.decisionTasks } : {}),
+      ...(stage.role === 'guard'
+        ? { authorizedGuard: isBuiltin || (packageId !== undefined && this.authorizedGuardPackages.has(packageId)) }
+        : {}),
     }));
   }
 
@@ -96,6 +125,8 @@ let globalRegistry: ChatStageRegistry | undefined;
 export const getChatStageRegistry = (): ChatStageRegistry => {
   if (!globalRegistry) {
     globalRegistry = new ChatStageRegistry();
+    // UserPromptSubmit hooks (design 11.3). Registered first, so it leads the default pipeline.
+    globalRegistry.registerBuiltin(new UserHooksStage());
   }
   return globalRegistry;
 };

@@ -6,38 +6,34 @@
 
 import type { IProvider, TProviderWithModel } from '@/common/config/storage';
 import { configService } from '@/common/config/configService';
+import { ROUTER9_REASONING_EFFORTS, TOMNI_GATEWAY_PROVIDER_ID, type Router9ReasoningEffort } from '@/common/router9';
 import { useGoogleAuthModels } from '@/renderer/hooks/agent/useGoogleAuthModels';
 import { useProvidersQuery } from '@/renderer/hooks/agent/useModelProviderList';
 import { hasAvailableModels } from '../utils/modelUtils';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-/**
- * Build a unique key for a provider/model pair.
- */
 const buildModelKey = (providerId?: string, modelName?: string) => {
   if (!providerId || !modelName) return null;
   return `${providerId}:${modelName}`;
 };
 
-/**
- * Check if a model key still exists in the provider list.
- */
 const isModelKeyAvailable = (key: string | null, providers?: IProvider[]) => {
   if (key === 'auto:auto') return true;
   if (!key || !providers || providers.length === 0) return false;
-  return providers.some((provider) => {
-    if (!provider.id || !provider.models?.length) return false;
-    return provider.models.some((modelName) => buildModelKey(provider.id, modelName) === key);
-  });
+  return providers.some((provider) =>
+    Boolean(provider.id && provider.models?.some((modelName) => buildModelKey(provider.id, modelName) === key))
+  );
 };
 
-/** Provider-based agent keys that share the model list UI */
-type ProviderAgentKey = 'tomnyagentic';
+const isReasoningEffort = (value: unknown): value is Router9ReasoningEffort =>
+  typeof value === 'string' && ROUTER9_REASONING_EFFORTS.includes(value as Router9ReasoningEffort);
 
-/** Map agent key → storage key for persisting default model */
+type ProviderAgentKey = 'tomnyagentic';
 const MODEL_STORAGE_KEY: Record<ProviderAgentKey, 'tomnyagentic.defaultModel'> = {
   tomnyagentic: 'tomnyagentic.defaultModel',
 };
+
+type StoredModelSelection = { id: string; use_model: string; reasoning_effort?: Router9ReasoningEffort };
 
 export type GuidModelSelectionResult = {
   modelList: IProvider[];
@@ -45,114 +41,93 @@ export type GuidModelSelectionResult = {
   formatGeminiModelLabel: (provider: { platform?: string } | undefined, modelName?: string) => string;
   current_model: TProviderWithModel | undefined;
   setCurrentModel: (model_info: TProviderWithModel) => Promise<void>;
+  setReasoningEffort: (reasoningEffort?: Router9ReasoningEffort) => Promise<void>;
 };
 
-/**
- * Hook that manages the model list and selection state for the Guid page.
- * @param agentKey - current provider-based agent (currently only 'tomnyagentic')
- */
+/** Manages the Hub default model and the gateway-only reasoning effort override. */
 export const useGuidModelSelection = (agentKey: ProviderAgentKey = 'tomnyagentic'): GuidModelSelectionResult => {
   const { isGoogleAuth } = useGoogleAuthModels();
   const { data: modelConfig } = useProvidersQuery();
-
   const modelList = useMemo(() => {
-    const allProviders: IProvider[] = (modelConfig || []).filter((platform) => !!platform.models.length);
+    const allProviders: IProvider[] = (modelConfig || []).filter((provider) => !!provider.models.length);
     return allProviders.filter(hasAvailableModels);
   }, [modelConfig]);
-
-  const formatGeminiModelLabel = useCallback((_provider: { platform?: string } | undefined, modelName?: string) => {
-    if (!modelName) return '';
-    return modelName;
-  }, []);
-
-  const [current_model, _setCurrentModel] = useState<TProviderWithModel>();
+  const formatGeminiModelLabel = useCallback((_provider: { platform?: string } | undefined, modelName?: string) => modelName ?? '', []);
+  const [current_model, setCurrentModelState] = useState<TProviderWithModel>();
   const selectedModelKeyRef = useRef<string | null>(null);
   const prevStorageKeyRef = useRef<string | null>(null);
-
   const storageKey = MODEL_STORAGE_KEY[agentKey];
 
-  const setCurrentModel = useCallback(
-    async (model_info: TProviderWithModel) => {
-      selectedModelKeyRef.current = buildModelKey(model_info.id, model_info.use_model);
-      await configService.set(storageKey, { id: model_info.id, use_model: model_info.use_model }).catch((error) => {
-        console.error('Failed to save default model:', error);
-      });
-      _setCurrentModel(model_info);
-    },
-    [storageKey]
-  );
+  const setCurrentModel = useCallback(async (modelInfo: TProviderWithModel) => {
+    const reasoningEffort =
+      modelInfo.id === TOMNI_GATEWAY_PROVIDER_ID && isReasoningEffort(modelInfo.reasoning_effort)
+        ? modelInfo.reasoning_effort
+        : undefined;
+    const nextModel: TProviderWithModel = {
+      ...modelInfo,
+      ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
+    };
+    selectedModelKeyRef.current = buildModelKey(nextModel.id, nextModel.use_model);
+    const stored: StoredModelSelection = {
+      id: nextModel.id,
+      use_model: nextModel.use_model,
+      ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
+    };
+    await configService.set(storageKey, stored).catch((error) => console.error('Failed to save default model:', error));
+    setCurrentModelState(nextModel);
+  }, [storageKey]);
 
-  // Set default model when modelList or agent changes
+  const setReasoningEffort = useCallback(async (reasoningEffort?: Router9ReasoningEffort) => {
+    if (current_model?.id !== TOMNI_GATEWAY_PROVIDER_ID) return;
+    await setCurrentModel({ ...current_model, ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}) });
+  }, [current_model, setCurrentModel]);
+
   useEffect(() => {
-    const setDefaultModel = async () => {
-      if (!modelList || modelList.length === 0) {
-        return;
-      }
-      // When agent switches, reset selection so we reload from the new storage key
+    const restore = async () => {
+      if (!modelList.length) return;
       const agentChanged = prevStorageKeyRef.current !== null && prevStorageKeyRef.current !== storageKey;
       prevStorageKeyRef.current = storageKey;
-      if (agentChanged) {
-        selectedModelKeyRef.current = null;
-      }
-
+      if (agentChanged) selectedModelKeyRef.current = null;
       const currentKey = selectedModelKeyRef.current || buildModelKey(current_model?.id, current_model?.use_model);
       if (!agentChanged && isModelKeyAvailable(currentKey, modelList)) {
-        if (!selectedModelKeyRef.current && currentKey) {
-          selectedModelKeyRef.current = currentKey;
-        }
+        if (!selectedModelKeyRef.current && currentKey) selectedModelKeyRef.current = currentKey;
         return;
       }
-      const savedModel = configService.get(storageKey);
 
-      const isNewFormat = savedModel && typeof savedModel === 'object' && 'id' in savedModel;
-
-      let defaultModel: IProvider | undefined;
-      let resolvedUseModel: string;
-
-      if (isNewFormat) {
-        const { id, use_model } = savedModel;
-        if (id === 'auto' || use_model === 'auto') {
-          _setCurrentModel({
-            id: 'auto',
-            name: 'Auto (Laya Decision)',
-            use_model: 'auto',
-            platform: 'auto',
-          } as any);
+      const saved = configService.get(storageKey);
+      if (saved && typeof saved === 'object' && 'id' in saved) {
+        const selection = saved as StoredModelSelection;
+        if (selection.id === 'auto' || selection.use_model === 'auto') {
+          setCurrentModelState({ id: 'auto', name: 'Auto (Laya Decision)', use_model: 'auto', platform: 'auto' } as TProviderWithModel);
           return;
         }
-        const exactMatch = modelList.find((m) => m.id === id);
-        if (exactMatch && exactMatch.models.includes(use_model)) {
-          defaultModel = exactMatch;
-          resolvedUseModel = use_model;
-        } else {
-          defaultModel = modelList[0];
-          resolvedUseModel = defaultModel?.models[0] ?? '';
+        const provider = modelList.find((candidate) => candidate.id === selection.id);
+        if (provider?.models.includes(selection.use_model)) {
+          await setCurrentModel({
+            ...provider,
+            use_model: selection.use_model,
+            ...(selection.id === TOMNI_GATEWAY_PROVIDER_ID && isReasoningEffort(selection.reasoning_effort)
+              ? { reasoning_effort: selection.reasoning_effort }
+              : {}),
+          });
+          return;
         }
-      } else if (typeof savedModel === 'string') {
-        defaultModel = modelList.find((m) => m.models.includes(savedModel)) || modelList[0];
-        resolvedUseModel = defaultModel?.models.includes(savedModel) ? savedModel : (defaultModel?.models[0] ?? '');
-      } else {
-        defaultModel = modelList[0];
-        resolvedUseModel = defaultModel?.models[0] ?? '';
       }
 
-      if (!defaultModel || !resolvedUseModel) return;
+      if (typeof saved === 'string') {
+        const provider = modelList.find((candidate) => candidate.models.includes(saved));
+        if (provider) {
+          await setCurrentModel({ ...provider, use_model: saved });
+          return;
+        }
+      }
 
-      await setCurrentModel({
-        ...defaultModel,
-        use_model: resolvedUseModel,
-      });
+      const fallback = modelList[0];
+      const model = fallback?.models[0];
+      if (fallback && model) await setCurrentModel({ ...fallback, use_model: model });
     };
+    void restore().catch((error) => console.error('Failed to set default model:', error));
+  }, [modelList, storageKey, setCurrentModel]);
 
-    setDefaultModel().catch((error) => {
-      console.error('Failed to set default model:', error);
-    });
-  }, [modelList, storageKey]);
-  return {
-    modelList,
-    isGoogleAuth,
-    formatGeminiModelLabel,
-    current_model,
-    setCurrentModel,
-  };
+  return { modelList, isGoogleAuth, formatGeminiModelLabel, current_model, setCurrentModel, setReasoningEffort };
 };

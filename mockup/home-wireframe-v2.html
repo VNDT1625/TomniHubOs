@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="vi" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TomniHubOS — Home Wireframe v2 (Monochrome + Glass)</title>
+<style>
+  /* ============ TOKENS ============ */
+  :root, html[data-theme="dark"] {
+    --bg-0:#0c0d0f; --bg-1:#141518; --bg-2:#1b1d21; --bg-3:#232529;
+    --line:rgba(255,255,255,.08); --line-strong:rgba(255,255,255,.16);
+    --tx-0:#f4f5f7; --tx-1:#a7aab2; --tx-2:#6d7079;
+    --glass:rgba(16,17,20,.62); --glass-line:rgba(255,255,255,.09);
+    --glass-hi:rgba(255,255,255,.06);
+    --accent-bg:#f4f5f7; --accent-tx:#0c0d0f;
+    --track:#232529; --shadow:0 8px 24px rgba(0,0,0,.35);
+  }
+  html[data-theme="light"] {
+    --bg-0:#f5f5f4; --bg-1:#ffffff; --bg-2:#ececea; --bg-3:#e3e3e1;
+    --line:rgba(0,0,0,.09); --line-strong:rgba(0,0,0,.16);
+    --tx-0:#16171a; --tx-1:#54575e; --tx-2:#8a8d94;
+    --glass:rgba(255,255,255,.8); --glass-line:rgba(0,0,0,.07);
+    --glass-hi:rgba(255,255,255,.65);
+    --accent-bg:#16171a; --accent-tx:#f5f5f4;
+    --track:#e3e3e1; --shadow:0 8px 24px rgba(0,0,0,.08);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { height:100%; }
+  body {
+    font-family:"Segoe UI",system-ui,sans-serif;
+    background:#3a3d44; /* canvas ngoài app */
+    display:flex; align-items:center; justify-content:center;
+    color:var(--tx-0);
+  }
+
+  /* ============ APP FRAME 1440x860 ============ */
+  .app {
+    width:1440px; height:860px; position:relative; overflow:hidden;
+    background:var(--bg-0); border-radius:12px;
+    display:grid;
+    grid-template-rows:52px 1fr 28px;
+    grid-template-columns:232px 1fr 300px;
+    grid-template-areas:
+      "title title title"
+      "sider main rail"
+      "status status status";
+  }
+
+  /* ============ GLASS PRIMITIVES (mục 3A rulebook) ============ */
+  .glass {
+    background:var(--glass);
+    -webkit-backdrop-filter:blur(20px) saturate(1.6);
+    backdrop-filter:blur(20px) saturate(1.6);
+    border-bottom:1px solid var(--glass-line);
+    box-shadow:inset 0 1px 0 var(--glass-hi);
+  }
+  html[data-theme="light"] .glass {
+    -webkit-backdrop-filter:blur(20px) saturate(1.3);
+    backdrop-filter:blur(20px) saturate(1.3);
+  }
+
+  /* ============ TITLEBAR ============ */
+  .titlebar {
+    grid-area:title; position:relative; z-index:30;
+    display:flex; align-items:center; gap:8px; padding:0 12px;
+  }
+  .tb-group { display:flex; align-items:center; gap:4px; }
+  .tb-brand { display:flex; align-items:center; gap:8px; font-weight:600; font-size:14px; padding:0 8px 0 4px; }
+  .logo-mark {
+    width:22px; height:22px; border-radius:6px;
+    background:var(--accent-bg); color:var(--accent-tx);
+    display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700;
+  }
+  .cmdk {
+    position:absolute; left:50%; transform:translateX(-50%);
+    width:420px; height:32px; border-radius:8px;
+    background:var(--bg-2); border:1px solid var(--line);
+    display:flex; align-items:center; gap:8px; padding:0 12px;
+    color:var(--tx-2); font-size:13px;
+  }
+  .cmdk kbd {
+    margin-left:auto; font-size:11px; color:var(--tx-2);
+    border:1px solid var(--line); border-radius:4px; padding:1px 5px; font-family:inherit;
+  }
+  .icon-btn {
+    width:32px; height:32px; border-radius:8px; flex:none;
+    display:flex; align-items:center; justify-content:center;
+    color:var(--tx-1); font-size:13px;
+  }
+  .icon-btn:hover { background:var(--bg-3); color:var(--tx-0); }
+  .chip-balance {
+    height:32px; padding:0 10px; border-radius:8px;
+    background:var(--bg-2); border:1px solid var(--line);
+    display:flex; align-items:center; gap:6px; font-size:13px; font-weight:600;
+  }
+  .avatar { width:24px; height:24px; border-radius:50%; background:var(--bg-3); border:1px solid var(--line-strong); color:var(--tx-1); display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:600; }
+  .avatar.lg { width:32px; height:32px; }
+  .win-controls { display:flex; gap:4px; margin-left:4px; }
+  .win-dot { width:12px; height:12px; border-radius:50%; border:1.5px solid var(--tx-2); }
+
+  /* ============ SIDEBAR ============ */
+  .sider {
+    grid-area:sider; position:relative; z-index:20;
+    border-right:1px solid var(--glass-line);
+    display:flex; flex-direction:column; padding:12px 10px; gap:2px;
+  }
+  .sider-brand { display:flex; align-items:center; gap:8px; padding:2px 6px 12px; font-weight:600; font-size:14px; }
+  .sider-brand .chev { margin-left:auto; }
+  .nav-item {
+    height:32px; border-radius:8px; display:flex; align-items:center; gap:10px;
+    padding:0 12px; font-size:13px; color:var(--tx-1);
+  }
+  .nav-item:hover { background:var(--bg-3); color:var(--tx-0); }
+  .nav-item.active { background:var(--accent-bg); color:var(--accent-tx); font-weight:600; }
+  .nav-item .n-icon { width:16px; text-align:center; opacity:.8; }
+  .nav-item .n-chev { margin-left:auto; color:var(--tx-2); font-size:11px; }
+  .side-label {
+    font-size:11px; font-weight:600; letter-spacing:.06em; color:var(--tx-2);
+    padding:14px 12px 6px; display:flex; align-items:center; justify-content:space-between;
+  }
+  .ws-folder { display:flex; align-items:center; gap:8px; padding:4px 12px; font-size:12px; color:var(--tx-1); }
+  .ws-item { display:flex; align-items:center; gap:8px; padding:4px 12px 4px 28px; font-size:12.5px; color:var(--tx-2); }
+  .ws-item:hover { color:var(--tx-0); }
+  .show-more { font-size:12px; color:var(--tx-2); padding:4px 12px 4px 28px; }
+  .show-more:hover { color:var(--tx-0); }
+  .sider-footer {
+    margin-top:auto; height:44px; border-radius:10px;
+    display:flex; align-items:center; gap:10px; padding:0 10px;
+    border:1px solid var(--line); background:var(--bg-2);
+  }
+  .sider-footer .meta { min-width:0; }
+  .sider-footer .meta b { display:block; font-size:12.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .sider-footer .meta span { font-size:11px; color:var(--tx-2); }
+
+  /* ============ CENTER ============ */
+  .main { grid-area:main; overflow-y:auto; padding:26px 32px 32px; }
+  .main::-webkit-scrollbar { width:8px; }
+  .main::-webkit-scrollbar-thumb { background:var(--bg-3); border-radius:4px; }
+  .eyebrow { font-size:12px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--tx-2); }
+  h1 { font-size:24px; font-weight:600; margin:6px 0 4px; letter-spacing:-.01em; }
+  .sub { font-size:14px; color:var(--tx-1); margin-bottom:22px; }
+
+  .sendbox {
+    background:var(--bg-1); border:1px solid var(--line-strong);
+    border-radius:14px; padding:14px 16px 10px;
+  }
+  .sendbox textarea {
+    width:100%; border:none; outline:none; resize:none; background:transparent;
+    font:inherit; font-size:14px; color:var(--tx-0); height:44px;
+  }
+  .sendbox textarea::placeholder { color:var(--tx-2); }
+  .sendbox-bar { display:flex; align-items:center; gap:6px; margin-top:8px; }
+  .model-chip {
+    height:32px; padding:0 10px; border-radius:8px; font-size:12.5px;
+    background:var(--bg-2); border:1px solid var(--line);
+    display:flex; align-items:center; gap:6px; color:var(--tx-1);
+  }
+  .spacer { flex:1; }
+  .btn-primary {
+    height:36px; min-width:36px; padding:0 14px; border-radius:9px;
+    background:var(--accent-bg); color:var(--accent-tx);
+    font-size:13px; font-weight:600; border:none; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; gap:6px;
+  }
+  .quick-row { display:flex; gap:8px; margin:14px 0 26px; flex-wrap:wrap; }
+  .quick-chip {
+    height:32px; padding:0 12px; border-radius:8px; font-size:13px;
+    border:1px solid var(--line); background:transparent; color:var(--tx-1);
+    display:flex; align-items:center; gap:8px;
+  }
+  .quick-chip:hover { background:var(--bg-2); color:var(--tx-0); }
+
+  .section-head { display:flex; align-items:baseline; justify-content:space-between; margin:26px 0 12px; }
+  .section-head h2 { font-size:16px; font-weight:600; }
+  .section-head a { font-size:12.5px; color:var(--tx-2); text-decoration:none; }
+  .section-head a:hover { color:var(--tx-0); }
+
+  .group-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+  .group-card {
+    background:var(--bg-1); border:1px solid var(--line); border-radius:12px;
+    padding:14px 14px 12px;
+  }
+  .group-card h3 { font-size:13.5px; font-weight:600; }
+  .group-card p { font-size:12px; color:var(--tx-2); margin:2px 0 12px; }
+  .tile-row { display:flex; gap:8px; }
+  .tile {
+    flex:1; min-width:0; border:1px solid var(--line); border-radius:10px;
+    padding:10px 8px; display:flex; flex-direction:column; align-items:center; gap:8px;
+  }
+  .tile-icon {
+    width:32px; height:32px; border-radius:9px; border:1.5px dashed var(--tx-2);
+    display:flex; align-items:center; justify-content:center; font-size:13px; color:var(--tx-2);
+  }
+  .tile span { font-size:12px; color:var(--tx-1); text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
+  .tile small { font-size:11px; color:var(--tx-2); text-align:center; line-height:1.3; display:-webkit-box; -webkit-line-clamp:1; -webkit-box-orient:vertical; overflow:hidden; }
+
+  .row-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+  .row-card {
+    background:var(--bg-1); border:1px solid var(--line); border-radius:12px;
+    padding:12px 14px; display:flex; align-items:center; gap:12px;
+  }
+  .row-card .tile-icon { width:32px; height:32px; flex:none; }
+  .row-card b { font-size:13px; display:block; }
+  .row-card span { font-size:12px; color:var(--tx-2); }
+
+  /* ============ RIGHT RAIL (≤3 thẻ, glass) ============ */
+  .rail {
+    grid-area:rail; position:relative; z-index:20;
+    border-left:1px solid var(--glass-line);
+    padding:14px 12px; display:flex; flex-direction:column; gap:12px;
+    overflow-y:auto;
+  }
+  .rail-card {
+    border:1px solid var(--glass-line); border-radius:12px; padding:14px;
+    background:var(--glass);
+    box-shadow:inset 0 1px 0 var(--glass-hi);
+  }
+  .rail-card h4 { font-size:13px; font-weight:600; display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+  .rail-card h4 a { font-size:11.5px; color:var(--tx-2); text-decoration:none; font-weight:400; }
+  .task-row { display:flex; align-items:center; gap:8px; font-size:12.5px; color:var(--tx-1); padding:5px 0; }
+  .task-row .dot { width:6px; height:6px; border-radius:50%; background:var(--tx-2); flex:none; }
+  .task-row .pct { margin-left:auto; font-family:Consolas,monospace; font-size:11.5px; color:var(--tx-2); }
+  .meter { height:4px; border-radius:2px; background:var(--track); overflow:hidden; margin:3px 0 7px; }
+  .meter i { display:block; height:100%; background:var(--tx-1); border-radius:2px; }
+  .mono { font-family:Consolas,monospace; font-size:11.5px; color:var(--tx-2); }
+  .note-row { display:flex; gap:8px; padding:6px 0; font-size:12.5px; color:var(--tx-1); align-items:baseline; }
+  .note-row time { font-family:Consolas,monospace; font-size:10.5px; color:var(--tx-2); flex:none; }
+
+  /* ============ STATUS BAR ============ */
+  .statusbar {
+    grid-area:status; z-index:30;
+    display:flex; align-items:center; gap:16px; padding:0 14px;
+    font-family:Consolas,monospace; font-size:11px; color:var(--tx-2);
+    border-top:1px solid var(--glass-line);
+  }
+  .statusbar .right { margin-left:auto; display:flex; align-items:center; gap:6px; }
+  .status-dot { width:6px; height:6px; border-radius:50%; background:var(--tx-1); }
+
+  /* ============ ANNOTATION / AUDIT ============ */
+  .measure {
+    position:absolute; font-family:Consolas,monospace; font-size:10px;
+    color:#e8b931; pointer-events:none; z-index:40;
+  }
+  .theme-toggle {
+    position:fixed; right:20px; bottom:20px; z-index:50;
+    height:36px; padding:0 14px; border-radius:10px; cursor:pointer;
+    background:#16171a; color:#f5f5f4; border:1px solid rgba(255,255,255,.2);
+    font-size:12.5px; display:flex; align-items:center; gap:8px;
+  }
+</style>
+</head>
+<body>
+
+<div class="app" id="app">
+  <!-- TITLEBAR: glass floating layer -->
+  <header class="titlebar glass">
+    <div class="tb-group">
+      <div class="icon-btn">☰</div>
+      <div class="icon-btn">←</div>
+      <div class="icon-btn">→</div>
+    </div>
+    <div class="tb-brand"><div class="logo-mark">T</div>Tomny</div>
+    <div class="cmdk">⌕&nbsp;&nbsp;Tìm kiếm hoặc gõ lệnh…<kbd>Ctrl K</kbd></div>
+    <div class="tb-group" style="margin-left:auto">
+      <div class="chip-balance">◉ 5.00 <b>TOM</b></div>
+      <div class="icon-btn"><div class="avatar">N</div></div>
+      <div class="icon-btn" id="themeBtn" title="Đổi sáng/tối">◐</div>
+      <div class="icon-btn">⚙</div>
+    </div>
+    <div class="win-controls"><div class="win-dot"></div><div class="win-dot"></div><div class="win-dot"></div></div>
+  </header>
+
+  <!-- SIDEBAR: glass floating layer -->
+  <aside class="sider glass">
+    <div class="sider-brand"><div class="logo-mark">T</div>Tomny <span class="chev n-chev" style="margin-left:auto">‹</span></div>
+    <div class="nav-item active"><span class="n-icon">⌂</span>Home</div>
+    <div class="nav-item"><span class="n-icon">◌</span>Chat<span class="n-chev">2</span></div>
+    <div class="nav-item"><span class="n-icon">◷</span>Lịch sử</div>
+    <div class="nav-item"><span class="n-icon">▦</span>Store</div>
+    <div class="nav-item"><span class="n-icon">◫</span>Quản lý</div>
+
+    <div class="side-label">ỨNG DỤNG GHIM <span>⊞</span></div>
+    <div class="nav-item"><span class="n-icon">◎</span>Browser<span class="n-chev">›</span></div>
+    <div class="nav-item"><span class="n-icon">▤</span>Document Studio<span class="n-chev">›</span></div>
+    <div class="nav-item"><span class="n-icon">↯</span>Automation Studio</div>
+
+    <div class="side-label">WORKSPACES <span>＋</span></div>
+    <div class="ws-folder">▾ ▤ Dev</div>
+    <div class="ws-item">◦ Fix auth flow</div>
+    <div class="ws-item">◦ Redesign home v2</div>
+    <div class="show-more">Show more (3)</div>
+
+    <div class="sider-footer">
+      <div class="avatar lg">N</div>
+      <div class="meta"><b>ndt16022005@gmail.com</b><span>Tài khoản &amp; Cấp bậc</span></div>
+      <span class="n-chev">›</span>
+    </div>
+  </aside>
+
+  <!-- CENTER -->
+  <main class="main">
+    <div class="eyebrow">Tomny Agentic</div>
+    <h1>Hôm nay bạn muốn làm gì?</h1>
+    <div class="sub">Tomny sẵn sàng hỗ trợ bạn với mọi công việc.</div>
+
+    <div class="sendbox">
+      <textarea placeholder="Gửi tin nhắn, tải tệp lên, mở thư mục, hoặc tạo tác vụ theo lịch…"></textarea>
+      <div class="sendbox-bar">
+        <div class="model-chip">◈ Tomny Agentic · ag/gemini-3.8-flash-high <span style="color:var(--tx-2)">▾</span></div>
+        <div class="spacer"></div>
+        <div class="icon-btn">＋</div>
+        <div class="icon-btn">✎</div>
+        <div class="icon-btn">◎</div>
+        <div class="icon-btn">▤</div>
+        <button class="btn-primary">Gửi ↑</button>
+      </div>
+    </div>
+
+    <div class="quick-row">
+      <div class="quick-chip">☰ Tạo kế hoạch</div>
+      <div class="quick-chip">▤ Phân tích dữ liệu</div>
+      <div class="quick-chip">✎ Viết tài liệu</div>
+      <div class="quick-chip">▦ Tạo hình ảnh</div>
+      <div class="quick-chip">⋯ Thêm</div>
+    </div>
+
+    <div class="section-head"><h2>Ứng dụng</h2><a href="#">Xem tất cả ›</a></div>
+    <div class="group-grid">
+      <div class="group-card">
+        <h3>Giao tiếp</h3><p>Kết nối và trao đổi hiệu quả</p>
+        <div class="tile-row">
+          <div class="tile"><div class="tile-icon">◌</div><span>Chat</span><small>Trò chuyện</small></div>
+          <div class="tile"><div class="tile-icon">◎</div><span>Browser</span><small>Nghiên cứu web</small></div>
+          <div class="tile"><div class="tile-icon">◫</div><span>Company</span><small>Điều phối đội</small></div>
+        </div>
+      </div>
+      <div class="group-card">
+        <h3>Sáng tạo</h3><p>Tạo nội dung và thiết kế</p>
+        <div class="tile-row">
+          <div class="tile"><div class="tile-icon">▤</div><span>Docs</span><small>Soạn thảo</small></div>
+          <div class="tile"><div class="tile-icon">↯</div><span>Auto</span><small>Quy trình</small></div>
+          <div class="tile"><div class="tile-icon">＋</div><span>Thêm app</span><small>Store</small></div>
+        </div>
+      </div>
+      <div class="group-card">
+        <h3>Công cụ phát triển</h3><p>Hỗ trợ lập trình và vận hành</p>
+        <div class="tile-row">
+          <div class="tile"><div class="tile-icon">⌘</div><span>IDE</span><small>Phát triển</small></div>
+          <div class="tile"><div class="tile-icon">⎇</div><span>Git</span><small>Quản lý repo</small></div>
+          <div class="tile"><div class="tile-icon">▤</div><span>Terminal</span><small>Dòng lệnh</small></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-head"><h2>Tiếp tục</h2><a href="#">Xem tất cả ›</a></div>
+    <div class="row-grid">
+      <div class="row-card"><div class="tile-icon">⌘</div><div><b>IDE</b><span>Phát triển ứng dụng nội bộ</span></div></div>
+      <div class="row-card"><div class="tile-icon">◫</div><div><b>Company</b><span>Điều phối đội ngũ và workspace</span></div></div>
+      <div class="row-card"><div class="tile-icon">◎</div><div><b>Browser</b><span>Nghiên cứu và duyệt web</span></div></div>
+    </div>
+
+    <div class="section-head"><h2>Store</h2><a href="#">Xem tất cả ›</a></div>
+    <div class="row-grid">
+      <div class="row-card"><div class="tile-icon">±</div><div><b>Calculator</b><span>Máy tính bảo mật · v1.0.0</span></div></div>
+    </div>
+    <div style="height:24px"></div>
+  </main>
+
+  <!-- RIGHT RAIL: glass floating layer, đúng 3 thẻ -->
+  <aside class="rail glass">
+    <div class="rail-card">
+      <h4>Công việc <a href="#">Xem tất cả</a></h4>
+      <div class="task-row"><span class="dot"></span>Đang thực hiện<span class="pct">0%</span></div>
+      <div class="meter"><i style="width:0%"></i></div>
+      <div class="task-row"><span class="dot"></span>Chờ duyệt<span class="pct">0%</span></div>
+      <div class="meter"><i style="width:0%"></i></div>
+      <div class="task-row"><span class="dot"></span>Gặp lỗi<span class="pct">0%</span></div>
+      <div class="meter"><i style="width:0%"></i></div>
+    </div>
+
+    <div class="rail-card">
+      <h4>Thông số hệ thống <a href="#">Chi tiết</a></h4>
+      <div class="task-row">CPU<span class="pct mono">36%</span></div>
+      <div class="meter"><i style="width:36%"></i></div>
+      <div class="task-row">RAM<span class="pct mono">78%</span></div>
+      <div class="meter"><i style="width:78%"></i></div>
+      <div class="task-row">Lưu trữ<span class="pct mono">99%</span></div>
+      <div class="meter"><i style="width:99%"></i></div>
+      <div class="task-row" style="color:var(--tx-2)">Kết nối<span class="pct mono">Tốt</span></div>
+    </div>
+
+    <div class="rail-card">
+      <h4>Thông báo <a href="#">Xem tất cả</a></h4>
+      <div class="note-row"><time>09:41</time>Tomny Core đã sẵn sàng</div>
+      <div class="note-row"><time>09:40</time>Laya Decision Engine khởi động</div>
+      <div class="note-row"><time>09:38</time>Lịch tác vụ sẵn sàng</div>
+    </div>
+  </aside>
+
+  <!-- STATUS BAR -->
+  <footer class="statusbar glass">
+    <span>Tomny Hub v1.0.0</span>
+    <span>·</span>
+    <span>Hỗ trợ</span>
+    <span>·</span>
+    <span>Report Issue</span>
+    <span class="right"><span class="status-dot"></span>Tomny Core: Hoạt động tốt</span>
+  </footer>
+
+  <div class="measure" style="top:14px;left:196px">titlebar 52px · glass</div>
+  <div class="measure" style="top:120px;left:238px">sider 232px · glass</div>
+  <div class="measure" style="top:120px;right:308px">rail 300px · 3 thẻ · glass</div>
+  <div class="measure" style="top:60px;left:50%;transform:translateX(-50%)">cmdk 420px · target 32px+</div>
+</div>
+
+<button class="theme-toggle" id="themeToggle">◐ Đổi Sáng / Tối (audit cả 2 mode)</button>
+
+<script>
+  const btn = document.getElementById('themeToggle');
+  btn.addEventListener('click', () => {
+    const html = document.documentElement;
+    html.dataset.theme = html.dataset.theme === 'dark' ? 'light' : 'dark';
+  });
+</script>
+</body>
+</html>

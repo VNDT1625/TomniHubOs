@@ -7,6 +7,7 @@
 import React, { useState } from 'react';
 import { Card, Divider, InputNumber, Select, Slider, Switch } from '@arco-design/web-react';
 import { useTranslation } from 'react-i18next';
+import NotActiveNotice from './components/NotActiveNotice';
 import SettingsPageWrapper from './components/SettingsPageWrapper';
 
 /**
@@ -19,13 +20,14 @@ import SettingsPageWrapper from './components/SettingsPageWrapper';
 const AiConfigSettings: React.FC = () => {
   const { t } = useTranslation();
   const [temperature, setTemperature] = useState<number>(0.3);
-  const [contextWindow, setContextWindow] = useState<number>(32000);
+  const [contextWindow, setContextWindow] = useState<number>(32768);
   const [streamTimeout, setStreamTimeout] = useState<number>(120);
   const [fallbackModel, setFallbackModel] = useState<string>('qwen2.5-coder:7b-local');
 
   return (
     <SettingsPageWrapper contentClassName='max-w-960px'>
       <div className='flex flex-col gap-20px'>
+        <NotActiveNotice detail={t('settings.notActive.aiConfig')} />
         <Card title={t('settings.aiConfigSettings.inferenceParamsTitle')} bordered className='rd-12px'>
           <div className='flex flex-col gap-16px'>
             <div>
@@ -35,6 +37,7 @@ const AiConfigSettings: React.FC = () => {
               </div>
               <p className='text-12px text-t-tertiary m-0 mb-8px'>{t('settings.aiConfigSettings.temperatureDesc')}</p>
               <Slider
+                disabled
                 value={temperature}
                 min={0}
                 max={1}
@@ -53,6 +56,7 @@ const AiConfigSettings: React.FC = () => {
                 <p className='text-12px text-t-tertiary m-0'>{t('settings.aiConfigSettings.contextWindowDesc')}</p>
               </div>
               <Select
+                disabled
                 value={contextWindow}
                 onChange={setContextWindow}
                 style={{ width: 160 }}
@@ -77,6 +81,7 @@ const AiConfigSettings: React.FC = () => {
               </div>
               <div className='flex items-center gap-6px'>
                 <InputNumber
+                  disabled
                   style={{ width: 100 }}
                   value={streamTimeout}
                   min={30}
@@ -96,6 +101,7 @@ const AiConfigSettings: React.FC = () => {
               <p className='text-12px text-t-tertiary m-0 mt-2px'>{t('settings.aiConfigSettings.fallbackModelDesc')}</p>
             </div>
             <Select
+              disabled
               value={fallbackModel}
               onChange={setFallbackModel}
               style={{ width: 220 }}

@@ -48,6 +48,7 @@ export class NativeConversationRepository {
   private snapshot: NativeConversationSnapshot = clone(EMPTY_SNAPSHOT);
   private initialized: Promise<void> | undefined;
   private writeQueue = Promise.resolve();
+  private pendingWrite: Promise<void> | undefined;
   private readonly legacyDatabasePaths: string[];
 
   public constructor(
@@ -87,9 +88,66 @@ export class NativeConversationRepository {
     const before = this.snapshot.conversations.length;
     this.snapshot.conversations = this.snapshot.conversations.filter((item) => item.id !== id);
     this.snapshot.messages = this.snapshot.messages.filter((item) => item.conversation_id !== id);
+    this.touchMessages(id);
     if (before === this.snapshot.conversations.length) return false;
     await this.flush();
     return true;
+  }
+
+  /**
+   * One page of a conversation's messages, oldest first (or newest first when descending). Only the page is cloned,
+   * so a poll for the latest messages does not copy the whole conversation.
+   */
+  /** Per-conversation counter, bumped on every change to its messages. A poller can ask whether anything changed. */
+  private readonly messageRevisions = new Map<string, number>();
+  private readonly orderedCache = new Map<string, { revision: number; messages: TMessage[] }>();
+
+  /** Revision of one conversation's messages; 0 until it changes. */
+  public messageRevision(conversationId: string): number {
+    return this.messageRevisions.get(conversationId) ?? 0;
+  }
+
+  public async countMessages(conversationId: string): Promise<number> {
+    await this.initialize();
+    return this.orderedMessages(conversationId).length;
+  }
+
+  /**
+   * One page of a conversation's messages, oldest first (or newest first when descending). Only the page is copied,
+   * so a poll for the latest messages does not copy the whole conversation. `project` builds the item to return; it
+   * must return fresh objects (it is applied before copying, so unchanged items are not cloned).
+   */
+  public async pageMessages(
+    conversationId: string,
+    start: number,
+    size: number,
+    descending: boolean,
+    project?: (message: TMessage) => TMessage
+  ): Promise<{ items: TMessage[]; total: number }> {
+    await this.initialize();
+    const ordered = this.orderedMessages(conversationId);
+    const from = Math.max(0, start);
+    const window = descending
+      ? ordered.slice(Math.max(0, ordered.length - from - size), Math.max(0, ordered.length - from)).toReversed()
+      : ordered.slice(from, from + size);
+    return { items: project ? window.map(project) : clone(window), total: ordered.length };
+  }
+
+  /** Sorted messages of one conversation, rebuilt only after a change to that conversation (not on every poll). */
+  private orderedMessages(conversationId: string): TMessage[] {
+    const revision = this.messageRevision(conversationId);
+    const cached = this.orderedCache.get(conversationId);
+    if (cached?.revision === revision) return cached.messages;
+    const messages = this.snapshot.messages
+      .filter((item) => item.conversation_id === conversationId)
+      .toSorted((left, right) => (left.created_at ?? 0) - (right.created_at ?? 0));
+    this.orderedCache.set(conversationId, { revision, messages });
+    return messages;
+  }
+
+  private touchMessages(conversationId: string): void {
+    this.messageRevisions.set(conversationId, this.messageRevision(conversationId) + 1);
+    this.orderedCache.delete(conversationId);
   }
 
   public async listMessages(conversationId: string): Promise<TMessage[]> {
@@ -114,12 +172,14 @@ export class NativeConversationRepository {
     );
     if (index >= 0) this.snapshot.messages[index] = clone(message);
     else this.snapshot.messages.push(clone(message));
+    this.touchMessages(message.conversation_id);
     await this.flush();
   }
 
   public async clearMessages(conversationId: string): Promise<void> {
     await this.initialize();
     this.snapshot.messages = this.snapshot.messages.filter((item) => item.conversation_id !== conversationId);
+    this.touchMessages(conversationId);
     await this.flush();
   }
 
@@ -143,6 +203,19 @@ export class NativeConversationRepository {
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
       this.snapshot = clone(EMPTY_SNAPSHOT);
+      shouldFlush = true;
+    }
+
+    // A packaging run lives in the process that wrote it. One still marked running at load was cut off by a restart.
+    for (const message of this.snapshot.messages) {
+      const content = message.content as { content?: unknown; repoRun?: unknown } | undefined;
+      if (content?.repoRun !== 'running') continue;
+      const text = typeof content.content === 'string' ? content.content : '';
+      message.content = {
+        ...content,
+        content: `${text}\n\n⚠️ Việc đóng gói bị gián đoạn khi ứng dụng đóng. Chạy lại \`/repotopackage\` để thử lại.`,
+        repoRun: 'interrupted',
+      } as typeof message.content;
       shouldFlush = true;
     }
 
@@ -265,13 +338,23 @@ export class NativeConversationRepository {
     }
   }
 
-  private async flush(): Promise<void> {
-    const snapshot = clone(this.snapshot);
-    this.writeQueue = this.writeQueue.then(async () => {
+  /**
+   * Persists the whole snapshot. Writes requested while one is queued but not started share it: the queued write
+   * serializes the state at the moment it runs, so every caller's change is included. The snapshot is serialized
+   * once per write, not copied first, which keeps the cost of a burst of saves to one serialization.
+   */
+  private flush(): Promise<void> {
+    if (this.pendingWrite) return this.pendingWrite;
+    const write = this.writeQueue.then(async () => {
+      this.pendingWrite = undefined;
+      const body = JSON.stringify(this.snapshot);
       const temporaryPath = `${this.filePath}.${process.pid}.tmp`;
-      await writeFile(temporaryPath, JSON.stringify(snapshot, null, 2), 'utf8');
+      await writeFile(temporaryPath, body, 'utf8');
       await rename(temporaryPath, this.filePath);
     });
-    await this.writeQueue;
+    this.pendingWrite = write;
+    // A failed write must not block later writes; its caller still receives the rejection.
+    this.writeQueue = write.catch((): undefined => undefined);
+    return write;
   }
 }

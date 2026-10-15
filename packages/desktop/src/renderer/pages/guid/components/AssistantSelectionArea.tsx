@@ -14,12 +14,12 @@ import { CUSTOM_AVATAR_IMAGE_MAP } from '../constants';
 import styles from '../index.module.css';
 import type { AvailableAgent, EffectiveAgentInfo } from '../types';
 import type { Assistant } from '@/common/types/agent/assistantTypes';
+import { AssistantCard } from '@/renderer/components/agent/AssistantCard';
 import { Message } from '@arco-design/web-react';
-import { Plus, Robot } from '@icon-park/react';
+import { Plus } from '@icon-park/react';
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { resolveExtensionAssetUrl } from '@/renderer/utils/platform';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
 
 type AssistantSelectionAreaProps = {
   is_presetAgent: boolean;
@@ -37,6 +37,8 @@ type AssistantSelectionAreaProps = {
   onSetInput: (text: string) => void;
   onFocusInput: () => void;
   onRegisterOpenDetails?: (openDetails: (() => void) | null) => void;
+  /** Lets the chat-bar picker open the create drawer owned by this component. */
+  onRegisterOpenCreate?: (openCreate: (() => void) | null) => void;
 };
 
 const resolveAssistantCandidateIds = (assistantId: string): string[] => {
@@ -55,9 +57,9 @@ const AssistantSelectionArea: React.FC<AssistantSelectionAreaProps> = ({
   onSetInput,
   onFocusInput,
   onRegisterOpenDetails,
+  onRegisterOpenCreate,
 }) => {
   const { t } = useTranslation();
-  const navigate = useNavigate();
   const [agentMessage, agentMessageContext] = Message.useMessage({ maxCount: 10 });
 
   const avatarImageMap: Record<string, string> = useMemo(
@@ -107,11 +109,19 @@ const AssistantSelectionArea: React.FC<AssistantSelectionAreaProps> = ({
         setEditAgent={editor.setEditAgent}
         editContext={editor.editContext}
         setEditContext={editor.setEditContext}
+        editPrompts={editor.editPrompts}
+        setEditPrompts={editor.setEditPrompts}
         promptViewMode={editor.promptViewMode}
         setPromptViewMode={editor.setPromptViewMode}
         availableSkills={editor.availableSkills}
         selectedSkills={editor.selectedSkills}
         setSelectedSkills={editor.setSelectedSkills}
+        selectedPlugins={editor.selectedPlugins}
+        setSelectedPlugins={editor.setSelectedPlugins}
+        selectedHooks={editor.selectedHooks}
+        selectedTools={editor.selectedTools}
+        setSelectedTools={editor.setSelectedTools}
+        setSelectedHooks={editor.setSelectedHooks}
         pendingSkills={editor.pendingSkills}
         customSkills={editor.customSkills}
         setDeletePendingSkillName={editor.setDeletePendingSkillName}
@@ -185,6 +195,16 @@ const AssistantSelectionArea: React.FC<AssistantSelectionAreaProps> = ({
     if (!onRegisterOpenDetails) return;
     onRegisterOpenDetails(openAssistantDetails);
   }, [onRegisterOpenDetails, openAssistantDetails]);
+
+  const openCreateAssistant = useCallback(() => {
+    void editor.handleCreate();
+  }, [editor]);
+
+  useLayoutEffect(() => {
+    if (!onRegisterOpenCreate) return;
+    onRegisterOpenCreate(openCreateAssistant);
+    return () => onRegisterOpenCreate(null);
+  }, [onRegisterOpenCreate, openCreateAssistant]);
 
   const scrollWrapRef = useRef<HTMLDivElement>(null);
   const [isScrollable, setIsScrollable] = useState(false);
@@ -292,38 +312,23 @@ const AssistantSelectionArea: React.FC<AssistantSelectionAreaProps> = ({
                 avatarImage &&
                 (/\.(svg|png|jpe?g|webp|gif)$/i.test(avatarImage) || /^(https?:|file:\/\/|data:|\/)/i.test(avatarImage))
               );
-              const description =
-                assistant.description_i18n?.[localeKey] ||
-                assistant.description_i18n?.['en-US'] ||
-                assistant.description ||
-                '';
               return (
-                <div
+                <AssistantCard
                   key={assistant.id}
-                  data-testid={`preset-pill-${assistant.id}`}
-                  className={styles.assistantCard}
+                  assistant={assistant}
+                  localeKey={localeKey}
+                  testId={`preset-pill-${assistant.id}`}
+                  countsTestId={`preset-counts-${assistant.id}`}
+                  avatarImage={isImageAvatar ? avatarImage : undefined}
+                  avatarEmoji={!isImageAvatar && avatarValue ? avatarValue : undefined}
                   onClick={() => onSelectAssistant(`custom:${assistant.id}`)}
-                >
-                  <div className={styles.assistantCardAvatar}>
-                    {isImageAvatar ? (
-                      <img src={avatarImage} alt='' />
-                    ) : avatarValue ? (
-                      <span className={styles.assistantCardEmoji}>{avatarValue}</span>
-                    ) : (
-                      <Robot theme='outline' size={18} />
-                    )}
-                  </div>
-                  <div className={styles.assistantCardMeta}>
-                    <div className={styles.assistantCardName}>{assistant.name_i18n?.[localeKey] || assistant.name}</div>
-                    {description && <div className={styles.assistantCardDesc}>{description}</div>}
-                  </div>
-                </div>
+                />
               );
             })}
           <div
             data-testid='btn-add-preset'
             className={styles.assistantCardAdd}
-            onClick={() => navigate('/settings/assistants')}
+            onClick={() => void editor.handleCreate()}
           >
             <Plus theme='outline' size={20} />
           </div>

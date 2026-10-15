@@ -362,14 +362,48 @@ const collectLocalizedCredentialValues = (input: string, candidates: Candidate[]
   }
 };
 
+const VALUE_CHARACTER = /[A-Za-z0-9+/_=-]/;
+const VALUE_LETTER = /[A-Za-z]/;
+const VALUE_DIGIT = /\d/;
+const WHITESPACE_CHARACTER = /\s/;
+const MIN_VALUE_LENGTH = 24;
+
+/**
+ * Linear scan of long opaque values (tokens, keys, encoded blobs). A value is a maximal run of value characters of at
+ * least 24 characters whose non-whitespace segment also holds a letter and a digit. The scan replaces a regex with
+ * per-start lookaheads, which was quadratic on long whitespace-free runs (a 32 KB slash-heavy run took about 20 s).
+ * Each segment is scanned once and its last letter and digit positions are reused for later runs in it.
+ */
 const collectAggressiveValues = (input: string, candidates: Candidate[]): void => {
-  const value =
-    /(?<![A-Za-z0-9])(?=[A-Za-z0-9+/_=-]{24,}(?![A-Za-z0-9]))(?=[^\s]*[A-Za-z])(?=[^\s]*\d)[A-Za-z0-9+/_=-]{24,}(?![A-Za-z0-9])/g;
-  for (const match of input.matchAll(value)) {
-    if (match.index === undefined || !match[0] || isAlreadyMasked(match[0])) continue;
+  let segmentEnd = -1;
+  let lastLetter = -1;
+  let lastDigit = -1;
+  let index = 0;
+  while (index < input.length) {
+    if (!VALUE_CHARACTER.test(input.charAt(index))) {
+      index += 1;
+      continue;
+    }
+    const start = index;
+    while (index < input.length && VALUE_CHARACTER.test(input.charAt(index))) index += 1;
+    const end = index;
+    if (start >= segmentEnd) {
+      segmentEnd = start;
+      lastLetter = -1;
+      lastDigit = -1;
+      while (segmentEnd < input.length && !WHITESPACE_CHARACTER.test(input.charAt(segmentEnd))) {
+        const character = input.charAt(segmentEnd);
+        if (VALUE_LETTER.test(character)) lastLetter = segmentEnd;
+        else if (VALUE_DIGIT.test(character)) lastDigit = segmentEnd;
+        segmentEnd += 1;
+      }
+    }
+    if (end - start < MIN_VALUE_LENGTH || lastLetter < start || lastDigit < start) continue;
+    const matched = input.slice(start, end);
+    if (isAlreadyMasked(matched)) continue;
     candidates.push({
-      start: match.index,
-      end: match.index + match[0].length,
+      start,
+      end,
       replacement: REDACTED,
       redacts: true,
       name: 'SENSITIVE_VALUE',

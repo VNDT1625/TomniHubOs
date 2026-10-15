@@ -84,4 +84,21 @@ describe('UpdateModal signed updater flow', () => {
     expect(screen.queryByText('update.downloadAndInstall')).toBeNull();
     expect(mocks.ipcBridge.autoUpdate.download.invoke).not.toHaveBeenCalled();
   });
+
+  it('downloads quietly and offers native silent installation when the update is ready', async () => {
+    mocks.ipcBridge.autoUpdate.check.invoke.mockResolvedValue({ success: true, data: { currentVersion: '1.0.0' } });
+    mocks.ipcBridge.autoUpdate.quitAndInstall.invoke.mockResolvedValue(undefined);
+    render(<UpdateModal />);
+    const onStatus = mocks.ipcBridge.autoUpdate.status.on.mock.calls.at(-1)?.[0] as
+      | ((event: { status: string; version?: string }) => void)
+      | undefined;
+    if (!onStatus) throw new Error('native update status listener not registered');
+
+    await act(async () => onStatus({ status: 'available', version: '2.0.0' }));
+    expect(screen.queryByTestId('update-modal')).toBeNull();
+
+    await act(async () => onStatus({ status: 'downloaded', version: '2.0.0' }));
+    fireEvent.click(await screen.findByText('update.installNow'));
+    await waitFor(() => expect(mocks.ipcBridge.autoUpdate.quitAndInstall.invoke).toHaveBeenCalledOnce());
+  });
 });

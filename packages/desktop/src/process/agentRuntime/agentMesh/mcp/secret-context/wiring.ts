@@ -1,4 +1,4 @@
-import type { SecretContextStoredCallback } from './router';
+import type { PackageAccessRequester, SecretContextStoredCallback } from './router';
 import { createSecretContextUseRouter, type SecretContextUseRouter } from './router';
 import type { SecretVault } from '@process/agentRuntime/secretVault';
 import { createSecretDestinationSinks } from './sinks';
@@ -6,6 +6,7 @@ import { createSecretDestinationSinks } from './sinks';
 let sharedRouter: SecretContextUseRouter | undefined;
 let sharedVault: SecretVault | undefined;
 let sharedStoredCallback: SecretContextStoredCallback | undefined;
+let sharedPackageAccess: PackageAccessRequester | undefined;
 
 const registerDestinationSinks = (router: SecretContextUseRouter, vault: SecretVault): void => {
   for (const [name, sink] of Object.entries(createSecretDestinationSinks(vault))) {
@@ -28,12 +29,19 @@ export const configureSecretContextStoredCallback = (callback: SecretContextStor
   sharedRouter?.configureStoredCallback(callback);
 };
 
+/** Let a Package App's run ask the person for access to a general app secret. */
+export const configureSecretContextPackageAccess = (access: PackageAccessRequester): void => {
+  sharedPackageAccess = access;
+  sharedRouter?.configurePackageAccess(access);
+};
+
 /** Register trusted sinks once; additional host capabilities can extend this registry later. */
 export const getSecretContextUseRouter = (): SecretContextUseRouter => {
   if (!sharedRouter) {
     sharedRouter = createSecretContextUseRouter({
       ...(sharedVault ? { vault: sharedVault } : {}),
       ...(sharedStoredCallback ? { onSecretStored: sharedStoredCallback } : {}),
+      ...(sharedPackageAccess ? { packageAccess: sharedPackageAccess } : {}),
     });
     if (sharedVault) registerDestinationSinks(sharedRouter, sharedVault);
   }
@@ -44,4 +52,5 @@ export const resetSecretContextUseRouterForTests = (): void => {
   sharedRouter = undefined;
   sharedVault = undefined;
   sharedStoredCallback = undefined;
+  sharedPackageAccess = undefined;
 };

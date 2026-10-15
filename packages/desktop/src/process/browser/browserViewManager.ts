@@ -31,13 +31,15 @@
  *
  * ## Session choice (criterion 1.3 — real user login session)
  *
- * By default the manager does **not** set a `partition`. Omitting `partition`
- * makes each tab use Electron's default persistent session — the same session
- * the main window uses — so the web agent operates inside the user's **real
- * login session** (their existing cookies / logins), as required. An explicit
- * `partition` is accepted in {@link CreateTabOptions} only for advanced,
- * opt-in isolation; nothing here creates an incognito/isolated partition on its
- * own.
+ * Tabs without an explicit `partition` run in the persistent Browser profile
+ * ({@link BROWSER_PROFILE_PARTITION}, `persist:tomny-browser`), NOT in the
+ * default session the Hub window uses. The user and the web agent share this
+ * profile, so the agent still works inside the user's real login session
+ * (cookies are copied once from the default session, see `profile.ts`), while
+ * extensions and `<all_urls>` content scripts can never reach the Hub UI
+ * (design 12.1, gap G6). An explicit `partition` in {@link CreateTabOptions} is
+ * for Main-internal callers only (e.g. web-embed); the IPC bridge rejects it
+ * from the renderer (gap G8).
  *
  * Web-content `webPreferences` are locked down by default (`contextIsolation:
  * true`, `nodeIntegration: false`, `sandbox: true`) so remote pages cannot reach
@@ -59,6 +61,8 @@
 
 import { WebContentsView } from 'electron';
 import type { BrowserWindow, WebContents, WebContentsViewConstructorOptions, WebPreferences } from 'electron';
+import { BROWSER_PROFILE_PARTITION } from '@process/integrations/browserExtensions/profile';
+import { emitBrowserTabLifecycle } from '@process/integrations/browserExtensions/wiring/tabLifecycle';
 
 /** Stable identifier for a single browser tab / {@link WebContentsView}. */
 export type BrowserTabId = string;
@@ -109,9 +113,9 @@ export type CreateTabOptions = {
   /** Whether the tab starts visible. Defaults to `true`. */
   visible?: boolean;
   /**
-   * Advanced, opt-in session partition. Leave unset (the default) to run in the
-   * user's **real login session** (criterion 1.3). Setting this isolates the tab
-   * into a separate session — only use it when isolation is explicitly wanted.
+   * Main-internal session partition. Leave unset (the default) to run in the
+   * persistent Browser profile (`persist:tomny-browser`), which holds the user's
+   * login session (criterion 1.3). Never forward a renderer-supplied value here.
    */
   partition?: string;
   /**
@@ -211,8 +215,12 @@ export type IBrowserViewManager = {
   setVisible: (id: BrowserTabId, visible: boolean) => void;
   /** Hide a tab (keep it alive but stop painting it). No-op for unknown ids. */
   hide: (id: BrowserTabId) => void;
-  /** Hide every managed tab (used when the Browser page is not on screen). */
+    /** Hide every managed tab (used when the Browser page is not on screen). */
   hideAll: () => void;
+  /** Throttle inactive user tabs while Hub is hidden; exempt protected agent tabs and background research. */
+  setHubSleeping?: (sleeping: boolean, protectedTabs?: readonly BrowserTabId[]) => void;
+  /** Snapshot a tab's current paint as a PNG data URL (null when unavailable). */
+  capture: (id: BrowserTabId) => Promise<string | null>;
   /** List all currently managed tabs with their live url/title and last-known bounds. */
   listTabs: () => BrowserTabInfo[];
   /**
@@ -263,6 +271,8 @@ type TabRecord = {
    * the background.
    */
   readonly background: boolean;
+  /** True while the page is in HTML fullscreen and the view spans the whole window. */
+  htmlFullScreen?: boolean;
 };
 
 /**
@@ -275,7 +285,8 @@ class BrowserViewManagerImpl implements IBrowserViewManager {
   private readonly createView: (options: WebContentsViewConstructorOptions) => WebContentsView;
   private readonly generateId: () => string;
   private readonly onTabUpdate?: (update: TabUpdate) => void;
-  private readonly tabs = new Map<BrowserTabId, TabRecord>();
+    private readonly tabs = new Map<BrowserTabId, TabRecord>();
+  private readonly savedThrottling = new Map<BrowserTabId, boolean>();
 
   constructor(deps: BrowserViewManagerDeps) {
     this.getWindow = deps.getWindow;
@@ -308,9 +319,7 @@ class BrowserViewManagerImpl implements IBrowserViewManager {
     //      is an intentional exception to background power saving, and the user
     //      can always close a tab if it costs too much.
     const webPreferences: WebPreferences = { ...DEFAULT_WEB_PREFERENCES, backgroundThrottling: false };
-    if (options.partition !== undefined) {
-      webPreferences.partition = options.partition;
-    }
+    webPreferences.partition = options.partition ?? BROWSER_PROFILE_PARTITION;
     const view = this.createView({ webPreferences });
 
     const bounds = options.bounds ?? ZERO_BOUNDS;
@@ -336,6 +345,46 @@ class BrowserViewManagerImpl implements IBrowserViewManager {
 
     window.contentView.addChildView(view);
     this.tabs.set(id, { id, view, bounds: { ...bounds }, visible, background });
+    emitBrowserTabLifecycle({ type: 'created', id });
+
+    // True HTML fullscreen (YouTube "full screen" button): a WebContentsView only
+    // fills its own rectangle, so grow the view to the whole window and put the
+    // window itself into OS fullscreen; restore both when the page leaves.
+    try {
+      const wc = view.webContents;
+      const fit = (): void => {
+        const record = this.tabs.get(id);
+        const win = this.getWindow();
+        if (!record || !win || win.isDestroyed()) return;
+        const { width, height } = win.getContentBounds();
+        record.view.setBounds({ x: 0, y: 0, width, height });
+      };
+      const onResize = (): void => fit();
+      wc.on('enter-html-full-screen', () => {
+        const record = this.tabs.get(id);
+        const win = this.getWindow();
+        if (!record || !win || win.isDestroyed()) return;
+        record.htmlFullScreen = true;
+        win.contentView.addChildView(record.view); // re-adding moves it above all other views
+        win.setFullScreen(true);
+        win.on('resize', onResize);
+        fit();
+        setTimeout(() => this.tabs.get(id)?.htmlFullScreen && fit(), 250);
+      });
+      wc.on('leave-html-full-screen', () => {
+        const record = this.tabs.get(id);
+        const win = this.getWindow();
+        if (!record) return;
+        record.htmlFullScreen = false;
+        if (win && !win.isDestroyed()) {
+          win.removeListener('resize', onResize);
+          win.setFullScreen(false);
+        }
+        record.view.setBounds(record.bounds);
+      });
+    } catch {
+      // Best-effort: never block tab creation on a fullscreen hook failure.
+    }
 
     // Keep popups INSIDE the embedded browser. Without this, any link the page
     // opens in a new window (`target="_blank"`, `window.open`, a "new tab" link)
@@ -386,11 +435,13 @@ class BrowserViewManagerImpl implements IBrowserViewManager {
     return id;
   }
 
-  destroyTab(id: BrowserTabId): void {
+    destroyTab(id: BrowserTabId): void {
+    this.savedThrottling.delete(id);
     const record = this.tabs.get(id);
     if (!record) return;
     this.tabs.delete(id);
 
+    emitBrowserTabLifecycle({ type: 'destroyed', id });
     // Detach from the window first so it stops painting, then free the WebContents.
     const window = this.getWindow();
     if (window && !window.isDestroyed()) {
@@ -406,6 +457,7 @@ class BrowserViewManagerImpl implements IBrowserViewManager {
     const record = this.tabs.get(id);
     if (!record) return;
     record.bounds = { ...bounds };
+    if (record.htmlFullScreen) return; // page owns the whole window until it leaves fullscreen
     record.view.setBounds(bounds);
   }
 
@@ -472,6 +524,7 @@ class BrowserViewManagerImpl implements IBrowserViewManager {
     for (const tabId of this.tabs.keys()) {
       this.setVisibility(tabId, tabId === id);
     }
+    emitBrowserTabLifecycle({ type: 'shown', id });
   }
 
   hide(id: BrowserTabId): void {
@@ -485,9 +538,39 @@ class BrowserViewManagerImpl implements IBrowserViewManager {
     this.setVisibility(id, visible);
   }
 
-  hideAll(): void {
+    hideAll(): void {
     for (const id of this.tabs.keys()) {
       this.setVisibility(id, false);
+    }
+  }
+
+  setHubSleeping(sleeping: boolean, protectedTabs: readonly BrowserTabId[] = []): void {
+    if (!sleeping) {
+      for (const [id, previous] of this.savedThrottling) {
+        const contents = this.tabs.get(id)?.view.webContents;
+        if (contents && !contents.isDestroyed()) contents.setBackgroundThrottling(previous);
+      }
+      this.savedThrottling.clear();
+      return;
+    }
+    const protectedIds = new Set(protectedTabs);
+    for (const [id, tab] of this.tabs) {
+      if (tab.background || protectedIds.has(id) || tab.view.webContents.isDestroyed()) continue;
+      const contents = tab.view.webContents;
+      if (!this.savedThrottling.has(id)) this.savedThrottling.set(id, contents.getBackgroundThrottling());
+      contents.setBackgroundThrottling(true);
+    }
+  }
+
+
+  async capture(id: BrowserTabId): Promise<string | null> {
+    const record = this.tabs.get(id);
+    if (!record || record.view.webContents.isDestroyed()) return null;
+    try {
+      const image = await record.view.webContents.capturePage();
+      return image.isEmpty() ? null : image.toDataURL();
+    } catch {
+      return null;
     }
   }
 
@@ -513,7 +596,8 @@ class BrowserViewManagerImpl implements IBrowserViewManager {
     return record.view.webContents;
   }
 
-  dispose(): void {
+    dispose(): void {
+    this.savedThrottling.clear();
     // Snapshot the ids first: destroyTab() deletes from `this.tabs` as we go, so
     // iterating a live view would mutate the collection mid-iteration.
     for (const id of Array.from(this.tabs.keys())) {

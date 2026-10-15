@@ -9,7 +9,6 @@ import {
   ExpandRight,
   Peoples,
   Remind,
-  Search,
   SettingTwo,
 } from '@icon-park/react';
 import { useTranslation } from 'react-i18next';
@@ -19,11 +18,13 @@ import { ipcBridge } from '@/common';
 import { TEAM_MODE_ENABLED } from '@/common/config/constants';
 import tomniIcon from '@/renderer/assets/tomni-icon.svg';
 import MobileConversationBrand from './MobileConversationBrand';
+import { isGuidPath, isHubPagePath } from '../hubRoutes';
 import WindowControls from '../WindowControls';
 import TomBalanceWidget from './TomBalanceWidget';
 import SettingsGlassDropdown from './SettingsGlassDropdown';
-import GlobalSearchModal from './GlobalSearchModal';
-import NotificationCenterDrawer from './NotificationCenterDrawer';
+import SuperSearch from '@renderer/components/layout/SuperSearch';
+import NotificationCenterDrawer from './NotificationHub/NotificationCenterDrawer';
+import ExtensionStrip, { surfaceForPath } from './extensions/ExtensionStrip';
 import { useNotifications } from '@/renderer/services/notificationService';
 import { WORKSPACE_STATE_EVENT, dispatchWorkspaceToggleEvent } from '@renderer/utils/workspace/workspaceEvents';
 import type { WorkspaceStateDetail } from '@renderer/utils/workspace/workspaceEvents';
@@ -60,7 +61,7 @@ const Titlebar: React.FC<TitlebarProps> = ({ workspaceAvailable }) => {
   const [workspaceCollapsed, setWorkspaceCollapsed] = useState(true);
   const [mobileCenterTitle, setMobileCenterTitle] = useState(appTitle);
   const [mobileCenterOffset, setMobileCenterOffset] = useState(0);
-  const [searchModalVisible, setSearchModalVisible] = useState(false);
+  const [headerSides, setHeaderSides] = useState({ left: 120, right: 284 });
   const [notificationsDrawerVisible, setNotificationsDrawerVisible] = useState(false);
   const { unreadP0Count, unreadP1Count, unreadCount } = useNotifications();
   const layout = useLayoutContext();
@@ -71,18 +72,6 @@ const Titlebar: React.FC<TitlebarProps> = ({ workspaceAvailable }) => {
   const menuRef = useRef<HTMLDivElement | null>(null);
   const toolbarRef = useRef<HTMLDivElement | null>(null);
   const lastNonSettingsPathRef = useRef('/guid');
-
-  // Global Ctrl+K / Cmd+K listener
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        setSearchModalVisible((prev) => !prev);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
 
   // Global listener for opening notification center
   useEffect(() => {
@@ -118,9 +107,14 @@ const Titlebar: React.FC<TitlebarProps> = ({ workspaceAvailable }) => {
     : t('common.collapse', { defaultValue: 'Collapse workspace' });
   const backToChatTooltip = t('common.back', { defaultValue: 'Back to Chat' });
   const isSettingsRoute = location.pathname.startsWith('/settings');
+  // v3 Home header: back/forward, centred search, bell dot, avatar, window controls only.
+  // v3 header on every desktop route; Home additionally owns the HubSidebar toggle.
+  const isHome = !layout?.isMobile;
+  const onGuidRoute = isGuidPath(location.pathname);
+  const hasLegacySider = !isHubPagePath(location.pathname);
   const iconSize = 18;
   const desktopIconStroke = layout?.isMobile ? undefined : 2.5;
-  const showSiderToggle = Boolean(layout?.setSiderCollapsed) && !(layout?.isMobile && isSettingsRoute);
+  const showSiderToggle = Boolean(layout?.setSiderCollapsed) && !(layout?.isMobile && isSettingsRoute) && !isHome;
   const showBackToChatButton = Boolean(layout?.isMobile && isSettingsRoute);
   const siderTooltip = layout?.siderCollapsed
     ? t('common.expandMore', { defaultValue: 'Expand sidebar' })
@@ -249,6 +243,27 @@ const Titlebar: React.FC<TitlebarProps> = ({ workspaceAvailable }) => {
     return () => observer.disconnect();
   }, [layout?.isMobile, showBackToChatButton, showWorkspaceButton, mobileCenterTitle]);
 
+  // Keep the search inside the real space left between navigation and
+  // notification/avatar/window controls as the Hub rail changes width.
+  useEffect(() => {
+    if (!isHome || layout?.isMobile) return undefined;
+    const measure = () => {
+      const left = Math.ceil(menuRef.current?.getBoundingClientRect().width ?? 120);
+      const right = Math.ceil(toolbarRef.current?.getBoundingClientRect().width ?? 284);
+      setHeaderSides((value) => (value.left === left && value.right === right ? value : { left, right }));
+    };
+    measure();
+    if (typeof ResizeObserver !== 'undefined') {
+      const observer = new ResizeObserver(measure);
+      if (menuRef.current) observer.observe(menuRef.current);
+      if (toolbarRef.current) observer.observe(toolbarRef.current);
+      if (containerRef.current) observer.observe(containerRef.current);
+      return () => observer.disconnect();
+    }
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [isHome, layout?.isMobile]);
+
   const mobileCenterStyle = layout?.isMobile
     ? ({
         '--app-titlebar-mobile-center-offset': `${workspaceAvailable ? mobileCenterOffset : 0}px`,
@@ -267,12 +282,22 @@ const Titlebar: React.FC<TitlebarProps> = ({ workspaceAvailable }) => {
     <>
       <div
         ref={containerRef}
-        style={mobileCenterStyle}
+        style={
+          isHome && !layout?.isMobile
+            ? ({
+                ...mobileCenterStyle,
+                '--titlebar-menu-w': `${headerSides.left}px`,
+                '--titlebar-toolbar-w': `${headerSides.right}px`,
+              } as React.CSSProperties)
+            : mobileCenterStyle
+        }
         className={classNames('flex items-center gap-8px app-titlebar bg-2 border-b border-[var(--border-base)]', {
           'app-titlebar--mobile': layout?.isMobile,
           'app-titlebar--mobile-conversation': layout?.isMobile && workspaceAvailable,
           'app-titlebar--desktop': isDesktopRuntime,
           'app-titlebar--mac': isMacRuntime,
+          'app-titlebar--home': isHome,
+          'app-titlebar--page': isHome && !onGuidRoute,
         })}
       >
         {/* Left Section: Menu Controls, History & Brand Logo */}
@@ -293,6 +318,21 @@ const Titlebar: React.FC<TitlebarProps> = ({ workspaceAvailable }) => {
               className={classNames('app-titlebar__button', layout?.isMobile && 'app-titlebar__button--mobile')}
               onClick={handleSiderToggle}
               aria-label={siderTooltip}
+            >
+              <SidebarIcon size={iconSize} strokeWidth={desktopIconStroke} />
+            </button>
+          )}
+          {isHome && (onGuidRoute || (hasLegacySider && layout?.setSiderCollapsed)) && (
+            <button
+              type='button'
+              className='app-titlebar__button app-titlebar__no-drag'
+              onClick={() =>
+                onGuidRoute
+                  ? window.dispatchEvent(new CustomEvent('tomni-hub-toggle-sidebar'))
+                  : layout?.setSiderCollapsed?.(!layout.siderCollapsed)
+              }
+              aria-label='Toggle sidebar'
+              data-testid='hub-sidebar-toggle'
             >
               <SidebarIcon size={iconSize} strokeWidth={desktopIconStroke} />
             </button>
@@ -323,33 +363,26 @@ const Titlebar: React.FC<TitlebarProps> = ({ workspaceAvailable }) => {
           )}
 
           {/* Brand Mark with Logo */}
-          <div
-            className='app-titlebar__brand-tag app-titlebar__no-drag'
-            onClick={() => void navigate('/guid')}
-            title='Tomni Hub Agent OS'
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              marginLeft: '8px',
-              padding: '3px 8px',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              userSelect: 'none',
-            }}
-          >
-            <img src={tomniIcon} alt='Tomny' style={{ width: '18px', height: '18px' }} />
-            <span
+          {!isHome && (
+            <div
+              className='app-titlebar__brand-tag app-titlebar__no-drag'
+              onClick={() => void navigate('/guid')}
+              title='Tomny Hub Agent OS'
               style={{
-                fontWeight: 700,
-                fontSize: '13px',
-                color: 'var(--color-text-1, #f8fafc)',
-                letterSpacing: '0.02em',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                marginLeft: '8px',
+                padding: '3px 8px',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                userSelect: 'none',
               }}
             >
-              Tomny
-            </span>
-          </div>
+              <img src={tomniIcon} alt='Tomny' style={{ width: '18px', height: '18px' }} />
+              <span className='app-titlebar__brand-tag-text'>Tomny</span>
+            </div>
+          )}
         </div>
 
         {/* Center Section: Mobile Brand or Desktop Omni Search */}
@@ -382,57 +415,11 @@ const Titlebar: React.FC<TitlebarProps> = ({ workspaceAvailable }) => {
           </div>
         ) : (
           <div
-            className='app-titlebar__search-container app-titlebar__no-drag'
-            style={{
-              flex: 1,
-              display: 'flex',
-              justifyContent: 'center',
-              maxWidth: '440px',
-              margin: '0 auto',
-            }}
+            className={classNames('app-titlebar__search-container app-titlebar__no-drag', {
+              'app-titlebar__search-container--page': !isHome,
+            })}
           >
-            <button
-              type='button'
-              className='app-titlebar__omni-search-btn'
-              onClick={() => setSearchModalVisible(true)}
-              title='Tìm kiếm hội thoại, ứng dụng, cài đặt... (Ctrl + K)'
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                width: '100%',
-                height: '28px',
-                padding: '0 10px',
-                borderRadius: '8px',
-                border: '1px solid var(--color-border-2, rgba(255, 255, 255, 0.12))',
-                background: 'var(--color-fill-2, rgba(255, 255, 255, 0.05))',
-                color: 'var(--color-text-3, #94a3b8)',
-                fontSize: '12px',
-                cursor: 'pointer',
-                transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
-                <Search theme='outline' size={14} fill='currentColor' />
-                <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  Tìm kiếm hoặc gõ lệnh...
-                </span>
-              </div>
-              <kbd
-                style={{
-                  fontSize: '10px',
-                  padding: '1px 5px',
-                  borderRadius: '4px',
-                  background: 'rgba(255, 255, 255, 0.08)',
-                  border: '1px solid rgba(255, 255, 255, 0.1)',
-                  color: 'var(--color-text-3, #94a3b8)',
-                  fontFamily: 'monospace',
-                  flexShrink: 0,
-                }}
-              >
-                Ctrl + K
-              </kbd>
-            </button>
+            <SuperSearch />
           </div>
         )}
 
@@ -441,69 +428,59 @@ const Titlebar: React.FC<TitlebarProps> = ({ workspaceAvailable }) => {
           {layout?.isMobile && <div id='app-titlebar-actions-slot' className='app-titlebar__actions-slot' />}
 
           {/* Realtime TOM Balance Widget */}
-          <TomBalanceWidget />
+          {!isHome && <TomBalanceWidget />}
+
+          {/* Extension strip: pinned icons and the puzzle popup, before the bell (docs section 12.5, T4.5) */}
+          {!layout?.isMobile && (
+            <ExtensionStrip
+              surface={surfaceForPath(location.pathname)}
+              sidePanelOpen={workspaceAvailable && !workspaceCollapsed}
+            />
+          )}
 
           {/* Notification Hub Bell Button */}
           <Badge
-            count={unreadP0Count + unreadP1Count}
-            dot={unreadP0Count + unreadP1Count === 0 && unreadCount > 0}
-            style={{
-              backgroundColor: unreadP0Count > 0 ? '#ef4444' : '#f59e0b',
-              boxShadow: unreadP0Count > 0 ? '0 0 8px rgba(239, 68, 68, 0.6)' : undefined,
-            }}
+            count={isHome ? 0 : unreadP0Count + unreadP1Count}
+            dot={isHome ? false : unreadP0Count + unreadP1Count === 0 && unreadCount > 0}
+            style={
+              isHome
+                ? undefined
+                : {
+                    backgroundColor: unreadP0Count > 0 ? '#ef4444' : '#f59e0b',
+                    boxShadow: unreadP0Count > 0 ? '0 0 8px rgba(239, 68, 68, 0.6)' : undefined,
+                  }
+            }
           >
             <button
               type='button'
-              className='app-titlebar__button app-titlebar__no-drag'
+              className={classNames('app-titlebar__button app-titlebar__no-drag', {
+                'app-titlebar__pill-btn': !isHome,
+                'app-titlebar__pill-btn--alert': !isHome && unreadP0Count > 0,
+              })}
               title='Trung tâm Thông báo (Laya Engine)'
               aria-label='Trung tâm Thông báo'
               onClick={() => setNotificationsDrawerVisible(true)}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: '28px',
-                height: '28px',
-                borderRadius: '14px',
-                background: 'rgba(255, 255, 255, 0.06)',
-                border: '1px solid rgba(255, 255, 255, 0.12)',
-                color: unreadP0Count > 0 ? '#f87171' : '#e2e8f0',
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-                margin: '0 2px',
-              }}
             >
               <Remind theme='outline' size={14} fill='currentColor' />
+              {isHome && unreadCount > 0 && <span className='app-titlebar__bell-dot' />}
             </button>
           </Badge>
 
           {/* Direct Settings Navigation Button */}
-          <button
-            type='button'
-            className='app-titlebar__button app-titlebar__no-drag'
-            title='Cài đặt hệ thống'
-            aria-label='Cài đặt hệ thống'
-            onClick={() => void navigate('/settings')}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: '28px',
-              height: '28px',
-              borderRadius: '14px',
-              background: 'rgba(255, 255, 255, 0.06)',
-              border: '1px solid rgba(255, 255, 255, 0.12)',
-              color: '#e2e8f0',
-              cursor: 'pointer',
-              transition: 'all 0.2s',
-              margin: '0 2px',
-            }}
-          >
-            <SettingTwo theme='outline' size={14} fill='currentColor' />
-          </button>
+          {!isHome && (
+            <button
+              type='button'
+              className='app-titlebar__button app-titlebar__no-drag app-titlebar__pill-btn app-titlebar__settings-btn'
+              title='Cài đặt hệ thống'
+              aria-label='Cài đặt hệ thống'
+              onClick={() => void navigate('/settings')}
+            >
+              <SettingTwo theme='outline' size={14} fill='currentColor' />
+            </button>
+          )}
 
           {/* Settings & Account Glassmorphism Dropdown */}
-          <SettingsGlassDropdown />
+          <SettingsGlassDropdown variant={isHome ? 'home' : 'default'} />
 
           {/* Workspace Toggle Button */}
           {showWorkspaceButton && (
@@ -525,9 +502,6 @@ const Titlebar: React.FC<TitlebarProps> = ({ workspaceAvailable }) => {
           {showWindowControls && <WindowControls />}
         </div>
       </div>
-
-      {/* Global Search & Command Palette Modal */}
-      <GlobalSearchModal visible={searchModalVisible} onClose={() => setSearchModalVisible(false)} />
 
       {/* Omni Notification Center Drawer */}
       <NotificationCenterDrawer

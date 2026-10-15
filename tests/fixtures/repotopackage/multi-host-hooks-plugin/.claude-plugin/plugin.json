@@ -1,0 +1,8 @@
+{
+  "name": "multi-host-plugin",
+  "version": "1.0.0",
+  "description": "Synthetic fixture: one plugin whose hook files are written for several hosts.",
+  "mcpServers": {
+    "context-mode": { "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/start.mjs"] }
+  }
+}

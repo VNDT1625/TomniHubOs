@@ -22,6 +22,12 @@ pub enum Commands {
     #[command(about = "Edit a file")]
     Edit(EditArgs),
 
+    #[command(
+        name = "edit-many",
+        about = "Apply exact replacements to several files in one batch, with one undo (JSON array of {file, edits} from --spec FILE or --stdin)"
+    )]
+    EditMany(EditManyArgs),
+
     #[command(about = "Delete a file with MTUI backup, history, diff, and undo support")]
     Delete(FileDeleteArgs),
 
@@ -84,6 +90,14 @@ pub enum Commands {
 
     #[command(about = "Show a codebase map from Understand/codegraph")]
     Map(MapArgs),
+
+    #[command(about = "List files below a directory whose relative path matches a glob")]
+    Glob(GlobArgs),
+
+    #[command(
+        about = "Build or inspect the Understand/codegraph cache without the IDE: `understand build` writes .tomni/understand/summary.json"
+    )]
+    Understand(UnderstandCommandArgs),
 
     #[command(
         about = "Analyze the codebase: `analyze type` detects languages + editor engines; `analyze [path]` error-checks"
@@ -260,6 +274,16 @@ pub enum EditOperation {
     #[command(about = "Replace exact text")]
     Replace(ReplaceArgs),
 
+    #[command(
+        about = "Apply several exact replacements to one file in a single operation (JSON array of {old,new,all?} from --spec FILE or --stdin)"
+    )]
+    ReplaceMany(ReplaceManyArgs),
+
+    #[command(
+        about = "Replace text matched by a regular expression; captures work as ${1} in the replacement (write ${1}x, not $1x, when a letter follows)"
+    )]
+    Regex(RegexArgs),
+
     #[command(about = "Replace a specific line")]
     Line(LineArgs),
 
@@ -275,14 +299,77 @@ pub enum EditOperation {
 
 #[derive(Args)]
 pub struct ReplaceArgs {
-    #[arg(help = "Old text to replace")]
-    pub old: String,
+    #[arg(help = "Old text to replace (or use --old-file)")]
+    pub old: Option<String>,
 
-    #[arg(help = "New text")]
-    pub new: String,
+    #[arg(help = "New text (or use --new-file)")]
+    pub new: Option<String>,
+
+    #[arg(long, help = "Read the old text from this file, exactly as written")]
+    pub old_file: Option<String>,
+
+    #[arg(long, help = "Read the new text from this file, exactly as written")]
+    pub new_file: Option<String>,
 
     #[arg(long, help = "Replace all occurrences")]
     pub all: bool,
+
+    #[arg(long, help = "Dry run")]
+    pub dry_run: bool,
+
+    #[arg(
+        long,
+        help = "Content hash returned by `mtui read`; enables stale edit analysis"
+    )]
+    pub expect_hash: Option<String>,
+
+    #[arg(long, help = "Confirmation token returned by stale edit analysis")]
+    pub accept_stale: Option<String>,
+}
+
+#[derive(Args)]
+pub struct RegexArgs {
+    #[arg(help = "Regular expression (Rust syntax)")]
+    pub pattern: String,
+
+    #[arg(help = "Replacement text; ${1} refers to the first capture group")]
+    pub replacement: String,
+
+    #[arg(long, help = "Replace every match instead of requiring exactly one")]
+    pub all: bool,
+
+    #[arg(long, help = "Dry run")]
+    pub dry_run: bool,
+
+    #[arg(
+        long,
+        help = "Content hash returned by `mtui read`; enables stale edit analysis"
+    )]
+    pub expect_hash: Option<String>,
+
+    #[arg(long, help = "Confirmation token returned by stale edit analysis")]
+    pub accept_stale: Option<String>,
+}
+
+#[derive(Args)]
+pub struct EditManyArgs {
+    #[arg(long, help = "Read the JSON array of {file, edits:[{old,new,all?}]} from this file")]
+    pub spec: Option<String>,
+
+    #[arg(long, help = "Read the JSON array from stdin")]
+    pub stdin: bool,
+
+    #[arg(long, help = "Dry run")]
+    pub dry_run: bool,
+}
+
+#[derive(Args)]
+pub struct ReplaceManyArgs {
+    #[arg(long, help = "Read the JSON array of edits from this file")]
+    pub spec: Option<String>,
+
+    #[arg(long, help = "Read the JSON array of edits from stdin")]
+    pub stdin: bool,
 
     #[arg(long, help = "Dry run")]
     pub dry_run: bool,
@@ -405,6 +492,18 @@ pub struct ReadArgs {
 }
 
 #[derive(Args)]
+pub struct GlobArgs {
+    #[arg(help = "Glob such as `**/*.ts` or `src/**/*.{ts,tsx}`, relative to --dir")]
+    pub pattern: String,
+
+    #[arg(long, default_value = ".", help = "Directory to search below")]
+    pub dir: String,
+
+    #[arg(long, default_value_t = 200, help = "Maximum files to return")]
+    pub limit: usize,
+}
+
+#[derive(Args)]
 pub struct SearchArgs {
     #[arg(help = "File or directory to search in")]
     pub path: String,
@@ -474,6 +573,9 @@ pub struct UndoArgs {
 
     #[arg(long, help = "Undo specific operation")]
     pub operation: Option<String>,
+
+    #[arg(long, help = "Undo every operation of one `edit-many` batch (its group id)")]
+    pub group: Option<String>,
 }
 
 #[derive(Args)]
@@ -585,7 +687,7 @@ pub struct VerifyPythonArgs {
 
     #[arg(
         long,
-        help = "Spec slug or .tomny/specs/<slug>/ path for plan/temporary log storage"
+        help = "Spec slug or .tomni/specs/<slug>/ path for plan/temporary log storage"
     )]
     pub spec: Option<String>,
 
@@ -629,7 +731,7 @@ pub struct VerifyRunArgs {
 
     #[arg(
         long,
-        help = "Spec slug or .tomny/specs/<slug>/ path for plan/temporary log storage"
+        help = "Spec slug or .tomni/specs/<slug>/ path for plan/temporary log storage"
     )]
     pub spec: Option<String>,
 
@@ -665,7 +767,7 @@ pub struct TasksArgs {
     #[command(subcommand)]
     pub query: TasksQuery,
 
-    #[arg(long, global = true, help = "Spec slug or .tomny/specs/<slug>/ path")]
+    #[arg(long, global = true, help = "Spec slug or .tomni/specs/<slug>/ path")]
     pub spec: Option<String>,
 }
 
@@ -838,7 +940,37 @@ pub struct WikiArgs {
 }
 
 #[derive(Args)]
+pub struct UnderstandCommandArgs {
+    #[command(subcommand)]
+    pub action: UnderstandAction,
+}
 
+#[derive(Subcommand)]
+pub enum UnderstandAction {
+    #[command(about = "Scan the repository and (re)write the Understand summary cache")]
+    Build(UnderstandBuildArgs),
+
+    #[command(about = "Show cache age, size, and whether a rebuild is needed")]
+    Status,
+}
+
+#[derive(Args)]
+pub struct UnderstandBuildArgs {
+    #[arg(
+        long,
+        help = "Discard preserved semantic summaries and rebuild every entry statically"
+    )]
+    pub full: bool,
+
+    #[arg(
+        long,
+        default_value_t = 20000,
+        help = "Maximum files to index before stopping"
+    )]
+    pub max_files: usize,
+}
+
+#[derive(Args)]
 pub struct MapArgs {
     #[command(subcommand)]
     pub query: MapQuery,
@@ -933,7 +1065,7 @@ pub struct MemoryCompactArgs {
 
     #[arg(
         long,
-        help = "Spec slug or .tomny/specs/<slug>/ path to include task state"
+        help = "Spec slug or .tomni/specs/<slug>/ path to include task state"
     )]
     pub spec: Option<String>,
 }

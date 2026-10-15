@@ -1,4 +1,6 @@
 mod ranking;
+pub mod build;
+mod docs;
 pub(crate) mod storage;
 pub mod wiki;
 use crate::error::MtuiError;
@@ -279,7 +281,7 @@ fn load_cache(project_root: &Path) -> Result<SummaryCache, MtuiError> {
     let path = cache_path(project_root);
     let text = std::fs::read_to_string(&path).map_err(|_| MtuiError::FileNotFound {
         message: "Understand summary cache not found".to_string(),
-        suggestion: "Build Understand/codegraph in the IDE first".to_string(),
+        suggestion: "Run `mtui understand build` first".to_string(),
     })?;
     serde_json::from_str(text.trim_start_matches('\u{feff}')).map_err(|e| MtuiError::Internal {
         message: format!("Failed to parse Understand summary cache: {}", e),
@@ -1937,7 +1939,7 @@ fn fallback_context(
                 "Understand summary cache not found and fallback path search found no candidates"
                     .to_string(),
             suggestion:
-                "Build Understand/codegraph in the IDE or use `mtui search <path> <keyword>`"
+                "Run `mtui understand build` or use `mtui search <path> <keyword>`"
                     .to_string(),
         });
     }
@@ -2354,7 +2356,7 @@ mod tests {
     #[test]
     fn stale_marker_paths_are_deduped_sorted_and_malformed_safe() {
         let temp = tempfile::tempdir().expect("tempdir");
-        let cache_dir = temp.path().join(".tomny").join("understand");
+        let cache_dir = temp.path().join(".tomni").join("understand");
         std::fs::create_dir_all(&cache_dir).expect("cache dir");
         std::fs::write(
             cache_dir.join("stale.json"),
@@ -2377,7 +2379,7 @@ mod tests {
     #[test]
     fn map_folder_filters_inside_a_coarse_parent_module() {
         let temp = tempfile::tempdir().expect("tempdir");
-        let cache_dir = temp.path().join(".tomny").join("understand");
+        let cache_dir = temp.path().join(".tomni").join("understand");
         std::fs::create_dir_all(&cache_dir).expect("cache dir");
         std::fs::write(
             cache_dir.join("summary.json"),
@@ -2521,7 +2523,7 @@ mod tests {
     #[test]
     fn query_folder_filters_inside_a_coarse_parent_module() {
         let temp = tempfile::tempdir().expect("tempdir");
-        let cache_dir = temp.path().join(".tomny").join("understand");
+        let cache_dir = temp.path().join(".tomni").join("understand");
         std::fs::create_dir_all(&cache_dir).expect("cache dir");
         std::fs::write(
             cache_dir.join("summary.json"),
@@ -2593,7 +2595,7 @@ mod tests {
     #[test]
     fn query_folder_info_compacts_file_symbols() {
         let temp = tempfile::tempdir().expect("tempdir");
-        let cache_dir = temp.path().join(".tomny").join("understand");
+        let cache_dir = temp.path().join(".tomni").join("understand");
         std::fs::create_dir_all(&cache_dir).expect("cache dir");
         std::fs::write(
             cache_dir.join("summary.json"),

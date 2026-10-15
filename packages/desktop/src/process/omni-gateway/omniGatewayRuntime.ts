@@ -43,6 +43,11 @@ export type OmniGatewayRuntimeConfig = {
   rootPath?: string;
   allowDangerous: boolean;
   externalMode?: { enabled: boolean };
+  remote?: {
+    mode: 'quick' | 'setup';
+    stableMcpBaseUrl?: string;
+    stableWebuiBaseUrl?: string;
+  };
 };
 
 export type LiveOmniGateway = {
@@ -179,12 +184,23 @@ export const createOmniGatewayRuntime = (deps: OmniGatewayRuntimeDeps): OmniGate
         })
       : undefined;
 
-    oauthHandler = cfg.externalMode?.enabled
-      ? createOmniOAuthHandler({
-          store: deps.oauth(),
-          getPublicOrigin: () => liveExternal?.tunnelUrl,
-        })
-      : undefined;
+    const resolvePublicOrigin = (): string | undefined =>
+      liveExternal?.tunnelUrl ??
+      (cfg.remote?.mode === 'setup' ? cfg.remote.stableMcpBaseUrl : undefined) ??
+      cfg.remote?.stableMcpBaseUrl ??
+      process.env.OMNI_PUBLIC_ORIGIN;
+
+    oauthHandler =
+      cfg.externalMode?.enabled ||
+      cfg.remote?.mode === 'setup' ||
+      Boolean(cfg.remote?.stableMcpBaseUrl) ||
+      currentAuthMode === 'oauth' ||
+      currentAuthMode === 'mixed'
+        ? createOmniOAuthHandler({
+            store: deps.oauth(),
+            getPublicOrigin: resolvePublicOrigin,
+          })
+        : undefined;
 
     const host = await startOmniGatewayHost({
       port: cfg.port,
@@ -193,10 +209,83 @@ export const createOmniGatewayRuntime = (deps: OmniGatewayRuntimeDeps): OmniGate
       getAuthMode: () => currentAuthMode,
       isOAuthTokenValid: async (presented) => (await deps.oauth().validateAccessToken(presented)) !== undefined,
       oauthHandler: oauthHandler ? (req, res) => (oauthHandler as OmniOAuthHandler).tryHandle(req, res) : undefined,
-      isOriginAllowed: (origin) => {
+      isOriginAllowed: (origin, req) => {
         try {
-          const publicOrigin = liveExternal ? new URL(liveExternal.tunnelUrl).origin : undefined;
-          return publicOrigin !== undefined && new URL(origin).origin === publicOrigin;
+          const parsed = new URL(origin);
+          const normalizedOrigin = parsed.origin.toLowerCase();
+
+          // 1. If ephemeral quick tunnel is active, match its origin
+          if (liveExternal?.tunnelUrl) {
+            try {
+              if (normalizedOrigin === new URL(liveExternal.tunnelUrl).origin.toLowerCase()) {
+                return true;
+              }
+            } catch {
+              // ignore invalid tunnelUrl
+            }
+          }
+
+          // 1b. If stable MCP base URL is configured in remote setup, match its origin
+          if (cfg.remote?.stableMcpBaseUrl) {
+            try {
+              if (normalizedOrigin === new URL(cfg.remote.stableMcpBaseUrl).origin.toLowerCase()) {
+                return true;
+              }
+            } catch {
+              // ignore invalid stableMcpBaseUrl
+            }
+          }
+
+          // 2. Same-origin match with incoming request Host or X-Forwarded-Host
+          if (req) {
+            const rawHost = (req.headers['x-forwarded-host'] ?? req.headers['host'] ?? '')
+              .toString()
+              .split(',')[0]
+              .trim()
+              .toLowerCase();
+            if (rawHost) {
+              const hostNameOnly = rawHost.split(':')[0];
+              if (parsed.host.toLowerCase() === rawHost || parsed.hostname.toLowerCase() === hostNameOnly) {
+                return true;
+              }
+            }
+          }
+
+          // 3. Known domain and subdomains for Omni MCP gateway (e.g. mcp.omni-mcp.xyz, omni-mcp.xyz)
+          const hostname = parsed.hostname.toLowerCase();
+          if (hostname === 'omni-mcp.xyz' || hostname.endsWith('.omni-mcp.xyz')) {
+            return true;
+          }
+
+          // 4. Known AI clients (ChatGPT, Claude, Gemini, Cursor)
+          const ALLOWED_AI_HOSTS = [
+            'chatgpt.com',
+            'chat.openai.com',
+            'oaistatic.com',
+            'claude.ai',
+            'gemini.google.com',
+            'cursor.com',
+            'cursor.sh',
+          ];
+          if (ALLOWED_AI_HOSTS.some((h) => hostname === h || hostname.endsWith(`.${h}`))) {
+            return true;
+          }
+
+          // 5. Local development and loopback
+          if (hostname === '127.0.0.1' || hostname === 'localhost') {
+            return true;
+          }
+
+          // 6. Custom allowed origins from environment variable
+          const envOrigins = (process.env.OMNI_ALLOWED_ORIGINS ?? '')
+            .split(',')
+            .map((s) => s.trim().toLowerCase())
+            .filter(Boolean);
+          if (envOrigins.some((allowed) => normalizedOrigin === allowed || hostname === allowed)) {
+            return true;
+          }
+
+          return false;
         } catch {
           return false;
         }

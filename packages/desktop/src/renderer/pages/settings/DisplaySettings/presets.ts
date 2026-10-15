@@ -24,6 +24,8 @@ import retromaY2kCss from './presets/retroma-y2k.css?raw';
 import retromaObsidianBookCss from './presets/retroma-obsidian-book.css?raw';
 import discourseHorizonCss from './presets/discourse-horizon.css?raw';
 import glitteringInputFieldCss from './presets/glittering-input-field.css?raw';
+import editorialWorkspaceCss from './presets/editorial-workspace.css?raw';
+import cyberTelemetryCss from './presets/cyber-telemetry.css?raw';
 
 /**
  * 默认主题 ID / Default theme ID
@@ -103,6 +105,22 @@ export const PRESET_THEMES: ICssTheme[] = [
     name: 'Glittering Input Field',
     is_preset: true,
     css: glitteringInputFieldCss,
+    created_at: Date.now(),
+    updated_at: Date.now(),
+  },
+  {
+    id: 'editorial-workspace',
+    name: 'Editorial Workspace',
+    is_preset: true,
+    css: editorialWorkspaceCss,
+    created_at: Date.now(),
+    updated_at: Date.now(),
+  },
+  {
+    id: 'cyber-telemetry',
+    name: 'Cyber Telemetry',
+    is_preset: true,
+    css: cyberTelemetryCss,
     created_at: Date.now(),
     updated_at: Date.now(),
   },

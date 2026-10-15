@@ -1,13 +1,7 @@
-/**
- * @license
- * Copyright 2025 Tomny (github.com/VNDT1625/OmniAgent)
- * SPDX-License-Identifier: Apache-2.0
- */
-
 import React, { type PropsWithChildren } from 'react';
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import type { IMessageText } from '@/common/chat/chatLib';
+import type { IMessageLiveImageOutput, IMessageText, TMessage } from '@/common/chat/chatLib';
 import { MessageListLoadingProvider, MessageListProvider } from '@/renderer/pages/conversation/Messages/hooks';
 import MessageList from '@/renderer/pages/conversation/Messages/MessageList';
 
@@ -77,6 +71,10 @@ vi.mock('@/renderer/pages/conversation/Messages/components/MessageToolGroup', ()
   default: () => <div>tool_group</div>,
 }));
 
+vi.mock('@/renderer/pages/conversation/Messages/components/MessageLiveImageOutput', () => ({
+  default: () => <div>live-image-output</div>,
+}));
+
 vi.mock('@/renderer/pages/conversation/Messages/components/MessageAgentStatus', () => ({
   default: () => <div>agent_status</div>,
 }));
@@ -141,11 +139,31 @@ function createTextMessage(): IMessageText {
   };
 }
 
+function createLiveImageMessage(): IMessageLiveImageOutput {
+  return {
+    id: 'image-1',
+    msg_id: 'image-1',
+    conversation_id: 'conversation-1',
+    type: 'image_output',
+    position: 'left',
+    created_at: 1,
+    content: {
+      schemaVersion: 1,
+      outputId: 'output-1',
+      revision: 1,
+      conversationId: 'conversation-1',
+      runId: 'run-1',
+      source: 'browser-screenshot',
+      state: 'queued',
+    },
+  };
+}
+
 function Wrapper({
   children,
   messages = [createTextMessage()],
   loading = false,
-}: PropsWithChildren<{ messages?: IMessageText[]; loading?: boolean }>): JSX.Element {
+}: PropsWithChildren<{ messages?: TMessage[]; loading?: boolean }>): JSX.Element {
   return (
     <MessageListLoadingProvider value={loading}>
       <MessageListProvider value={messages}>{children}</MessageListProvider>
@@ -186,5 +204,13 @@ describe('MessageList', () => {
 
     expect(screen.getByTestId('message-list-skeleton')).toBeInTheDocument();
     expect(screen.queryByText('empty state')).not.toBeInTheDocument();
+  });
+
+  it('dispatches a live image lifecycle message to its dedicated card', () => {
+    render(<MessageList />, {
+      wrapper: ({ children }) => <Wrapper messages={[createLiveImageMessage()]}>{children}</Wrapper>,
+    });
+
+    expect(screen.getByText('live-image-output')).toBeInTheDocument();
   });
 });

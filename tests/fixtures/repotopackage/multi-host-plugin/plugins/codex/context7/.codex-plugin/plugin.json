@@ -1,0 +1,7 @@
+{
+  "name": "context7",
+  "version": "1.0.0",
+  "description": "Library documentation lookup for Codex",
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json"
+}

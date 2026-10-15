@@ -1,4 +1,33 @@
 {
+  "downloadGate": {
+    "title": "確認下載",
+    "message": "要儲存來自 {{source}} 的「{{filename}}」嗎？",
+    "detail": "檔案類型：{{extension}}。大小：{{size}}。",
+    "sizeUnknown": "大小未知",
+    "noExtension": "無",
+    "save": "儲存",
+    "cancel": "取消"
+  },
+  "extensionStrip": {
+    "button": "擴充功能",
+    "popupTitle": "擴充功能",
+    "fullAccess": "完整存取權",
+    "accessRequested": "此網站要求存取權",
+    "empty": "尚未開啟任何擴充功能。",
+    "loadError": "無法載入擴充功能。",
+    "pin": "釘選到工具列",
+    "unpin": "取消釘選工具列",
+    "more": "更多",
+    "siteAccess": "網站存取權限",
+    "siteOnClick": "點擊時",
+    "siteOnSite": "特定網站",
+    "siteAllSites": "所有網站",
+    "allowSite": "允許此網站",
+    "uninstall": "移除擴充功能",
+    "actionFailed": "無法儲存變更。",
+    
+"manage": "管理擴充功能"
+  },
   "navTitle": "瀏覽器",
   "title": "瀏覽器",
   "subtitle": "在應用程式內瀏覽網頁，並讓 AI 模型作為網頁代理操作頁面。",

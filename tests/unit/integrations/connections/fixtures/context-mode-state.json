@@ -1,0 +1,394 @@
+{
+  "schemaVersion": 2,
+  "records": [
+    {
+      "packageId": "com.community.context-mode",
+      "packageVersion": "1.0.169",
+      "connectionKey": "cli:statusline.mjs",
+      "enabled": false,
+      "status": "off",
+      "autoStart": true
+    },
+    {
+      "packageId": "com.community.context-mode",
+      "packageVersion": "1.0.169",
+      "connectionKey": "hook:posttooluse-0-e0ced60c",
+      "enabled": false,
+      "status": "off",
+      "autoStart": true
+    },
+    {
+      "packageId": "com.community.context-mode",
+      "packageVersion": "1.0.169",
+      "connectionKey": "hook:precompact-1-48604e68",
+      "enabled": false,
+      "status": "unsupported",
+      "autoStart": true,
+      "reason": "The event \"PreCompact\" is not supported yet."
+    },
+    {
+      "packageId": "com.community.context-mode",
+      "packageVersion": "1.0.169",
+      "connectionKey": "hook:pretooluse-10-e1576124",
+      "enabled": false,
+      "status": "off",
+      "autoStart": true
+    },
+    {
+      "packageId": "com.community.context-mode",
+      "packageVersion": "1.0.169",
+      "connectionKey": "hook:pretooluse-2-7e17c987",
+      "enabled": false,
+      "status": "off",
+      "autoStart": true
+    },
+    {
+      "packageId": "com.community.context-mode",
+      "packageVersion": "1.0.169",
+      "connectionKey": "hook:pretooluse-3-b42f7d16",
+      "enabled": false,
+      "status": "off",
+      "autoStart": true
+    },
+    {
+      "packageId": "com.community.context-mode",
+      "packageVersion": "1.0.169",
+      "connectionKey": "hook:pretooluse-4-6cfc1540",
+      "enabled": false,
+      "status": "off",
+      "autoStart": true
+    },
+    {
+      "packageId": "com.community.context-mode",
+      "packageVersion": "1.0.169",
+      "connectionKey": "hook:pretooluse-5-ce54d72c",
+      "enabled": false,
+      "status": "off",
+      "autoStart": true
+    },
+    {
+      "packageId": "com.community.context-mode",
+      "packageVersion": "1.0.169",
+      "connectionKey": "hook:pretooluse-6-bfda7040",
+      "enabled": false,
+      "status": "off",
+      "autoStart": true
+    },
+    {
+      "packageId": "com.community.context-mode",
+      "packageVersion": "1.0.169",
+      "connectionKey": "hook:pretooluse-7-7c6d61a8",
+      "enabled": false,
+      "status": "off",
+      "autoStart": true
+    },
+    {
+      "packageId": "com.community.context-mode",
+      "packageVersion": "1.0.169",
+      "connectionKey": "hook:pretooluse-8-b3116e10",
+      "enabled": false,
+      "status": "off",
+      "autoStart": true
+    },
+    {
+      "packageId": "com.community.context-mode",
+      "packageVersion": "1.0.169",
+      "connectionKey": "hook:pretooluse-9-29ff511f",
+      "enabled": false,
+      "status": "off",
+      "autoStart": true
+    },
+    {
+      "packageId": "com.community.context-mode",
+      "packageVersion": "1.0.169",
+      "connectionKey": "hook:sessionstart-12-4420a63c",
+      "enabled": false,
+      "status": "off",
+      "autoStart": true
+    },
+    {
+      "packageId": "com.community.context-mode",
+      "packageVersion": "1.0.169",
+      "connectionKey": "hook:stop-13-58316f19",
+      "enabled": false,
+      "status": "off",
+      "autoStart": true
+    },
+    {
+      "packageId": "com.community.context-mode",
+      "packageVersion": "1.0.169",
+      "connectionKey": "hook:userpromptsubmit-11-14e9652e",
+      "enabled": false,
+      "status": "off",
+      "autoStart": true
+    },
+    {
+      "packageId": "com.community.context-mode",
+      "packageVersion": "1.0.169",
+      "connectionKey": "knowledge:docs",
+      "enabled": true,
+      "status": "on",
+      "autoStart": false,
+      "approvalHash": "sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "approvedAt": 1792081575872,
+      "installed": [
+        "library:docs"
+      ]
+    },
+    {
+      "packageId": "com.community.context-mode",
+      "packageVersion": "1.0.169",
+      "connectionKey": "mcp:context-mode-source",
+      "enabled": false,
+      "status": "off",
+      "autoStart": true
+    },
+    {
+      "packageId": "com.community.context-mode",
+      "packageVersion": "1.0.169",
+      "connectionKey": "rules:agents",
+      "enabled": true,
+      "status": "on",
+      "autoStart": false,
+      "approvalHash": "sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "approvedAt": 1792081575887,
+      "installed": [
+        "rules:agents"
+      ]
+    },
+    {
+      "packageId": "com.community.context-mode",
+      "packageVersion": "1.0.169",
+      "connectionKey": "rules:agents-2",
+      "enabled": true,
+      "status": "on",
+      "autoStart": false,
+      "approvalHash": "sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "approvedAt": 1792081575901,
+      "installed": [
+        "rules:agents-2"
+      ]
+    },
+    {
+      "packageId": "com.community.context-mode",
+      "packageVersion": "1.0.169",
+      "connectionKey": "rules:agents-3",
+      "enabled": true,
+      "status": "on",
+      "autoStart": false,
+      "approvalHash": "sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "approvedAt": 1792081575915,
+      "installed": [
+        "rules:agents-3"
+      ]
+    },
+    {
+      "packageId": "com.community.context-mode",
+      "packageVersion": "1.0.169",
+      "connectionKey": "rules:agents-4",
+      "enabled": true,
+      "status": "on",
+      "autoStart": false,
+      "approvalHash": "sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "approvedAt": 1792081575927,
+      "installed": [
+        "rules:agents-4"
+      ]
+    },
+    {
+      "packageId": "com.community.context-mode",
+      "packageVersion": "1.0.169",
+      "connectionKey": "rules:agents-5",
+      "enabled": true,
+      "status": "on",
+      "autoStart": false,
+      "approvalHash": "sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "approvedAt": 1792081575939,
+      "installed": [
+        "rules:agents-5"
+      ]
+    },
+    {
+      "packageId": "com.community.context-mode",
+      "packageVersion": "1.0.169",
+      "connectionKey": "rules:agents-6",
+      "enabled": true,
+      "status": "on",
+      "autoStart": false,
+      "approvalHash": "sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "approvedAt": 1792081575950,
+      "installed": [
+        "rules:agents-6"
+      ]
+    },
+    {
+      "packageId": "com.community.context-mode",
+      "packageVersion": "1.0.169",
+      "connectionKey": "rules:claude",
+      "enabled": true,
+      "status": "on",
+      "autoStart": false,
+      "approvalHash": "sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "approvedAt": 1792081575962,
+      "installed": [
+        "rules:claude"
+      ]
+    },
+    {
+      "packageId": "com.community.context-mode",
+      "packageVersion": "1.0.169",
+      "connectionKey": "rules:claude-2",
+      "enabled": true,
+      "status": "on",
+      "autoStart": false,
+      "approvalHash": "sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "approvedAt": 1792081575972,
+      "installed": [
+        "rules:claude-2"
+      ]
+    },
+    {
+      "packageId": "com.community.context-mode",
+      "packageVersion": "1.0.169",
+      "connectionKey": "rules:gemini",
+      "enabled": true,
+      "status": "on",
+      "autoStart": false,
+      "approvalHash": "sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "approvedAt": 1792081575989,
+      "installed": [
+        "rules:gemini"
+      ]
+    },
+    {
+      "packageId": "com.community.context-mode",
+      "packageVersion": "1.0.169",
+      "connectionKey": "rules:gemini-2",
+      "enabled": true,
+      "status": "on",
+      "autoStart": false,
+      "approvalHash": "sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "approvedAt": 1792081576009,
+      "installed": [
+        "rules:gemini-2"
+      ]
+    },
+    {
+      "packageId": "com.community.context-mode",
+      "packageVersion": "1.0.169",
+      "connectionKey": "skill:source/.claude/skills/context-mode-ops",
+      "enabled": true,
+      "status": "on",
+      "autoStart": false,
+      "approvalHash": "sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "approvedAt": 1792081576053,
+      "installed": [
+        "context-mode-ops"
+      ]
+    },
+    {
+      "packageId": "com.community.context-mode",
+      "packageVersion": "1.0.169",
+      "connectionKey": "skill:source/skills/context-mode",
+      "enabled": true,
+      "status": "on",
+      "autoStart": false,
+      "approvalHash": "sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "approvedAt": 1792081576100,
+      "installed": [
+        "context-mode"
+      ]
+    },
+    {
+      "packageId": "com.community.context-mode",
+      "packageVersion": "1.0.169",
+      "connectionKey": "skill:source/skills/ctx-doctor",
+      "enabled": true,
+      "status": "on",
+      "autoStart": false,
+      "approvalHash": "sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "approvedAt": 1792081576135,
+      "installed": [
+        "ctx-doctor"
+      ]
+    },
+    {
+      "packageId": "com.community.context-mode",
+      "packageVersion": "1.0.169",
+      "connectionKey": "skill:source/skills/ctx-index",
+      "enabled": true,
+      "status": "on",
+      "autoStart": false,
+      "approvalHash": "sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "approvedAt": 1792081576159,
+      "installed": [
+        "ctx-index"
+      ]
+    },
+    {
+      "packageId": "com.community.context-mode",
+      "packageVersion": "1.0.169",
+      "connectionKey": "skill:source/skills/ctx-insight",
+      "enabled": true,
+      "status": "on",
+      "autoStart": false,
+      "approvalHash": "sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "approvedAt": 1792081576182,
+      "installed": [
+        "ctx-insight"
+      ]
+    },
+    {
+      "packageId": "com.community.context-mode",
+      "packageVersion": "1.0.169",
+      "connectionKey": "skill:source/skills/ctx-purge",
+      "enabled": true,
+      "status": "on",
+      "autoStart": false,
+      "approvalHash": "sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "approvedAt": 1792081576207,
+      "installed": [
+        "ctx-purge"
+      ]
+    },
+    {
+      "packageId": "com.community.context-mode",
+      "packageVersion": "1.0.169",
+      "connectionKey": "skill:source/skills/ctx-search",
+      "enabled": true,
+      "status": "on",
+      "autoStart": false,
+      "approvalHash": "sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "approvedAt": 1792081576231,
+      "installed": [
+        "ctx-search"
+      ]
+    },
+    {
+      "packageId": "com.community.context-mode",
+      "packageVersion": "1.0.169",
+      "connectionKey": "skill:source/skills/ctx-stats",
+      "enabled": true,
+      "status": "on",
+      "autoStart": false,
+      "approvalHash": "sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "approvedAt": 1792081576258,
+      "installed": [
+        "ctx-stats"
+      ]
+    },
+    {
+      "packageId": "com.community.context-mode",
+      "packageVersion": "1.0.169",
+      "connectionKey": "skill:source/skills/ctx-upgrade",
+      "enabled": true,
+      "status": "on",
+      "autoStart": false,
+      "approvalHash": "sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "approvedAt": 1792081576283,
+      "installed": [
+        "ctx-upgrade"
+      ]
+    }
+  ]
+}

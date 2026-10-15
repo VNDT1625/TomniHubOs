@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { render } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
 
 vi.mock('@monaco-editor/react', () => ({
@@ -36,6 +36,18 @@ describe('HTMLViewer', () => {
   it('hides toolbar when hideToolbar is true', () => {
     const { container } = render(<HTMLViewer content='<h1>Test</h1>' hideToolbar />);
     expect(container.querySelector('[class*="toolbar"]')).not.toBeInTheDocument();
+  });
+
+    it('isolates inline HTML scripts and switches between live preview and code', () => {
+    render(<HTMLViewer content='<button onclick="this.textContent=1">Run</button>' />);
+    const frame = screen.getByTestId('html-preview-frame');
+    expect(frame).toHaveAttribute('sandbox', 'allow-scripts');
+    expect(frame.getAttribute('srcdoc')).toContain('Content-Security-Policy');
+    expect(frame.getAttribute('srcdoc')).toContain('onclick');
+    fireEvent.click(screen.getByRole('button', { name: 'Mã nguồn' }));
+    expect(screen.getByTestId('monaco-editor')).toHaveTextContent('button');
+    fireEvent.click(screen.getByRole('button', { name: 'Giao diện' }));
+    expect(screen.getByTestId('html-preview-frame')).toBeInTheDocument();
   });
 
   it('accepts file_path prop', () => {

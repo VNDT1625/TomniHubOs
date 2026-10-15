@@ -84,6 +84,12 @@ import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { baseName } from '@package-apps/shared/filePath';
 import { collectTreeFilePaths, useIdeWorkspace, type TreeNode } from '@package-apps/ide/renderer/hooks/useIdeWorkspace';
+import {
+  IDE_LIVE_SESSIONS_APP_ID,
+  buildIdeLiveSessions,
+  useIdeChatTabsFor,
+} from '@package-apps/ide/renderer/liveSessions/ideLiveSessions';
+import { useReportLiveSessions } from '@/renderer/hooks/useReportLiveSessions';
 import { useRepoWiki } from '@package-apps/ide/renderer/hooks/useRepoWiki';
 import { useRepoChanges } from '@package-apps/ide/renderer/hooks/useRepoChanges';
 import WikiPanel from '@package-apps/ide/renderer/components/WikiPanel';
@@ -184,6 +190,19 @@ const IdeWorkspace: React.FC<IdeWorkspaceProps> = (props) => {
   const { onBack = () => window.history.back(), onOpenDesign, initialMode = 'files' } = props;
   const { t } = useTranslation();
   const ide = useIdeWorkspace();
+  const liveChatTabs = useIdeChatTabsFor(ide.rootPath);
+  const liveSessions = useMemo(
+    () =>
+      buildIdeLiveSessions({
+        rootPath: ide.rootPath,
+        openFiles: ide.openFiles,
+        dirtyFiles: ide.dirtyFiles,
+        chatTabs: liveChatTabs,
+        unsavedLabel: t('ide.workspace.unsavedDot'),
+      }),
+    [ide.rootPath, ide.openFiles, ide.dirtyFiles, liveChatTabs, t]
+  );
+  useReportLiveSessions(IDE_LIVE_SESSIONS_APP_ID, liveSessions);
   // Keep Quick Test services alive across IDE mode switches. The embedded
   // browser remains panel-owned and is destroyed while the tab is hidden.
   const wiki = useRepoWiki();

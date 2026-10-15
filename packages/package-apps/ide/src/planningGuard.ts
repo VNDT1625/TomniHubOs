@@ -26,13 +26,13 @@ const isPlanningEnabled = (rootPath: string): boolean => {
 const slugFromExecuteTarget = (target: string): string | undefined => {
   if (target.toLowerCase() === 'plan') return undefined;
   const normalized = target.replace(/\\/g, '/').replace(/\/+$/g, '');
-  for (const marker of ['/.omni/specs/', '/.tomny/specs/']) {
+  for (const marker of ['/.tomni/specs/', '/.omni/specs/', '/.tomny/specs/']) {
     const markerIndex = normalized.toLowerCase().lastIndexOf(marker);
     if (markerIndex >= 0) {
       return normalized.slice(markerIndex + marker.length).split('/')[0] || undefined;
     }
   }
-  for (const relativePrefix of ['.omni/specs/', '.tomny/specs/']) {
+  for (const relativePrefix of ['.tomni/specs/', '.omni/specs/', '.tomny/specs/']) {
     if (normalized.toLowerCase().startsWith(relativePrefix)) {
       return normalized.slice(relativePrefix.length).split('/')[0] || undefined;
     }

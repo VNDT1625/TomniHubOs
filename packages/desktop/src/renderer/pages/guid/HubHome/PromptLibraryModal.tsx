@@ -7,7 +7,6 @@
 import React, { useState } from 'react';
 import { Modal, Tabs, Button, Tag } from '@arco-design/web-react';
 import { ChartHistogram, Code, Compass, DashboardOne, Edit, Lightning, List, Right, Shield } from '@icon-park/react';
-import '@/renderer/styles/glassmorphism.css';
 
 const { TabPane } = Tabs;
 
@@ -155,7 +154,7 @@ export const PromptLibraryModal: React.FC<PromptLibraryModalProps> = ({ visible,
       }}
     >
       <div style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '16px' }}>
-        Chọn một mẫu câu lệnh chuyên sâu để bắt đầu phiên làm việc cùng Tomni AI Agent:
+              Chọn một mẫu câu lệnh chuyên sâu để bắt đầu phiên làm việc cùng Tomny AI Agent:
       </div>
 
       <Tabs activeTab={activeTab} onChange={setActiveTab} type='rounded' size='small'>

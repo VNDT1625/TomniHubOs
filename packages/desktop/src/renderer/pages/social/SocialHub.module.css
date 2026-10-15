@@ -1,0 +1,135 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  background-color: var(--bg-1, #ffffff);
+  color: var(--text-primary, #0a0b0d);
+  overflow: hidden;
+}
+
+[data-theme='dark'] .container {
+  background-color: var(--bg-1, #121316);
+  color: var(--text-primary, #ffffff);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 54px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--bg-3, #e2e4e8);
+  background-color: var(--bg-1, #ffffff);
+  z-index: 10;
+  user-select: none;
+}
+
+[data-theme='dark'] .header {
+  border-bottom-color: var(--bg-3, #26282d);
+  background-color: var(--bg-1, #121316);
+}
+
+.tabGroup {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 100%;
+}
+
+.tabButton {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 16px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-secondary, #475569);
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.tabButton:hover {
+  background-color: var(--bg-hover, #f1f5f9);
+  color: var(--text-primary, #0a0b0d);
+}
+
+[data-theme='dark'] .tabButton:hover {
+  background-color: var(--bg-hover, #1e2025);
+  color: #ffffff;
+}
+
+.tabButtonActive {
+  background-color: var(--bg-hover, #f1f5f9);
+  color: var(--text-primary, #0a0b0d);
+  border-color: var(--bg-3, #e2e4e8);
+  font-weight: 600;
+}
+
+[data-theme='dark'] .tabButtonActive {
+  background-color: var(--bg-hover, #1e2025);
+  color: #ffffff;
+  border-color: var(--bg-3, #2b2e35);
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.accountSelect {
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 1px solid var(--bg-3, #e2e4e8);
+  background-color: var(--bg-base, #f8fafc);
+  color: var(--text-primary, #0a0b0d);
+  font-size: 12.5px;
+  cursor: pointer;
+  outline: none;
+}
+
+[data-theme='dark'] .accountSelect {
+  border-color: var(--bg-3, #2b2e35);
+  background-color: var(--bg-base, #18191c);
+  color: #ffffff;
+}
+
+.refreshButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  border: 1px solid var(--bg-3, #e2e4e8);
+  background-color: var(--bg-base, #f8fafc);
+  color: var(--text-primary, #0a0b0d);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.refreshButton:hover {
+  background-color: var(--bg-hover, #e2e8f0);
+}
+
+[data-theme='dark'] .refreshButton {
+  border-color: var(--bg-3, #2b2e35);
+  background-color: var(--bg-base, #18191c);
+  color: #ffffff;
+}
+
+[data-theme='dark'] .refreshButton:hover {
+  background-color: var(--bg-hover, #22242a);
+}
+
+.contentArea {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}

@@ -39,6 +39,7 @@ const channels = {
   setVisible: bridge.buildProvider<void, SetVisibleRequest>(BROWSER_HOST_CHANNELS.setVisible),
   hide: bridge.buildProvider<void, BrowserTabIdRequest>(BROWSER_HOST_CHANNELS.hide),
   hideAll: bridge.buildProvider<void, void>(BROWSER_HOST_CHANNELS.hideAll),
+  capture: bridge.buildProvider<string | null, BrowserTabIdRequest>(BROWSER_HOST_CHANNELS.capture),
   listTabs: bridge.buildProvider<BrowserTabInfo[], void>(BROWSER_HOST_CHANNELS.listTabs),
   destroyTab: bridge.buildProvider<void, BrowserTabIdRequest>(BROWSER_HOST_CHANNELS.destroyTab),
   getAgentMode: bridge.buildProvider<AgentModeState, BrowserTabIdRequest>(BROWSER_HOST_CHANNELS.getAgentMode),
@@ -122,6 +123,8 @@ export const browserHostClient = {
     invokeWithTimeout(BROWSER_HOST_CHANNELS.hide, () => channels.hide.invoke(request), BROWSER_HOST_TIMEOUT_MS),
   hideAll: (): Promise<void> =>
     invokeWithTimeout(BROWSER_HOST_CHANNELS.hideAll, () => channels.hideAll.invoke(), BROWSER_HOST_TIMEOUT_MS),
+  capture: (request: BrowserTabIdRequest): Promise<string | null> =>
+    invokeWithTimeout(BROWSER_HOST_CHANNELS.capture, () => channels.capture.invoke(request), BROWSER_HOST_TIMEOUT_MS),
   listTabs: (): Promise<BrowserTabInfo[]> =>
     invokeWithTimeout(BROWSER_HOST_CHANNELS.listTabs, () => channels.listTabs.invoke(), BROWSER_HOST_TIMEOUT_MS),
   destroyTab: (request: BrowserTabIdRequest): Promise<void> =>

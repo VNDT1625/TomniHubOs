@@ -1,4 +1,52 @@
 {
+  "assistantAgentMd": "agent.md",
+  "assistantPluginTitle": "插件",
+  "assistantPluginHint": "此助手在对话中使用的 MCP 服务器与软件包工具。",
+  "assistantPluginOther": "其他",
+  "assistantPluginEmpty": "尚未安装插件。",
+  "assistantItemOff": "关闭",
+  "assistantHookTitle": "钩子",
+  "assistantHookHint": "钩子仅在您已批准并启用后运行。选择钩子不会批准它。",
+  "assistantHookInactive": "未激活",
+  "assistantHookNeedsApproval": "需要批准",
+  "assistantHookEmpty": "尚未配置钩子。",
+  "assistantBundleExport": "导出",
+  "assistantBundleImport": "导入",
+  "assistantBundleExportFailed": "导出失败（{{code}}）。",
+  "assistantBundleImportFailed": "导入失败（{{code}}）。",
+  "assistantBundleImported": "已加载助手，请检查后保存。",
+  
+"assistantPromptsTitle": "示例提示",
+  "assistantPromptPlaceholder": "示例提示",
+  "assistantPromptAdd": "添加提示",
+  "assistantPromptRemove": "删除提示",
+  "assistantPromptsLimit": "最多 {{count}} 条示例提示。",
+  
+"backgroundSleep": {
+    "title": "后台休眠与服务",
+    "refresh": "刷新",
+    "explainer": "关闭到托盘会暂停媒体播放；运行中的任务继续。独立服务在各自设置中管理。",
+    "agents": "Agent 任务",
+    "agentsDesc": "后台完成任务；空闲控制器自动休眠。",
+    "automatic": "自动",
+    "mcp": "MCP 工具网关",
+    "mcpDesc": "Tomni 在托盘中时继续运行，远程访问需另行配置。",
+    "webui": "WebUI",
+    "webuiDesc": "仅在显式启用时运行。请在 WebUI 设置中配置访问和初始密码。",
+    "notifications": "桌面通知",
+    "notificationsDesc": "Tomni 隐藏时仍可收到任务完成通知。",
+    "scheduler": "计划任务",
+    "schedulerDesc": "Tomni 留在托盘时在桌面进程内运行。",
+    "unknown": "未知",
+    "running": "运行中 · 设置",
+    "configure": "配置",
+    "metricsTitle": "Electron 资源测量",
+        "cpuChange": "休眠前后的 CPU",
+    "ramChange":  "休眠后工作集变化",
+    "currentRam": "当前工作集总和",
+    "notMeasured": "等待完整的休眠采样",
+    "metricsDisclaimer": "Electron 进程工作集之和，不代表独占物理内存，也不包含独立 sidecar。关闭到托盘后重新打开以查看比较。"
+  },
   "personalSecrets": {
     "allowedHostnamesLabel": "允许的浏览器主机名",
     "allowedHostnamesPlaceholder": "example.com",
@@ -6,6 +54,13 @@
     "allowedHostnamesInvalid": "请输入 1–20 个唯一且精确的主机名，不要包含协议、路径、端口或通配符。",
     "allowedHostnamesTagLabel": "允许的主机",
     "legacyTargetsMissing": "未配置允许的主机 — 编辑前保持阻止",
+    "destinationsLabel": "允许输入的位置",
+    "destinationsDescription": "选择应用可以在哪里输入此密钥集。只有选择网页表单时才需要主机名。",
+    "destinationBrowser": "网页表单",
+    "destinationTerminal": "终端",
+    "destinationProcess": "进程 / 部署",
+    "destinationsRequired": "请至少选择一个可使用此密钥集的位置。",
+    "destinationsTagLabel": "使用位置",
     "nameRequired": "请输入密钥组名称。",
     "variablesInvalid": "每个变量都需要有效且不重复的名称和值。",
     "createdSuccess": "密钥组已创建。",
@@ -367,7 +422,7 @@
     "accessKeyId": "访问密钥 ID",
     "secretAccessKey": "私有访问密钥",
     "profile": "AWS Profile",
-    "profileHint": "来自 ~/.aws/config 的配置文件名称（例如 \u0027default\u0027）",
+    "profileHint": "来自 ~/.aws/config 的配置文件名称（例如 'default'）",
     "testConnection": "测试连接",
     "connectionSuccess": "连接成功！AWS 凭证有效。",
     "connectionFailed": "连接失败，请检查您的凭证。",
@@ -381,6 +436,26 @@
   "fontSize": "缩放",
   "fontSizeDescription": "调整应用的整体缩放比例（Zoom），让界面元素更符合阅读习惯。",
   "fontSizeReset": "恢复默认缩放",
+  "markdownColors": {
+    "label": "文字颜色",
+    "description": "聊天消息中标题、粗体、链接、文件路径、行内代码和引用的颜色。修改立即生效，仅保存在此设备上。",
+    "resetAll": "全部重置",
+    "resetToken": "重置",
+    "previewLabel": "预览",
+    "previewBody": "正文包含",
+    "tokens": {
+      "h1": "标题 1",
+      "h2": "标题 2",
+      "h3": "标题 3",
+      "text": "正文",
+      "bold": "粗体",
+      "link": "链接",
+      "path": "文件路径",
+      "codeFg": "行内代码文字",
+      "codeBg": "行内代码背景",
+      "quote": "引用"
+    }
+  },
   "lightMode": "浅色",
   "darkMode": "深色",
   "devConsole": {
@@ -403,7 +478,222 @@
   "agent": "对话Agent",
   "tools": "工具",
   "capabilities": "能力扩展",
+  "hooks": {
+    "title": "钩子",
+    "description": "钩子是在对话中发生事件时运行的小程序。它们只能拦截或添加备注，永远不能授予权限。每个钩子都需要你批准，并与其确切内容绑定。",
+    "unavailable": "此窗口中无法使用钩子。",
+    "dismiss": "关闭提示",
+    "loading": "正在加载钩子…",
+    "refresh": "刷新",
+    "runAll": "运行钩子",
+    "allOffNote": "所有钩子均已关闭。下面的内容即使已批准也不会运行。",
+    "sourceSwitch": "运行此来源的钩子",
+    "source": {
+      "package": "来自软件包",
+      "user": "你自己的",
+      "workspace": "来自工作区"
+    },
+    "sourceHint": {
+      "package": "已安装的软件包可以附带钩子。它们以“程序加参数”的方式运行，从不经过 shell。",
+      "user": "你自己添加的钩子。在你批准之前保持关闭。",
+      "workspace": "来自项目 .claude/settings.json 的钩子。在你允许该工作区并逐个批准之前保持关闭。"
+    },
+    "sourceEmpty": "这里没有钩子。",
+    "status": {
+      "ready": "已开启",
+      "needs-approval": "需要批准",
+      "needs-consent": "工作区未获允许",
+      "stale": "已更改，已关闭",
+      "disabled": "已关闭",
+      "unsupported": "不支持",
+      "forbidden": "不允许"
+    },
+    "statusHint": {
+      "needs-approval": "先阅读它将运行的内容，再批准。",
+      "needs-consent": "请先为此工作区允许钩子。",
+      "stale": "命令或其脚本在你批准后发生了变化，因此已被关闭。请重新审阅。",
+      "disabled": "已批准，但你已将其关闭。",
+      "unsupported": "尚不支持此事件，因此永远不会运行。",
+      "forbidden": "软件包钩子必须是“程序加参数”，不能是 shell 命令行。"
+    },
+    "inactiveBySwitch": "上方的某个开关已关闭，因此这个钩子不会运行。",
+    "row": {
+      "event": "事件",
+      "matcher": "匹配器",
+      "matchAll": "全部",
+      "timeout": "时间限制",
+      "seconds": "{{count}} 秒",
+      "command": "确切命令",
+      "runsExec": "直接运行程序“{{program}}”，带 {{count}} 个参数。不经过 shell。",
+      "runsShell": "通过你的 shell 运行这一行。shell 可以运行任何内容，请仔细阅读。",
+      "form": {
+        "exec": "程序",
+        "shell": "Shell 命令行"
+      },
+      "approvedAt": "批准于 {{time}}"
+    },
+    "action": {
+      "review": "审阅并批准",
+      "reapprove": "重新审阅",
+      "enable": "开启",
+      "disable": "关闭",
+      "remove": "移除"
+    },
+    "dialog": {
+      "title": "批准此钩子？",
+      "intro": "批准后，每当其事件发生时，它都会在你的电脑上运行。它只能拦截或添加备注，永远不能授予权限。",
+      "hashNote": "你的批准与这一确切内容绑定。如果命令或脚本发生变化，它会被关闭，直到你再次批准。",
+      "approve": "批准",
+      "cancel": "取消",
+      "loading": "正在读取它将运行的内容…"
+    },
+    "line": {
+      "source": "来源",
+      "plugin": "软件包",
+      "event": "事件",
+      "matcher": "匹配器",
+      "form": "类型",
+      "command": "命令",
+      "args": "参数",
+      "timeout": "时间限制（秒）",
+      "file": "纳入批准的脚本文件",
+      "unpinned": "未纳入批准",
+      "network": "网络"
+    },
+    "networkUnrestricted": "此版本不限制网络：脚本可以使用网络。",
+    "confirmTitle": "批准钩子",
+    "confirmApprove": "此钩子将在其事件发生时在你的电脑上运行。要批准吗？",
+    "coverage": {
+      "title": "工具钩子能拦截什么",
+      "summary": "工具钩子只有对 Tomny 智能体才能拦截所有工具。通过 ACP 连接的智能体仅在其请求权限时（询问模式）才受覆盖。Codex 从不向 Tomny 请求权限，因此工具钩子无法拦截它。",
+      "ownHooks": "有些智能体还会运行其自身设置中的钩子，Tomny 无法控制它们。",
+      "agent": {
+        "tomny": "Tomny 智能体",
+        "acpAsk": "ACP 智能体（询问模式）",
+        "acpAuto": "ACP 智能体（其他模式）",
+        "codex": "Codex",
+        "remote": "远程智能体"
+      },
+      "preLabel": "工具运行前",
+      "postLabel": "工具运行后",
+      "pre": {
+        "all-tools": "可拦截所有工具",
+        "permission-requests-only": "只能拦截请求权限的工具",
+        "none": "无法拦截工具"
+      },
+      "post": {
+        "result-text": "可看到工具结果",
+        "metadata-only": "只能看到工具已运行",
+        "none": "不运行"
+      }
+    },
+    "audit": {
+      "title": "最近的运行",
+      "empty": "尚未运行过钩子。",
+      "note": "仅保留长度和代码，从不存储输入或输出。",
+      "col": {
+        "time": "时间",
+        "event": "事件",
+        "source": "来源",
+        "hook": "钩子",
+        "decision": "决定",
+        "exit": "退出码",
+        "duration": "时长",
+        "result": "结果"
+      },
+      "decision": {
+        "deny": "拒绝了工具",
+        "ask": "询问了你",
+        "block": "已拦截",
+        "stop": "停止了本轮",
+        "none": "无决定"
+      },
+      "timedOut": "已超时",
+      "stale": "批准后发生变化；已关闭",
+      "ok": "已完成"
+    },
+    "create": {
+      "title": "添加你自己的钩子",
+      "event": "事件",
+      "matcher": "匹配器（可选）",
+      "matcherHint": "用于工具事件的工具名称模式。留空表示所有工具。",
+      "command": "程序或命令行",
+      "args": "参数，每行一个",
+      "argsHint": "留空则通过 shell 运行该行，而不是作为程序运行。",
+      "timeout": "时间限制（秒）",
+      "submit": "添加钩子",
+      "note": "新钩子在你审阅并批准之前保持关闭。"
+    },
+    "done": {
+      "approved": "钩子已批准并开启。",
+      "created": "钩子已添加。请审阅后批准。",
+      "removed": "钩子已移除。"
+    },
+    "error": {
+      "DENIED": "此窗口无权更改钩子。",
+      "INVALID_REQUEST": "该钩子定义无效。",
+      "NOT_FOUND": "该钩子已不存在，列表已刷新。",
+      "CANCELLED": "已取消批准，未做任何更改。",
+      "UNAVAILABLE": "钩子当前不可用。",
+      "UNSUPPORTED": "尚不支持此事件。",
+      "FORBIDDEN": "无法开启或移除此钩子。",
+      "NEEDS_CONSENT": "请先为此工作区允许钩子。",
+      "HASH_MISMATCH": "自你阅读后该钩子已发生变化，请重新审阅。",
+      "APPROVAL_REQUIRED": "必须先重新批准此钩子。",
+      "IO_ERROR": "无法保存更改，请重试。"
+    }
+  },
   "capabilitiesTab": {
+
+    "assistants": "助手",
+    "hooks": "Hook",
+    "plugins": "插件",
+    "pluginsDescription": "为 Tomny 提供额外工具的 MCP 服务器和已安装的软件包。",
+    "packagesTitle": "已安装的软件包",
+    "packagesEmpty": "尚未安装软件包。",
+    "externalTitle": "供外部应用使用 Tomny",
+    "externalDescription": "允许 Claude Desktop、Cursor 等应用通过 MCP 调用 Tomny。",
+    "removePlugin": "移除插件",
+    "removeConfirmTitle": "删除此项？",
+    "removeConfirmContent": "将删除“{{name}}”，且无法撤销。",
+    "pluginBadge": "插件",
+    "explainer": "插件 = 一整套，可包含 MCP 服务器、技能、Hook 和规则。MCP = 单个工具服务器。工具 Schema = 发送给模型的每个工具的描述。",
+    "tipPlugin": "插件 = 一整套，可包含 MCP 服务器、技能、Hook 和规则。",
+    "tipMcp": "MCP = 单个工具服务器。",
+    "tipToolSchema": "工具 Schema = 发送给模型的每个工具的描述。",
+    "typeMcp": "MCP",
+    "builtinTitle": "Tomny 内置",
+    "builtinHint": "Tomny 自带的工具服务器。仅在可在此处更改的地方显示开关。",
+    "builtinToolsCount": "{{count}} 个工具",
+    "builtinImageGenHint": "请在下方的图像生成部分开启或关闭。",
+    "builtinEmpty": "没有内置工具服务器。",
+    "builtinGroupOn": "已开启",
+    "builtinGroupAvailable": "可用 / 未开启",
+    "builtinGroupEmptyOn": "没有已开启的内置服务器。",
+    "builtinGroupEmptyAvailable": "所有内置服务器都已开启。",
+    "builtinToggleAria": "切换 {{name}}",
+
+    "hubTabAvailable": "可用",
+    "hubTabInstalled": "已安装",
+    "hubTabCustom": "自定义",
+    "hubSearchPlaceholder": "按名称或描述搜索",
+    "hubFilterAll": "全部",
+    "hubNoMatch": "没有符合搜索或筛选条件的项目。",
+    "hubEmptyCustom": "你还没有自定义 MCP 服务器，请在下方添加。",
+    "hubCustomHint": "你自己添加的 MCP 服务器。属于插件的服务器显示在“已安装”中。",
+    "hubAutoStartCaption": "Tomny 打开时会重新开启，前提是授权仍然有效。",
+    "hubDetails": "详情",
+    "hubCollapse": "收起",
+    "hubEnableAria": "开启或关闭 {{name}}",
+    "statusOn": "已开启",
+    "statusOff": "已关闭",
+    "userMcpTitle": "你的 MCP 服务器",
+    "installedPluginsTitle": "已安装的插件",
+    "fromPluginSkills": "来自插件：{{name}} · {{count}} 个技能",
+    "fromPluginHooks": "来自插件：{{name}} · {{count}} 个 Hook",
+    "manageInPlugin": "在插件中管理",
+    "pluginGroupNote": "随插件一起开启或关闭，此项没有单独的开关。",
+    "viewSkill": "查看",
     "skills": "技能",
     "tools": "工具"
   },
@@ -1313,7 +1603,8 @@
     "clearHistoryTitle": "清除聊天记录",
     "clearHistoryDesc": "此操作将释放存储空间并清空本设备上的所有本地会话。",
     "clearHistoryBtn": "清除记录",
-    "historyClearedNotice": "本地会话记录已清空。"
+    "historyClearedNotice": "本地会话记录已清空。",
+    "noAccount": "未登录"
   },
   "billingSettings": {
     "title": "账单与用量",
@@ -1361,7 +1652,16 @@
     "dualModelDesc": "由专注副作用与安全检查的独立 Agent 审查 Git Diff。",
     "autoRollbackTitle": "人工接管前最大自动修复重试次数",
     "autoRollbackDesc": "若测试失败，自动将错误调用栈回传给 AI 自行修复后才停止。",
-    "triesUnit": "次"
+    "triesUnit": "次",
+    "defaultChainTitle": "默认聊天流水线",
+    "defaultChainDesc": "每条消息在模型回答前后经过的步骤。",
+    "editDefault": "编辑默认流水线",
+    "stageOn": "开启",
+    "stageOff": "关闭",
+    "chainOff": "流水线已关闭：消息直接发送给模型。",
+    "loadFailed": "无法加载流水线。",
+    "perConversationHint": "每个会话都可以通过聊天框中的流水线按钮单独修改，重启后仍会保留。",
+    "plannedNotice": "下面的代码防护措施仍在规划中，尚未接入聊天，因此无法开启。"
   },
   "aiConfigSettings": {
     "title": "AI 推理配置",
@@ -1393,7 +1693,11 @@
     "ramAlertDesc": "并发运行多个模型或浏览器标签页时尽早预警防止内存溢出。",
     "quietHoursTitle": "免打扰时段 (Quiet Hours)",
     "focusModeTitle": "开启专注模式",
-    "focusModeDesc": "在专注工作时段静音所有音效并隐藏非关键横幅通知。"
+    "focusModeDesc": "在专注工作时段静音所有音效并隐藏非关键横幅通知。",
+    "sourcesHint": "发送通知的邮箱、订阅源和网站在通知中心管理。",
+    "openCenter": "打开通知中心",
+    "quietFrom": "从",
+    "quietTo": "到"
   },
   "privacySecuritySettings": {
     "title": "隐私与安全",
@@ -1410,6 +1714,17 @@
     "loopback": "本地环回",
     "auditTitle": "审计日志 (Audit Trail)",
     "auditDesc": "回溯并检查所有会话中的 bash 指令、文件改动与 Token 消耗。",
+    "workspaceAccessTitle": "Approved workspaces",
+    "workspaceAccessDesc": "Folders selected by you are remembered on this device. Remove one to stop showing it in workspace choices.",
+    "workspaceAccessEmpty": "No workspace has been approved yet.",
     "viewAuditLog": "查看审计日志"
-  }
+  },
+  "notActive": {
+    "title": "尚未启用",
+    "aiConfig": "这些参数尚未发送给模型，因此修改不会生效。",
+    "privacy": "这里的开关目前不控制任何内容。密钥遮蔽和外发数据检查始终开启且无法关闭；YOLO 模式在每个会话中单独选择。",
+    "profile": "这里只有退出登录真正可用。同步、拒绝用于训练、导出和清除历史尚未接通，因此已关闭。",
+    "billing": "Tomny 尚未统计 token 或费用，因此不显示套餐、用量或支出上限。模型提供商会直接向你收费。"
+  },
+  "mcpInAppNotice": "This list shows only MCP servers you connected or created from a repository. Tools built into TomniHubOS (tomny_*) are chosen by surface and are not MCP connectors."
 }

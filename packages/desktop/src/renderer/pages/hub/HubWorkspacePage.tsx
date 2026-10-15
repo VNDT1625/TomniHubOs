@@ -1,48 +1,28 @@
-import tomniIcon from '@/renderer/assets/tomni-icon.svg';
-import Sider from '@/renderer/components/layout/Sider';
-import ConversationSearchPopover from '@/renderer/pages/conversation/GroupedHistory/ConversationSearchPopover';
 import { HUB_APPS, parseRecentHubApps, type HubAppDefinition } from '@/renderer/pages/guid/HubHome/catalog';
+import { DEFAULT_ONBOARDING_APPS } from '@/renderer/pages/guid/HubHome/sidebarPins';
 import { useManagerStore } from '@/renderer/pages/manager/useManagerStore';
-import type {
-  CatalogSourceState,
-  FederatedCatalogItem,
-  FederatedCatalogSearchResult,
-  GoalSurfacePlan,
-  PackageListing,
-} from '@/common/packages';
+import type { PackageListing } from '@/common/packages';
 import type { PublisherSubmissionNativeReceipt } from '@/common/types/platform/electron';
 import {
   createStudioCompatibilityLegacyFallbackDestination,
   isStudioPackageGateNavigationState,
 } from '@/common/packages/studioCompatibility';
-import { Alert, Button, Card, Input, Message, Modal, Progress, Select, Tag, Tooltip } from '@arco-design/web-react';
-import {
-  AllApplication,
-  Cpu,
-  Calendar,
-  DashboardOne,
-  Left,
-  Notes,
-  Plus,
-  Remind,
-  Refresh,
-  Right,
-  Search,
-  SettingTwo,
-  Time,
-} from '@icon-park/react';
+import { Alert, Button, Card, Input, Message, Modal, Tag } from '@arco-design/web-react';
+import { AllApplication, Calendar, DashboardOne, Notes, Plus, Refresh, Right, Search, Time } from '@icon-park/react';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { isElectronDesktop } from '@/renderer/utils/platform';
 import styles from './HubWorkspacePage.module.css';
 import { getFirstRunnablePackageModule, PackageAppHost } from './PackageAppHost';
+import { isPackageListingInstalled } from './installedPackageApps';
 import { packageClient } from './packageClient';
 import StoreProductDetail from './StoreProductDetail';
-import { useSystemMetrics } from '@/renderer/pages/settings/ResourceSettings/system/useSystemMetrics';
 import { requestPackagePermissionUpdateConsent } from './StoreProductDetail/permissionConsent';
 import { useAllCronJobs } from '@/renderer/pages/cron/useCronJobs';
-import { useNotifications } from '@/renderer/services/notificationService';
+import { StoreControls, type StoreFilter } from '@/renderer/pages/integrations/store/StoreControls';
+import { LocalBuiltUpdateCheck } from '@/renderer/pages/integrations/store/LocalBuiltUpdateCheck';
+import { ExtensionsTab, storeViewForPath } from '@/renderer/pages/integrations/extensions/ExtensionsTab';
 
 export type HubWorkspaceKind = 'management' | 'store' | 'history' | 'package-app';
 
@@ -53,10 +33,6 @@ type HubWorkspacePageProps = {
 };
 
 const RECENT_APPS_STORAGE_KEY = 'tomni.hub.recentApps';
-/** Electron Vite serves development renderer pages over HTTP; packaged pages use `file:`. */
-const LOCAL_SURFACE_AI_PILOT_VISIBLE =
-  typeof window !== 'undefined' && (window.location.protocol === 'http:' || window.location.protocol === 'https:');
-
 /**
  * Search eligibility remains authoritative in the package service. This is a
  * display-only defensive order that puts already installed matches first.
@@ -69,6 +45,15 @@ export const orderStorePackageListings = (listings: PackageListing[]): PackageLi
   });
 
 /** Store cards use the signed offer only to prevent a misleading pre-checkout install action. */
+/** Keep downloaded Store apps visible, but remove obsolete never-installed Tomny demo surfaces.
+ * Installed older apps and local Repo-to-Package imports remain manageable and uninstallable. */
+export const isVisibleStorePackage = (listing: PackageListing): boolean => {
+  if (listing.trust === 'local-built' || listing.installedTrust === 'local-built') return isPackageListingInstalled(listing);
+  if (listing.manifest.publisherId !== 'com.tomni' || listing.manifest.type !== 'app') return true;
+  const defaults = new Set<string>(DEFAULT_ONBOARDING_APPS.map((item) => item.id));
+  return defaults.has(listing.manifest.id) || isPackageListingInstalled(listing);
+};
+
 export const requiresPaidStoreActivation = (listing: PackageListing): boolean =>
   listing.offer?.active === true && listing.offer.price.amountMinor > 0;
 
@@ -80,7 +65,6 @@ const readRecentApps = (): HubAppDefinition[] => {
 
 const HubWorkspacePage: React.FC<HubWorkspacePageProps> = ({ kind, packageId, moduleId }) => {
   const { t } = useTranslation();
-  const coreStatusKey = 'guid.hubHome.shell.coreHealthy';
   const navigate = useNavigate();
   const location = useLocation();
   const isPackageApp = kind === 'package-app' && Boolean(packageId) && Boolean(moduleId);
@@ -113,13 +97,7 @@ const HubWorkspacePage: React.FC<HubWorkspacePageProps> = ({ kind, packageId, mo
     [navigate, packageGateNavigationState]
   );
   const manager = useManagerStore();
-  const systemMetrics = useSystemMetrics();
-  const cpuPercent = Math.round(systemMetrics.live?.cpu?.overallPercent ?? 12);
-  const memPercent = Math.round(systemMetrics.live?.memory?.usedPercent ?? 45);
-  const isHighRam = memPercent > 80;
   const { jobs: cronJobs } = useAllCronJobs();
-  const { notifications } = useNotifications();
-  const [collapsed, setCollapsed] = useState(() => window.matchMedia?.('(max-width: 839px)').matches ?? false);
   const [query, setQuery] = useState('');
 
   const recentApps = useMemo(readRecentApps, []);
@@ -130,13 +108,9 @@ const HubWorkspacePage: React.FC<HubWorkspacePageProps> = ({ kind, packageId, mo
         ? 'guid.hubHome.shell.store'
         : 'guid.hubHome.shell.nav.history';
 
-  const subtitleKey =
-    kind === 'management'
-      ? 'manager.workspace.overviewSubtitle'
-      : kind === 'store'
-        ? 'guid.hubHome.shell.storeHint'
-        : 'guid.hubHome.recentSubtitle';
+  const subtitleKey = kind === 'management' ? 'manager.workspace.overviewSubtitle' : 'guid.hubHome.recentSubtitle';
 
+  const isStoreList = kind === 'store' && !packageId;
   const searchKey = 'guid.hubHome.shell.searchPlaceholder';
 
   const visibleApps = useMemo(() => {
@@ -147,249 +121,89 @@ const HubWorkspacePage: React.FC<HubWorkspacePageProps> = ({ kind, packageId, mo
   }, [query, recentApps, t]);
 
   return (
-    <div className={`${styles.shell} ${collapsed ? styles.shellCollapsed : ''}`} data-testid={`hub-${kind}-page`}>
-      <aside className={styles.sidebar}>
-        <div className={styles.brand}>
-          <img src={tomniIcon} alt='' />
-          <strong className={styles.sidebarCopy}>Tomny</strong>
-          <Tooltip content={t(collapsed ? 'common.expand' : 'common.collapse')} position='right'>
+    <div className={`hub-page ${isPackageApp ? 'hub-page--package' : ''}`} data-testid={`hub-${kind}-page`}>
+      {!isPackageApp && !isStoreList && (
+        <header className='hub-page-heading'>
+          <div>
+            <h1>{t(titleKey)}</h1>
+            {kind !== 'store' && <p>{t(subtitleKey)}</p>}
+          </div>
+          {kind !== 'store' && (
             <Button
-              type='text'
-              shape='circle'
-              className={styles.collapseButton}
-              icon={
-                collapsed ? (
-                  <Right theme='outline' size={14} fill='currentColor' />
-                ) : (
-                  <Left theme='outline' size={14} fill='currentColor' />
-                )
-              }
-              aria-label={t(collapsed ? 'common.expand' : 'common.collapse')}
-              onClick={() => setCollapsed((current) => !current)}
-            />
-          </Tooltip>
-        </div>
-        <Sider collapsed={collapsed} />
-      </aside>
-
-      <header className={styles.topbar}>
-        <ConversationSearchPopover
-          onConversationSelect={() => undefined}
-          renderTrigger={({ onClick, isActive }) => (
-            <Button
-              type='secondary'
-              className={`${styles.globalSearch} ${isActive ? styles.globalSearchActive : ''}`}
-              icon={<Search theme='outline' size={15} fill='currentColor' />}
-              onClick={onClick}
+              type='primary'
+              icon={<Plus theme='outline' size={15} fill='currentColor' />}
+              onClick={() => navigate(kind === 'management' ? '/manager/workspace' : '/studio')}
             >
-              <span>{t('guid.hubHome.shell.searchPlaceholder')}</span>
-              <kbd>Ctrl + K</kbd>
+              {t(kind === 'management' ? 'manager.tasks.create' : 'studio.create.action')}
             </Button>
           )}
+        </header>
+      )}
+
+      {!packageId && !isPackageApp && kind !== 'store' && (
+        <Input
+          allowClear
+          className='hub-page-search'
+          prefix={<Search theme='outline' size={15} fill='currentColor' />}
+          placeholder={t(searchKey)}
+          value={query}
+          onChange={setQuery}
         />
-        <div className={styles.topbarActions}>
-          <Button
-            type='text'
-            shape='circle'
-            icon={<Remind theme='outline' size={17} fill='currentColor' />}
-            aria-label={t('guid.hubHome.status.notificationsTitle')}
-            onClick={() => navigate('/settings/realtime')}
-          />
-          <Button
-            type='text'
-            shape='circle'
-            icon={<SettingTwo theme='outline' size={17} fill='currentColor' />}
-            aria-label={t('guid.hubHome.shell.nav.settings')}
-            onClick={() => navigate('/settings/model')}
-          />
-        </div>
-      </header>
+      )}
 
-      <div className={`${styles.body} ${isPackageApp ? styles.packageAppBody : ''}`}>
-        <main className={`${styles.main} ${isPackageApp ? styles.packageAppMain : ''}`}>
-          {!isPackageApp && (
-            <header className={styles.pageHeading}>
-              <div>
-                <h1>{t(titleKey)}</h1>
-                <p>{t(subtitleKey)}</p>
-              </div>
-              {kind !== 'store' && (
-                <Button
-                  type='primary'
-                  icon={<Plus theme='outline' size={15} fill='currentColor' />}
-                  onClick={() => navigate(kind === 'management' ? '/manager/workspace' : '/studio')}
-                >
-                  {t(kind === 'management' ? 'manager.tasks.create' : 'studio.create.action')}
-                </Button>
-              )}
-            </header>
-          )}
-
-          {!packageId && !isPackageApp && (
-            <Input
-              allowClear
-              className={styles.pageSearch}
-              prefix={<Search theme='outline' size={15} fill='currentColor' />}
-              placeholder={t(searchKey)}
-              value={query}
-              onChange={setQuery}
-            />
-          )}
-
-          {isPackageApp && packageId && moduleId ? (
-            <PackageAppHost packageId={packageId} moduleId={moduleId} onBack={returnFromPackageApp} allowSandboxedWeb />
-          ) : kind === 'store' && packageId ? (
-            <StoreProductDetail packageId={packageId} onBack={returnFromStorePackage} onOpen={openStorePackageModule} />
-          ) : kind === 'store' ? (
-            <StoreContent query={query} />
-          ) : kind === 'management' ? (
-            <ManagementContent
-              query={query}
-              taskCount={manager.data.tasks.length}
-              noteCount={manager.data.notes.length}
-              eventCount={manager.data.events.length}
-              coreCount={cronJobs.length || (isElectronDesktop() ? 1 : 0)}
-              onOpenScheduled={() => navigate('/scheduled')}
-              onOpen={() => navigate('/manager/workspace')}
-            />
-          ) : (
-            <HistoryContent apps={visibleApps} onNavigate={navigate} />
-          )}
-        </main>
-
-        {!isPackageApp && (
-          <aside className={styles.statusRail} data-testid='hub-status-rail'>
-            {/* Card 1: Tasks Monitor */}
-            <Card className={styles.statusCard} bordered>
-              <div className={styles.statusHeading}>
-                <strong>{t('guid.hubHome.status.workTitle')}</strong>
-                <Button type='text' size='mini' onClick={() => navigate('/manager/workspace')}>
-                  {t('guid.hubHome.viewAll')}
-                </Button>
-              </div>
-              <div className={styles.statusMetric}>
-                <span>
-                  {manager.data.tasks.length > 0
-                    ? t('guid.hubHome.status.workInProgress', { count: manager.data.tasks.length })
-                    : 'Tất cả Agent đang sẵn sàng'}
-                </span>
-                <Progress
-                  percent={manager.data.tasks.length > 0 ? 68 : 0}
-                  showText={false}
-                  size='small'
-                  status={manager.data.tasks.length > 0 ? 'normal' : 'success'}
-                />
-              </div>
-              {manager.data.tasks.slice(0, 2).map((task) => (
-                <p
-                  key={task.id}
-                  style={{
-                    margin: '4px 0',
-                    fontSize: '11px',
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                  }}
-                >
-                  ⚡ {(task as any).name || (task as any).title || task.id}
-                </p>
-              ))}
-            </Card>
-
-            {/* Card 2: System Telemetry */}
-            <Card className={styles.statusCard} bordered>
-              <div className={styles.statusHeading}>
-                <strong>Thông số hệ thống</strong>
-                <Cpu theme='outline' size={15} fill='currentColor' />
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '6px' }}>
-                <div>
-                  <div
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      fontSize: '11px',
-                      color: 'var(--hub-muted)',
-                    }}
-                  >
-                    <span>CPU</span>
-                    <span>{cpuPercent}%</span>
-                  </div>
-                  <Progress
-                    percent={cpuPercent}
-                    showText={false}
-                    size='small'
-                    status={cpuPercent > 85 ? 'warning' : 'normal'}
-                  />
-                </div>
-                <div>
-                  <div
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      fontSize: '11px',
-                      color: 'var(--hub-muted)',
-                    }}
-                  >
-                    <span>RAM ({isHighRam ? 'Tải cao' : 'Ổn định'})</span>
-                    <span>{memPercent}%</span>
-                  </div>
-                  <Progress
-                    percent={memPercent}
-                    showText={false}
-                    size='small'
-                    status={isHighRam ? 'error' : 'normal'}
-                  />
-                </div>
-              </div>
-            </Card>
-
-            {/* Card 3: Usage & Environment */}
-            <Card className={styles.statusCard} bordered>
-              <div className={styles.statusHeading}>
-                <strong>{t('guid.hubHome.status.systemTitle')}</strong>
-                <Time theme='outline' size={15} fill='currentColor' />
-              </div>
-              <div className={styles.systemReady}>
-                <span className={styles.readyDot} />
-                <span>{t('guid.hubHome.status.coreReady')}</span>
-              </div>
-              <small>{t('guid.hubHome.status.coreReadyHint')}</small>
-            </Card>
-          </aside>
-        )}
-      </div>
-
-      <footer className={styles.footer}>
-        <span>{t('guid.hubHome.shell.version')}</span>
-        <span className={styles.footerStatus}>
-          <span className={styles.readyDot} />
-          {t(coreStatusKey)}
-        </span>
-      </footer>
+      {isPackageApp && packageId && moduleId ? (
+        <PackageAppHost packageId={packageId} moduleId={moduleId} onBack={returnFromPackageApp} allowSandboxedWeb />
+      ) : kind === 'store' && packageId ? (
+        <StoreProductDetail packageId={packageId} onBack={returnFromStorePackage} onOpen={openStorePackageModule} />
+      ) : kind === 'store' ? (
+        <StoreContent />
+      ) : kind === 'management' ? (
+        <ManagementContent
+          query={query}
+          taskCount={manager.data.tasks.length}
+          noteCount={manager.data.notes.length}
+          eventCount={manager.data.events.length}
+          coreCount={cronJobs.length || (isElectronDesktop() ? 1 : 0)}
+          onOpenScheduled={() => navigate('/scheduled')}
+          onOpen={() => navigate('/manager/workspace')}
+        />
+      ) : (
+        <HistoryContent apps={visibleApps} onNavigate={navigate} />
+      )}
     </div>
   );
 };
 
-const StoreContent: React.FC<{ query: string }> = ({ query }) => {
+const StoreContent: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [packages, setPackages] = useState<PackageListing[]>([]);
-  const [microsoftItems, setMicrosoftItems] = useState<FederatedCatalogItem[]>([]);
-  const [microsoftStatus, setMicrosoftStatus] = useState<CatalogSourceState['status']>();
+  const [storeFilter, setStoreFilter] = useState<StoreFilter>('all');
+  // `/store/extensions` (the header's Manage extensions) opens the Extensions tab; the tab buttons keep working.
+  const location = useLocation();
+  const [storeView, setStoreView] = useState<'packages' | 'extensions'>(() => storeViewForPath(location.pathname));
+  useEffect(() => {
+    setStoreView(storeViewForPath(location.pathname));
+  }, [location.pathname]);
+  const installedPackageIds = useMemo(
+    () => packages.filter(isPackageListingInstalled).map((item) => item.manifest.id),
+    [packages]
+  );
+  const visiblePackages = useMemo(
+    () =>
+            packages.filter(
+        (item) =>
+          isVisibleStorePackage(item) && (storeFilter === 'all' ||
+          (storeFilter === 'installed' && isPackageListingInstalled(item)) ||
+                    (storeFilter === 'updates' && item.updateAvailable))
+      ),
+    [packages, storeFilter]
+  );
   const [busyId, setBusyId] = useState<string>();
 
   const [refreshing, setRefreshing] = useState(false);
   const [submittingPublisherPackage, setSubmittingPublisherPackage] = useState(false);
   const [publisherSubmissionReceipt, setPublisherSubmissionReceipt] = useState<PublisherSubmissionNativeReceipt>();
-  const [goal, setGoal] = useState('');
-  const [goalPlan, setGoalPlan] = useState<GoalSurfacePlan>();
-  const [planningGoal, setPlanningGoal] = useState(false);
-  const [executingPlanStep, setExecutingPlanStep] = useState<number>();
-  const [goalPlanningError, setGoalPlanningError] = useState<string>();
-  const [modelTargets, setModelTargets] = useState<readonly { targetId: string; modelKeys: readonly string[] }[]>([]);
-  const [selectedModelTarget, setSelectedModelTarget] = useState<string>();
-  const [selectedModelKey, setSelectedModelKey] = useState<string>();
   const [error, setError] = useState<string>();
   const loadEpoch = useRef(0);
 
@@ -397,35 +211,14 @@ const StoreContent: React.FC<{ query: string }> = ({ query }) => {
     const epoch = ++loadEpoch.current;
     try {
       setError(undefined);
-      const normalizedQuery = query.trim();
-      const regionPart = navigator.language.split('-')[1]?.toUpperCase();
-      const region = regionPart && /^[A-Z]{2}$/.test(regionPart) ? regionPart : 'ZZ';
-      const [listings, federated]: [PackageListing[], FederatedCatalogSearchResult | undefined] = await Promise.all([
-        normalizedQuery ? packageClient.search({ query: normalizedQuery }) : packageClient.list(),
-        normalizedQuery
-          ? packageClient
-              .federatedSearch({ query: normalizedQuery, region, limit: 24 })
-              .catch((): undefined => undefined)
-          : Promise.resolve(undefined),
-      ]);
+            const listings = await packageClient.list();
       if (epoch !== loadEpoch.current) return;
       setPackages(orderStorePackageListings(listings.filter((item) => item.delivery === 'downloaded-package')));
-      const microsoftSource = federated?.sources.find((source) => source.source === 'microsoft-store');
-      setMicrosoftStatus(normalizedQuery ? (microsoftSource?.status ?? 'failed') : undefined);
-      setMicrosoftItems(
-        federated?.items.filter(
-          (item) =>
-            item.offers.some((offer) => offer.source === 'microsoft-store') &&
-            !item.offers.some((offer) => offer.source === 'tomni-store')
-        ) ?? []
-      );
     } catch (loadError) {
       if (epoch !== loadEpoch.current) return;
-      setMicrosoftItems([]);
-      setMicrosoftStatus(query.trim() ? 'failed' : undefined);
       setError(loadError instanceof Error ? loadError.message : String(loadError));
     }
-  }, [query]);
+  }, []);
 
   useEffect(() => {
     const timeout = window.setTimeout((): void => {
@@ -434,37 +227,19 @@ const StoreContent: React.FC<{ query: string }> = ({ query }) => {
     const reloadWhenVisible = (): void => {
       if (document.visibilityState === 'visible') void load();
     };
-    window.addEventListener('focus', reloadWhenVisible);
+        window.addEventListener('focus', reloadWhenVisible);
+    window.addEventListener('tomni-packages-changed', reloadWhenVisible);
+        const off = packageClient.onContributionsChanged?.(() => void load()) ?? (() => undefined);
     document.addEventListener('visibilitychange', reloadWhenVisible);
     return () => {
       loadEpoch.current += 1;
       window.clearTimeout(timeout);
-      window.removeEventListener('focus', reloadWhenVisible);
+            window.removeEventListener('focus', reloadWhenVisible);
+      window.removeEventListener('tomni-packages-changed', reloadWhenVisible);
+      off();
       document.removeEventListener('visibilitychange', reloadWhenVisible);
     };
   }, [load]);
-
-  useEffect(() => {
-    const modelSelection = window.electronAPI?.hubModelSelection;
-    if (!modelSelection) return;
-    let active = true;
-    void Promise.all([modelSelection.list(), modelSelection.get()]).then(([catalog, current]) => {
-      if (!active) return;
-      if (!catalog.ok) {
-        setGoalPlanningError('guid.hubHome.storeDetail.goalPlanningUnavailable');
-        return;
-      }
-      setModelTargets(catalog.targets);
-      if (!current.ok || current.selection === undefined) return;
-      const selectedTarget = catalog.targets.find((target) => target.targetId === current.selection?.targetId);
-      if (!selectedTarget?.modelKeys.includes(current.selection.modelKey)) return;
-      setSelectedModelTarget(selectedTarget.targetId);
-      setSelectedModelKey(current.selection.modelKey);
-    });
-    return () => {
-      active = false;
-    };
-  }, []);
 
   const refreshCatalog = async (): Promise<void> => {
     setRefreshing(true);
@@ -491,6 +266,7 @@ const StoreContent: React.FC<{ query: string }> = ({ query }) => {
       if (permissionConsentId) await packageClient.install(id, permissionConsentId);
       else await packageClient.install(id);
       await load();
+      window.dispatchEvent(new CustomEvent('tomni-packages-changed'));
     } catch (operationError) {
       const message = operationError instanceof Error ? operationError.message : String(operationError);
       setError(message);
@@ -506,23 +282,12 @@ const StoreContent: React.FC<{ query: string }> = ({ query }) => {
     try {
       await packageClient.uninstall(item.manifest.id);
       await load();
+      window.dispatchEvent(new CustomEvent('tomni-packages-changed'));
     } catch (operationError) {
       const message = operationError instanceof Error ? operationError.message : String(operationError);
-      setError(message);
-      Message.error(message);
-    } finally {
-      setBusyId(undefined);
-    }
-  };
-
-  const openMicrosoftProduct = async (productId: string): Promise<void> => {
-    const operationId = `microsoft:${productId}`;
-    setBusyId(operationId);
-    setError(undefined);
-    try {
-      await packageClient.openMicrosoftStorePage(productId);
-    } catch (operationError) {
-      const message = operationError instanceof Error ? operationError.message : String(operationError);
+      // The removal may have partly or fully applied before the error: resync both views from the service.
+      await load();
+      window.dispatchEvent(new CustomEvent('tomni-packages-changed'));
       setError(message);
       Message.error(message);
     } finally {
@@ -564,127 +329,6 @@ const StoreContent: React.FC<{ query: string }> = ({ query }) => {
     }
   };
 
-  const saveHubModelSelection = async (targetId: string, modelKey: string): Promise<boolean> => {
-    const modelSelection = window.electronAPI?.hubModelSelection;
-    if (!modelSelection) {
-      setGoalPlanningError('guid.hubHome.storeDetail.goalPlanningUnavailable');
-      return false;
-    }
-    const result = await modelSelection.set({ targetId, modelKey });
-    if (result.ok) return true;
-    setGoalPlanningError('guid.hubHome.storeDetail.goalPlanningUnavailable');
-    return false;
-  };
-
-  const planSurfacesForGoal = async (): Promise<void> => {
-    const planner = window.electronAPI?.hubGoalSurfacePlanning;
-    if (!planner || !goal.trim() || !selectedModelTarget || !selectedModelKey) {
-      setGoalPlanningError(
-        !selectedModelTarget || !selectedModelKey
-          ? 'guid.hubHome.storeDetail.goalPlanningModelRequired'
-          : 'guid.hubHome.storeDetail.goalPlanningUnavailable'
-      );
-      return;
-    }
-    setPlanningGoal(true);
-    setGoalPlanningError(undefined);
-    setGoalPlan(undefined);
-    try {
-      if (!(await saveHubModelSelection(selectedModelTarget, selectedModelKey))) return;
-      const result = await planner.plan({ goal: goal.trim() });
-      if (result.ok === false) {
-        setGoalPlanningError('guid.hubHome.storeDetail.goalPlanningUnavailable');
-        return;
-      }
-      setGoalPlan(result.plan);
-    } catch {
-      setGoalPlanningError('guid.hubHome.storeDetail.goalPlanningUnavailable');
-    } finally {
-      setPlanningGoal(false);
-    }
-  };
-
-  /**
-   * The C4 development pilot can receive only Main-issued opaque IDs. Package,
-   * runtime, target, model, instruction, and user goal stay Main-owned.
-   */
-  const executeLocalPlanStep = async (stepIndex: number): Promise<void> => {
-    const plan = goalPlan;
-    const actionApi = window.electronAPI?.hubGoalSurfaceAction;
-    const accessApi = window.electronAPI?.packageSurfaceAiAccess;
-    if (!plan || !actionApi || !accessApi) {
-      Message.error(t('guid.hubHome.storeDetail.goalPlanningPilotUnavailable'));
-      return;
-    }
-    setExecutingPlanStep(stepIndex);
-    try {
-      const prepared = await actionApi.prepare({ planId: plan.requestId, stepIndex });
-      if (!prepared.ok || !('actionId' in prepared) || !('consent' in prepared)) {
-        Message.error(t('guid.hubHome.storeDetail.goalPlanningPilotUnavailable'));
-        setExecutingPlanStep(undefined);
-        return;
-      }
-      const challengeResult = await accessApi.requestChallenge(prepared.consent);
-      if (!challengeResult.ok || !('challenge' in challengeResult)) {
-        await actionApi.cancel({ actionId: prepared.actionId });
-        Message.error(t('guid.hubHome.storeDetail.goalPlanningPilotUnavailable'));
-        setExecutingPlanStep(undefined);
-        return;
-      }
-      const { challenge } = challengeResult;
-      Modal.confirm({
-        title: t('guid.hubHome.storeDetail.goalPlanningPilotConfirmTitle'),
-        content: t('guid.hubHome.storeDetail.goalPlanningPilotConfirmDescription', {
-          operation: challenge.operationId,
-          capability: challenge.capability,
-        }),
-        okText: t('guid.hubHome.storeDetail.aiAccessAllow'),
-        cancelText: t('common.cancel'),
-        onOk: async () => {
-          try {
-            const confirmation = await accessApi.confirmChallenge({
-              challengeId: challenge.challengeId,
-              approved: true,
-            });
-            if (
-              !confirmation.ok ||
-              !('approved' in confirmation) ||
-              !confirmation.approved ||
-              !confirmation.consentId
-            ) {
-              await actionApi.cancel({ actionId: prepared.actionId });
-              Message.error(t('guid.hubHome.storeDetail.goalPlanningPilotUnavailable'));
-              return;
-            }
-            const execution = await actionApi.execute({
-              actionId: prepared.actionId,
-              consentId: confirmation.consentId,
-            });
-            if (!execution.ok || !('receipt' in execution)) {
-              Message.error(t('guid.hubHome.storeDetail.goalPlanningPilotUnavailable'));
-              return;
-            }
-            Message.success(
-              t('guid.hubHome.storeDetail.goalPlanningPilotSuccess', { receipt: execution.receipt.receiptId })
-            );
-          } catch {
-            Message.error(t('guid.hubHome.storeDetail.goalPlanningPilotUnavailable'));
-          } finally {
-            setExecutingPlanStep(undefined);
-          }
-        },
-        onCancel: () => {
-          void accessApi.confirmChallenge({ challengeId: challenge.challengeId, approved: false });
-          void actionApi.cancel({ actionId: prepared.actionId });
-          setExecutingPlanStep(undefined);
-        },
-      });
-    } catch {
-      Message.error(t('guid.hubHome.storeDetail.goalPlanningPilotUnavailable'));
-      setExecutingPlanStep(undefined);
-    }
-  };
-
   const confirmRemoval = (item: PackageListing): void => {
     Modal.confirm({
       title: t('guid.hubHome.storeDetail.removeTitle', { name: item.manifest.name }),
@@ -698,25 +342,32 @@ const StoreContent: React.FC<{ query: string }> = ({ query }) => {
 
   return (
     <>
-      <div className='mb-12px flex justify-end gap-8px'>
-        <Button
-          type='secondary'
-          loading={submittingPublisherPackage}
-          disabled={submittingPublisherPackage}
-          data-testid='store-publisher-submit'
-          onClick={() => void submitPublisherPackage()}
-        >
-          {t('guid.hubHome.storeDetail.publisherSubmission')}
-        </Button>
-        <Button
-          type='secondary'
-          icon={<Refresh theme='outline' size='14' />}
-          loading={refreshing}
-          onClick={() => void refreshCatalog()}
-        >
-          {t('common.refresh')}
-        </Button>
-      </div>
+      <header className='hub-page-heading'>
+        <div>
+          <h1>{t('guid.hubHome.shell.store')}</h1>
+        </div>
+        <div className='flex items-center gap-8px'>
+          <Button
+            type='secondary'
+            icon={<Refresh theme='outline' size='14' />}
+            loading={refreshing}
+            onClick={() => void refreshCatalog()}
+          >
+            {t('common.refresh')}
+          </Button>
+          <Button
+            type='primary'
+            shape='circle'
+            icon={<Plus theme='outline' size={16} fill='currentColor' />}
+            loading={submittingPublisherPackage}
+            disabled={submittingPublisherPackage}
+            aria-label={t('guid.hubHome.storeDetail.publisherSubmission')}
+            title={t('guid.hubHome.storeDetail.publisherSubmission')}
+            data-testid='store-publisher-submit'
+            onClick={() => void submitPublisherPackage()}
+          />
+        </div>
+      </header>
       {publisherSubmissionReceipt ? (
         <Alert
           data-testid='store-publisher-submission-result'
@@ -740,152 +391,44 @@ const StoreContent: React.FC<{ query: string }> = ({ query }) => {
           className='mb-12px'
         />
       ) : null}
-      <Card className={styles.surfacePlanner} bordered data-testid='store-goal-surface-planner'>
-        <div className={styles.surfacePlannerHeader}>
-          <div>
-            <h2>{t('guid.hubHome.storeDetail.goalPlanningTitle')}</h2>
-            <p>{t('guid.hubHome.storeDetail.goalPlanningDescription')}</p>
-          </div>
-          <Tag color={LOCAL_SURFACE_AI_PILOT_VISIBLE ? 'arcoblue' : 'gray'}>
-            {t(
-              LOCAL_SURFACE_AI_PILOT_VISIBLE
-                ? 'guid.hubHome.storeDetail.goalPlanningPilotLocal'
-                : 'guid.hubHome.storeDetail.goalPlanningNoAction'
-            )}
-          </Tag>
-        </div>
-        <div className={styles.surfacePlannerControls}>
-          <Select
-            value={selectedModelTarget}
-            placeholder={t('guid.hubHome.storeDetail.goalPlanningTarget')}
-            onChange={(value: string) => {
-              setSelectedModelTarget(value);
-              setSelectedModelKey(undefined);
-              setGoalPlanningError(undefined);
-            }}
-          >
-            {modelTargets.map((target) => (
-              <Select.Option key={target.targetId} value={target.targetId}>
-                {target.targetId}
-              </Select.Option>
-            ))}
-          </Select>
-          <Select
-            value={selectedModelKey}
-            placeholder={t('guid.hubHome.storeDetail.goalPlanningModel')}
-            disabled={!selectedModelTarget}
-            onChange={(value: string) => {
-              setSelectedModelKey(value);
-              setGoalPlanningError(undefined);
-            }}
-          >
-            {modelTargets
-              .find((target) => target.targetId === selectedModelTarget)
-              ?.modelKeys.map((modelKey) => (
-                <Select.Option key={modelKey} value={modelKey}>
-                  {modelKey}
-                </Select.Option>
-              ))}
-          </Select>
-          <Input.TextArea
-            value={goal}
-            autoSize={{ minRows: 2, maxRows: 5 }}
-            placeholder={t('guid.hubHome.storeDetail.goalPlanningGoal')}
-            maxLength={10_000}
-            onChange={setGoal}
-          />
+      <nav className='hub-store-views' data-testid='store-views'>
+        {(['packages', 'extensions'] as const).map((view) => (
           <Button
-            type='primary'
-            loading={planningGoal}
-            disabled={planningGoal || !goal.trim() || !selectedModelTarget || !selectedModelKey}
-            onClick={() => void planSurfacesForGoal()}
-            data-testid='store-goal-surface-plan'
+            key={view}
+            type={storeView === view ? 'primary' : 'secondary'}
+            size='small'
+            aria-pressed={storeView === view}
+            onClick={() => setStoreView(view)}
+            data-testid={`store-view-${view}`}
           >
-            {t('guid.hubHome.storeDetail.goalPlanningAction')}
+            {t(
+              view === 'packages'
+                ? 'guid.hubHome.storeImport.ext.tabPackages'
+                : 'guid.hubHome.storeImport.ext.tabExtensions'
+            )}
           </Button>
-        </div>
-        {goalPlanningError && <Alert type='warning' content={t(goalPlanningError)} showIcon />}
-        {goalPlan && (
-          <div className={styles.surfacePlanSteps} data-testid='store-goal-surface-plan-result'>
-            {goalPlan.steps.map((step, stepIndex) => {
-              const packageId =
-                step.kind === 'propose-install'
-                  ? step.proposal.candidate.package.packageId
-                  : step.kind === 'blocked'
-                    ? undefined
-                    : step.candidate.package.packageId;
-              const labelKey =
-                step.kind === 'execute-local'
-                  ? 'guid.hubHome.storeDetail.goalPlanningLocal'
-                  : step.kind === 'execute-remote'
-                    ? 'guid.hubHome.storeDetail.goalPlanningRemote'
-                    : step.kind === 'propose-install'
-                      ? 'guid.hubHome.storeDetail.goalPlanningInstall'
-                      : 'guid.hubHome.storeDetail.goalPlanningBlocked';
-              const installedSurface =
-                step.kind === 'execute-local' && packageId
-                  ? packages.find((item) => item.manifest.id === packageId)
-                  : undefined;
-              const runnableModule = installedSurface ? getFirstRunnablePackageModule(installedSurface) : undefined;
-              const canRunLocalPilot =
-                LOCAL_SURFACE_AI_PILOT_VISIBLE &&
-                step.kind === 'execute-local' &&
-                Boolean(window.electronAPI?.hubGoalSurfaceAction);
-              return (
-                <div key={step.query.queryId} className={styles.surfacePlanStep}>
-                  <Tag>{t(labelKey)}</Tag>
-                  <strong>{step.query.capability}</strong>
-                  {packageId && <span>{packageId}</span>}
-                  {step.kind === 'propose-install' && step.proposal.requiresPurchase && (
-                    <small>{t('guid.hubHome.storeDetail.goalPlanningPurchase')}</small>
-                  )}
-                  {packageId && (
-                    <Button
-                      type='text'
-                      size='mini'
-                      onClick={() => {
-                        if (step.kind === 'execute-local' && runnableModule) {
-                          navigate(`/apps/${encodeURIComponent(packageId)}/${encodeURIComponent(runnableModule.id)}`);
-                          return;
-                        }
-                        navigate(`/store/package/${encodeURIComponent(packageId)}`);
-                      }}
-                    >
-                      {t('guid.hubHome.storeDetail.goalPlanningViewSurface')}
-                    </Button>
-                  )}
-                  {canRunLocalPilot && (
-                    <Button
-                      type='primary'
-                      size='mini'
-                      loading={executingPlanStep === stepIndex}
-                      disabled={executingPlanStep !== undefined}
-                      data-testid={`store-goal-surface-run-local-${stepIndex}`}
-                      onClick={() => void executeLocalPlanStep(stepIndex)}
-                    >
-                      {t('guid.hubHome.storeDetail.goalPlanningPilotAction')}
-                    </Button>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </Card>
-      {error && <Alert type='error' content={error} closable onClose={() => setError(undefined)} />}
-      {query.trim() && microsoftStatus && microsoftStatus !== 'ready' && (
-        <Alert
-          type='warning'
-          content={t(
-            microsoftStatus === 'stale'
-              ? 'guid.hubHome.storeDetail.microsoftSourceStale'
-              : 'guid.hubHome.storeDetail.microsoftSourceFailed'
-          )}
+        ))}
+      </nav>
+      {storeView === 'extensions' && <ExtensionsTab packageIds={installedPackageIds} />}
+      {storeView === 'packages' && (
+        <StoreControls
+          filter={storeFilter}
+          onFilter={setStoreFilter}
+          onImported={async () => {
+            await load();
+            window.dispatchEvent(new CustomEvent('tomni-packages-changed'));
+          }}
+          onKeyRevoked={async () => {
+            await load();
+            window.dispatchEvent(new CustomEvent('tomni-packages-changed'));
+          }}
+          onOpenDetails={(id) => navigate(`/store/package/${encodeURIComponent(id)}`)}
         />
       )}
-      {packages.length === 0 && microsoftItems.length === 0 ? (
+      {error && <Alert type='error' content={error} closable onClose={() => setError(undefined)} />}
+      {storeView === 'extensions' ? null : visiblePackages.length === 0 ? (
         <div className={styles.emptyState}>
-          <span>{t('guid.hubHome.storeDetail.empty')}</span>
+          <span>{t(packages.length ? 'guid.hubHome.storeImport.noMatches' : 'guid.hubHome.storeDetail.empty')}</span>
           {error && (
             <Button type='secondary' onClick={() => void load()}>
               {t('common.retry')}
@@ -894,8 +437,8 @@ const StoreContent: React.FC<{ query: string }> = ({ query }) => {
         </div>
       ) : (
         <div className={styles.packageGrid}>
-          {packages.map((item) => {
-            const installed = item.state === 'installed';
+          {visiblePackages.map((item) => {
+            const installed = isPackageListingInstalled(item);
             const runnableModule = getFirstRunnablePackageModule(item);
             const requiresPayment = requiresPaidStoreActivation(item);
             const stateKey = item.updateAvailable
@@ -935,9 +478,27 @@ const StoreContent: React.FC<{ query: string }> = ({ query }) => {
                   >
                     {t(stateKey)}
                   </Tag>
+                  {item.installedTrust === 'local-built' && (
+                    <Tag color='purple' data-testid={`store-local-built-${item.manifest.id}`}>
+                      {t('guid.hubHome.storeImport.localBuilt')}
+                    </Tag>
+                  )}
+                  {item.installedTrust === 'unsigned-revoked' && (
+                    <Tag color='red' data-testid={`store-unsigned-revoked-${item.manifest.id}`}>
+                      {t('guid.hubHome.localKey.revoked')}
+                    </Tag>
+                  )}
                 </div>
                 <strong className={styles.packageName}>{item.manifest.name}</strong>
                 <p className={styles.packageDescription}>{item.manifest.description}</p>
+                {item.installedTrust === 'unsigned-revoked' && (
+                  <p className={styles.packageDescription} role='status'>
+                    {t('guid.hubHome.localKey.revokedNotice')}
+                  </p>
+                )}
+                {item.installedTrust === 'local-built' && installed && (
+                  <LocalBuiltUpdateCheck packageId={item.manifest.id} />
+                )}
                 <div className={styles.packageMeta}>
                   <span>{item.manifest.type}</span>
                   <span>v{item.manifest.version}</span>
@@ -985,51 +546,6 @@ const StoreContent: React.FC<{ query: string }> = ({ query }) => {
                     )}
                   </Button>
                 </div>
-              </Card>
-            );
-          })}
-          {microsoftItems.map((item) => {
-            const offer = item.offers.find((candidate) => candidate.source === 'microsoft-store');
-            if (!offer) return null;
-            const operationId = `microsoft:${offer.sourceItemId}`;
-            const certified = offer.trustSignal?.kind === 'microsoft-certification';
-            return (
-              <Card
-                key={item.canonicalKey}
-                className={`${styles.packageCard} ${styles.externalPackageCard}`}
-                bordered
-                hoverable
-              >
-                <div className={styles.packageHeader}>
-                  <span className={styles.packageGlyph}>
-                    <AllApplication theme='outline' size={20} fill='currentColor' />
-                  </span>
-                  <Tag color='arcoblue'>
-                    {t(
-                      certified
-                        ? 'guid.hubHome.storeDetail.microsoftCertified'
-                        : 'guid.hubHome.storeDetail.microsoftStore'
-                    )}
-                  </Tag>
-                </div>
-                <strong className={styles.packageName}>{item.display.name}</strong>
-                <p className={styles.packageDescription}>
-                  {item.display.summary ?? t('guid.hubHome.storeDetail.microsoftSummaryFallback')}
-                </p>
-                <div className={styles.packageMeta}>
-                  <span>{t('guid.hubHome.storeDetail.microsoftStore')}</span>
-                  {offer.version && <span>v{offer.version}</span>}
-                  <span>{t(`guid.hubHome.storeDetail.availability.${offer.availability}`)}</span>
-                </div>
-                <Button
-                  type='primary'
-                  long
-                  loading={busyId === operationId}
-                  disabled={busyId !== undefined && busyId !== operationId}
-                  onClick={() => void openMicrosoftProduct(offer.sourceItemId)}
-                >
-                  {t('guid.hubHome.storeDetail.openMicrosoftStore')}
-                </Button>
               </Card>
             );
           })}

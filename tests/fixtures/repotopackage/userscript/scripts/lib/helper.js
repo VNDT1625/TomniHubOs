@@ -1,0 +1,1 @@
+window.helper = () => 1;

@@ -36,17 +36,19 @@ export const FIRST_PARTY_PACKAGE_SIGNING_POLICIES: Readonly<Record<string, Packa
   },
 };
 
-const DEFAULT_SURFACE_PACKAGE_IDS = new Set(['com.tomni.ide']);
-
-/** Browser and IDE are base surfaces, never Store catalog products. */
+/**
+ * A legacy default IDE route is not an installable Store product. Allow an IDE
+ * artifact only when the catalog explicitly declares a signed first-party
+ * download; Main still verifies the signed catalog, artifact and publisher.
+ */
 export const excludeDefaultSurfaceCatalogEntries = (
   entries: readonly PackageCatalogEntry[]
-): readonly PackageCatalogEntry[] => entries.filter((entry) => !DEFAULT_SURFACE_PACKAGE_IDS.has(entry.manifest.id));
+): readonly PackageCatalogEntry[] => entries.filter((entry) =>
+  entry.manifest.id !== 'com.tomni.ide' ||
+  (entry.delivery === 'downloaded-package' && entry.trust === 'signed-first-party')
+);
 
-/**
- * The Store catalog contains only independently installable artifacts. Browser
- * and IDE are default base surfaces and are never Store downloads.
- */
+/** Static fallback preserves historical signed artifacts until replacements are published. */
 export const createFirstPartyPackageCatalog = (
   calculatorArtifactUrl = CALCULATOR_ARTIFACT_URL
 ): readonly PackageCatalogEntry[] => [

@@ -13,6 +13,8 @@ import {
   type NativeConversationRuntime,
   type NativeConversationWorkspaceProvisioner,
 } from '@process/services/database/nativeConversation';
+import { createTurnNotePolicy, type TurnNotePolicy } from '@process/services/database/nativeConversation/turnNotes';
+import { sanitizeNoteText } from '@process/services/database/nativeConversation/turnNotesWiring';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -48,7 +50,8 @@ const params = (): ICreateConversationParams => ({
 const createHarness = async (
   workspaceProvisioner?: NativeConversationWorkspaceProvisioner,
   memory?: ISessionMemoryStore,
-  terminal?: Promise<{ type: 'error' | 'cancelled'; text: string } | undefined>
+  terminal?: Promise<{ type: 'error' | 'cancelled'; text: string } | undefined>,
+  turnNotes?: TurnNotePolicy
 ) => {
   const { repository, filePath } = await makeRepository();
   const starts: Parameters<NativeConversationRuntime['start']>[] = [];
@@ -103,21 +106,25 @@ const createHarness = async (
   };
   const responses: Array<{ type: string; data: unknown }> = [];
   const completions: Array<{ session_id: string; state: string }> = [];
-  const changes: Array<{ conversation_id: string; action: string }> = [];
+    const changes: Array<{ conversation_id: string; action: string }> = [];
+  const catalogUpdates: Array<{ conversation_id: string; catalog: { status: string; commands: readonly { name: string }[] } }> = [];
   const service = new NativeConversationService(
     repository,
     runtime,
     {
       response: (event) => responses.push(event),
       turnCompleted: (event) => completions.push(event),
-      listChanged: (event) => changes.push(event),
+            listChanged: (event) => changes.push(event),
+      commandCatalog: (event) => catalogUpdates.push(event),
     },
     workspaceProvisioner,
-    memory
+    memory,
+    turnNotes
   );
   await service.initialize();
   return {
     service,
+    runtime,
     repository,
     filePath,
     starts,
@@ -126,9 +133,224 @@ const createHarness = async (
     orchestrationResolutions,
     responses,
     completions,
-    changes,
+        changes,
+    catalogUpdates,
   };
 };
+
+describe('native CLI command discovery', () => {
+  it('resolves the provider target and workspace from the saved conversation in Main', async () => {
+    const harness = await createHarness();
+    const conversation = await harness.service.create(params());
+    const catalog = {
+      status: 'available' as const,
+      commands: [{ name: 'compact', description: 'Provider-advertised command' }],
+    };
+    const listCommands = vi.fn(async () => catalog);
+    harness.runtime.listCommands = listCommands;
+
+    await expect(harness.service.getCliCommands(conversation.id)).resolves.toEqual(catalog);
+        expect(listCommands).toHaveBeenCalledWith('claude', 'C:\\workspace', conversation.id, expect.any(Function));
+
+    await expect(harness.service.getCliCommands('missing-conversation')).resolves.toEqual({
+      status: 'unavailable',
+      commands: [],
+    });
+    expect(listCommands).toHaveBeenCalledTimes(1);
+  });
+
+    it('delivers live ACP updates to the subscribed conversation and unregisters on reset', async () => {
+    const harness = await createHarness();
+    const conversation = await harness.service.create(params());
+    const releaseCommands = vi.fn();
+    harness.runtime.releaseCommands = releaseCommands;
+    let notify: ((catalog: { status: 'available'; commands: { name: string; description: string }[] }) => void) | undefined;
+    harness.runtime.listCommands = vi.fn(async (_target, _workspace, _session, onUpdate) => {
+      notify = onUpdate as typeof notify;
+      return { status: 'available' as const, commands: [] };
+    });
+    await harness.service.getCliCommands(conversation.id);
+    notify?.({ status: 'available', commands: [{ name: 'init', description: 'Initialize' }] });
+    expect(harness.catalogUpdates).toEqual([{
+      conversation_id: conversation.id,
+      catalog: { status: 'available', commands: [{ name: 'init', description: 'Initialize' }] },
+    }]);
+    await harness.service.reset(conversation.id);
+    expect(releaseCommands).toHaveBeenCalledWith(conversation.id);
+  });
+
+    it('invalidates provider commands when a conversation switches CLI targets', async () => {
+    const harness = await createHarness();
+    const conversation = await harness.service.create(params());
+    const release = vi.fn();
+    harness.runtime.releaseCommands = release;
+    await harness.service.update(conversation.id, {
+      extra: { ...conversation.extra, backend: 'opencode', tomny_core_target_id: 'opencode' },
+    });
+    expect(release).toHaveBeenCalledWith(conversation.id);
+  });
+
+    it('marks provider slash invocation Main-only and preserves the command in the runtime prompt', async () => {
+    const harness = await createHarness();
+    const conversation = await harness.service.create(params());
+    const command = '/compact keep this exact argument';
+    await harness.service.send(
+      { conversation_id: conversation.id, input: command, model_input: command },
+      undefined, undefined, undefined, false, true
+    );
+    expect(harness.starts).toHaveLength(1);
+    expect(harness.starts[0][2]).toBe(command);
+    expect(harness.starts[0][8]).toMatchObject({ nativeCliCommand: true });
+  });
+
+  it('does not fabricate commands when the runtime has no discovery capability', async () => {
+    const harness = await createHarness();
+    const conversation = await harness.service.create(params());
+    await expect(harness.service.getCliCommands(conversation.id)).resolves.toEqual({
+      status: 'unsupported',
+      commands: [],
+    });
+  });
+});
+
+describe('native conversation workspace references', () => {
+  it('provides a short dropped file to the runtime prompt without Understanding metadata', async () => {
+    const workspace = await mkdtemp(path.join(os.tmpdir(), 'tomni-reference-workspace-'));
+    tempDirectories.push(workspace);
+    const { writeFile } = await import('node:fs/promises');
+    const contents = '{"schemaVersion":1,"packages":[]}';
+    await writeFile(path.join(workspace, 'installed.json'), contents, 'utf8');
+    const harness = await createHarness();
+    const conversation = await harness.service.create({ ...params(), extra: { ...params().extra, workspace } });
+    await harness.service.send({
+      conversation_id: conversation.id,
+      input: '[installed.json] Please read this file.',
+      model_input: '[File reference: installed.json] Please read this file.',
+      workspace_references: [{ relativePath: 'installed.json', kind: 'file' }],
+    });
+    expect(harness.starts).toHaveLength(1);
+    expect(harness.starts[0][2]).toContain(contents);
+    expect(harness.starts[0][2]).toContain('inline full text');
+    expect(harness.starts[0][2]).toContain('already been provided in this turn');
+    expect(harness.responses.find((event) => event.type === 'user_content')?.data).toEqual({
+      content: '[installed.json] Please read this file.',
+    });
+  });
+    it('passes absolute canonical paths and requests preloaded file tools for a large attachment', async () => {
+    const workspace = await mkdtemp(path.join(os.tmpdir(), 'tomni-reference-workspace-'));
+    tempDirectories.push(workspace);
+    const { writeFile } = await import('node:fs/promises');
+    const content = 'A'.repeat(20_100);
+    await writeFile(path.join(workspace, 'large.txt'), content, 'utf8');
+    const harness = await createHarness();
+    const conversation = await harness.service.create({ ...params(), extra: { ...params().extra, workspace } });
+    await harness.service.send({
+      conversation_id: conversation.id,
+      input: 'Read the attached large file only.',
+      workspace_references: [{ relativePath: 'large.txt', kind: 'file' }],
+    });
+    const prompt = harness.starts[0][2];
+    expect(prompt).toContain(JSON.stringify(path.join(workspace, 'large.txt')));
+    expect(prompt).toContain('call tomny_read directly');
+    expect(prompt).not.toContain(content);
+    expect(harness.starts[0][8]).toMatchObject({ prefetchWorkspaceRead: true });
+  });
+
+  it('projects a canonical Understanding summary for a dropped folder before starting the runtime', async () => {
+    const workspace = await mkdtemp(path.join(os.tmpdir(), 'tomni-reference-workspace-'));
+    tempDirectories.push(workspace);
+    await import('node:fs/promises').then(async ({ mkdir, writeFile }) => {
+      await mkdir(path.join(workspace, 'docs'), { recursive: true });
+      await mkdir(path.join(workspace, '.tomni', 'understand'), { recursive: true });
+      await writeFile(
+        path.join(workspace, '.tomni', 'understand', 'summary.json'),
+        JSON.stringify({ modules: [{ id: 'docs', summary: 'Canonical documentation folder.' }] }),
+        'utf8'
+      );
+    });
+    const harness = await createHarness();
+    const conversation = await harness.service.create({
+      ...params(),
+      extra: { ...params().extra, workspace },
+    });
+
+    await harness.service.send({
+      conversation_id: conversation.id,
+      input: 'Inspect the selected folder',
+      workspace_references: [{ relativePath: 'docs', kind: 'folder' }],
+    });
+
+    expect(harness.starts).toHaveLength(1);
+    expect(harness.starts[0][2]).toContain('[Untrusted workspace folder: docs]');
+    expect(harness.starts[0][2]).toContain('Canonical documentation folder.');
+  });
+});
+
+describe('native conversation fork', () => {
+  it('copies archived messages under independent ids and session identity', async () => {
+    const harness = await createHarness();
+    const source = await harness.service.create(params());
+    await harness.service.send({ conversation_id: source.id, input: 'Original message' });
+    const fork = await harness.service.forkConversation(source.id);
+    const sourceMessages = await harness.repository.listMessages(source.id);
+    const forkMessages = await harness.repository.listMessages(fork.id);
+    expect(fork.id).not.toBe(source.id);
+    expect(fork.name).toContain('(fork)');
+    expect(forkMessages).toHaveLength(sourceMessages.length);
+    expect(forkMessages[0]?.conversation_id).toBe(fork.id);
+    expect(forkMessages[0]?.id).not.toBe(sourceMessages[0]?.id);
+    expect(forkMessages[0]?.content).toEqual(sourceMessages[0]?.content);
+    expect((fork.extra as Record<string, unknown>).tomny_core_session_id).toBe(fork.id);
+  });
+});
+
+describe('native conversation startup failure', () => {
+  it('rejects an invalid workspace reference before persisting or starting a turn', async () => {
+    const workspace = await mkdtemp(path.join(os.tmpdir(), 'tomni-reference-workspace-'));
+    tempDirectories.push(workspace);
+    const harness = await createHarness();
+    const conversation = await harness.service.create({
+      ...params(),
+      extra: { ...params().extra, workspace },
+    });
+
+    await expect(
+      harness.service.send({
+        conversation_id: conversation.id,
+        input: 'Inspect the selected file',
+        workspace_references: [{ relativePath: '../outside.ts', kind: 'file' }],
+      })
+    ).rejects.toThrow('WORKSPACE_REFERENCE_INVALID_PATH');
+
+    expect(await harness.repository.listMessages(conversation.id)).toEqual([]);
+    expect(harness.starts).toEqual([]);
+    expect(harness.responses).toEqual([]);
+    expect(harness.service.activeCount()).toBe(0);
+    expect((await harness.service.get(conversation.id))?.status).toBe('pending');
+  });
+
+  it('emits error and finish, completes the turn, and permits another send after a synchronous start rejection', async () => {
+    const harness = await createHarness();
+    const conversation = await harness.service.create(params());
+    const originalStart = harness.runtime.start;
+    harness.runtime.start = () => {
+      throw new Error('provider unavailable');
+    };
+    await expect(harness.service.send({ conversation_id: conversation.id, input: 'Try starting' })).rejects.toThrow(
+      'provider unavailable'
+    );
+    expect(harness.responses.map((response) => response.type)).toEqual(['user_content', 'error', 'finish']);
+    expect(harness.responses.at(-1)?.data).toEqual({ state: 'error' });
+    expect(harness.completions).toEqual([expect.objectContaining({ session_id: conversation.id, state: 'error' })]);
+    expect(harness.service.activeCount()).toBe(0);
+    expect((await harness.service.get(conversation.id))?.status).toBe('finished');
+
+    harness.runtime.start = originalStart;
+    await harness.service.send({ conversation_id: conversation.id, input: 'Try again' });
+    expect(harness.service.activeCount()).toBe(1);
+    await harness.service.cancel(conversation.id);
+  });
+});
 
 describe('native Save context projection', () => {
   it('injects only the scoped Save payload, reflects changes, and keeps message history archive-only', async () => {
@@ -220,8 +442,9 @@ describe('native Save context projection', () => {
       summarizer: async () => 'compacted Save',
       policy: { tokenBudget: 100_000, recallRecent: 20, recallTokenBudget: 100 },
     });
-    await memory.remember('complete-save', { text: 'AUTH-FLOW validates OAuth state in authService' });
+    // The newest note always travels with the prompt, so the irrelevant one is written first.
     await memory.remember('complete-save', { text: 'PAYMENT-FLOW retries declined card payments' });
+    await memory.remember('complete-save', { text: 'AUTH-FLOW validates OAuth state in authService' });
     await memory.remember('complete-save', { text: 'PINNED-CONSTRAINT always use TypeScript', pinned: true });
     const harness = await createHarness(undefined, memory);
     const conversation = await harness.service.create({
@@ -473,6 +696,126 @@ describe('native conversation cutover', () => {
     expect(JSON.parse(await readFile(harness.filePath, 'utf8')).version).toBe(1);
   });
 
+  it('projects app-managed context for every native session without inventing CLI-native tokens', async () => {
+    const harness = await createHarness();
+    const conversation = await harness.service.create({
+      ...params(),
+      type: 'acp',
+      extra: {
+        ...params().extra,
+        backend: 'claude',
+        workspace: params().extra.workspace as string,
+        tomny_custom_context: 'Keep replies concise.',
+        tomny_context_branches: [
+          { id: 'release', title: 'Release', summary: 'Work target', content: 'Preserve the shared send seam.' },
+        ],
+      },
+    });
+    const contextService = harness.service as typeof harness.service & {
+      getSessionContext?: (conversationId: string) => Promise<{
+        inspection: { kind: 'app-only' | 'native' };
+        app: { custom_context: string; minimum_next_turn_tokens: number };
+      }>;
+    };
+
+    expect(contextService.getSessionContext).toBeTypeOf('function');
+    const snapshot = await contextService.getSessionContext!(conversation.id);
+    expect(snapshot.inspection.kind).toBe('app-only');
+    expect(snapshot.app.custom_context).toBe('Keep replies concise.');
+    expect(snapshot.app.minimum_next_turn_tokens).toBeGreaterThan(0);
+  });
+
+
+  it('reports verified native context only for the Tomny runtime', async () => {
+    const harness = await createHarness();
+    const conversation = await harness.service.create({
+      ...params(),
+      type: "tomnyagentic",
+      extra: { ...params().extra, backend: "tomny" },
+    });
+
+    const snapshot = await harness.service.getSessionContext(conversation.id);
+
+    expect(snapshot.inspection).toMatchObject({
+      kind: "native",
+      snapshot: { system: "Tomny system prompt" },
+    });
+  });
+
+
+  it('persists user-managed context for a CLI session without native inspection', async () => {
+    const harness = await createHarness();
+    const conversation = await harness.service.create({ ...params(), type: "acp" });
+    const contextService = harness.service as typeof harness.service & {
+      updateSessionContext?: (
+        conversationId: string,
+        customContext: string,
+        branches: Array<{ id: string; title: string; summary: string; content: string }>
+      ) => Promise<{ app: { custom_context: string; context_branches: Array<{ id: string }> } }>;
+    };
+
+    expect(contextService.updateSessionContext).toBeTypeOf("function");
+    const saved = await contextService.updateSessionContext!(conversation.id, "Use concise Vietnamese.", [
+      { id: "release", title: "Release", summary: "Current work", content: "Keep the shared send seam." },
+    ]);
+
+    expect(saved.app.custom_context).toBe("Use concise Vietnamese.");
+    expect(saved.app.context_branches).toEqual([expect.objectContaining({ id: "release" })]);
+    await expect(contextService.updateSessionContext!(conversation.id, "", [])).resolves.toMatchObject({
+      app: { custom_context: "", context_branches: [] },
+    });
+  });
+
+
+  it('rejects non-text custom context from an untrusted IPC payload', async () => {
+    const harness = await createHarness();
+    const conversation = await harness.service.create({ ...params(), type: 'acp' });
+
+    await expect(
+      harness.service.updateSessionContext(
+        conversation.id,
+        { instruction: 'not a string' } as unknown as string,
+        []
+      )
+    ).rejects.toThrow('Custom context must be text');
+
+    expect((await harness.service.get(conversation.id))?.extra.tomny_custom_context).toBeUndefined();
+  });
+
+
+  it('rejects invalid user-managed session context before it reaches the shared send seam', async () => {
+    const harness = await createHarness();
+    const conversation = await harness.service.create({ ...params(), type: 'acp' });
+    const contextService = harness.service as typeof harness.service & {
+      updateSessionContext?: (
+        conversationId: string,
+        customContext: string,
+        branches: Array<{ id: string; title: string; summary: string; content: string }>
+      ) => Promise<unknown>;
+    };
+
+    await expect(
+      contextService.updateSessionContext!(conversation.id, '', [
+        { id: 'duplicate', title: 'One', summary: '', content: 'first' },
+        { id: 'duplicate', title: 'Two', summary: '', content: 'second' },
+      ])
+    ).rejects.toThrow('unique');
+  });
+  it('rejects invalid legacy Tomny context updates before persisting them', async () => {
+    const harness = await createHarness();
+    const conversation = await harness.service.create({ ...params(), type: 'tomnyagentic' });
+
+    await expect(
+      harness.service.updateTomnyAgenticContext(conversation.id, '', [
+        { id: 'duplicate', title: 'One', summary: '', content: 'first' },
+        { id: 'duplicate', title: 'Two', summary: '', content: 'second' },
+      ])
+    ).rejects.toThrow('unique');
+
+    expect((await harness.service.get(conversation.id))?.extra.tomny_context_branches).toBeUndefined();
+  });
+
+
   it('serves and persists the Memory Context snapshot without the legacy HTTP API', async () => {
     const harness = await createHarness();
     const conversation = await harness.service.create(params());
@@ -687,6 +1030,45 @@ describe('native conversation cutover', () => {
     ]);
   });
 
+    it('preserves Workflow child identities in tool_group frames so the Hub can render a fan-out', async () => {
+    const harness = await createHarness();
+    const conversation = await harness.service.create(params());
+    await harness.service.send({ conversation_id: conversation.id, input: 'run A and B together' });
+    const requestId = harness.starts[0][0];
+    for (const step of ['A', 'B']) {
+      harness.service.handleCoreEvent(
+        coreEvent(requestId, conversation.id, 'tool-call', {
+          tool: 'tomny_read',
+          callId: `workflow:wf-1:${step}`,
+          workflowId: 'wf-1',
+                    workflowStepId: step,
+          workflowStage: 0,
+          input: { filePath: `${step}.ts` },
+          phase: 'running',
+        })
+      );
+    }
+    harness.service.handleCoreEvent(
+      coreEvent(requestId, conversation.id, 'tool-result', {
+        tool: 'tomny_read',
+        callId: 'workflow:wf-1:A',
+        workflowId: 'wf-1',
+                workflowStepId: 'A',
+        workflowStage: 0,
+        outcome: 'error',
+        text: 'A failed',
+      })
+    );
+    await vi.waitFor(() => expect(harness.responses.filter((event) => event.type === 'tool_group')).toHaveLength(3));
+    const calls = harness.responses
+      .filter((event) => event.type === 'tool_group')
+      .flatMap((event) => event.data as Array<{ workflow_id?: string; workflow_step_id?: string; call_id: string; status: string }>);
+    expect(calls.map((call) => [call.workflow_id, call.workflow_step_id])).toEqual([
+      ['wf-1', 'A'], ['wf-1', 'B'], ['wf-1', 'A'],
+    ]);
+    expect(calls[2]).toMatchObject({ call_id: 'workflow:wf-1:A', status: 'Error' });
+  });
+
   it('keeps repeated same-name tools separate by call_id and drops ambiguous events', async () => {
     const harness = await createHarness();
     const conversation = await harness.service.create(params());
@@ -750,7 +1132,7 @@ describe('native conversation cutover', () => {
     });
     await harness.service.send({ conversation_id: conversation.id, input: 'inspect this project' });
 
-    expect(harness.starts[0][8]).toEqual({
+        expect(harness.starts[0][8]).toMatchObject({
       surface: 'ide',
       permissionScopes: ['workspace.read', 'workspace.write'],
       capabilityGrants: ['surface.ide'],
@@ -823,6 +1205,32 @@ describe('native conversation cutover', () => {
     expect(harness.starts[0][2]).toBe('inspect this project');
   });
 
+  it('excludes workspace secret metadata and values from context inspection and runtime identity', async () => {
+    const harness = await createHarness();
+    const secretAlias = 'DEPLOYMENT_TOKEN';
+    const secretValue = 'must-not-be-model-visible';
+    const conversation = await harness.service.create({
+      ...params(),
+      extra: {
+        ...params().extra,
+        repository_secret_alias: secretAlias,
+        repository_secret_value: secretValue,
+      },
+    });
+
+    const snapshot = await harness.service.getSessionContext(conversation.id);
+
+    expect(JSON.stringify(snapshot)).not.toContain(secretAlias);
+    expect(JSON.stringify(snapshot)).not.toContain(secretValue);
+
+    await harness.service.send({ conversation_id: conversation.id, input: 'deploy the release' });
+
+    const runtimeContext = harness.starts[0][8];
+    expect(runtimeContext?.conversationContext ?? '').not.toContain(secretAlias);
+    expect(runtimeContext?.conversationContext ?? '').not.toContain(secretValue);
+    expect(runtimeContext?.savedMemoryContext ?? '').not.toContain(secretAlias);
+    expect(runtimeContext?.savedMemoryContext ?? '').not.toContain(secretValue);
+  });
   it('cancels the exact active runtime request and rejects concurrent sends', async () => {
     const harness = await createHarness();
     const conversation = await harness.service.create(params());
@@ -875,5 +1283,186 @@ describe('native conversation cutover', () => {
     expect(source).toContain('shell.open-folder-with');
     expect(source).toContain('app.system-info');
     expect(source).toContain('star-office.detect');
+  });
+});
+
+const createProductionLikePolicy = (): TurnNotePolicy => createTurnNotePolicy({ sanitize: sanitizeNoteText });
+
+describe('turn notes for turns without StartAction', () => {
+  const finishTurn = async (
+    harness: Awaited<ReturnType<typeof createHarness>>,
+    conversationId: string,
+    input: string,
+    answer: string
+  ): Promise<void> => {
+    await harness.service.send({ conversation_id: conversationId, input });
+    const requestId = harness.starts.at(-1)![0];
+    harness.service.handleCoreEvent(coreEvent(requestId, conversationId, 'delta', { text: answer, mode: 'append' }));
+    harness.service.handleCoreEvent(coreEvent(requestId, conversationId, 'completed'));
+    await vi.waitFor(() => expect(harness.service.activeCount()).toBe(0));
+  };
+
+  const setup = async (turnNotes = createTurnNotePolicy({ sanitize: async (text) => text })) => {
+    const memory = createSessionMemoryStore({ summarizer: async () => 'compacted Save' });
+    const harness = await createHarness(undefined, memory, undefined, turnNotes);
+    const conversation = await harness.service.create({
+      ...params(),
+      extra: { ...params().extra, ide_memory_id: 'turn-notes' },
+    });
+    return { memory, harness, conversation };
+  };
+
+  it('remembers a substantive answer but not small talk', async () => {
+    const { memory, harness, conversation } = await setup();
+
+    await finishTurn(harness, conversation.id, 'hello', 'Hello!');
+    expect(memory.snapshot('turn-notes').items).toEqual([]);
+
+    await finishTurn(
+      harness,
+      conversation.id,
+      'How should we store the retry state? Never keep it in localStorage.',
+      'Keep the retry state in src/retry/state.ts and persist it through the session store. Do not use localStorage because the window can be cleared.'
+    );
+    const notes = memory.snapshot('turn-notes').items;
+    expect(notes).toHaveLength(1);
+    expect(notes[0].text).toContain('src/retry/state.ts');
+    expect(notes[0].text).toContain('[msg:');
+  });
+
+  it('hands the newest note to a follow-up that shares no words with it', async () => {
+    const { harness, conversation } = await setup();
+    await finishTurn(
+      harness,
+      conversation.id,
+      'Where does the retry state live? Never use localStorage.',
+      'It lives in src/retry/state.ts and is saved by the session store. Do not use localStorage.'
+    );
+
+    await harness.service.send({ conversation_id: conversation.id, input: 'go ahead' });
+    const identity = harness.starts.at(-1)![8];
+    expect(identity?.savedMemoryContext).toContain('src/retry/state.ts');
+  });
+
+  it('keeps what was asked, not an answer, when a turn failed, so a later "continue" has something to continue', async () => {
+    const { memory, harness, conversation } = await setup();
+    await harness.service.send({
+      conversation_id: conversation.id,
+      input: 'Explain the retry design in src/retry/state.ts and never use localStorage.',
+    });
+    const requestId = harness.starts.at(-1)![0];
+    harness.service.handleCoreEvent(
+      coreEvent(requestId, conversation.id, 'delta', {
+        text: 'The design keeps state in src/retry/state.ts.',
+        mode: 'append',
+      })
+    );
+    harness.service.handleCoreEvent(coreEvent(requestId, conversation.id, 'error', { text: 'provider failed' }));
+    await vi.waitFor(() => expect(harness.service.activeCount()).toBe(0));
+
+    const notes = memory.snapshot('turn-notes').items;
+    expect(notes).toHaveLength(1);
+    expect(notes[0]).toMatchObject({ kind: 'todo' });
+    expect(notes[0].text).toContain('Unfinished request');
+    expect(notes[0].text).toContain('Explain the retry design');
+
+    // The automatic resume says nothing about the task, yet it reaches the model together with what was asked.
+    await harness.service.send({
+      conversation_id: conversation.id,
+      input:
+        'Hãy tiếp tục công việc đang dở từ chỗ bị gián đoạn. / Continue the unfinished work from where it was interrupted.',
+    });
+    expect(harness.starts.at(-1)![8]?.savedMemoryContext).toContain('Explain the retry design');
+  });
+
+  it('does not turn the automatic resume instruction into a task of its own when that turn is interrupted too', async () => {
+    const { memory, harness, conversation } = await setup();
+    await harness.service.send({
+      conversation_id: conversation.id,
+      input:
+        'Hãy tiếp tục công việc đang dở từ chỗ bị gián đoạn. / Continue the unfinished work from where it was interrupted.',
+    });
+    const requestId = harness.starts.at(-1)![0];
+    harness.service.handleCoreEvent(coreEvent(requestId, conversation.id, 'error', { text: 'provider failed' }));
+    await vi.waitFor(() => expect(harness.service.activeCount()).toBe(0));
+    expect(memory.snapshot('turn-notes').items).toEqual([]);
+  });
+
+  it('removes a secret that the answer repeated before it reaches the Save', async () => {
+    const { memory, harness, conversation } = await setup(createProductionLikePolicy());
+    const token = 'ghp_abcdefghijklmnopqrstuvwxyz0123456789';
+    await finishTurn(
+      harness,
+      conversation.id,
+      'Which file configures the deploy? Never commit the token.',
+      `The deploy is configured in src/deploy/config.ts. The token ${token} must never be committed.`
+    );
+    const notes = memory.snapshot('turn-notes').items;
+    expect(notes).toHaveLength(1);
+    expect(notes[0].text).not.toContain(token);
+    expect(notes[0].text).toContain('src/deploy/config.ts');
+  });
+
+  it('also cleans an action capsule', async () => {
+    const { memory, harness, conversation } = await setup(createProductionLikePolicy());
+    const token = 'ghp_abcdefghijklmnopqrstuvwxyz0123456789';
+    await harness.service.send({ conversation_id: conversation.id, input: 'trace the deploy flow' });
+    const requestId = harness.starts.at(-1)![0];
+    harness.service.handleCoreEvent(
+      coreEvent(requestId, conversation.id, 'tool-call', {
+        tool: 'StartAction',
+        callId: 'gate-1',
+        input: { goal: `Trace the deploy flow using ${token}` },
+      })
+    );
+    harness.service.handleCoreEvent(coreEvent(requestId, conversation.id, 'delta', { text: 'Done.', mode: 'append' }));
+    harness.service.handleCoreEvent(coreEvent(requestId, conversation.id, 'completed'));
+    await vi.waitFor(() => expect(harness.service.activeCount()).toBe(0));
+    const capsule = memory.snapshot('turn-notes').items.find((item) => item.text.includes('Action capsule'));
+    expect(capsule).toBeDefined();
+    expect(capsule?.text).not.toContain(token);
+  });
+});
+
+describe('config notices', () => {
+  it('shows a changed model or mode as its own notice, not as thinking, and does not store it', async () => {
+    const harness = await createHarness();
+    const conversation = await harness.service.create(params());
+    await harness.service.send({ conversation_id: conversation.id, input: 'hello' });
+    const requestId = harness.starts.at(-1)![0];
+
+    harness.service.handleCoreEvent(
+      coreEvent(requestId, conversation.id, 'notice', {
+        text: 'config updated: model: ag/a → ag/b\nmode updated: default',
+      })
+    );
+    harness.service.handleCoreEvent(coreEvent(requestId, conversation.id, 'thinking', { text: 'Reading the project' }));
+    harness.service.handleCoreEvent(coreEvent(requestId, conversation.id, 'completed'));
+    await vi.waitFor(() => expect(harness.service.activeCount()).toBe(0));
+
+    const tips = harness.responses.filter((response) => response.type === 'tips');
+    expect(tips).toHaveLength(1);
+    expect(tips[0].data).toEqual({
+      content: 'config updated: model: ag/a → ag/b\nmode updated: default',
+      type: 'success',
+    });
+
+    const thinking = harness.responses.filter((response) => response.type === 'thinking');
+    expect(JSON.stringify(thinking)).not.toContain('config updated');
+    expect(JSON.stringify(thinking)).toContain('Reading the project');
+
+    const stored = await harness.repository.listMessages(conversation.id);
+    expect(JSON.stringify(stored)).not.toContain('config updated');
+  });
+
+  it('ignores an empty notice', async () => {
+    const harness = await createHarness();
+    const conversation = await harness.service.create(params());
+    await harness.service.send({ conversation_id: conversation.id, input: 'hello' });
+    const requestId = harness.starts.at(-1)![0];
+    harness.service.handleCoreEvent(coreEvent(requestId, conversation.id, 'notice', { text: '   ' }));
+    harness.service.handleCoreEvent(coreEvent(requestId, conversation.id, 'completed'));
+    await vi.waitFor(() => expect(harness.service.activeCount()).toBe(0));
+    expect(harness.responses.filter((response) => response.type === 'tips')).toHaveLength(0);
   });
 });

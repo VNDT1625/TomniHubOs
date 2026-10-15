@@ -4,17 +4,20 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useAcpMessage } from '@/renderer/pages/conversation/platforms/acp/useAcpMessage';
 import { getConversationOrNull } from '@/renderer/pages/conversation/utils/conversationCache';
 import type { IResponseMessage } from '@/common/adapter/ipcBridge';
 
-const { addOrUpdateMessageMock, responseStreamOnMock, responseStreamHandlerRef } = vi.hoisted(() => ({
+const { addOrUpdateMessageMock, responseStreamOnMock, responseStreamHandlerRef, commandUpdatesRef } = vi.hoisted(() => ({
   addOrUpdateMessageMock: vi.fn(),
   responseStreamOnMock: vi.fn(),
-  responseStreamHandlerRef: {
+    responseStreamHandlerRef: {
     current: undefined as ((message: IResponseMessage) => void) | undefined,
+  },
+  commandUpdatesRef: {
+    current: undefined as ((event: { conversation_id: string; catalog: { status: 'available' | 'unsupported' | 'unavailable'; commands: { name: string; description: string }[] } }) => void) | undefined,
   },
 }));
 
@@ -40,8 +43,17 @@ vi.mock('@/common', () => ({
       warmup: {
         invoke: vi.fn().mockResolvedValue(undefined),
       },
-      getSlashCommands: {
+            getSlashCommands: {
         invoke: vi.fn().mockResolvedValue([]),
+      },
+            getCliCommands: {
+        invoke: vi.fn().mockResolvedValue({ status: 'unsupported', commands: [] }),
+      },
+      cliCommandsUpdated: {
+        on: vi.fn((handler) => {
+          commandUpdatesRef.current = handler;
+          return vi.fn();
+        }),
       },
     },
     systemSettings: {
@@ -58,7 +70,89 @@ vi.mock('@/common', () => ({
 describe('useAcpMessage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    responseStreamHandlerRef.current = undefined;
+        responseStreamHandlerRef.current = undefined;
+    commandUpdatesRef.current = undefined;
+  });
+
+    it('loads native ACP commands into the chat without relying on the legacy HTTP catalog', async () => {
+    const { ipcBridge } = await import('@/common');
+    vi.mocked(ipcBridge.conversation.getCliCommands.invoke).mockResolvedValue({
+      status: 'available',
+      commands: [{ name: 'compact', description: 'Compact provider context' }],
+    });
+    vi.mocked(getConversationOrNull).mockResolvedValue(null);
+
+    const { result } = renderHook(() => useAcpMessage('conv-1'));
+
+    await waitFor(() => {
+      expect(result.current.slashCommands).toEqual([
+        {
+                              name: 'compact',
+          description: 'Compact provider context',
+          kind: 'template',
+          source: 'acp',
+          selectionBehavior: 'insert',
+        },
+      ]);
+    });
+    expect(ipcBridge.conversation.getCliCommands.invoke).toHaveBeenCalledWith({ conversation_id: 'conv-1' });
+    expect(ipcBridge.conversation.getSlashCommands.invoke).not.toHaveBeenCalled();
+  });
+
+      it('applies Main-pushed live command replacements, ignores other chats and clears on empty updates', async () => {
+    vi.mocked(getConversationOrNull).mockResolvedValue(null);
+    const { result } = renderHook(() => useAcpMessage('conv-1', { skipWarmup: true }));
+    act(() => {
+      commandUpdatesRef.current?.({ conversation_id: 'elsewhere', catalog: { status: 'available', commands: [{ name: 'foreign', description: '' }] } });
+      commandUpdatesRef.current?.({ conversation_id: 'conv-1', catalog: { status: 'available', commands: [{ name: 'review', description: 'Review workspace' }] } });
+    });
+    expect(result.current.slashCommands.map((item) => item.name)).toEqual(['review']);
+    act(() => {
+      commandUpdatesRef.current?.({ conversation_id: 'conv-1', catalog: { status: 'available', commands: [] } });
+    });
+    expect(result.current.slashCommands).toEqual([]);
+  });
+
+  it('accepts updated commands pushed by the ACP provider during an active session', async () => {
+    vi.mocked(getConversationOrNull).mockResolvedValue(null);
+    const { result } = renderHook(() => useAcpMessage('conv-1', { skipWarmup: true }));
+
+    act(() => {
+      responseStreamHandlerRef.current?.({
+        type: 'available_commands',
+        conversation_id: 'conv-1',
+        msg_id: 'commands-updated',
+        data: {
+          commands: [
+            { name: 'compact', description: 'Compact the active CLI context' },
+            { name: 'project:review', description: 'Review workspace' },
+          ],
+        },
+      });
+    });
+
+    expect(result.current.slashCommands.map((item) => item.name)).toEqual(['compact', 'project:review']);
+    expect(result.current.slashCommands.every((item) => item.source === 'acp')).toBe(true);
+  });
+
+    it('shows Codex skills as provider-owned slash shortcuts instead of ACP TUI commands', async () => {
+    const { ipcBridge } = await import('@/common');
+    vi.mocked(ipcBridge.conversation.getCliCommands.invoke).mockResolvedValue({
+      status: 'available',
+      origin: 'codex-app-server',
+      commands: [{ name: 'skill:code-review', description: 'Codex skill: Review code' }],
+    });
+    vi.mocked(getConversationOrNull).mockResolvedValue(null);
+    const { result } = renderHook(() => useAcpMessage('codex-chat'));
+    await waitFor(() => {
+      expect(result.current.slashCommands).toEqual([{
+        name: 'skill:code-review',
+        description: 'Codex skill: Review code',
+        source: 'codex',
+        kind: 'template',
+        selectionBehavior: 'insert',
+      }]);
+    });
   });
 
   it('completes hydration when the conversation lookup fails', async () => {

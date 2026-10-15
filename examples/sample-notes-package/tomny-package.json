@@ -18,7 +18,7 @@
       "entrypoint": "index.html"
     }
   ],
-  "permissions": [],
+  "permissions": ["sidebar.sessions"],
   "dependencies": [],
   "tags": ["notes", "sample", "productivity"]
 }

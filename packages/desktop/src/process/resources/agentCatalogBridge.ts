@@ -2,7 +2,12 @@ import path from 'node:path';
 import { app } from 'electron';
 import { assistantChannels } from '@/common/types/agent/assistantChannels';
 import { agentChannels } from '@/common/types/agent/agentChannels';
-import type { Assistant } from '@/common/types/agent/assistantTypes';
+import type { Assistant, CreateAssistantRequest, ImportError } from '@/common/types/agent/assistantTypes';
+import {
+  createAssistantSchema,
+  parseCreateAssistantRequest,
+  parseUpdateAssistantRequest,
+} from '@/common/types/agent/assistant/assistantSchema';
 import type { AgentMetadata } from '@/common/types/agent/agentMetadata';
 
 import { readLegacyCatalog } from '@process/services/database/legacyCatalogReader';
@@ -18,6 +23,8 @@ let assistants: AssistantCatalogStore | undefined;
 let agents: AgentCatalogStore | undefined;
 const getAssistants = (): AssistantCatalogStore =>
   (assistants ??= createAssistantCatalogStore(path.join(root(), 'assistants.json')));
+/** Main-only shared store; package host must not open a second stale copy of assistants.json. */
+export const getNativeAssistantCatalog = (): AssistantCatalogStore => getAssistants();
 const getAgents = (): AgentCatalogStore => (agents ??= createAgentCatalogStore(path.join(root(), 'agents.json')));
 let assistantMigration: Promise<void> | undefined;
 let agentMigration: Promise<void> | undefined;
@@ -72,6 +79,9 @@ export const BUILTIN_DEFAULT_ASSISTANTS: Assistant[] = [
     enabled_skills: [],
     custom_skill_names: [],
     disabled_builtin_skills: [],
+    enabled_plugins: [],
+    enabled_hooks: [],
+    default_tools: [],
     context_i18n: {},
     prompts: [],
     prompts_i18n: {},
@@ -99,6 +109,9 @@ export const BUILTIN_DEFAULT_ASSISTANTS: Assistant[] = [
     enabled_skills: [],
     custom_skill_names: [],
     disabled_builtin_skills: [],
+    enabled_plugins: [],
+    enabled_hooks: [],
+    default_tools: [],
     context_i18n: {},
     prompts: [],
     prompts_i18n: {},
@@ -126,6 +139,9 @@ export const BUILTIN_DEFAULT_ASSISTANTS: Assistant[] = [
     enabled_skills: [],
     custom_skill_names: [],
     disabled_builtin_skills: [],
+    enabled_plugins: [],
+    enabled_hooks: [],
+    default_tools: [],
     context_i18n: {},
     prompts: [],
     prompts_i18n: {},
@@ -192,11 +208,26 @@ export const registerAgentCatalogBridge = (): void => {
     await readyAssistants();
     return getAssistants().list();
   });
-  assistantChannels.create.provider((input) => getAssistants().create(input));
-  assistantChannels.update.provider((input) => getAssistants().update(input));
+  // Every assistant payload is untrusted: strict schemas refuse unknown fields and oversized values before storage.
+  assistantChannels.create.provider((input) => getAssistants().create(parseCreateAssistantRequest(input)));
+  assistantChannels.update.provider((input) => getAssistants().update(parseUpdateAssistantRequest(input)));
   assistantChannels.delete.provider(({ id }) => getAssistants().remove(id));
   assistantChannels.setState.provider((input) => getAssistants().setState(input));
-  assistantChannels.import.provider(({ assistants: rows }) => getAssistants().importMany(rows));
+  assistantChannels.import.provider(async ({ assistants: rows }) => {
+    const valid: CreateAssistantRequest[] = [];
+    const refused: ImportError[] = [];
+    for (const row of rows) {
+      const parsed = createAssistantSchema.safeParse(row);
+      if (parsed.success) valid.push(parsed.data as CreateAssistantRequest);
+      else refused.push({ id: typeof row?.id === 'string' ? row.id.slice(0, 200) : '', error: 'invalid_assistant' });
+    }
+    const result = await getAssistants().importMany(valid);
+    return {
+      ...result,
+      failed: result.failed + refused.length,
+      errors: [...refused, ...result.errors],
+    };
+  });
 
   agentChannels.getAvailableAgents.provider(async () => {
     try {

@@ -1,0 +1,26 @@
+{
+  "connections": [
+    {
+      "kind": "cli",
+      "id": "demo-tool",
+      "title": "demo-tool",
+      "command": "uvx",
+      "args": ["demo-tool"],
+      "display": "terminal",
+      "source": "pypi",
+      "package": "demo-tool",
+      "origin": "pyproject"
+    },
+    {
+      "kind": "cli",
+      "id": "demo-run",
+      "title": "demo-run",
+      "command": "demo-run",
+      "display": "terminal",
+      "source": "pypi",
+      "package": "demo-tool",
+      "origin": "pyproject"
+    }
+  ],
+  "openItems": []
+}

@@ -9,12 +9,9 @@
  * Pure renderer bridge invoker with no Node.js or package dependencies.
  */
 
+import type { SessionMemorySnapshot } from '@/common/types/platform/sessionMemory';
 import { bridge } from '@office-ai/platform';
-import type {
-  SuperMemorySnapshot,
-  SuperMemoryKind,
-  RememberResult,
-} from '@process/userUnderstanding/sessionMemoryStore';
+import type { SuperMemoryKind, RememberResult } from '@process/userUnderstanding/sessionMemoryStore';
 
 export type IdeMemoryResult<T> = { ok: true; data: T } | { ok: false; error: string };
 export type IdeMemoryRecordableKind = Exclude<SuperMemoryKind, 'summary'>;
@@ -70,27 +67,24 @@ export type RepoSecretComboInput = {
 };
 
 export const sessionMemoryClient = {
-  memorySnapshot: (sessionId: string) =>
-    bridge
-      .buildProvider<IdeMemoryResult<SuperMemorySnapshot>, { sessionId: string }>('ide.memory-snapshot')
-      .invoke({ sessionId }),
+  memorySnapshot: async (sessionId: string): Promise<IdeMemoryResult<SessionMemorySnapshot>> =>
+    window.electronAPI?.sessionMemory?.snapshot({ sessionId }) ?? { ok: false, error: 'UNAVAILABLE' },
 
-  memoryClear: (sessionId: string) =>
-    bridge.buildProvider<IdeMemoryResult<boolean>, { sessionId: string }>('ide.memory-clear').invoke({ sessionId }),
+  memoryClear: async (sessionId: string): Promise<IdeMemoryResult<boolean>> =>
+    window.electronAPI?.sessionMemory?.clear({ sessionId }) ?? { ok: false, error: 'UNAVAILABLE' },
 
-  memoryRemember: (sessionId: string, text: string, opts?: { kind?: IdeMemoryRecordableKind; pinned?: boolean }) =>
-    bridge
-      .buildProvider<
-        IdeMemoryResult<RememberResult>,
-        { sessionId: string; text: string; kind?: IdeMemoryRecordableKind; pinned?: boolean }
-      >('ide.memory-remember')
-      .invoke({
-        sessionId,
-        text,
-        kind: opts?.kind,
-        pinned: opts?.pinned,
-      }),
+  memoryForget: async (sessionId: string, itemId: string): Promise<IdeMemoryResult<boolean>> =>
+    window.electronAPI?.sessionMemory?.forget({ sessionId, itemId }) ?? { ok: false, error: 'UNAVAILABLE' },
 
+  memoryRemember: async (
+    sessionId: string,
+    text: string,
+    opts?: { kind?: IdeMemoryRecordableKind; pinned?: boolean }
+  ): Promise<IdeMemoryResult<RememberResult>> =>
+    window.electronAPI?.sessionMemory?.remember({ sessionId, text, kind: opts?.kind, pinned: opts?.pinned }) ?? {
+      ok: false,
+      error: 'UNAVAILABLE',
+    },
   repoSecretList: (repository: string) =>
     bridge
       .buildProvider<IdeMemoryResult<RepoSecretContext[]>, { repository: string }>('ide.repo-secret-list')

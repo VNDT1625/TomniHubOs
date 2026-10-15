@@ -421,7 +421,7 @@ body[arco-theme='dark'] .arco-modal-confirm-icon {
 .arco-modal {
   border: 1px solid var(--surface-glass-border) !important;
   border-radius: var(--popup-radius) !important;
-  background: var(--surface-glass-raised) !important;
+  background: var(--surface-glass-popup) !important;
   box-shadow: var(--surface-glass-shadow-raised) !important;
   backdrop-filter: var(--surface-glass-filter);
   -webkit-backdrop-filter: var(--surface-glass-filter);
@@ -485,7 +485,7 @@ body[arco-theme='dark'] .arco-modal-footer {
 .arco-popover-arrow.arco-trigger-arrow,
 .arco-dropdown-menu + .arco-trigger-arrow {
   border-color: var(--surface-glass-border) !important;
-  background: var(--surface-glass-raised) !important;
+  background: var(--surface-glass-popup) !important;
 }
 
 .arco-select-popup .arco-select-option,
@@ -547,6 +547,63 @@ body[arco-theme='dark'] .arco-modal-footer {
   box-shadow: var(--surface-glass-shadow-raised) !important;
   backdrop-filter: var(--surface-glass-filter) !important;
   -webkit-backdrop-filter: var(--surface-glass-filter) !important;
+}
+
+/* Popups open over text, so they stay nearly opaque; the translucent token let the content under them
+   show through and made the menu hard to read. */
+.arco-popover-content,
+.arco-popconfirm-content,
+.arco-dropdown-menu,
+.arco-select-popup,
+.arco-cascader-popup,
+.arco-picker-container {
+  border-color: var(--surface-glass-popup-border) !important;
+  background: var(--surface-glass-popup) !important;
+  box-shadow: var(--surface-glass-popup-shadow) !important;
+  backdrop-filter: var(--surface-glass-filter-popup) !important;
+  -webkit-backdrop-filter: var(--surface-glass-filter-popup) !important;
+}
+
+/* Lit top and left edges, fading out toward the corners (kept off the rounded corners so they never poke out). */
+.arco-popover-content,
+.arco-popconfirm-content,
+.arco-dropdown-menu,
+.arco-select-popup,
+.arco-cascader-popup,
+.arco-picker-container {
+  position: relative;
+}
+
+.arco-popover-content::before,
+.arco-popconfirm-content::before,
+.arco-dropdown-menu::before,
+.arco-select-popup::before,
+.arco-cascader-popup::before,
+.arco-picker-container::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 14px;
+  left: 14px;
+  height: 1px;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, var(--surface-glass-popup-edge), transparent);
+}
+
+.arco-popover-content::after,
+.arco-popconfirm-content::after,
+.arco-dropdown-menu::after,
+.arco-select-popup::after,
+.arco-cascader-popup::after,
+.arco-picker-container::after {
+  content: '';
+  position: absolute;
+  top: 14px;
+  bottom: 14px;
+  left: 0;
+  width: 1px;
+  pointer-events: none;
+  background: linear-gradient(180deg, var(--surface-glass-popup-edge), transparent, rgba(255, 255, 255, 0.3));
 }
 
 .arco-card,
@@ -613,7 +670,8 @@ body[arco-theme='dark'] .arco-modal-footer {
 .arco-textarea:-webkit-autofill:focus {
   -webkit-text-fill-color: var(--color-text-1);
   caret-color: var(--color-text-1);
-  box-shadow: 0 0 0 1000px var(--surface-glass) inset !important;
+  /* Autofill paints over a translucent surface, so the inset must be an opaque colour. */
+  box-shadow: 0 0 0 1000px var(--bg-1) inset !important;
   transition: background-color 9999s ease-out 0s;
 }
 
@@ -772,5 +830,7 @@ body[arco-theme='dark'] .arco-modal-footer {
   .arco-picker {
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
+    /* Reduced transparency must mean MORE opaque, not a clear pane: without blur the translucent fills are unreadable. */
+    background: var(--bg-1) !important;
   }
 }

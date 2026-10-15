@@ -5,6 +5,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import type { McpOAuthStatus } from '@/renderer/hooks/mcp/useMcpOAuth';
 import FeedbackButton from '@/renderer/components/base/FeedbackButton';
+import { CapabilityKindTag } from '@/renderer/pages/settings/ToolsSettings/CapabilityKindUi';
 import { iconColors } from '@/renderer/styles/colors';
 
 interface McpServerHeaderProps {
@@ -56,6 +57,10 @@ const formatStatusTimestamp = (timestamp?: number): string | null => {
   return new Date(timestamp).toLocaleString();
 };
 
+/** The error of the last failed check, shortened for the status popover. */
+const truncateStatusDetail = (text: string, maxLength = 400): string =>
+  text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
+
 const getStatusPopoverContent = (
   server: IMcpServer,
   t?: (key: string, options?: Record<string, unknown>) => string
@@ -89,7 +94,9 @@ const getStatusPopoverContent = (
       ? t?.('settings.mcpInlineCommandHint', {
           command: server.transport.command,
         }) || `Missing ${server.transport.command}. Install it and test again.`
-      : t?.('settings.mcpInlineConfigHint') || 'Configuration may be incorrect. Review the MCP JSON and test again.';
+      : server.last_test_error?.trim()
+        ? truncateStatusDetail(server.last_test_error.trim())
+        : t?.('settings.mcpInlineConfigHint') || 'Configuration may be incorrect. Review the MCP JSON and test again.';
 
   return (
     <div className='max-w-300px space-y-2 text-13px leading-20px'>
@@ -167,6 +174,7 @@ const McpServerHeader: React.FC<McpServerHeaderProps> = ({
     <div className='flex items-center justify-between group'>
       <div className='flex items-center gap-2'>
         <span>{server.name}</span>
+        <CapabilityKindTag kind='mcp' />
         {statusPopoverContent ? (
           <Popover content={statusPopoverContent} trigger='hover' position='top'>
             <span className='flex items-center cursor-default'>{statusIcon}</span>

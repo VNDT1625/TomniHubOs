@@ -101,6 +101,30 @@ export const ensureBrowserControlSession = async (
   return Boolean(ok);
 };
 
+/** Remove Browser-Control snapshots without affecting other selected MCP servers. */
+export const removeBrowserControlSession = async (conversationId: string): Promise<boolean> => {
+  const conversation = await ipcBridge.conversation.get.invoke({ id: conversationId });
+  if (!conversation) return false;
+  const extra = (conversation.extra ?? {}) as {
+    selected_session_mcp_servers?: ISessionMcpServer[];
+    session_mcp_servers?: ISessionMcpServer[];
+  };
+  const selected = Array.isArray(extra.selected_session_mcp_servers) ? extra.selected_session_mcp_servers : [];
+  const session = Array.isArray(extra.session_mcp_servers) ? extra.session_mcp_servers : [];
+  const selectedUpdated = selected.filter((server) => server.name !== 'tomny-browser-control');
+  const sessionUpdated = session.filter((server) => server.name !== 'tomny-browser-control');
+  if (selectedUpdated.length === selected.length && sessionUpdated.length === session.length) return true;
+  const ok = await ipcBridge.conversation.update.invoke({
+    id: conversationId,
+    updates: {
+      selected_session_mcp_servers: selectedUpdated,
+      session_mcp_servers: sessionUpdated,
+    } as never,
+    merge_extra: true,
+  });
+  return Boolean(ok);
+};
+
 export const ensureNativeMcpCatalog = async (): Promise<{
   userServers: IMcpServer[];
   builtinServers: IMcpServer[];

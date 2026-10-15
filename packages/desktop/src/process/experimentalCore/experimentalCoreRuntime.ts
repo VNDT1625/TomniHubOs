@@ -5,14 +5,21 @@
  */
 
 import { getResourceCoordinator, type IResourceCoordinator } from '@process/resource/resourceCoordinator';
+import { redactSensitiveText } from '@process/agentRuntime/agentMesh/security';
 import type { CompanyCoreRunner } from '@process/agentRuntime/companyCoreRunner';
 import type {
   CoreContextComposeInput,
   CoreContextComposer,
   CoreIdentityContextSnapshot,
 } from '@process/agentRuntime/contextTypes';
-import type { ResolvedSurface, SurfaceRegistry } from '@process/agentRuntime/surfaceRegistry';
+import type {
+  ResolvedSurface,
+  SurfaceCapabilityBinding,
+  SurfaceRegistry,
+  SurfaceResolutionRequest,
+} from '@process/agentRuntime/surfaceRegistry';
 import { buildSurfaceHarnessPrompt } from '@process/agentRuntime/surfaceRegistry/harnesses';
+import { toolNameAllowed } from '@process/toolselect/builtinToolCatalog';
 import { AgentMeshService, type AgentMessageKind } from '@process/agentRuntime/agentMesh';
 import {
   describeOrchestrationProposal,
@@ -33,6 +40,19 @@ import type {
   PermissionRequest,
 } from '@process/services/agentChat/permission';
 import type { CoreTelemetryRecorder } from '@process/services/diagnostics/coreTelemetry';
+import { setWatchdogBreadcrumb } from '@process/services/diagnostics/mainThreadWatchdog';
+import {
+  dispatchNotification,
+  dispatchPostToolUse,
+  dispatchPreToolUse,
+  dispatchStop,
+  drainHookContext,
+  getHookCoverage,
+  hasActivePreToolUseHook,
+  MAX_STOP_CONTINUATIONS,
+  sanitizeHookText,
+  type HookTurnContext,
+} from '@process/integrations/hookRuntime/hookDispatcher';
 import {
   AcpCoreAdapter,
   CodexAppServerAdapter,
@@ -44,11 +64,13 @@ import {
   type CoreContextSnapshot,
   type CoreCapabilityHostContext,
   type CoreMcpServer,
+  type CoreRunInput,
   type CoreToolCatalogPolicy,
   type DetectedCoreTarget,
   type TomnySessionActionHistorySource,
 } from './adapters';
 import { detectCoreTargets } from './coreRegistry';
+import type { CliCommandDiscovery } from '@/common/chat/slash/types';
 import type {
   ExperimentalCoreModel,
   ExperimentalPermissionMode,
@@ -101,6 +123,7 @@ export type ExperimentalCoreEvent = {
     | 'started'
     | 'delta'
     | 'status'
+    | 'notice'
     | 'thinking'
     | 'step'
     | 'tool-call'
@@ -117,7 +140,11 @@ export type ExperimentalCoreEvent = {
   mode?: 'append' | 'replace';
   permissionId?: string;
   tool?: string;
-  callId?: string;
+    callId?: string;
+  /** Main-owned grouping for one Workflow run. */
+  workflowId?: string;
+    workflowStepId?: string;
+  workflowStage?: number;
   /** Structured tool arguments retained for the worklog/detail view. */
   input?: unknown;
   /** Logical Team/Company agent that owns this tool activity. */
@@ -178,6 +205,8 @@ export type ExperimentalCoreContextIdentity = {
   surface?: string;
   agentId?: string;
   personalId?: string;
+  /** Main-owned conversation binding for scoped visual output publication. */
+  conversationId?: string;
   permissionScopes?: string[];
   capabilityGrants?: string[];
   availableCapabilities?: string[];
@@ -187,20 +216,39 @@ export type ExperimentalCoreContextIdentity = {
   savedMemoryContext?: string;
   mcpServers?: CoreMcpServer[];
   superMode?: boolean;
+  /**
+   * Capability ids the chat pipeline chose for this turn. It can only narrow the optional `core.*` groups
+   * of the active Surface; it never adds a capability or removes the Surface's own tools.
+   */
+    toolSelection?: readonly string[] | null;
+  /** Default tool ids of the applied assistant: their schemas are attached from the first turn (no tool search). */
+  assistantDefaultTools?: readonly string[];
+  /** Main-derived, verified large workspace attachment needs eager read/search schemas. */
+  prefetchWorkspaceRead?: boolean;
   /** Main-only bounded derivation mode: no profile, MCP, or tool context. */
   sterile?: boolean;
   /**
    * Main-only C4 mode: suppresses all personal/conversation/Save context and
    * built-in tools while retaining only an explicitly injected operation host.
    */
-  suppressPersonalContext?: boolean;
+    suppressPersonalContext?: boolean;
+  /** Trusted Main-only: ACP slash invocation must reach the provider byte-for-byte as a prompt. */
+  nativeCliCommand?: boolean;
 };
 
 const MAX_CONVERSATION_CONTEXT_CHARS = 24_000;
 const MAX_SAVED_MEMORY_CONTEXT_CHARS = 64_000;
 const SECRET_CONTEXT_CAPABILITY_ID = 'core.secret-context';
 const SECRET_CONTEXT_SERVER_NAME = 'tomny-secret-context';
-const BUILTIN_AVAILABLE_CAPABILITIES = ['core.skill-workflow', SECRET_CONTEXT_CAPABILITY_ID];
+/** Capabilities every Core session can use, whatever the conversation grants. A binding missing here is dropped when a surface resolves. */
+export const BUILTIN_AVAILABLE_CAPABILITIES = [
+    'core.skill-workflow',
+  'core.tool-workflow',
+  'core.workspace-read',
+  // Read-only, redacted notification digest ("what did I miss"); no connector settings or secrets.
+  'core.notification-hub',
+  SECRET_CONTEXT_CAPABILITY_ID,
+];
 
 const normalizeSavedMemoryContext = (value?: string): string => {
   const normalized = value?.trim() ?? '';
@@ -221,6 +269,7 @@ const normalizeContextIdentity = (
     surface: identity?.surface?.trim() || 'chat',
     agentId: identity?.agentId?.trim() || 'tomny',
     personalId: suppressPersonalContext ? 'sterile' : identity?.personalId?.trim() || 'default',
+    conversationId: suppressPersonalContext ? '' : identity?.conversationId?.trim() || '',
     permissionScopes: suppressPersonalContext ? [] : [...(identity?.permissionScopes ?? [])],
     capabilityGrants: sterile ? [] : [...(identity?.capabilityGrants ?? [])],
     availableCapabilities: suppressPersonalContext
@@ -233,8 +282,14 @@ const normalizeContextIdentity = (
     savedMemoryContext: suppressPersonalContext ? '' : normalizeSavedMemoryContext(identity?.savedMemoryContext),
     mcpServers: sterile ? [] : [...(identity?.mcpServers ?? [])],
     superMode: suppressPersonalContext ? false : identity?.superMode === true,
-    sterile,
+        toolSelection:
+      suppressPersonalContext || !identity?.toolSelection ? null : [...new Set(identity.toolSelection)].slice(0, 32),
+    // Assistant default tools are personal context: a sterile or suppressed run gets none.
+    assistantDefaultTools: suppressPersonalContext ? [] : [...new Set(identity?.assistantDefaultTools ?? [])].slice(0, 24),
+    prefetchWorkspaceRead: !suppressPersonalContext && identity?.prefetchWorkspaceRead === true,
+        sterile,
     suppressPersonalContext,
+    nativeCliCommand: identity?.nativeCliCommand === true,
   };
 };
 
@@ -246,9 +301,19 @@ const childPermissionForParent = (
 ): CoreCapabilityHostContext['permissionMode'] => (permissionMode === 'read-only' ? 'read-only' : 'workspace-write');
 
 const SECRET_FIREWALL_TOOLS = new Set([
-  'agent_secret_context_use',
-  'secret_context_capture',
-  'secret_context_generate',
+  'tomny_secret_use',
+  'tomny_secret_capture',
+  'tomny_secret_generate',
+  'tomny_secret_list',
+  'tomny_secret_request',
+  'tomny_secret_request_access',
+  // The CLI may report an MCP tool without its `tomny_` prefix.
+  'secret_use',
+  'secret_capture',
+  'secret_generate',
+  'secret_list',
+  'secret_request',
+  'secret_request_access',
 ]);
 
 type PermissionIdentity = {
@@ -308,19 +373,79 @@ const secretContextPolicyFor = (
 const requiresFreshOrchestrationApproval = (tool: string): boolean =>
   tool === 'orchestration.create.team' || tool === 'orchestration.create.company';
 
+/**
+ * Tool-name patterns for MCP servers the user picked for this conversation. The CLI exposes an MCP tool as
+ * `mcp__<server>__<tool>`; the server name is also tried with unsafe characters replaced, because the CLI
+ * normalises names it puts into a tool identifier.
+ */
+export const sessionMcpToolPatterns = (servers: readonly Pick<CoreMcpServer, 'name'>[] = []): string[] => {
+  const patterns = new Set<string>();
+  for (const { name } of servers) {
+    const trimmed = name.trim();
+    if (!trimmed) continue;
+    patterns.add(`mcp__${trimmed}__*`);
+    patterns.add(`mcp__${trimmed.replaceAll(/[^A-Za-z0-9_-]/gu, '_')}__*`);
+  }
+  return [...patterns];
+};
+
+/**
+ * Resolve Super capabilities through the same scope, grant and compatibility policy as an active Surface.
+ *
+ * Super adds what works without a surface (`core` and `portable`). A `surface-only` capability needs its
+ * surface's live harness, so it joins only as part of the active surface itself; otherwise its schemas would
+ * cost tokens for tools that cannot run.
+ */
+export const resolveCoreSuperCapabilities = (
+  registry: SurfaceRegistry | undefined,
+  request: Omit<SurfaceResolutionRequest, 'surfaceId'>,
+  availableHostNames?: readonly string[],
+  activeSurfaceId?: string
+): SurfaceCapabilityBinding[] => {
+  if (!registry) return [];
+  const available = availableHostNames ? new Set(availableHostNames.map((name) => name.toLowerCase())) : undefined;
+  const seen = new Set<string>();
+  const capabilities: SurfaceCapabilityBinding[] = [];
+  for (const result of registry.discover(request)) {
+    if (!result.compatible) continue;
+    const inActiveSurface = activeSurfaceId !== undefined && result.manifest?.id === activeSurfaceId;
+    for (const capability of result.capabilities) {
+      if ((capability.availability ?? 'surface-only') === 'surface-only' && !inActiveSurface) continue;
+      if (
+        capability.kind === 'mcp' &&
+        capability.serverName?.trim() &&
+        available &&
+        !available.has(capability.serverName.trim().toLowerCase())
+      ) {
+        continue;
+      }
+      const key = `${capability.id}:${capability.serverName ?? ''}:${capability.toolPatterns.join(',')}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      capabilities.push(capability);
+    }
+  }
+  return capabilities;
+};
+
 /** Build the ToolMap boundary from the selected surface and the conversation's explicit Super mode. */
 export const resolveCoreToolCatalogPolicy = (
   surface: ResolvedSurface | undefined,
-  superEnabled = false
+  superEnabled = false,
+  sessionServers: readonly Pick<CoreMcpServer, 'name'>[] = [],
+  superCapabilities?: readonly SurfaceCapabilityBinding[]
 ): CoreToolCatalogPolicy => {
-  if (superEnabled) return { mode: 'super', patterns: ['*'] };
+  const capabilities = superEnabled
+    ? (superCapabilities ?? surface?.capabilities ?? [])
+    : (surface?.capabilities ?? []);
   return {
-    mode: 'surface',
+    mode: superEnabled ? 'super' : 'surface',
     patterns: [
       ...new Set(
         [
           'tomny_session_actions',
-          ...(surface?.capabilities ?? [])
+          ...sessionMcpToolPatterns(sessionServers),
+          ...capabilities
             .filter((capability) => capability.kind === 'mcp')
             .flatMap((capability) => capability.toolPatterns),
         ]
@@ -336,16 +461,27 @@ export const resolveCoreToolCatalogPolicy = (
  * registered surface participates, so adding a manifest + its host immediately
  * extends Super without touching this runtime or the renderer toggle.
  */
+/** Attach bounded eager file tools only when the trusted Surface already allows both schemas. */
+export const shouldPrefetchAttachedFileTools = (
+  requested: boolean,
+  patterns: readonly string[],
+  availableHostNames: readonly string[]
+): boolean =>
+  requested &&
+  toolNameAllowed('tomny_read', patterns) &&
+  toolNameAllowed('tomny_search', patterns) &&
+  availableHostNames.some((name) => name === 'tomny-core-workspace' || name === 'tomny-ide');
+
 export const resolveCoreCapabilityServerNames = (
   surface: ResolvedSurface | undefined,
   registry: SurfaceRegistry | undefined,
   superEnabled: boolean,
-  availableHostNames?: readonly string[]
+  availableHostNames?: readonly string[],
+  superCapabilities?: readonly SurfaceCapabilityBinding[]
 ): string[] => {
-  const capabilities =
-    superEnabled && registry
-      ? registry.list().flatMap((manifest) => manifest.capabilities)
-      : (surface?.capabilities ?? []);
+  const capabilities = superEnabled
+    ? (superCapabilities ?? (registry ? registry.list().flatMap((manifest) => manifest.capabilities) : []))
+    : (surface?.capabilities ?? []);
   const available = availableHostNames ? new Set(availableHostNames.map((name) => name.toLowerCase())) : undefined;
   const names = new Map<string, string>();
   for (const capability of capabilities) {
@@ -392,6 +528,15 @@ type PendingOrchestrationProposal = {
   requestId: string;
   resolve: (approved: boolean) => void;
 };
+
+/** Hook state of one governed run (design 11.3). Absent for sterile derivation runs, which never fire hooks. */
+type HookRunState = {
+  turn: HookTurnContext;
+  /** Tool requests seen so far, so PostToolUse can carry the input of the call it reports on. */
+  calls: Map<string, { tool: string; input?: unknown }>;
+};
+
+const MAX_TRACKED_HOOK_CALLS = 500;
 
 const kindForTarget = (target: DetectedCoreTarget): ExperimentalTargetKind => {
   if (target.protocol === 'tomny-json-stream') return 'builtin';
@@ -524,10 +669,17 @@ const transportKey = (
 /** Direct core with durable conversation checkpoints and transport process reuse. */
 export class ExperimentalCoreRuntime {
   private readonly active = new Map<string, ActiveRequest>();
-  private readonly runEvents = new Map<string, ExperimentalCoreEvent[]>();
+    private readonly runEvents = new Map<string, ExperimentalCoreEvent[]>();
+  /** Isolated by exact session, Surface, workspace and permission/tool grants. */
+  private readonly workflowSessions = new Map<string, {
+    store: import('@process/agentRuntime/agentMesh/workflow/resultDelivery').WorkflowResultStore;
+    mailbox: import('@process/agentRuntime/agentMesh/workflow/mailbox').WorkflowMailbox;
+    updatedAt: number;
+  }>();
   private readonly eventListeners = new Set<(event: ExperimentalCoreEvent) => void>();
   private readonly permissions = new Map<string, PendingPermission>();
   private readonly orchestrationProposals = new Map<string, PendingOrchestrationProposal>();
+  private readonly hookStates = new Map<string, HookRunState>();
   private readonly deps: ExperimentalCoreRuntimeDeps;
   private readonly sessionStore: CoreSessionStore;
   private readonly eventStore: DurableEventStore;
@@ -599,6 +751,24 @@ export class ExperimentalCoreRuntime {
     const adapter = this.deps.adapters.find((candidate) => candidate.protocol === target.protocol);
     if (!adapter) return [];
     return this.modelsFor(target, adapter, requireWorkspace(workspace));
+  }
+
+    /** Resolve advertised CLI commands via the installed provider adapter, never via a model prompt. */
+    public async listCommands(
+    targetId: string, workspace: string, logicalSessionId?: string,
+    onUpdate?: (value: CliCommandDiscovery) => void
+  ): Promise<CliCommandDiscovery> {
+    const cwd = requireWorkspace(workspace);
+    if (this.targets.length === 0) this.targets = await this.deps.detectTargets();
+    const target = this.targets.find((candidate) => candidate.id === targetId);
+    if (!target?.available) return { status: 'unavailable', commands: [] };
+    const adapter = this.deps.adapters.find((candidate) => candidate.protocol === target.protocol);
+    if (!adapter?.listCommands) return { status: 'unsupported', commands: [] };
+        return adapter.listCommands(target, cwd, logicalSessionId, onUpdate);
+  }
+
+  public releaseCommands(logicalSessionId: string): void {
+    for (const adapter of this.deps.adapters) adapter.releaseCommands?.(logicalSessionId);
   }
 
   /** Resolve the concrete network destination for the selected model before Foundation grants cloud execution. */
@@ -807,7 +977,7 @@ export class ExperimentalCoreRuntime {
     if (!adapter?.inspectContext)
       throw new Error('The selected core does not expose its live context: ' + target.name + '.');
 
-    const surfaceResolution = this.deps.surfaceRegistry?.resolve({
+    const surfaceRequest = {
       surfaceId: contextIdentity.surface,
       model: {
         targetKind: kindForTarget(target),
@@ -819,16 +989,30 @@ export class ExperimentalCoreRuntime {
       grantedPermissionScopes: contextIdentity.permissionScopes,
       explicitlyGrantedCapabilityIds: contextIdentity.capabilityGrants,
       availableCapabilityIds: contextIdentity.availableCapabilities,
-    });
+    };
+    const surfaceResolution = this.deps.surfaceRegistry?.resolve(surfaceRequest);
     if (surfaceResolution?.ok === false) {
       throw new Error(surfaceResolution.issues.map((issue) => issue.message).join(' '));
     }
     const resolvedSurface = surfaceResolution?.ok ? surfaceResolution.value : undefined;
+    const superCapabilities = contextIdentity.superMode
+      ? resolveCoreSuperCapabilities(
+          this.deps.surfaceRegistry,
+          surfaceRequest,
+          this.deps.availableCapabilityHostNames?.(),
+          resolvedSurface?.manifest.id
+        )
+      : undefined;
     const surfaceId = resolvedSurface?.manifest.id ?? contextIdentity.surface;
     const toolCatalog =
       contextIdentity.sterile || contextIdentity.suppressPersonalContext
         ? { mode: 'surface' as const, patterns: [] }
-        : resolveCoreToolCatalogPolicy(resolvedSurface, contextIdentity.superMode);
+        : resolveCoreToolCatalogPolicy(
+            resolvedSurface,
+            contextIdentity.superMode,
+            contextIdentity.mcpServers,
+            superCapabilities
+          );
     const mcpServerNames =
       contextIdentity.sterile || contextIdentity.suppressPersonalContext
         ? []
@@ -836,13 +1020,17 @@ export class ExperimentalCoreRuntime {
             resolvedSurface,
             this.deps.surfaceRegistry,
             contextIdentity.superMode,
-            this.deps.availableCapabilityHostNames?.()
+            this.deps.availableCapabilityHostNames?.(),
+            superCapabilities
           );
     const capabilityHostContext: CoreCapabilityHostContext = Object.freeze({
+      requestId: input.sessionId,
+      conversationId: contextIdentity.conversationId || input.sessionId,
       sessionId: input.sessionId,
       workspace,
       surface: surfaceId,
       permissionMode: childPermissionForParent(permissionMode),
+      toolPatterns: Object.freeze([...toolCatalog.patterns]),
     });
     const mcpServers = contextIdentity.sterile
       ? []
@@ -977,6 +1165,7 @@ export class ExperimentalCoreRuntime {
     approved: boolean,
     lifetime: PermissionGrantLifetime = 'allow-once'
   ): Promise<boolean> {
+    setWatchdogBreadcrumb(approved ? 'permission:approve' : 'permission:deny');
     const pending = this.permissions.get(permissionId);
     if (!pending) return false;
     this.permissions.delete(permissionId);
@@ -1150,7 +1339,89 @@ export class ExperimentalCoreRuntime {
         detail: request.detail,
         text: request.tool,
       });
+      const hookState = this.hookStates.get(requestId);
+      if (hookState) {
+        void dispatchNotification(
+          hookState.turn,
+          `Permission requested for ${sanitizeHookText(request.tool, 80)}`
+        ).catch((): undefined => undefined);
+      }
     });
+  }
+
+  /**
+   * Permission callback and PreToolUse gate for one adapter run (design 11.3, spike S-1).
+   *
+   * - Native adapter (`tomny-json-stream`): it sees every tool request before the tool runs, so it gets the
+   *   `preToolUse` gate and its own `requestPermission` is left alone (no second hook run for the same tool).
+   * - Every other adapter: its tools only reach Tomny as permission requests, so the hook runs at the head of
+   *   `requestPermission`. Tools the agent never asks about cannot be blocked (Codex, ACP outside ask mode).
+   * A hook `deny` returns false; `ask` forces a fresh question; no verdict leaves the normal flow untouched.
+   */
+  private hookedPermission(
+    requestId: string,
+    sessionId: string,
+    targetId: string,
+    adapter: CoreAdapter,
+    identityFor: (tool: string) => PermissionIdentity
+  ): Pick<CoreRunInput, 'requestPermission' | 'preToolUse'> {
+    const state = this.hookStates.get(requestId);
+    const native = adapter.protocol === 'tomny-json-stream';
+    const announceDeny = (tool: string, reason: string): void =>
+      this.push({
+        requestId,
+        sessionId,
+        targetId,
+        type: 'notice',
+        text: `A hook blocked ${sanitizeHookText(tool, 80)}: ${reason}`,
+      });
+    const requestPermission: CoreRunInput['requestPermission'] = async (request) => {
+      let forceFresh = request.forceFresh === true;
+      if (state && !native) {
+        const verdict = await dispatchPreToolUse(state.turn, {
+          tool: request.tool,
+          input: request.detail === undefined ? {} : { detail: request.detail },
+        });
+        if (verdict.action === 'deny') {
+          announceDeny(request.tool, verdict.reason);
+          return false;
+        }
+        if (verdict.action === 'ask') forceFresh = true;
+      }
+      return this.requestPermission(requestId, sessionId, targetId, request, identityFor(request.tool), forceFresh);
+    };
+    if (!state || !native) return { requestPermission };
+    return {
+      requestPermission,
+      preToolUse: async (call) => {
+        const verdict = await dispatchPreToolUse(state.turn, call);
+        if (verdict.action === 'deny') announceDeny(call.tool, verdict.reason);
+        return verdict;
+      },
+    };
+  }
+
+  /** PostToolUse / PostToolUseFailure: observe finished tool calls of every agent. Never blocks the event path. */
+  private observeToolHooks(requestId: string, event: CoreAdapterEvent): void {
+    const state = this.hookStates.get(requestId);
+    if (!state) return;
+    if (event.type === 'tool-call') {
+      if (!event.callId) return;
+      if (state.calls.size >= MAX_TRACKED_HOOK_CALLS) state.calls.clear();
+      state.calls.set(event.callId, { tool: event.tool, ...(event.input !== undefined ? { input: event.input } : {}) });
+      return;
+    }
+    if (event.type !== 'tool-result') return;
+    const call = event.callId ? state.calls.get(event.callId) : undefined;
+    if (event.callId) state.calls.delete(event.callId);
+    const input = event.input ?? call?.input;
+    void dispatchPostToolUse(state.turn, {
+      tool: event.tool,
+      outcome: event.outcome,
+      text: event.text,
+      ...(event.callId ? { callId: event.callId } : {}),
+      ...(input !== undefined ? { input } : {}),
+    }).catch((): undefined => undefined);
   }
 
   private denyPermissionsForRequest(requestId: string): void {
@@ -1295,14 +1566,13 @@ export class ExperimentalCoreRuntime {
                 agentId,
               });
           },
-          requestPermission: (request) =>
-            this.requestPermission(
-              input.requestId,
-              input.sessionId,
-              input.targetId,
-              request,
-              input.permissionIdentity(request.tool)
-            ),
+          ...this.hookedPermission(
+            input.requestId,
+            input.sessionId,
+            input.targetId,
+            input.adapter,
+            input.permissionIdentity
+          ),
         })
       );
       return response;
@@ -1594,6 +1864,7 @@ export class ExperimentalCoreRuntime {
             input: sanitizeToolEventInput(input.event.tool, input.event.input),
           }
         : input.event;
+    this.observeToolHooks(input.requestId, adapterEvent);
     this.push({
       requestId: input.requestId,
       sessionId: input.sessionId,
@@ -1605,31 +1876,43 @@ export class ExperimentalCoreRuntime {
   }
 
   private async withAgentLease<T>(run: () => Promise<T>, signal?: AbortSignal): Promise<T> {
-    if (!this.deps.coordinator) return run();
+    const coordinator = this.deps.coordinator;
+    if (!coordinator) return run();
     let lease: { id: string } | undefined;
     try {
-      lease = await Promise.race([
-        this.deps.coordinator.requestLease({ kind: 'agent', estCostMB: 96 }),
-        new Promise<undefined>((resolve) => {
-          const timer = setTimeout(resolve, 1500);
-          signal?.addEventListener(
-            'abort',
-            () => {
-              clearTimeout(timer);
-              resolve(undefined);
-            },
-            { once: true }
-          );
-        }),
-      ]).catch((err): undefined => {
-        console.warn('[TomnyCore] Resource lease bypassed or timed out:', err);
-        return undefined;
+      // Cancel the request when we stop waiting. Otherwise it stays queued and is granted
+      // later with no owner, permanently occupying an agent slot until restart.
+      const requestAbort = new AbortController();
+      const requested = coordinator.requestLease({ kind: 'agent', estCostMB: 96 }, { signal: requestAbort.signal });
+      let timer: NodeJS.Timeout | undefined;
+      const gaveUp = new Promise<undefined>((resolve) => {
+        const giveUp = (): void => {
+          requestAbort.abort();
+          resolve(undefined);
+        };
+        timer = setTimeout(giveUp, 1500);
+        signal?.addEventListener('abort', giveUp, { once: true });
       });
+      lease = await Promise.race([requested, gaveUp])
+        .catch((err): undefined => {
+          console.warn('[TomnyCore] Resource lease bypassed or timed out:', err);
+          return undefined;
+        })
+        .finally(() => {
+          if (timer) clearTimeout(timer);
+        });
+      // A grant that raced with the cancellation has no owner; release it immediately.
+      void requested.then(
+        (late) => {
+          if (lease?.id !== late.id) coordinator.releaseLease(late.id);
+        },
+        (): undefined => undefined
+      );
       return await run();
     } finally {
       if (lease?.id) {
         try {
-          this.deps.coordinator.releaseLease(lease.id);
+          coordinator.releaseLease(lease.id);
         } catch {
           /* ignore */
         }
@@ -1656,9 +1939,16 @@ export class ExperimentalCoreRuntime {
     let retainsConversationHistory = true;
     let assistantText = '';
     let assistantCheckpointed = false;
-    let terminalCheckpointPersisted = false;
+        let terminalCheckpointPersisted = false;
+        let closeWorkflowHost: (() => Promise<void>) | undefined;
+    let workflowMailboxPrelude = '';
+    // Phase timing for the first message of a session, which is where a slow start shows up (`[Tomny:send]`).
+    const phaseStartedAt = performance.now();
+    const markPhase = (label: string): void =>
+      console.info(`[Tomny:send] run ${label} +${Math.round(performance.now() - phaseStartedAt)}ms`);
     try {
       await this.initialized;
+      markPhase('initialized');
       const normalizedPrompt = prompt.trim();
       const normalizedWorkspace = requireWorkspace(workspace);
       if (!normalizedPrompt) throw new Error('Prompt cannot be empty.');
@@ -1669,6 +1959,7 @@ export class ExperimentalCoreRuntime {
       }
 
       if (this.targets.length === 0) this.targets = await this.deps.detectTargets();
+      markPhase('targets detected');
       const isCompany = targetId === EXPERIMENTAL_COMPANY_TARGET_ID;
       const companyModel = isCompany ? decodeCompanyModelKey(modelKey) : undefined;
       const transportTargetId =
@@ -1681,7 +1972,7 @@ export class ExperimentalCoreRuntime {
       retainsConversationHistory = adapter.retainsConversationHistory !== false;
       if (isCompany && !this.deps.companyRunner) throw new Error('The Company core runner is unavailable.');
       if (isCompany && !companyId?.trim()) throw new Error('Select a company before starting the Company core.');
-      const surfaceResolution = this.deps.surfaceRegistry?.resolve({
+      const surfaceRequest = {
         surfaceId: contextIdentity.surface,
         model: {
           targetKind: kindForTarget(target),
@@ -1693,16 +1984,29 @@ export class ExperimentalCoreRuntime {
         grantedPermissionScopes: contextIdentity.permissionScopes,
         explicitlyGrantedCapabilityIds: contextIdentity.capabilityGrants,
         availableCapabilityIds: contextIdentity.availableCapabilities,
-      });
+      };
+      const surfaceResolution = this.deps.surfaceRegistry?.resolve(surfaceRequest);
       if (surfaceResolution?.ok === false) {
         throw new Error(surfaceResolution.issues.map((issue) => issue.message).join(' '));
       }
       const resolvedSurface = surfaceResolution?.ok ? surfaceResolution.value : undefined;
+      const superCapabilities = contextIdentity.superMode
+        ? resolveCoreSuperCapabilities(
+            this.deps.surfaceRegistry,
+            surfaceRequest,
+            this.deps.availableCapabilityHostNames?.()
+          )
+        : undefined;
       const resolvedSurfaceId = resolvedSurface?.manifest.id ?? contextIdentity.surface;
       const toolCatalog =
         contextIdentity.sterile || contextIdentity.suppressPersonalContext
           ? { mode: 'surface' as const, patterns: [] }
-          : resolveCoreToolCatalogPolicy(resolvedSurface, contextIdentity.superMode);
+          : resolveCoreToolCatalogPolicy(
+              resolvedSurface,
+              contextIdentity.superMode,
+              contextIdentity.mcpServers,
+              superCapabilities
+            );
       let trustedSecretContextHost = false;
       const permissionIdentity = (tool: string): PermissionIdentity => ({
         ...permissionIdentityFor(contextIdentity, resolvedSurfaceId, resolvedSurface, tool),
@@ -1716,9 +2020,12 @@ export class ExperimentalCoreRuntime {
               resolvedSurface,
               this.deps.surfaceRegistry,
               contextIdentity.superMode,
-              this.deps.availableCapabilityHostNames?.()
+              this.deps.availableCapabilityHostNames?.(),
+              superCapabilities
             );
       const capabilityHostContext: CoreCapabilityHostContext = Object.freeze({
+        requestId,
+        conversationId: contextIdentity.conversationId || sessionId,
         sessionId,
         workspace: normalizedWorkspace,
         surface: resolvedSurfaceId,
@@ -1726,11 +2033,109 @@ export class ExperimentalCoreRuntime {
         requestPermission: (request) =>
           this.requestPermission(requestId, sessionId, targetId, request, permissionIdentity(request.tool)),
       });
+                  // Main has verified the path; eager schemas do not widen the Surface's allowed tools.
+                  const allowAttachedFileTools = shouldPrefetchAttachedFileTools(
+        contextIdentity.prefetchWorkspaceRead && !contextIdentity.sterile && !contextIdentity.suppressPersonalContext,
+        toolCatalog.patterns,
+        mcpServerNames
+      );
+            const enableWorkflow =
+        !contextIdentity.sterile && !contextIdentity.suppressPersonalContext &&
+        Boolean(this.deps.resolveCapabilityHosts) &&
+        mcpServerNames.includes('tomny-workflow') &&
+        toolNameAllowed('workflow_run', toolCatalog.patterns);
+      const ordinaryServerNames = mcpServerNames.filter((name) => name !== 'tomny-workflow');
+      const requestedServerNames = allowAttachedFileTools
+        ? [...ordinaryServerNames, 'tomny-attached-file-tools']
+        : ordinaryServerNames;
       const mcpServers = contextIdentity.sterile
         ? []
         : this.deps.resolveCapabilityHosts
-          ? await this.deps.resolveCapabilityHosts(mcpServerNames, contextIdentity.mcpServers, capabilityHostContext)
+          ? await this.deps.resolveCapabilityHosts(requestedServerNames, contextIdentity.mcpServers, capabilityHostContext)
           : contextIdentity.mcpServers;
+                  if (enableWorkflow) {
+        const scope = JSON.stringify([sessionId, targetId, normalizedWorkspace, resolvedSurfaceId, permissionMode,
+          [...toolCatalog.patterns].sort(), contextIdentity.permissionScopes, contextIdentity.capabilityGrants]);
+        for (const [key, value] of this.workflowSessions) {
+          if (Date.now() - value.updatedAt > 600_000 && value.mailbox.activeCount() === 0) {
+            value.store.clear();
+            this.workflowSessions.delete(key);
+          }
+        }
+        let workflowSession = this.workflowSessions.get(scope);
+        if (!workflowSession) {
+          const { createWorkflowResultStore } = await import('@process/agentRuntime/agentMesh/workflow/resultDelivery');
+          const { createWorkflowMailbox } = await import('@process/agentRuntime/agentMesh/workflow/mailbox');
+          const store = createWorkflowResultStore();
+          workflowSession = { store, mailbox: createWorkflowMailbox(store), updatedAt: Date.now() };
+          if (this.workflowSessions.size >= 32) throw new Error('WORKFLOW_SESSION_CAPACITY');
+          this.workflowSessions.set(scope, workflowSession);
+        }
+        workflowSession.updatedAt = Date.now();
+        const { startWorkflowMcpHost } = await import('@process/agentRuntime/agentMesh/workflow/host');
+        const host = await startWorkflowMcpHost({
+          requestId,
+          servers: mcpServers,
+          patterns: toolCatalog.patterns,
+                    signal,
+          coordinator: getResourceCoordinator(),
+          resultStore: workflowSession.store,
+          mailbox: workflowSession.mailbox,
+
+                              onStep: async (event) => {
+            // Live workflow diagnostics never trigger another Agent/model turn.
+            const raw = event.output === undefined ? '' : typeof event.output === 'string' ? event.output : JSON.stringify(event.output) ?? '';
+            this.push({
+              requestId, sessionId, targetId,
+              type: event.phase === 'running' ? 'tool-call' : 'tool-result',
+              tool: event.tool,
+              callId: `workflow:${event.workflowId}:${event.id}`,
+              workflowId: event.workflowId,
+                            workflowStepId: event.id,
+              workflowStage: event.workflowStage,
+              input: sanitizeToolEventInput(event.tool, event.input),
+              text: event.phase === 'running' ? '' : redactSensitiveText(raw.slice(0, 3_000)).text,
+              ...(event.phase !== 'running' ? { outcome: event.phase === 'success' ? 'success' : 'error' } : {}),
+            });
+            const state = this.hookStates.get(requestId);
+            if (!state || event.phase === 'running') return;
+                        try {
+              await dispatchPostToolUse(state.turn, {
+                tool: event.tool,
+                outcome: event.phase === 'success' ? 'success' : 'error',
+                text: typeof event.output === 'string' ? event.output.slice(0, 4_000) : JSON.stringify(event.output)?.slice(0, 4_000) ?? '',
+                input: event.input,
+                callId: `workflow:${event.id}`,
+              });
+            } catch (error) {
+              console.warn('[TomnyCore] Workflow PostToolUse report failed:', errorMessage(error));
+            }
+          },
+                    authorize: async (tool, input) => {
+            if (!this.active.has(requestId) || !toolNameAllowed(tool, toolCatalog.patterns) || signal.aborted) return false;
+            let forceFresh = false;
+            const hookState = this.hookStates.get(requestId);
+            if (hookState) {
+              const verdict = await dispatchPreToolUse(hookState.turn, { tool, input });
+              if (verdict.action === 'deny') return false;
+              if (verdict.action === 'ask') forceFresh = true;
+            }
+            return this.requestPermission(
+              requestId, sessionId, targetId,
+              { tool, detail: 'A step of a user-scoped multi-tool workflow.' },
+              permissionIdentity(tool), forceFresh
+            );
+          },
+        });
+        closeWorkflowHost = host.close;
+                mcpServers.push({ name: host.name, url: host.url, headers: host.headers, deferred: false });
+        const pendingMail = workflowSession.mailbox.list().filter((job) => job.unread > 0 || job.status === 'needs_agent' || job.status === 'running');
+                if (pendingMail.length) {
+          workflowMailboxPrelude = `## Pending Workflow Mailbox (Main-owned, scoped to this Session)\n${JSON.stringify(pendingMail.slice(0, 8))}\nUse the preloaded workflow_mailbox_poll tool for a specific workflowId and cursor. A completed tool never triggers a model turn by itself.`;
+          this.push({ requestId, sessionId, targetId, type: 'notice', text: workflowMailboxPrelude });
+        }
+      }
+      markPhase(`capability hosts ready (${mcpServers.length})`);
       trustedSecretContextHost = attestSecretContextHost(
         resolvedSurface,
         Boolean(this.deps.resolveCapabilityHosts),
@@ -1812,6 +2217,23 @@ export class ExperimentalCoreRuntime {
         });
       }
       if (signal.aborted) throw new Error('The request was cancelled.');
+      if (!contextIdentity.sterile && !contextIdentity.suppressPersonalContext) {
+        const hookTurn: HookTurnContext = {
+          sessionId,
+          workspaceDir: normalizedWorkspace,
+          permissionMode,
+          surface: resolvedSurfaceId,
+          agent: targetId,
+          signal,
+          ...(contextIdentity.conversationId ? { conversationId: contextIdentity.conversationId } : {}),
+        };
+        this.hookStates.set(requestId, { turn: hookTurn, calls: new Map() });
+        // Say so when the selected agent cannot be blocked by the active PreToolUse hooks (never overstate coverage).
+        const coverage = getHookCoverage(adapter.protocol, permissionMode);
+        if (coverage.preToolUse !== 'all-tools' && (await hasActivePreToolUseHook(normalizedWorkspace))) {
+          this.push({ requestId, sessionId, targetId, type: 'notice', text: coverage.note });
+        }
+      }
       const capabilityContract = resolvedSurface?.capabilities.length
         ? [
             `[Surface: ${resolvedSurface.manifest.id}]`,
@@ -1836,11 +2258,21 @@ export class ExperimentalCoreRuntime {
             contextIdentity.savedMemoryContext,
           ].join('\n')
         : '';
-      const surfacePrelude = [capabilityContract, surfaceHarness, savedMemoryContext, conversationContext]
+      // Context hooks queued for this session (SessionStart, tool hooks of the last turn): untrusted data.
+      const hookContext = this.hookStates.has(requestId) ? await drainHookContext(sessionId) : undefined;
+      const surfacePrelude = [capabilityContract, surfaceHarness, savedMemoryContext, conversationContext, hookContext, workflowMailboxPrelude]
         .filter(Boolean)
         .join('\n\n');
-      let effectivePrompt = surfacePrelude ? `${surfacePrelude}\n\n${normalizedPrompt}` : normalizedPrompt;
-      if (this.deps.contextComposer && !contextIdentity.suppressPersonalContext) {
+            // ACP slash commands are a protocol invocation, not a natural language request.
+      // Retain the normal resource grants, permissions and audit, but do not prepend any host context.
+            if (contextIdentity.nativeCliCommand && adapter.protocol !== 'acp' &&
+        !(adapter.protocol === 'codex-app-server' && /^\/skill:[a-zA-Z0-9][a-zA-Z0-9_.-]{0,71}(?=\s|$)/u.test(normalizedPrompt))) {
+        throw new Error('CLI_COMMAND_PROVIDER_UNSUPPORTED');
+      }
+      let effectivePrompt = contextIdentity.nativeCliCommand
+        ? normalizedPrompt
+        : surfacePrelude ? `${surfacePrelude}\n\n${normalizedPrompt}` : normalizedPrompt;
+      if (!contextIdentity.nativeCliCommand && this.deps.contextComposer && !contextIdentity.suppressPersonalContext) {
         try {
           effectivePrompt = await this.deps.contextComposer.composePrompt({
             agentId: contextIdentity.agentId,
@@ -1898,8 +2330,7 @@ export class ExperimentalCoreRuntime {
                         agentId: `company:${companyId!.trim()}`,
                       });
                   },
-                  requestPermission: (request) =>
-                    this.requestPermission(requestId, sessionId, targetId, request, permissionIdentity(request.tool)),
+                  ...this.hookedPermission(requestId, sessionId, targetId, adapter, permissionIdentity),
                 });
                 return response;
               },
@@ -1924,41 +2355,100 @@ export class ExperimentalCoreRuntime {
         this.push({ requestId, sessionId, targetId, type: 'delta', text: assistantText, mode: 'replace' });
       } else {
         let candidateResponse = '';
-        await this.withAgentLease(
-          () =>
-            adapter.run({
-              sessionId,
-              target,
-              prompt: shouldOfferOrchestration(normalizedPrompt)
-                ? [ORCHESTRATION_CAPABILITY_PROMPT, `User request:\n${effectivePrompt}`].join('\n\n')
-                : effectivePrompt,
-              workspace: normalizedWorkspace,
-              modelKey,
-              permissionMode,
-              surface: resolvedSurfaceId,
-              mcpServers,
-              toolCatalog,
-              signal,
-              emit: (event) => {
-                this.observeAdapterTelemetry(requestId, event);
-                if (event.type === 'delta') {
-                  candidateResponse = event.mode === 'replace' ? event.text : candidateResponse + event.text;
-
-                  const active = this.active.get(requestId);
-                  if (active) active.partialText = candidateResponse;
-                  if (!shouldOfferOrchestration(normalizedPrompt) || !candidateResponse.trimStart().startsWith('{')) {
-                    this.pushAdapterEvent({ requestId, sessionId, targetId, workspace: normalizedWorkspace, event });
+        let firstAdapterEventSeen = false;
+        const runAdapterTurn = (turnPrompt: string): Promise<void> =>
+          this.withAgentLease(
+            () =>
+              adapter.run({
+                                sessionId,
+                target,
+                persistentSession: (adapter.protocol === 'acp' || adapter.protocol === 'codex-app-server') &&
+                  Boolean(contextIdentity.conversationId),
+                prompt: turnPrompt,
+                workspace: normalizedWorkspace,
+                modelKey,
+                permissionMode,
+                surface: resolvedSurfaceId,
+                mcpServers,
+                toolCatalog,
+                signal,
+                emit: (event) => {
+                  this.observeAdapterTelemetry(requestId, event);
+                  if (!firstAdapterEventSeen) {
+                    firstAdapterEventSeen = true;
+                    markPhase(`first agent event (${event.type})`);
                   }
-                  return;
-                }
-                this.pushAdapterEvent({ requestId, sessionId, targetId, workspace: normalizedWorkspace, event });
-              },
-              requestPermission: (request) =>
-                this.requestPermission(requestId, sessionId, targetId, request, permissionIdentity(request.tool)),
-            }),
-          signal
+                  if (event.type === 'delta') {
+                    candidateResponse = event.mode === 'replace' ? event.text : candidateResponse + event.text;
+
+                    const active = this.active.get(requestId);
+                    if (active) active.partialText = candidateResponse;
+                    if (!shouldOfferOrchestration(normalizedPrompt) || !candidateResponse.trimStart().startsWith('{')) {
+                      this.pushAdapterEvent({ requestId, sessionId, targetId, workspace: normalizedWorkspace, event });
+                    }
+                    return;
+                  }
+                  this.pushAdapterEvent({ requestId, sessionId, targetId, workspace: normalizedWorkspace, event });
+                },
+                ...this.hookedPermission(requestId, sessionId, targetId, adapter, permissionIdentity),
+              }),
+            signal
+          );
+        markPhase('starting the agent');
+                await runAdapterTurn(
+          !contextIdentity.nativeCliCommand && shouldOfferOrchestration(normalizedPrompt)
+            ? [ORCHESTRATION_CAPABILITY_PROMPT, `User request:\n${effectivePrompt}`].join('\n\n')
+            : effectivePrompt
         );
-        const proposal = parseOrchestrationProposal(candidateResponse);
+        // Stop hooks (design 11.5): a hook may ask the agent to keep going. The runtime had no turn loop, so this
+        // is it: at most MAX_STOP_CONTINUATIONS extra turns, and `completed` is emitted only after the loop.
+        const stopState = this.hookStates.get(requestId);
+        let stopContinuations = 0;
+        let stopTranscript = '';
+        for (;;) {
+          if (contextIdentity.nativeCliCommand || !stopState || signal.aborted || parseOrchestrationProposal(candidateResponse)) break;
+          // oxlint-disable-next-line no-await-in-loop -- continuations are sequential by design
+          const stop = await dispatchStop(stopState.turn, {
+            lastAssistantMessage: candidateResponse,
+            stopHookActive: stopContinuations > 0,
+          });
+          if (stop.halted && stop.notice) {
+            this.push({
+              requestId,
+              sessionId,
+              targetId,
+              type: 'notice',
+              text: `A hook stopped the turn: ${stop.notice}`,
+            });
+          }
+          if (!stop.continueWith) break;
+          if (stopContinuations >= MAX_STOP_CONTINUATIONS) {
+            this.push({
+              requestId,
+              sessionId,
+              targetId,
+              type: 'notice',
+              text: `Stop hooks asked to continue more than ${MAX_STOP_CONTINUATIONS} times in a row; the turn ended.`,
+            });
+            break;
+          }
+          stopContinuations += 1;
+          const separator = `\n\n> ${stop.continueWith}\n\n`;
+          stopTranscript += candidateResponse + separator;
+          this.push({ requestId, sessionId, targetId, type: 'delta', text: separator, mode: 'append' });
+          const previousAnswer = candidateResponse.slice(-8_000);
+          candidateResponse = '';
+          // A transport that does not keep the conversation needs the earlier answer in the prompt again.
+          // oxlint-disable-next-line no-await-in-loop -- continuations are sequential by design
+          await runAdapterTurn(
+            retainsConversationHistory
+              ? stop.continueWith
+              : [effectivePrompt, `Your previous answer:\n${previousAnswer}`, stop.continueWith].join('\n\n')
+          );
+        }
+        if (stopContinuations > 0) candidateResponse = stopTranscript + candidateResponse;
+        const proposal = contextIdentity.nativeCliCommand || stopContinuations > 0
+          ? undefined : parseOrchestrationProposal(candidateResponse);
         if (!proposal) {
           assistantText = candidateResponse;
         } else {
@@ -2056,9 +2546,15 @@ export class ExperimentalCoreRuntime {
           .save(checkpoint)
           .catch((error) => console.error('[TomnyCore] Failed to persist terminal checkpoint:', errorMessage(error)));
       }
+            if (closeWorkflowHost) {
+        await closeWorkflowHost().catch((error) =>
+          console.warn('[TomnyCore] Workflow host cleanup failed:', errorMessage(error))
+        );
+      }
       this.denyPermissionsForRequest(requestId);
       this.denyOrchestrationProposalsForRequest(requestId);
       this.active.delete(requestId);
+      this.hookStates.delete(requestId);
 
       this.runEvents.delete(requestId);
     }

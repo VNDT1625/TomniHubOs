@@ -1,0 +1,80 @@
+{
+  "schemaVersion": 1,
+  "generatedBy": "classifier",
+  "connections": [
+    {
+      "kind": "mcp",
+      "transport": "http",
+      "id": "context7-http",
+      "title": "context7",
+      "url": "https://mcp.context7.com/mcp",
+      "headers": [
+        {
+          "name": "Authorization",
+          "fromEnv": "CONTEXT7_API_KEY"
+        }
+      ],
+      "plugin": "source/plugins/claude/context7",
+      "group": "mcp-context7",
+      "origin": "claude-plugin"
+    },
+    {
+      "kind": "mcp",
+      "id": "context7-npx",
+      "title": "context7",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@upstash/context7-mcp"
+      ],
+      "plugin": "source/plugins/codex/context7",
+      "group": "mcp-context7",
+      "origin": "codex-plugin"
+    },
+    {
+      "kind": "skill",
+      "path": "source/plugins/codex/context7/skills/context7-mcp",
+      "plugin": "source/plugins/codex/context7",
+      "origin": "codex-plugin"
+    }
+  ],
+  "openItems": [
+    {
+      "kind": "env-value",
+      "note": "MCP \"context7\": header Authorization đọc từ biến này; repo có thêm chữ quanh biến, hãy điền giá trị đầy đủ của header",
+      "connection": "context7-http",
+      "path": "source/plugins/claude/context7/.mcp.json",
+      "name": "CONTEXT7_API_KEY",
+      "required": true
+    },
+    {
+      "kind": "env-value",
+      "note": "MCP \"context7\": header Authorization đọc từ biến này; repo có thêm chữ quanh biến, hãy điền giá trị đầy đủ của header",
+      "connection": "context7-npx",
+      "path": "source/plugins/claude/context7/.mcp.json",
+      "name": "CONTEXT7_API_KEY",
+      "required": true
+    },
+    {
+      "kind": "choose",
+      "note": "MCP \"context7\" được khai báo theo nhiều cách khác nhau; chọn một (mặc định: context7-http).",
+      "connections": [
+        "context7-http",
+        "context7-npx"
+      ]
+    },
+    {
+      "kind": "unrecognized",
+      "note": "Plugin \"remote-helper\" nằm ở repo khác (github.com/example-org/remote-helper); không tự tải",
+      "path": "source/.claude-plugin/marketplace.json"
+    },
+    {
+      "kind": "unrecognized",
+      "note": "Tệp khai báo chưa có bộ nhận diện nào xử lý",
+      "path": "source/gemini-extension.json"
+    }
+  ],
+  "detectors": [
+    "agent-plugins@1"
+  ]
+}

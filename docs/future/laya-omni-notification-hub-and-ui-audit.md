@@ -7,6 +7,10 @@ Tài liệu này gồm 2 phần chính:
 
 ---
 
+> **Trạng thái triển khai (2026-10-08):** Giai đoạn 3 đã làm theo hướng không cần extension: ngăn kéo có nhóm/lọc, thẻ “bạn đã bỏ lỡ gì”, nhiều tài khoản Gmail (IMAP chỉ header), YouTube qua feed công khai, thông báo Windows của ứng dụng khác (Zalo/Telegram/Discord…), bắt thông báo web của ChatGPT/Claude/Gemini/mạng xã hội trong trình duyệt tích hợp, thông báo từ ứng dụng gói (`notifications.post`), tắt tiếng nguồn/ưu tiên người gửi, uy tín người gửi học từ phản hồi, leo thang LLM tuỳ chọn có ngân sách ngày (mặc định tắt) và công cụ MCP chỉ đọc để agent tóm tắt. Bảng trạng thái từng nguồn (chạy được / theo phiên web / mới có adapter) ở `docs/FEATURE_STATUS.md` §6. Còn TARGET: OAuth Gmail/Outlook, Telegram Bot, Facebook Page/follower API, bình luận YouTube, bản tin tổng hợp tự sinh theo ngày.
+
+> **Trạng thái triển khai (2026-10-05):** Giai đoạn 1 và 2 đã có trong mã — chuông trên Header mở ngăn kéo thật, route chết `/settings/realtime` đã gỡ, Home không còn thông báo giả, sự kiện nội bộ + IMAP chỉ đọc + feed RSS/Atom + trang web được phép (đọc số chưa đọc trên tiêu đề tab của trình duyệt tích hợp, thay cho extension ở Giai đoạn 3), phân loại Laya/quy tắc, tạo việc Manager 1 chạm. Còn TARGET: OAuth Gmail/Outlook, Telegram, bản tin tổng hợp theo ngày. Chi tiết: `docs/FEATURE_STATUS.md` §6.
+
 ## PHẦN 1: BÁO CÁO KHẢO SÁT TOÀN DIỆN UI & CÁC THÀNH PHẦN THIẾU CHỨC NĂNG
 
 ### Bảng tổng hợp trạng thái các trang chính (Status Table)

@@ -156,11 +156,20 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
 
   const supabaseEnabled = isSupabaseConfigured();
 
+  const e2eAuthenticated = isDesktopRuntime && window.electronAPI?.e2e !== undefined;
+
   const refresh = useCallback(async () => {
     const operationVersion = ++authStateVersionRef.current;
     const isCurrentOperation = (): boolean => authStateVersionRef.current === operationVersion;
 
     if (authStateVersionRef.current !== operationVersion) return;
+
+    if (e2eAuthenticated) {
+      setUser({ id: 'e2e-user', username: 'E2E User' });
+      setStatus('authenticated');
+      setReady(true);
+      return;
+    }
 
     if (isSupabaseConfigured()) {
       const storedSupabase = getStoredSupabaseSession();
@@ -238,7 +247,7 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
       setStatus('unauthenticated');
     }
     setReady(true);
-  }, []);
+  }, [e2eAuthenticated]);
 
   useEffect(() => {
     void refresh();
@@ -641,6 +650,11 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
+
+/** Shell can render in previews/tests before an AuthProvider is mounted. */
+export function useOptionalAuth(): AuthContextValue | undefined {
+  return useContext(AuthContext);
+}
 
 export function useAuth(): AuthContextValue {
   const context = useContext(AuthContext);

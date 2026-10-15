@@ -25,6 +25,13 @@ import {
 import type { PetSize } from '@process/pet/petTypes';
 
 import { setCloseToTrayEnabled } from '@process/utils/tray';
+import type { SleepMetricsMonitor } from '@process/system/backgroundMedia/sleepMetrics';
+
+let backgroundSleepMetrics: SleepMetricsMonitor | undefined;
+/** Bind read-only sleep measurements without creating a second metrics sampler. */
+export const registerSleepMetricsMonitor = (monitor: SleepMetricsMonitor): void => {
+  backgroundSleepMetrics = monitor;
+};
 
 // Keep-awake power blocker state
 let _keepAwakeBlockerId: number | null = null;
@@ -41,6 +48,11 @@ export function onLanguageChanged(listener: LanguageChangeListener): void {
 }
 
 export function initSystemSettingsBridge(): void {
+  ipcBridge.systemSettings.getBackgroundSleepMetrics.provider(() => {
+    if (!backgroundSleepMetrics) throw new Error('Background sleep metrics are unavailable.');
+    return Promise.resolve(backgroundSleepMetrics.snapshot());
+  });
+
   // Set "keep awake" — toggle prevent-display-sleep blocker.
   // getKeepAwake is served by the backend via HTTP; only the setter remains
   // because it drives the local power.preventDisplaySleep blocker.
@@ -119,7 +131,11 @@ export function initSystemSettingsBridge(): void {
     if (!Number.isSafeInteger(minutes) || minutes < 1 || minutes > 60) {
       throw new Error('Invalid agent idle timeout.');
     }
-    await ProcessConfig.set('acp.agentIdleTimeout', minutes);
+        await ProcessConfig.set('acp.agentIdleTimeout', minutes);
+    // Do not spawn the Agent Mesh just to change a preference. Re-arm only
+    // sessions that are already running; future sessions read this at startup.
+    const { updateActiveAgentIdleTimeout } = await import('@process/agentRuntime/agentMesh/mcp/wiring');
+    updateActiveAgentIdleTimeout(minutes);
   });
 
   // 语言变更通知，同步主进程 i18n 并通知托盘重建

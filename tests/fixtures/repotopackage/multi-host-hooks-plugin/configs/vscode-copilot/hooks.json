@@ -1,0 +1,6 @@
+{
+  "hooks": {
+    "PreToolUse": [ { "type": "command", "command": "multi-host hook vscode-copilot pretooluse" } ],
+    "PostToolUse": [ { "type": "command", "command": "multi-host hook vscode-copilot posttooluse" } ]
+  }
+}

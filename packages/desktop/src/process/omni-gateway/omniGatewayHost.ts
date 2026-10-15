@@ -97,7 +97,7 @@ export type StartOmniGatewayHostInput = {
    */
   oauthHandler?: (req: http.IncomingMessage, res: http.ServerResponse) => Promise<boolean>;
   /** Browser origins allowed to call the gateway. Requests without Origin (native MCP clients) remain supported. */
-  isOriginAllowed?: (origin: string) => boolean;
+  isOriginAllowed?: (origin: string, req?: http.IncomingMessage) => boolean;
 };
 
 /** SSE stream path for the IDE profile (local clients only). */
@@ -202,7 +202,7 @@ export const startOmniGatewayHost = async (input: StartOmniGatewayHostInput): Pr
     const originHeader = req.headers.origin;
     const origin = typeof originHeader === 'string' ? originHeader : undefined;
 
-    if (origin && input.isOriginAllowed?.(origin) !== true) {
+    if (origin && input.isOriginAllowed?.(origin, req) !== true) {
       res.writeHead(403, { 'content-type': 'text/plain', vary: 'Origin' }).end('Origin is not allowed.');
       return;
     }

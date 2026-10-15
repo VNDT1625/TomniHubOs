@@ -4,10 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from 'react';
-import { Button, Tooltip, Badge } from '@arco-design/web-react';
+import { Badge, Button, Tooltip } from '@arco-design/web-react';
 import { Connection } from '@icon-park/react';
-import { iconColors } from '@/renderer/styles/colors';
+import React from 'react';
+import { useTranslation } from 'react-i18next';
 
 export type ChatPipelineButtonProps = {
   activeCount: number;
@@ -15,17 +15,19 @@ export type ChatPipelineButtonProps = {
 };
 
 export const ChatPipelineButton: React.FC<ChatPipelineButtonProps> = ({ activeCount, onClick }) => {
+  const { t } = useTranslation();
   return (
-    <Tooltip content={`Chat Pipeline Flow: ${activeCount} chặng kích hoạt (Kéo-Thả tùy biến)`}>
+    <Tooltip content={t('conversation.pipeline.buttonTooltip', { count: activeCount })}>
       <Badge count={activeCount} offset={[-2, 2]}>
         <Button
           size='mini'
           type='secondary'
           onClick={onClick}
-          icon={<Connection theme='outline' size='14' fill={iconColors.primary} strokeWidth={2} />}
+          data-spotlight-id='pipeline'
+          icon={<Connection theme='outline' size='14' fill='currentColor' strokeWidth={2} />}
           className='mr-2'
         >
-          Pipeline
+          {t('conversation.pipeline.button')}
         </Button>
       </Badge>
     </Tooltip>

@@ -1,0 +1,6 @@
+[
+  {
+    "name": "build-log",
+    "command": "tail -f build.log"
+  }
+]

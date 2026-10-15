@@ -1,0 +1,6 @@
+{
+  "$schema": "https://agent-plugins.org/schema/v1/plugin.json",
+  "name": "context7",
+  "version": "1.0.0",
+  "description": "Library documentation lookup for Antigravity"
+}

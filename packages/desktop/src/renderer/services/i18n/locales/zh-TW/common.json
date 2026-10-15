@@ -1,4 +1,93 @@
 {
+  "superSearch": {
+    "placeholder": {
+      "hub": "搜尋…",
+      "browser": "使用 {{engine}} 搜尋…"
+    },
+    "ariaLabel": "超級搜尋",
+    "scopeLabel": "搜尋範圍",
+    "scope": {
+      "all": "全部"
+    },
+    "source": {
+      "local": "應用程式內",
+      "apps": "應用程式",
+      "web": "網頁"
+    },
+    "state": {
+      "loading": "搜尋中…",
+      "empty": "沒有結果",
+      "error": "此來源發生錯誤，其他來源仍可使用",
+      "timeout": "此來源回應過慢",
+      "unavailable": "來源尚未就緒",
+      "noBridge": "已連線，但尚未接上搜尋執行通道",
+      "disabled": "此來源已關閉，請在來源設定中開啟。"
+    },
+    "hint": {
+      "empty": "輸入以搜尋。使用 fb: abc 之類的前綴可只搜尋單一來源。",
+      "scopeOnly": "正在搜尋 {{source}} — 請輸入內容。"
+    },
+    "rank": "#{{rank}} · 前 {{percent}}%",
+    "rankTitle": "{{source}} 中第 {{rank}}/{{count}} 名 — 前 {{percent}}%",
+    "resultCount": "{{count}} 筆結果",
+    "footer": "↑↓ 選擇 · Enter 開啟 · Esc 關閉",
+    "close": "關閉",
+    "clear": "清除",
+    "engineLabel": "搜尋引擎",
+    "config": {
+      "title": "搜尋來源",
+      "source": "Source",
+      "remove": "Remove",
+      "addCustom": "Add a site search",
+      "customHelp": "Paste the search link of any site and put {q} where the keyword goes, e.g. https://www.google.com/maps/search/{q}",
+      "customName": "Name",
+      "customUrl": "Search link with {q}",
+      "customInvalid": "Needs a name, a unique alias and an http(s) link containing {q}",
+      "add": "Add",
+      "open": "來源設定",
+      "enabled": "開啟",
+      "inAll": "計入「全部」",
+      "alias": "別名",
+      "aliasInvalid": "別名無效或已被使用",
+      "connectedNote": "已連線的第三方來源預設關閉，開啟後才會送出查詢。",
+      "reset": "還原預設值",
+      "done": "完成",
+      "none": "找不到已連線的搜尋工具"
+    },
+    "web": {
+      "searchWith": "在 {{engine}} 搜尋「{{query}}」",
+      "openSite": "開啟 {{site}}"
+    },
+    "local": {
+      "untitledConversation": "未命名對話",
+      "restartApp": "重新啟動應用程式",
+      "actionSubtitle": "動作",
+      "pageSubtitle": "頁面",
+      "settings": "設定",
+      "page": {
+        "home": "首頁",
+        "history": "歷史",
+        "scheduled": "排程任務",
+        "store": "商店",
+        "browser": "瀏覽器",
+        "ide": "IDE",
+        "company": "公司",
+        "git": "Git",
+        "account": "帳號",
+        "settings": "設定"
+      }
+    },
+    "settings": {
+      "theme": "主題與配色",
+      "cssTheme": "自訂 CSS 主題",
+      "wallpaper": "桌布",
+      "interfaceLanguage": "介面語言",
+      "modelProviders": "模型供應商與 API 金鑰",
+      "mcpServers": "MCP 伺服器與連接器",
+      "skills": "技能",
+      "webui": "遠端 / WebUI 存取"
+    }
+  },
   "send": "發送",
   "cancel": "取消",
   "save": "儲存",
@@ -11,6 +100,7 @@
   "skills": "技能",
   "workspace": "專案",
   "settings": "設定",
+  "home": "首頁",
   "system": "系統",
   "about": "關於我們",
   "back": "返回聊天",
@@ -23,6 +113,7 @@
   "loading": "請稍候...",
   "copy": "複製",
   "reply": "引用",
+  "copiedInline": "已複製",
   "copySuccess": "已複製",
   "copyFailed": "複製失敗",
   "download": "下載",
@@ -89,6 +180,17 @@
   "fileAttach.uploading": "上傳中...",
   "fileAttach.uploadSuccess": "上傳成功",
   "fileAttach.cancelUpload": "取消上傳",
+  "attachmentQuickView": {
+    "showAttachments": "顯示附件 ({{count}})",
+    "hideAttachments": "隱藏附件 ({{count}})",
+    "remove": "移除 {{label}}",
+    "label": "{{label}} 的快速預覽",
+    "loading": "正在載入預覽…",
+    "unsupported": "此檔案類型無法在此處預覽。",
+    "directory": "無法在此處預覽資料夾。",
+    "too-large": "此檔案過大，無法快速預覽。",
+    "unavailable": "此檔案已無法使用。"
+  },
   "expand": "展開",
   "name": "名稱",
   "added": "已新增",
@@ -98,5 +200,267 @@
   "import": "匯入",
   "processing": "處理中...",
   "optional": "（選填）",
-  "clear": "清除"
+  "clear": "清除",
+  "notificationHub": {
+    "title": "通知",
+    "summary": "緊急 {{p0}} · 重要 {{p1}} · 已過濾 {{filtered}}",
+    "layaOn": "Laya 正在分類新通知。",
+    "layaOff": "Laya 未執行，正在使用內建規則分類。",
+    "taskCreated": "已建立任務",
+    "taskFailed": "無法建立任務",
+    "tabs": {
+      "focus": "重點",
+      "digest": "摘要",
+      "filtered": "已過濾",
+      "sources": "來源"
+    },
+    "empty": {
+      "focus": "目前沒有需要你處理的事。",
+      "digest": "暫無更新。",
+      "filtered": "沒有被過濾的內容。"
+    },
+    "level": {
+      "P0": "緊急",
+      "P1": "重要",
+      "P2": "摘要",
+      "P3": "過濾"
+    },
+    "by": {
+      "laya": "Laya 分類",
+      "rules": "規則分類",
+      "user": "由你設定",
+      "llm": "由你的模型分類"
+    },
+    "actions": {
+      "open": "開啟",
+      "createTask": "轉為任務",
+      "move": "調整級別",
+      "markRead": "標為已讀",
+      "remove": "刪除",
+      "alwaysImportant": "此寄件者一律緊急",
+      "alwaysMute": "一律過濾此寄件者",
+      "syncAll": "立即檢查來源",
+      "markAllRead": "全部標為已讀",
+      "clearTab": "清空此分頁",
+      "boostSender": "此人的訊息一律緊急",
+      "muteSender": "一律篩選此人",
+      "muteSource": "將 {{name}} 設為靜音",
+      "unmuteSource": "取消靜音 {{name}}",
+      "settings": "通知設定"
+    },
+    "event": {
+      "needsInput": "{{name}} 等待你的回覆",
+      "failed": "{{name}} 失敗",
+      "done": "{{name}} 已完成",
+      "scheduleFailed": "排程任務 {{name}} 失敗",
+      "scheduleDone": "排程任務 {{name}} 已完成",
+      "webUnread": "{{name}}：{{count}} 則未讀 (+{{added}})",
+      "ramHigh": "記憶體即將不足",
+      "ramHighBody": "記憶體已使用 {{percent}}%（{{used}} / {{total}} GB）。請關閉不需要的模型或分頁。"
+    },
+    "errors": {
+      "label": "請輸入名稱。",
+      "host": "伺服器位址無效。",
+      "user": "請輸入電子郵件或使用者名稱。",
+      "port": "連接埠須介於 1 到 65535。",
+      "password": "密碼過長。",
+      "url": "請使用 http 或 https 的訂閱位址。",
+      "origin": "請輸入網站，例如 facebook.com。",
+      "kind": "未知的來源類型。",
+      "missing": "此來源已不存在。",
+      "limit": "已達 30 個來源的上限。",
+      "busy": "此來源正在同步。",
+      "unknown": "發生問題，請重試。",
+      "channel": "請輸入 YouTube 頻道連結、@handle 或頻道 ID。",
+      "unsupported": "此系統不支援。"
+    },
+    "sources": {
+      "title": "已連線的來源",
+      "add": "新增來源",
+      "intro": "Tomny 只讀取你允許的內容：郵件標頭（不會標為已讀）、公開動態來源、你所選應用程式的 Windows 通知，以及已允許網站的分頁標題中的未讀數和網站本身的通知。",
+      "none": "還沒有來源。新增郵件、訂閱或網站。",
+      "kind": {
+        "imap": "郵件",
+        "feed": "訂閱",
+        "web": "網站",
+        "youtube": "YouTube",
+        "os": "桌面應用程式"
+      },
+      "lastError": "錯誤：{{error}}",
+      "lastSync": "檢查於 {{time}}",
+      "webPassive": "在內建瀏覽器開啟該網站時更新",
+      "neverSynced": "尚未檢查",
+      "noPassword": "未儲存密碼",
+      "enabled": "啟用",
+      "syncNow": "立即檢查",
+      "edit": "編輯",
+      "remove": "刪除",
+      "removeConfirm": "刪除此來源及其儲存的密碼？",
+      "provider": "服務商",
+      "presets": {
+        "gmail": "Gmail",
+        "outlook": "Outlook / Microsoft 365",
+        "yahoo": "Yahoo 信箱",
+        "icloud": "iCloud 郵件",
+        "custom": "其他 IMAP 伺服器"
+      },
+      "presetHint": {
+        "gmail": "先開啟兩步驟驗證，再到 myaccount.google.com/apppasswords 建立應用程式密碼並貼到這裡。需在 Gmail 設定中啟用 IMAP。",
+        "outlook": "如開啟兩步驟登入，請在 Microsoft 帳戶安全性頁面建立應用程式密碼。部分公司帳戶禁止 IMAP。",
+        "yahoo": "在 Yahoo 帳戶安全性中建立應用程式密碼並貼到這裡。",
+        "icloud": "在 account.apple.com 建立 App 專用密碼並貼到這裡。",
+        "custom": "輸入服務商的 IMAP 伺服器。僅使用 TLS 連線。"
+      },
+      "user": "電子郵件或使用者名稱",
+      "password": "應用程式密碼",
+      "passwordKeep": "留空則保留已儲存的密碼",
+      "host": "IMAP 伺服器",
+      "port": "連接埠",
+      "mailbox": "資料夾",
+      "url": "訂閱位址（RSS 或 Atom）",
+      "webHint": "選擇你在內建瀏覽器中登入的網站。Tomny 會留意其分頁標題中的未讀數，以及（經你允許）網站發出的通知；絕不讀取頁面內容。",
+      "origin": "網站",
+      "label": "名稱",
+      "interval": "檢查間隔（分鐘）",
+      "cancel": "取消",
+      "save": "儲存",
+      "saved": "已儲存來源",
+      "syncOk": "已檢查：{{count}} 則新內容",
+      "syncFailed": "檢查失敗：{{error}}",
+      "cardTitle": "來源與帳號",
+      "osApps": "納入的應用程式",
+      "osHint": "讀取其他 Windows 應用程式顯示的通知（Zalo、Telegram、Discord、Outlook、瀏覽器）。選擇應用程式，或全部不選以納入 Tomny 以外的所有應用程式。",
+      "osNone": "尚未找到應用程式通知，或目前系統不是 Windows。",
+      "osAllApps": "所有應用程式",
+      "preview": "保留簡短預覽",
+      "previewHint": "關閉：僅讀取寄件者和主旨。",
+      "youtubeHint": "貼上頻道連結、@handle 或頻道 ID。新上傳內容來自 YouTube 的公開動態來源；不需登入或 API 金鑰。",
+      "channel": "YouTube 頻道",
+      "capture": "接收網站本身的通知",
+      "captureHint": "當頁面發出通知（AI 回答已完成、有新訊息）時，通知會進入中心，僅在重要時提醒。"
+    },
+    "rules": {
+      "title": "過濾規則",
+      "useLaya": "讓 Laya 分類通知",
+      "layaRunning": "Laya 正在本機執行。",
+      "layaStopped": "Laya 未執行；Tomny 不會只為此啟動它。",
+      "systemAlerts": "緊急通知同時傳送系統提醒",
+      "vip": "一律緊急的寄件者",
+      "muted": "一律過濾的寄件者",
+      "urgent": "緊急關鍵字",
+      "vipPlaceholder": "每行一個：boss@company.com 或 company.com",
+      "mutedPlaceholder": "每行一個：news@shop.com 或 shop.com",
+      "urgentPlaceholder": "每行一個，例如：截止",
+      "save": "儲存規則",
+      "saved": "已儲存規則"
+    },
+    "delivery": {
+      "interrupt": "已提醒",
+      "digest": "在動態中",
+      "silent": "已隱藏"
+    },
+    "view": {
+      "toolbar": "篩選通知",
+      "search": "搜尋通知",
+      "groupBy": "分組方式",
+      "group": {
+        "time": "最新優先",
+        "level": "依重要程度",
+        "source": "依來源",
+        "account": "依帳號"
+      },
+      "source": "來源",
+      "allSources": "所有來源",
+      "unreadOnly": "僅未讀",
+      "noAccount": "其他"
+    },
+    "sourceKind": {
+      "agent": "Tomny 代理程式",
+      "schedule": "排程",
+      "team": "團隊",
+      "system": "Tomny",
+      "email": "郵件",
+      "feed": "動態來源",
+      "web": "網站",
+      "youtube": "YouTube",
+      "os": "桌面應用程式",
+      "app": "Tomny 應用程式"
+    },
+    "missed": {
+      "title": "你錯過了什麼",
+      "period": {
+        "today": "今天",
+        "24h": "24 小時",
+        "7d": "7 天"
+      },
+      "none": "此期間沒有新內容。",
+      "counts": "{{total}} 則通知，{{unread}} 則未讀 · {{p0}} 緊急 · {{p1}} 重要 · {{p2}} 摘要 · {{p3}} 已篩選",
+      "askAgent": "向任一 Tomny 代理程式詢問「我錯過了什麼？」即可取得書面摘要。"
+    },
+    "catalog": {
+      "title": "可連接的項目",
+      "intro": "可用：Tomny 自行擷取。已登入網站：在內建瀏覽器中登入該網站期間可用。僅轉接器：已規劃，需先完成服務供應商整合。",
+      "support": {
+        "working": "可用",
+        "session": "已登入網站",
+        "adapter-ready": "僅轉接器"
+      },
+      "group": {
+        "mail": "郵件",
+        "ai": "AI 助理",
+        "social": "社群",
+        "messages": "訊息",
+        "video": "影片",
+        "desktop": "桌面",
+        "apps": "應用程式"
+      }
+    },
+    "triage": {
+      "cardTitle": "Laya 分流",
+      "title": "哪些可以打擾你",
+      "intro": "規則、你的清單以及你開啟或略過的內容會先在本裝置上免費做出判斷。Laya 已在執行時會提供協助。",
+      "interrupt": "提醒範圍",
+      "interruptHint": "其餘內容都在動態中等待。",
+      "p0p1": "緊急 + 重要",
+      "learn": "從我開啟或略過的內容中學習",
+      "learnHint": "將寄件者上調或下調一級；本身絕不會把任何內容設為緊急。",
+      "packageApps": "來自 Tomny 應用程式的通知",
+      "packageAppsHint": "宣告了 notifications.show 的已安裝應用程式可以發送通知；它們無法將自己標記為緊急。",
+      "retention": "通知保留天數",
+      "muted": "已靜音的來源",
+      "mutedNone": "沒有已靜音的來源。"
+    },
+    "llm": {
+      "title": "就不明確的項目詢問模型",
+      "enable": "對不明確的項目使用模型",
+      "intro": "預設關閉。僅傳送規則無法歸類的項目，以小批次傳送，並移除代碼、數字、連結和地址。絕不會超出每日上限。",
+      "model": "模型",
+      "modelPlaceholder": "一個小型、低成本的模型 ID",
+      "dailyLimit": "每日最多項目數",
+      "includeSnippet": "一併傳送已遮蔽的預覽",
+      "includeSnippetHint": "關閉：僅傳送來源、寄件者網域和已遮蔽的主旨。",
+      "usage": "今日已用：{{used}} / {{limit}}",
+      "inactive": "未啟用",
+      "lastRun": "上次批次 {{time}}",
+      "error": {
+        "budget": "已達今日上限",
+        "no-model": "沒有服務供應商能提供此模型",
+        "unparsed": "無法讀取模型的回答"
+      },
+      "errorGeneric": "上次錯誤：{{error}}"
+    },
+    "flash": {
+      "title": "快速通知",
+      "empty": "目前沒有需要處理的內容。",
+      "viewAll": "查看全部",
+      "viewAllMore": "查看全部（另有 {{count}} 則）"
+    },
+    "page": {
+      "subtitle": "你收到的所有通知、來源與 Laya 設定。",
+      "tabs": {
+        "feed": "通知",
+        "triage": "Laya 與預算"
+      }
+    }
+  }
 }

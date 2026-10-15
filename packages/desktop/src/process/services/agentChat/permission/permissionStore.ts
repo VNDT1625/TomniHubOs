@@ -231,7 +231,13 @@ export class PermissionStore implements DurablePermissionStore {
     let result: T | undefined;
     let failure: unknown;
     const run = this.queue.then(async () => {
-      const previousState = clone(this.state);
+      // Grants are mutated in place (uses, revocation), so they are copied. Audit records are never mutated after
+      // they are written, so a shallow copy of the array is enough and avoids cloning thousands of records per call.
+      const previousState: PermissionStoreState = {
+        ...this.state,
+        grants: clone(this.state.grants),
+        audit: this.state.audit.slice(),
+      };
       const wasInitialized = this.initialized;
       try {
         result = await operation();

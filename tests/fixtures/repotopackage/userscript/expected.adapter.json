@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "generatedBy": "classifier",
+  "connections": [
+    {
+      "kind": "extension",
+      "id": "dark-lite",
+      "title": "Dark Lite",
+      "format": "userscript",
+      "root": "source/scripts/dark-lite.user.js",
+      "version": "0.4.1",
+      "permissions": [
+        "GM_getValue",
+        "GM_setValue",
+        "GM_notification"
+      ],
+      "hostPermissions": [
+        "*://api.example.org/*"
+      ],
+      "matches": [
+        "https://*.example.org/*"
+      ],
+      "unsupported": [
+        "GM_notification",
+        "@require cdn.jsdelivr.net"
+      ],
+      "origin": "userscript"
+    }
+  ],
+  "openItems": [
+    {
+      "kind": "needs-runtime",
+      "note": "Userscript \"Dark Lite\" dùng thứ Hub chưa hỗ trợ ở v1, nên không chạy đủ: GM_notification, @require cdn.jsdelivr.net. @require và @resource tới mạng không được tải.",
+      "connection": "dark-lite",
+      "path": "source/scripts/dark-lite.user.js"
+    }
+  ],
+  "detectors": [
+    "browser-ext@1"
+  ]
+}

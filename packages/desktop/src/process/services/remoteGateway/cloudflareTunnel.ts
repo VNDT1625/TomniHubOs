@@ -39,8 +39,20 @@ export type TunnelResult =
 type Tunnel = { proc: ChildProcess; url: string | null };
 const tunnels = new Map<string, Tunnel>();
 
+const getUserDataDir = (): string => {
+  try {
+    if (typeof app?.getPath === 'function') {
+      return app.getPath('userData');
+    }
+  } catch {
+    // headless environment fallback
+  }
+  const appData = process.env.APPDATA;
+  return appData ? join(appData, 'Tomny-Dev') : join(process.cwd(), '.tomni');
+};
+
 /** Directory where we keep an app-managed cloudflared binary (download fallback). */
-const managedDir = (): string => join(app.getPath('userData'), 'tools');
+const managedDir = (): string => join(getUserDataDir(), 'tools');
 /** Full path of the app-managed cloudflared binary. */
 const managedPath = (): string => join(managedDir(), process.platform === 'win32' ? 'cloudflared.exe' : 'cloudflared');
 

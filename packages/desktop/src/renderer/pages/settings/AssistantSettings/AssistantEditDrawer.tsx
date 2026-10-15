@@ -3,6 +3,16 @@
  * Contains name/avatar fields, agent selector, rules editor, and skills section.
  */
 import type { AssistantListItem, BuiltinAutoSkill, SkillInfo } from './types';
+import type { Assistant, CreateAssistantRequest } from '@/common/types/agent/assistantTypes';
+import AssistantBundleActions from './AssistantBundleActions';
+import AssistantSessionItemsSection from './AssistantSessionItemsSection';
+import { ASSISTANT_LIMITS } from '@/common/types/agent/assistant/assistantSchema';
+import {
+  addPromptLine,
+  canAddPrompt,
+  removePromptLine,
+  updatePromptLine,
+} from '@/common/types/agent/assistant/assistantPrompts';
 import type { AvailableBackend } from '@/renderer/hooks/assistant';
 import EmojiPicker from '@/renderer/components/chat/EmojiPicker';
 import MarkdownView from '@/renderer/components/Markdown';
@@ -32,6 +42,9 @@ type AssistantEditDrawerProps = {
   // Rules / prompt
   editContext: string;
   setEditContext: (v: string) => void;
+  // Example prompts shown on the chat start screen (capped by ASSISTANT_LIMITS)
+  editPrompts: string[];
+  setEditPrompts: (v: string[]) => void;
   promptViewMode: 'edit' | 'preview';
   setPromptViewMode: (v: 'edit' | 'preview') => void;
 
@@ -39,6 +52,13 @@ type AssistantEditDrawerProps = {
   availableSkills: SkillInfo[];
   selectedSkills: string[];
   setSelectedSkills: (v: string[]) => void;
+  // Plugins (MCP servers) and hooks the assistant brings
+  selectedPlugins: string[];
+  setSelectedPlugins: (v: string[]) => void;
+  selectedHooks: string[];
+  setSelectedHooks: (v: string[]) => void;
+  selectedTools: string[];
+  setSelectedTools: (v: string[]) => void;
   pendingSkills: Array<{ name: string; description: string }>;
   customSkills: string[];
   setDeletePendingSkillName: (v: string | null) => void;
@@ -80,11 +100,19 @@ const AssistantEditDrawer: React.FC<AssistantEditDrawerProps> = ({
   setEditAgent,
   editContext,
   setEditContext,
+  editPrompts,
+  setEditPrompts,
   promptViewMode,
   setPromptViewMode,
   availableSkills,
   selectedSkills,
   setSelectedSkills,
+  selectedPlugins,
+  setSelectedPlugins,
+  selectedHooks,
+  setSelectedHooks,
+  selectedTools,
+  setSelectedTools,
   pendingSkills,
   customSkills: _customSkills,
   setDeletePendingSkillName,
@@ -137,6 +165,48 @@ const AssistantEditDrawer: React.FC<AssistantEditDrawerProps> = ({
   const showSkills = isCreating || (activeAssistant !== null && activeAssistant.source !== 'extension');
 
   const agentOptions = availableBackends;
+
+  /** Current editor state as an assistant record, for export. Reads the latest values at click time. */
+  const buildCurrentAssistant = (): Assistant => ({
+    id: activeAssistant?.id ?? 'draft',
+    source: 'user',
+    name: editName.trim() || 'assistant',
+    name_i18n: {},
+    description: editDescription,
+    description_i18n: {},
+    avatar: editAvatar,
+    enabled: true,
+    sort_order: 0,
+    preset_agent_type: editAgent,
+    enabled_skills: selectedSkills,
+    custom_skill_names: [],
+    disabled_builtin_skills: disabledBuiltinSkills,
+    enabled_plugins: selectedPlugins,
+    enabled_hooks: selectedHooks,
+    default_tools: selectedTools,
+    context: editContext,
+    context_i18n: {},
+    prompts: [],
+    prompts_i18n: {},
+    models: [],
+  });
+
+  /** Fills the editor from an imported bundle. Nothing is saved here; the user reviews and presses Save. */
+  const applyImportedBundle = (request: CreateAssistantRequest) => {
+    setEditName(request.name);
+    setEditDescription(request.description ?? '');
+    setEditAvatar(request.avatar ?? '');
+    if (request.preset_agent_type && agentOptions.some((opt) => opt.id === request.preset_agent_type)) {
+      setEditAgent(request.preset_agent_type);
+    }
+    setEditContext(request.context ?? '');
+    setSelectedSkills([...new Set([...(request.enabled_skills ?? []), ...(request.custom_skill_names ?? [])])]);
+    setSelectedPlugins(request.enabled_plugins ?? []);
+    setSelectedHooks(request.enabled_hooks ?? []);
+    setSelectedTools(request.default_tools ?? []);
+    setDisabledBuiltinSkills(request.disabled_builtin_skills ?? []);
+    setPromptViewMode('edit');
+  };
 
   const customSkillItems = availableSkills.filter((skill) => skill.source === 'custom');
   const builtinSkillItems = availableSkills.filter((skill) => skill.source === 'builtin');
@@ -278,6 +348,13 @@ const AssistantEditDrawer: React.FC<AssistantEditDrawerProps> = ({
             </div>
           )}
 
+          {/* Share bundle: export the current editor state, or load a bundle into a new assistant */}
+          <AssistantBundleActions
+            buildCurrent={buildCurrentAssistant}
+            onImport={applyImportedBundle}
+            canImport={isCreating}
+          />
+
           {/* Name & Avatar */}
           <div className='flex-shrink-0'>
             <Typography.Text bold>
@@ -382,7 +459,7 @@ const AssistantEditDrawer: React.FC<AssistantEditDrawerProps> = ({
           <div className='flex-shrink-0'>
             <div className='flex items-center justify-between'>
               <Typography.Text bold className='flex-shrink-0'>
-                {t('settings.assistantRules', { defaultValue: 'Rules' })}
+                {t('settings.assistantAgentMd', { defaultValue: 'agent.md' })}
               </Typography.Text>
               <Button
                 type='text'
@@ -447,6 +524,76 @@ const AssistantEditDrawer: React.FC<AssistantEditDrawerProps> = ({
                 )}
               </div>
             </div>
+          </div>
+
+          {/* Example prompts: short starter lines shown on the chat start screen */}
+          <div className='flex-shrink-0' data-testid='assistant-prompts-section'>
+            <div className='flex items-center justify-between'>
+              <Typography.Text bold>
+                {t('settings.assistantPromptsTitle', { defaultValue: 'Example prompts' })}
+              </Typography.Text>
+              <span className='text-12px text-t-secondary'>
+                {editPrompts.length}/{ASSISTANT_LIMITS.promptMax}
+              </span>
+            </div>
+            <div className='mt-8px flex flex-col gap-8px'>
+              {editPrompts.map((prompt, index) => (
+                <div key={index} className='flex items-center gap-8px' data-testid={`assistant-prompt-row-${index}`}>
+                  <Input
+                    value={prompt}
+                    maxLength={ASSISTANT_LIMITS.promptLength}
+                    disabled={isBuiltin}
+                    placeholder={t('settings.assistantPromptPlaceholder', { defaultValue: 'Example prompt' })}
+                    onChange={(value) => setEditPrompts(updatePromptLine(editPrompts, index, value))}
+                    data-testid={`assistant-prompt-input-${index}`}
+                    className='flex-1 rounded-4px bg-bg-1'
+                  />
+                  <Button
+                    size='small'
+                    type='text'
+                    disabled={isBuiltin}
+                    aria-label={t('settings.assistantPromptRemove', { defaultValue: 'Remove prompt' })}
+                    onClick={() => setEditPrompts(removePromptLine(editPrompts, index))}
+                    data-testid={`assistant-prompt-remove-${index}`}
+                    icon={<Delete size={14} />}
+                  />
+                </div>
+              ))}
+              <div>
+                <Button
+                  size='small'
+                  type='outline'
+                  disabled={isBuiltin || !canAddPrompt(editPrompts)}
+                  onClick={() => setEditPrompts(addPromptLine(editPrompts))}
+                  data-testid='assistant-prompt-add'
+                  icon={<Plus size={14} />}
+                  className='rounded-[100px]'
+                >
+                  {t('settings.assistantPromptAdd', { defaultValue: 'Add prompt' })}
+                </Button>
+              </div>
+              {!canAddPrompt(editPrompts) && (
+                <div className='text-12px text-t-secondary' data-testid='assistant-prompt-limit'>
+                  {t('settings.assistantPromptsLimit', {
+                    count: ASSISTANT_LIMITS.promptMax,
+                    defaultValue: 'At most {{count}} example prompts.',
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Plugin and hook pick-lists: what this assistant brings to a chat */}
+          <div className='flex-shrink-0' data-testid='plugin-hook-section'>
+            <AssistantSessionItemsSection
+              selectedPlugins={selectedPlugins}
+              setSelectedPlugins={setSelectedPlugins}
+              selectedHooks={selectedHooks}
+              setSelectedHooks={setSelectedHooks}
+              selectedTools={selectedTools}
+              setSelectedTools={setSelectedTools}
+              disabled={isBuiltin}
+            />
           </div>
 
           {/* Skills section */}

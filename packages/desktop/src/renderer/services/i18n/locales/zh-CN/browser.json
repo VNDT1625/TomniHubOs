@@ -1,4 +1,33 @@
 {
+  "downloadGate": {
+    "title": "确认下载",
+    "message": "要保存来自 {{source}} 的“{{filename}}”吗？",
+    "detail": "文件类型：{{extension}}。大小：{{size}}。",
+    "sizeUnknown": "大小未知",
+    "noExtension": "无",
+    "save": "保存",
+    "cancel": "取消"
+  },
+  "extensionStrip": {
+    "button": "扩展程序",
+    "popupTitle": "扩展程序",
+    "fullAccess": "完全访问权限",
+    "accessRequested": "此网站请求访问权限",
+    "empty": "尚未启用任何扩展程序。",
+    "loadError": "无法加载扩展程序。",
+    "pin": "固定到工具栏",
+    "unpin": "从工具栏取消固定",
+    "more": "更多",
+    "siteAccess": "网站访问权限",
+    "siteOnClick": "点击时",
+    "siteOnSite": "特定网站",
+    "siteAllSites": "所有网站",
+    "allowSite": "允许此网站",
+    "uninstall": "移除扩展",
+    "actionFailed": "无法保存更改。",
+    
+"manage": "管理扩展程序"
+  },
   "navTitle": "浏览器",
   "title": "浏览器",
   "subtitle": "在应用内浏览网页，并让 AI 模型作为网页代理操作页面。",

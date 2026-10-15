@@ -34,7 +34,9 @@ const makeFakeView = (loadURL: (url: string) => Promise<void>) => {
     getURL: () => 'https://www.example.com/',
     getTitle: () => 'Example',
     setVisible: vi.fn(),
-    setAudioMuted: vi.fn(),
+        setAudioMuted: vi.fn(),
+    getBackgroundThrottling: vi.fn(() => false),
+    setBackgroundThrottling: vi.fn(),
     setZoomFactor: vi.fn(),
     setWindowOpenHandler: vi.fn(),
     on: vi.fn(),
@@ -149,6 +151,32 @@ describe('browserViewManager audio policy (background playback)', () => {
   });
 });
 
+describe('background Browser throttling while Hub sleeps', () => {
+  it('throttles idle user tabs and restores their original policy on wake', () => {
+    const userView = makeFakeView(() => Promise.resolve());
+    const researchView = makeFakeView(() => Promise.resolve());
+    const manager = createBrowserViewManager({
+      getWindow: () => fakeWindow() as never,
+      createView: vi.fn().mockReturnValueOnce(userView).mockReturnValueOnce(researchView),
+    });
+    manager.createTab({ id: 'user', visible: true });
+    manager.createTab({ id: 'research', visible: false });
+    manager.setHubSleeping?.(true);
+    expect(userView.webContents.setBackgroundThrottling).toHaveBeenCalledWith(true);
+    expect(researchView.webContents.setBackgroundThrottling).not.toHaveBeenCalled();
+    manager.setHubSleeping?.(false);
+    expect(userView.webContents.setBackgroundThrottling).toHaveBeenLastCalledWith(false);
+  });
+
+  it('does not throttle explicitly protected agent tabs', () => {
+    const userView = makeFakeView(() => Promise.resolve());
+    const manager = createBrowserViewManager({ getWindow: () => fakeWindow() as never, createView: () => userView as never });
+    manager.createTab({ id: 'agent', visible: true });
+    manager.setHubSleeping?.(true, ['agent']);
+    expect(userView.webContents.setBackgroundThrottling).not.toHaveBeenCalled();
+  });
+});
+
 describe('browserViewManager popup handling (keep links in-app)', () => {
   it('denies a popup window and loads its URL in the same tab instead', () => {
     const view = makeFakeView(() => Promise.resolve());
@@ -188,5 +216,24 @@ describe('browserViewManager popup handling (keep links in-app)', () => {
     const result = handler({ url: 'about:blank' });
     expect(result).toEqual({ action: 'deny' });
     expect(view.webContents.loadURL).not.toHaveBeenCalled();
+  });
+});
+
+describe('browserViewManager session partition (browser profile)', () => {
+  const partitionOf = (createView: { mock: { calls: unknown[][] } }): string | undefined =>
+    (createView.mock.calls[0][0] as { webPreferences: { partition?: string } }).webPreferences.partition;
+
+  it('runs a default tab in the persistent browser profile partition', () => {
+    const createView = vi.fn((_options: unknown) => makeFakeView(() => Promise.resolve()) as never);
+    const manager = createBrowserViewManager({ getWindow: () => fakeWindow() as never, createView });
+    manager.createTab({ visible: true });
+    expect(partitionOf(createView)).toBe('persist:tomny-browser');
+  });
+
+  it('keeps an explicit Main-internal partition', () => {
+    const createView = vi.fn((_options: unknown) => makeFakeView(() => Promise.resolve()) as never);
+    const manager = createBrowserViewManager({ getWindow: () => fakeWindow() as never, createView });
+    manager.createTab({ partition: 'persist:tomny-app-x' });
+    expect(partitionOf(createView)).toBe('persist:tomny-app-x');
   });
 });

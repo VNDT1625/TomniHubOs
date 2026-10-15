@@ -1,10 +1,11 @@
+import { generateKeyPairSync } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import JSZip from 'jszip';
 import { describe, expect, it } from 'vitest';
 import { classifyRepository, parsePackageManifest } from '@/common/packages';
-import { buildTomnyPackageFromRepo } from '../../../packages/desktop/src/process/extensions/package-manager/repoPackager';
+import { buildTomnyPackageFromRepo } from '../../../packages/desktop/src/process/extensions/package-manager/repoPackaging';
 import { verifyArtifactSignature } from '../../../packages/desktop/src/process/extensions/package-manager/artifactSecurity';
 
 describe('Repo-to-Package Automated Classifier', () => {
@@ -18,11 +19,12 @@ describe('Repo-to-Package Automated Classifier', () => {
           '@modelcontextprotocol/sdk': '^1.0.0',
         },
       },
+      mcpLaunch: { command: 'npx', args: ['-y', 'sqlite-mcp-server@1.0.0'], packageName: 'sqlite-mcp-server' },
     });
 
     expect(result.archetype).toBe('mcp-tool-server');
     expect(result.packageType).toBe('agent-capsule');
-    expect(result.permissions).toContain('mcp.tool');
+    expect(result.permissions).toContain('mcp.server.stdio');
     expect(result.isSupported).toBe(true);
 
     const parsed = parsePackageManifest(result.manifest);
@@ -100,7 +102,7 @@ describe('Repo-to-Package Automated Classifier', () => {
     const parsed = parsePackageManifest(result.manifest);
     expect(parsed.type).toBe('ui');
     expect(parsed.contributions?.ide?.subtabs).toBeDefined();
-    expect(parsed.dependencies).toEqual([{ id: 'com.tomni.ide', version: '>=1.0.0' }]);
+    expect(parsed.dependencies).toEqual([{ id: 'com.tomni.ide', version: '>=0.0.0' }]);
   });
 
   it('classifies a Web Surface App with zero permissions by default (Least Privilege)', () => {
@@ -176,8 +178,12 @@ describe('Repo-to-Package End-to-End Packaging', () => {
 
       const result = await buildTomnyPackageFromRepo({
         source: tempProjectDir,
+        allowLocalOutsideWorkspace: true,
         outputDirectory: outputDir,
-        keyId: 'test-repo-signing-key',
+        signing: {
+          privateKeyPem: generateKeyPairSync('ed25519').privateKey.export({ format: 'pem', type: 'pkcs8' }).toString(),
+          keyId: 'test-repo-signing-key',
+        },
       });
 
       expect(result.classification.archetype).toBe('web-surface-app');

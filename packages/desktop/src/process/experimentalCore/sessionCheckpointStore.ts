@@ -205,7 +205,9 @@ export class JsonCoreSessionStore extends MemoryCoreSessionStore {
   private async flush(): Promise<void> {
     this.writeQueue = this.writeQueue.then(async () => {
       const temporaryPath = `${this.filePath}.${process.pid}.tmp`;
-      await writeFile(temporaryPath, JSON.stringify(await this.list(), null, 2), 'utf8');
+      // Serialize the stored records directly: list() would clone every checkpoint first, twice the work per save.
+      const ordered = [...this.checkpoints.values()].toSorted((left, right) => right.updatedAt - left.updatedAt);
+      await writeFile(temporaryPath, JSON.stringify(ordered, null, 2), 'utf8');
       await rename(temporaryPath, this.filePath);
     });
     await this.writeQueue;

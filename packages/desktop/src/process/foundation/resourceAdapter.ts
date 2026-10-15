@@ -16,6 +16,9 @@ const createLocalLeaseId = (plan: ExecutionPlan): string => {
   return `lease_${identity}_${Date.now()}`;
 };
 
+/** Longest a run may wait in the resource queue before failing with a visible error instead of hanging. */
+const LEASE_QUEUE_DEADLINE_MS = 30_000;
+
 export class ResourceAdapter {
   private activeLeases = new Map<string, ResourceLease>();
 
@@ -41,6 +44,7 @@ export class ResourceAdapter {
               estCostMB: plan.estimatedCostMB,
               priority: plan.priority,
               requestId,
+              deadlineAt: Date.now() + LEASE_QUEUE_DEADLINE_MS,
               owner: { processKind: 'main', serviceId: 'foundation-run-kernel', taskId: plan.taskId },
             })
           ).id

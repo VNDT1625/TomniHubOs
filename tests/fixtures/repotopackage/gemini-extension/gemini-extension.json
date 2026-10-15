@@ -1,0 +1,16 @@
+{
+  "name": "demo-gemini",
+  "version": "1.0.0",
+  "contextFileName": "GEMINI.md",
+  "mcpServers": {
+    "demo-remote": { "httpUrl": "https://mcp.example.com/mcp" },
+    "demo-local": {
+      "command": "node",
+      "args": ["${extensionPath}/dist/server.js"],
+      "env": { "DEMO_TOKEN": "FAKE-GEMINI-TOKEN-0123456789" }
+    }
+  },
+  "settings": [
+    { "name": "API key", "description": "Your demo key", "envVar": "DEMO_API_KEY" }
+  ]
+}

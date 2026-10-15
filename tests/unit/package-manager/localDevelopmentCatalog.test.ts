@@ -9,12 +9,15 @@ vi.mock('electron', () => ({
 }));
 
 import { excludeDefaultSurfaceCatalogEntries, type PackageCatalogEntry } from '@/common/packages';
-import { loadLocalDevelopmentPackageCatalog } from '@/process/extensions/package-manager/packageBridge';
+import {
+  disposeConnectionRuntime,
+  loadLocalDevelopmentPackageCatalog,
+} from '@/process/extensions/package-manager/packageBridge';
 
 afterEach(() => vi.unstubAllEnvs());
 
 describe('local development Store catalog', () => {
-  it('excludes default IDE from every catalog source', () => {
+    it('filters legacy IDE placeholders but allows a signed downloadable first-party IDE release', () => {
     const entry = (id: string): PackageCatalogEntry => ({ manifest: { id } }) as unknown as PackageCatalogEntry;
 
     expect(
@@ -22,19 +25,40 @@ describe('local development Store catalog', () => {
         entry('com.tomni.browser'),
         entry('com.tomni.company'),
         entry('com.tomni.ide'),
-      ]).map((entry) => entry.manifest.id)
-    ).toEqual(['com.tomni.browser', 'com.tomni.company']);
+      ]).map((item) => item.manifest.id)
+        ).toEqual(['com.tomni.browser', 'com.tomni.company']);
+    const signedIde = { ...entry('com.tomni.ide'), delivery: 'downloaded-package' as const,
+      trust: 'signed-first-party' as const };
+    const masqueradingIde = { ...entry('com.tomni.ide'), delivery: 'downloaded-package' as const,
+      trust: 'signed-store' as const };
+    expect(excludeDefaultSurfaceCatalogEntries([signedIde, masqueradingIde])).toEqual([signedIde]);
   });
 
-  it('admits only Store-managed default packages and excludes default Browser and IDE surfaces', () => {
+  it('disposes a connection runtime before the package bridge is torn down', async () => {
+    const dispose = vi.fn(async () => undefined);
+
+    await disposeConnectionRuntime({ dispose } as never);
+
+    expect(dispose).toHaveBeenCalledOnce();
+  });
+
+  it('does nothing when no connection runtime has been created', async () => {
+    await expect(disposeConnectionRuntime()).resolves.toBeUndefined();
+  });
+
+    it('loads only allowed signed local development fixtures in an unpackaged build', () => {
     vi.stubEnv('TOMNI_STORE_LOCAL_ARTIFACTS', '1');
 
     const catalog = loadLocalDevelopmentPackageCatalog();
 
-    expect(catalog?.catalog.map((entry) => entry.manifest.id)).toEqual([
-      'com.tomni.company',
-      'com.tomni.knowledge',
-      'com.tomni.pet',
+            const ids = catalog?.catalog.map((item) => item.manifest.id);
+    expect(ids).toEqual(expect.arrayContaining([
+      'com.tomni.company', 'com.tomni.knowledge', 'com.tomni.pet',
+    ]));
+    const admitted = new Set([
+      'com.tomni.automation-studio', 'com.tomni.browser', 'com.tomni.company',
+      'com.tomni.document-studio', 'com.tomni.ide', 'com.tomni.knowledge', 'com.tomni.pet',
     ]);
+    expect(ids?.every((id) => admitted.has(id))).toBe(true);
   });
 });

@@ -14,15 +14,7 @@ import {
   FIRST_PARTY_PACKAGE_CATALOG,
   FIRST_PARTY_PACKAGE_SIGNING_POLICIES,
   FIRST_PARTY_PACKAGE_TRUSTED_KEYS,
-} from './src/common/packages';
-import {
-  createLocalPackageMutationRuntime,
-  createPackageHttpApi,
-  isSameOriginPackageMutationRequest,
-} from './src/process/extensions/package-manager/packageHttpApi';
-import { createPackageManagerService } from './src/process/extensions/package-manager/PackageManagerService';
-
-import { createRemotePackageCatalogLoader } from './src/process/extensions/package-manager/remoteCatalog';
+} from './src/common/packages/catalog';
 
 // Read the real Tomny version from the repo-root package.json.
 // `packages/desktop/package.json` is a workspace-internal placeholder pinned
@@ -45,6 +37,44 @@ function buildMcpServersPlugin() {
   };
 }
 
+// Browser extension Chrome API shim preloads (docs/platform/repotopackage-design.md 12.3, T4.3). Rollup would hoist the
+// code the two entries share into a chunk, and a sandboxed preload cannot require a chunk, so each entry is bundled
+// on its own with esbuild (the way the built-in MCP servers are): two standalone CJS files, `electron` the only
+// require. Main registers them on the Browser profile session by absolute path.
+function extensionShimPreloadPlugin(): Plugin {
+  let outDir = resolve('out/preload');
+  return {
+    name: 'vite-plugin-tomny-extension-shim-preload',
+    apply: 'build',
+    configResolved(config) {
+      outDir = resolve(config.root, config.build.outDir);
+    },
+    async closeBundle() {
+      const { build } = await import('esbuild');
+      const shimRoot = resolve('packages/desktop/src/process/integrations/browserExtensions/preload');
+      await build({
+        entryPoints: {
+          extensionFrame: join(shimRoot, 'frame.ts'),
+          extensionWorker: join(shimRoot, 'serviceWorker.ts'),
+        },
+        outdir: outDir,
+        bundle: true,
+        platform: 'node',
+        format: 'cjs',
+        target: 'node22',
+        external: ['electron'],
+        tsconfig: resolve('tsconfig.json'),
+        legalComments: 'none',
+        logLevel: 'warning',
+      });
+    },
+  };
+}
+
+const packageApiModule = './src/process/extensions/package-manager/packageHttpApi';
+const packageManagerServiceModule = './src/process/extensions/package-manager/PackageManagerService';
+const remoteCatalogModule = './src/process/extensions/package-manager/remoteCatalog';
+
 function devPackageApiPlugin(): Plugin {
   let activePort: number | undefined;
   const artifactPaths = new Map<string, string>([
@@ -64,51 +94,59 @@ function devPackageApiPlugin(): Plugin {
   ]);
   const packageRoot = join(homedir(), '.tomny-web-dev', 'tomny-packages');
 
-  const remoteCatalogLoader = createRemotePackageCatalogLoader({
-    url: process.env.TOMNI_STORE_CATALOG_URL ?? DEFAULT_PACKAGE_CATALOG_URL,
-    cachePath: join(packageRoot, 'catalog-cache.json'),
-    fallbackCatalog: excludeDefaultSurfaceCatalogEntries(FIRST_PARTY_PACKAGE_CATALOG),
-    trustedKeys: FIRST_PARTY_PACKAGE_TRUSTED_KEYS,
-    signingPolicies: FIRST_PARTY_PACKAGE_SIGNING_POLICIES,
-  });
-  const service = createPackageManagerService({
-    rootDir: packageRoot,
-    appVersion: rootPackageJson.version,
-    catalog: excludeDefaultSurfaceCatalogEntries(FIRST_PARTY_PACKAGE_CATALOG),
-    trustedKeys: FIRST_PARTY_PACKAGE_TRUSTED_KEYS,
-
-    catalogLoader: async () => excludeDefaultSurfaceCatalogEntries(await remoteCatalogLoader()),
-    resolveArtifactUrl: (url) => {
-      const filename = new URL(url).pathname.split('/').at(-1);
-      return useLocalDevelopmentStoreArtifacts && activePort && filename && artifactPaths.has(filename)
-        ? `http://127.0.0.1:${activePort}/api/packages/artifacts/${encodeURIComponent(filename)}`
-        : url;
-    },
-    allowLocalArtifactUrls: useLocalDevelopmentStoreArtifacts,
-  });
-  const mutation = createLocalPackageMutationRuntime({
-    service,
-    ledgerRootDir: join(packageRoot, 'catalog-action-ledger'),
-  });
-  const handler = createPackageHttpApi({
-    service,
-    mutation,
-    authorize: async () => true,
-    authorizeMutation: isSameOriginPackageMutationRequest,
-    artifactProvider: async (name) => {
-      const artifactPath = artifactPaths.get(name);
-      return artifactPath ? Buffer.from(readFileSync(artifactPath)) : undefined;
-    },
-  });
   return {
     name: 'vite-plugin-tomny-package-api',
-    configureServer(server: ViteDevServer) {
+    async configureServer(server: ViteDevServer) {
+      const [
+        { createLocalPackageMutationRuntime, createPackageHttpApi, isSameOriginPackageMutationRequest },
+        { createPackageManagerService },
+        { createRemotePackageCatalogLoader },
+      ] = await Promise.all([
+        import(packageApiModule),
+        import(packageManagerServiceModule),
+        import(remoteCatalogModule),
+      ]);
+      const remoteCatalogLoader = createRemotePackageCatalogLoader({
+        url: process.env.TOMNI_STORE_CATALOG_URL ?? DEFAULT_PACKAGE_CATALOG_URL,
+        cachePath: join(packageRoot, 'catalog-cache.json'),
+        fallbackCatalog: excludeDefaultSurfaceCatalogEntries(FIRST_PARTY_PACKAGE_CATALOG),
+        trustedKeys: FIRST_PARTY_PACKAGE_TRUSTED_KEYS,
+        signingPolicies: FIRST_PARTY_PACKAGE_SIGNING_POLICIES,
+      });
+      const service = createPackageManagerService({
+        rootDir: packageRoot,
+        appVersion: rootPackageJson.version,
+        catalog: excludeDefaultSurfaceCatalogEntries(FIRST_PARTY_PACKAGE_CATALOG),
+        trustedKeys: FIRST_PARTY_PACKAGE_TRUSTED_KEYS,
+        catalogLoader: async () => excludeDefaultSurfaceCatalogEntries(await remoteCatalogLoader()),
+        resolveArtifactUrl: (url: string) => {
+          const filename = new URL(url).pathname.split('/').at(-1);
+          return useLocalDevelopmentStoreArtifacts && activePort && filename && artifactPaths.has(filename)
+            ? `http://127.0.0.1:${activePort}/api/packages/artifacts/${encodeURIComponent(filename)}`
+            : url;
+        },
+        allowLocalArtifactUrls: useLocalDevelopmentStoreArtifacts,
+      });
+      const mutation = createLocalPackageMutationRuntime({
+        service,
+        ledgerRootDir: join(packageRoot, 'catalog-action-ledger'),
+      });
+      const handler = createPackageHttpApi({
+        service,
+        mutation,
+        authorize: async () => true,
+        authorizeMutation: isSameOriginPackageMutationRequest,
+        artifactProvider: async (name: string) => {
+          const artifactPath = artifactPaths.get(name);
+          return artifactPath ? Buffer.from(readFileSync(artifactPath)) : undefined;
+        },
+      });
       server.httpServer?.once('listening', () => {
         const address = server.httpServer?.address();
         activePort = address && typeof address !== 'string' ? address.port : undefined;
       });
       server.middlewares.use((request, response, next) => {
-        void handler(request, response).then((handled) => {
+        void handler(request, response).then((handled: boolean) => {
           if (!handled) next();
         });
       });
@@ -459,7 +497,10 @@ export default defineConfig(({ mode }) => {
       // the output, which Electron's sandbox-mode preload cannot resolve from
       // node_modules (→ "module not found"). Bundling inlines the few hundred
       // bytes of IPC wiring we actually need.
-      plugins: [externalizeDepsPlugin({ exclude: ['@sentry/electron', 'zod', 'semver'] })],
+      plugins: [
+        externalizeDepsPlugin({ exclude: ['@sentry/electron', 'zod', 'semver'] }),
+        extensionShimPreloadPlugin(),
+      ],
       resolve: {
         alias: {
           ...packageAppAliases,
@@ -535,7 +576,7 @@ export default defineConfig(({ mode }) => {
         iconParkPlugin(),
 
         ...(process.env.TOMNI_RENDERER_GRAPH_EVIDENCE === '1' ? [rendererGraphEvidencePlugin()] : []),
-        ...(isDevelopment ? [devPackageApiPlugin()] : []),
+        ...(isDevelopment && webDevProxy ? [devPackageApiPlugin()] : []),
         ...(enableSentrySourceMaps ? [sentryVitePlugin(sentryPluginOptions)] : []),
       ],
       build: {

@@ -53,6 +53,8 @@ import {
 import { createAutomationScheduler, type IAutomationScheduler } from './automationScheduler';
 import { startWebhookServer, stopWebhookServer, type WebhookServer } from './webhookServer';
 import { stopAutomationMcpHost } from './automationMcpHost';
+import { createFixedPackageActivationLifecycle } from '@process/resources/packageProcessRuntime/fixedPackageActivationLifecycle';
+import type { PackageListing, PackageStateChangedEvent } from '@/common/packages';
 import { resolveCredentialFields } from './credentialBridge';
 import { runImage, runScript } from '@process/makevideo/makeVideoBridge';
 import { createMakeVideoStore } from '@process/makevideo/makeVideoStore';
@@ -62,7 +64,7 @@ import { createFromDescription, toStructureSpec, type CompanyConfig } from '@pro
 import { createCompanyGenerator } from '@process/company/companyGenerator';
 import { showNotification } from '@process/bridge/notificationBridge';
 import { createManagerStore } from '@process/manager/managerStore';
-import { httpRequest } from '@/common/adapter/httpBridge';
+import { getLegacyCronAdapter } from '@process/cron/scheduledTasks';
 import type { RunEvent, Workflow } from './automationTypes';
 
 // ---------------------------------------------------------------------------
@@ -359,6 +361,54 @@ export const startAutomationWebhookServer = (
   return startWebhookServer({ store, runWorkflow: (workflowId, input) => startWorkflowRun(workflowId, input) });
 };
 
+/** Package ownership and account admission are independent: both must permit background Automation. */
+export const createAutomationStudioPackageLease = (deps: Readonly<{
+  packages: {
+    status: (id: string) => Promise<PackageListing>;
+    onStateChanged: (listener: (event: PackageStateChangedEvent) => void) => () => void;
+  };
+  background: AutomationBackgroundController;
+}>) => {
+  const packageId = 'com.tomni.automation-studio';
+  const lifecycle = createFixedPackageActivationLifecycle(packageId, {
+    packages: deps.packages,
+    canActivate: (listing) =>
+      listing.installedTrust === 'signed-first-party' &&
+      listing.installedManifest?.id === packageId &&
+      listing.installedManifest.publisherId === 'com.tomni',
+    activate: () => deps.background.start(),
+    deactivate: () => deps.background.stop(),
+  });
+  let accountActive = false;
+  return Object.freeze({
+    start: async (): Promise<void> => {
+      accountActive = true;
+      try {
+        await lifecycle.initialize();
+        await lifecycle.resume();
+      } catch (error) {
+        accountActive = false;
+        await lifecycle.quiesce();
+        throw error;
+      }
+    },
+    stop: async (): Promise<void> => {
+      accountActive = false;
+      await lifecycle.quiesce();
+    },
+    quiesce: () => lifecycle.quiesce(),
+    // Package Manager reconciles after both successful and rolled-back mutations.
+    // A signed-out user must not be reactivated by the package mutation path.
+    resume: async (): Promise<void> => {
+      if (accountActive) await lifecycle.resume();
+    },
+    dispose: async (): Promise<void> => {
+      accountActive = false;
+      await lifecycle.dispose();
+    },
+  });
+};
+
 /** Create the Main-only lifecycle that owns Automation's background resources. */
 export const createAutomationBackgroundController = (
   options: CreateAutomationBackgroundControllerOptions = {}
@@ -504,14 +554,27 @@ const getAutomationServices = (): AutomationServices => {
         return task.id;
       },
       createCronJob: async ({ cron, prompt, name }) => {
-        const created = await httpRequest<{ id?: string }>('POST', '/api/cron/jobs', {
-          schedule: cron,
-          prompt,
-          name: name ?? 'Automation job',
-          enabled: true,
-          execution_mode: 'new_conversation',
-        }).catch((): { id?: string } => ({}));
-        return created.id ?? '';
+        // Same scheduler as Settings → Scheduled tasks; each run opens its own conversation.
+        const created = await getLegacyCronAdapter()
+          .addJob({
+            name: name ?? 'Automation job',
+            schedule: {
+              kind: 'cron',
+              expr: cron,
+              tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
+              description: cron,
+            },
+            prompt,
+            conversation_id: '',
+            agent_type: 'tomnyagentic',
+            created_by: 'agent',
+            execution_mode: 'new_conversation',
+          })
+          .catch((error: unknown): undefined => {
+            console.warn('[Automation] Could not create the scheduled task:', error);
+            return undefined;
+          });
+        return created?.id ?? '';
       },
       // `action.conversation` reuses the same provider-backed chat the AI node
       // uses — a single non-streaming completion against the user's model.

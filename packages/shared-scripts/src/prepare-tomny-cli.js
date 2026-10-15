@@ -21,7 +21,7 @@ const {
 
 const UPSTREAM_REPOSITORY = 'https://github.com/iOfficeAI/aionrs.git';
 const SOURCE_PATCH_VERSION =
-  'tool-result-v2+context-inspection-v2+surface-catalog-v1+session-history-v1+action-gate-v6';
+  'tool-result-v2+context-inspection-v2+surface-catalog-v1+session-history-v1+action-gate-v8';
 const SOURCE_PATCHES = [
   {
     version: 'tool-result-v2',
@@ -773,7 +773,7 @@ impl Tool for SessionActionsTool {
         );
 
         state.write().unwrap().finish_action();
-        assert!(!state.read().unwrap().is_started());
+        assert!(state.read().unwrap().is_started());
         assert_eq!(state.read().unwrap().loaded_tool_defs().len(), 1);
 
         state.write().unwrap().reset_for_action();
@@ -785,6 +785,29 @@ impl Tool for SessionActionsTool {
         assert_eq!(state.read().unwrap().loaded_tool_defs().len(), 1);
     }
 }`,
+    ],
+  ]);
+
+  // The gate is open from the start: the model sees ToolSearch and the schemas it loaded, never StartAction, so it
+  // finds tools by name in one call instead of opening an action first. The engine already exposes ToolSearch and the
+  // loaded definitions whenever `is_started()` holds, and `resolve_direct` accepts loaded tools under the same
+  // condition, so nothing else needs to change.
+  replaceRequired(path.join(sourceDir, 'crates', 'aion-tools', 'src', 'tool_search.rs'), [
+    [
+      `    pub fn is_started(&self) -> bool {
+        self.started
+    }`,
+      `    pub fn is_started(&self) -> bool {
+        // Always open: there is no separate StartAction step any more.
+        true
+    }`,
+    ],
+    [
+      `        if !self.started {
+            return Err("Open the action gate with StartAction before calling a surface tool.".to_string());
+        }
+        if !self.loaded.contains(name) {`,
+      `        if !self.loaded.contains(name) {`,
     ],
   ]);
 };

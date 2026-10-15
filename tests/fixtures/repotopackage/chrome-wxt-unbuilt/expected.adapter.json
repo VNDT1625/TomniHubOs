@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "generatedBy": "classifier",
+  "connections": [
+    {
+      "kind": "extension",
+      "id": "wxt-clipper",
+      "title": "wxt-clipper",
+      "format": "chrome-mv3",
+      "root": "source/.output/chrome-mv3",
+      "version": "0.3.0",
+      "permissions": [],
+      "hostPermissions": [],
+      "unsupported": [],
+      "needsBuild": true,
+      "origin": "chrome-extension"
+    }
+  ],
+  "openItems": [
+    {
+      "kind": "needs-build",
+      "note": "Extension \"wxt-clipper\" (WXT) chưa build. Trong source chạy `bun install` rồi `bun run build`, sau đó trỏ kết nối vào source/.output/chrome-mv3. Bộ nhận diện không chạy lệnh này.",
+      "connection": "wxt-clipper",
+      "path": "source"
+    }
+  ],
+  "detectors": [
+    "browser-ext@1"
+  ]
+}

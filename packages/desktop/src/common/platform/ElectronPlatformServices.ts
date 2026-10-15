@@ -61,8 +61,8 @@ export class ElectronPlatformServices implements IPlatformServices {
   };
 
   notification = {
-    send: ({ title, body }: { title: string; body: string; icon?: string }): void => {
-      new Notification({ title, body }).show();
+    send: ({ title, body, silent }: { title: string; body: string; icon?: string; silent?: boolean }): void => {
+      new Notification({ title, body, silent }).show();
     },
   };
 

@@ -1,7 +1,7 @@
 # Kiến trúc Remote Telegram & Thiết kế Điều khiển Laptop bằng Giọng nói (Voice-to-Agent)
 
 > **Tài liệu Tham chiếu Kỹ thuật TomniHubOS**  
-> **Trạng thái:** CURRENT (Telegram Remote Text Channel) / TARGET (Voice STT & Laptop OS Control)  
+> **Trạng thái:** CURRENT (Telegram Remote Text Channel, nhận tin nhắn thoại và chuyển thành chữ với nút xác nhận) / TARGET (STT cục bộ, công cụ điều khiển máy, gửi ảnh chụp màn hình)  
 > **Chủ đề:** Điều khiển từ xa an toàn qua Telegram Bot, chuyển đổi Voice-to-Text (STT) và thực thi lệnh Agent trên hệ điều hành cục bộ.
 
 ---
@@ -89,17 +89,7 @@ Hệ thống Remote Telegram của TomniHubOS hiện tại được xây dựng 
        [Telegram Bot gửi kết quả phản hồi về điện thoại người dùng]
 ```
 
-> **Điểm nghẽn hiện tại trong mã nguồn:**  
-> Trong `TelegramChannelService.handleUpdate`:
->
-> ```ts
-> const message = update.message;
-> const user = message?.from;
-> const text = message?.text?.trim();
-> if (!message || !user || !text) return; // <-- Bỏ qua nếu tin nhắn là Voice/Audio
-> ```
->
-> Do đó, hiện tại bot chỉ nhận tin nhắn text thuần túy. Mọi voice note (`message.voice`) đều bị bỏ qua.
+> **Cập nhật 2026-10-05 (CURRENT):** `handleUpdate` không còn chỉ nhận văn bản. Tin nhắn thoại (`voice`/`audio`) được chuyển thành chữ và chờ người nói bấm xác nhận (`telegram/voice.ts`); ảnh và tài liệu được lưu vào `<workspace>/telegram-uploads/` rồi gửi cho agent làm tệp đính kèm (`telegram/attachments.ts`); video, sticker, chương trình và tệp nén nhận câu trả lời từ chối. Câu trả lời dài được chia thành nhiều tin. Trạng thái chi tiết ở `docs/FEATURE_STATUS.md` §4.
 
 ---
 
@@ -177,9 +167,36 @@ Hệ thống TomniHubOS đã có đầy đủ nền tảng để hiện thực h
 
 #### Phương án B: Local Offline STT (Khuyến nghị cho chế độ Bảo mật cao - 100% Cục bộ)
 
-- **Cơ chế:** Nhúng thư viện `node-whisper` hoặc binary `whisper.cpp` / ONNX model nhỏ gọn (`whisper-base` hoặc `whisper-small`).
+- **Cơ chế (CURRENT, chạy được khi đã cài model):** sidecar Python `scripts/whisper_sidecar.py` dùng faster-whisper ở chế độ **INT8 trên CPU**, nạp model từ thư mục cục bộ (`local_files_only`), giao tiếp JSONL như sidecar Laya. Sidecar chỉ khởi động ở tin thoại đầu tiên và tự tắt sau 5 phút không dùng (`services/telegram/localWhisper.ts`). Ứng dụng không tự tải model; người dùng chạy một lần `python scripts/setup-local-whisper.py --size tiny|base|small` (tải khoảng 75 / 145 / 480 MB). Bật tại Cài đặt → Kênh → Telegram → Voice model → Whisper cục bộ (INT8). Thư mục model: `TOMNY_WHISPER_MODEL_DIR`, rồi `<userData>/models/whisper-<size>`, rồi `resources/models/whisper-<size>`.
 - **Ưu điểm:** Không cần kết nối internet ra ngoài cho việc dịch voice, bảo mật âm thanh riêng tư tuyệt đối của chủ nhân.
 - **Tài nguyên:** Chiếm khoảng 200MB - 400MB RAM khi load model; CPU máy tính i5/Ryzen hoặc GPU RTX 3050 xử lý mất khoảng 1 - 2 giây.
+
+##### Đo đạc và chọn cỡ model Whisper cục bộ (trạng thái: đã đo sơ bộ, chưa chốt)
+
+**Cách đo.** `scripts/whisper_benchmark.py` chạy lần lượt các cỡ `tiny`, `base`, `small`, `medium` (INT8, CPU) trên một thư mục ghi âm và một file lời chuẩn. Với mỗi cỡ, script chạy một lần không có từ gợi ý và một lần có `--prompt`, rồi ghi CSV từng câu: transcript, WER, có giữ đúng ý định không, thời gian. Cuối cùng in bảng tổng hợp (WER trung bình, tỷ lệ giữ ý định, độ trễ trung bình và phân vị 95). Lần chạy đầu của mỗi model (khởi động) được loại khỏi số đo. Model đọc từ `<userData>/models/whisper-<cỡ>` (hoặc `--models-root`); script không tải gì.
+
+- File lời chuẩn: mỗi dòng `tên file <TAB> lời nói chuẩn [<TAB> từ khóa ý định cách nhau bằng ;]`. Một câu coi là giữ đúng ý định khi mọi từ khóa đều có mặt trong transcript.
+- WER bỏ qua chữ hoa/thường và dấu câu nhưng **giữ dấu thanh tiếng Việt** (mở ≠ mờ).
+- Bộ 50 câu tiếng Việt chuẩn bị sẵn: `scripts/whisper_benchmark_sentences.vi.tsv` (câu 1–40 đọc bình thường, 41–50 nên đọc nhanh hoặc có tiếng ồn nền). Thu mỗi câu thành `cau01.ogg` … `cau50.ogg` vào một thư mục rồi chạy:
+
+```bash
+python scripts/whisper_benchmark.py --audio <thư mục ghi âm> --refs scripts/whisper_benchmark_sentences.vi.tsv --sizes tiny base small medium --language vi --prompt "Chrome, Visual Studio Code, Telegram, Zalo" --out ket-qua-vi.csv
+```
+
+**Kết quả sơ bộ (05/10/2026, máy cá nhân, Windows 11, 16 GB RAM, faster-whisper 1.2.1, INT8).** Đo trên 10 câu lệnh **tiếng Anh do giọng máy đọc** (máy chưa có ghi âm tiếng Việt). Chỉ có độ trễ là dùng được; độ chính xác chưa nói lên điều gì về tiếng Việt.
+
+| Cỡ     | Dung lượng | WER  | Giữ ý định | Độ trễ TB | Độ trễ p95 |
+| ------ | ---------- | ---- | ---------- | --------- | ---------- |
+| tiny   | 75 MB      | 1,4% | 90%        | 0,7 giây  | 1,1 giây   |
+| base   | 142 MB     | 1,4% | 90%        | 1,3 giây  | 1,4 giây   |
+| small  | 464 MB     | 2,7% | 90%        | 2,5 giây  | 3,8 giây   |
+| medium | 1,5 GB     | 2,7% | 90%        | 5,6 giây  | 7,0 giây   |
+
+Chênh lệch WER giữa các cỡ là 0–1 từ trên 10 câu, nằm trong sai số. Từ gợi ý không đổi kết quả đáng kể trên bộ này. Chưa đo RAM của tiến trình.
+
+**Quyết định tạm thời.** Dùng `base` làm cỡ mặc định (cấu hình `assistant.telegram.sttLocal`, mặc định `base`): nhanh khoảng 1,3 giây, nhẹ. Các cỡ còn lại được giữ trên máy chỉ để đo lại bằng tiếng Việt; sau khi chốt, xóa các cỡ không dùng.
+
+**Tiêu chí chốt cỡ cuối cùng (đề xuất, đo trên bộ tiếng Việt thật):** chọn cỡ nhỏ nhất thỏa đồng thời (1) giữ đúng ý định từ 95% trở lên, (2) độ trễ p95 của bước chuyển giọng nói không quá 3 giây, (3) RAM khi chạy chấp nhận được. Nếu `base` không đạt (1), thử `small`. So sánh có/không từ gợi ý và ghi cỡ mẫu vào báo cáo (mục 4.4 của đề cương khóa luận). Trạng thái cuối: **chưa chốt** cho đến khi có số đo tiếng Việt.
 
 ---
 

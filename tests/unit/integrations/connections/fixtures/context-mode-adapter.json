@@ -1,0 +1,346 @@
+{
+  "schemaVersion": 1,
+  "generatedBy": "classifier",
+  "connections": [
+    {
+      "kind": "cli",
+      "id": "statusline.mjs",
+      "title": "statusline.mjs",
+      "command": "node",
+      "args": [
+        "bin/statusline.mjs"
+      ],
+      "display": "terminal",
+      "source": "source",
+      "cwd": "source",
+      "plugin": "source",
+      "origin": "claude-plugin"
+    },
+    {
+      "kind": "hook",
+      "id": "posttooluse-0-e0ced60c",
+      "event": "PostToolUse",
+      "matcher": "Bash|Read|Write|Edit|NotebookEdit|Glob|Grep|TodoWrite|TaskCreate|TaskUpdate|EnterPlanMode|ExitPlanMode|Skill|Agent|AskUserQuestion|EnterWorktree|mcp__",
+      "command": "node",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/hooks/posttooluse.mjs"
+      ],
+      "plugin": "source",
+      "origin": "claude-plugin"
+    },
+    {
+      "kind": "hook",
+      "id": "precompact-1-48604e68",
+      "event": "PreCompact",
+      "matcher": "",
+      "command": "node",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/hooks/precompact.mjs"
+      ],
+      "plugin": "source",
+      "origin": "claude-plugin"
+    },
+    {
+      "kind": "hook",
+      "id": "pretooluse-10-e1576124",
+      "event": "PreToolUse",
+      "matcher": "mcp__",
+      "command": "node",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/hooks/pretooluse.mjs"
+      ],
+      "plugin": "source",
+      "origin": "claude-plugin"
+    },
+    {
+      "kind": "hook",
+      "id": "pretooluse-2-7e17c987",
+      "event": "PreToolUse",
+      "matcher": "Bash",
+      "command": "node",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/hooks/pretooluse.mjs"
+      ],
+      "plugin": "source",
+      "origin": "claude-plugin"
+    },
+    {
+      "kind": "hook",
+      "id": "pretooluse-3-b42f7d16",
+      "event": "PreToolUse",
+      "matcher": "WebFetch",
+      "command": "node",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/hooks/pretooluse.mjs"
+      ],
+      "plugin": "source",
+      "origin": "claude-plugin"
+    },
+    {
+      "kind": "hook",
+      "id": "pretooluse-4-6cfc1540",
+      "event": "PreToolUse",
+      "matcher": "Read",
+      "command": "node",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/hooks/pretooluse.mjs"
+      ],
+      "plugin": "source",
+      "origin": "claude-plugin"
+    },
+    {
+      "kind": "hook",
+      "id": "pretooluse-5-ce54d72c",
+      "event": "PreToolUse",
+      "matcher": "Grep",
+      "command": "node",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/hooks/pretooluse.mjs"
+      ],
+      "plugin": "source",
+      "origin": "claude-plugin"
+    },
+    {
+      "kind": "hook",
+      "id": "pretooluse-6-bfda7040",
+      "event": "PreToolUse",
+      "matcher": "Agent",
+      "command": "node",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/hooks/pretooluse.mjs"
+      ],
+      "plugin": "source",
+      "origin": "claude-plugin"
+    },
+    {
+      "kind": "hook",
+      "id": "pretooluse-7-7c6d61a8",
+      "event": "PreToolUse",
+      "matcher": "mcp__plugin_context-mode_context-mode__ctx_execute",
+      "command": "node",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/hooks/pretooluse.mjs"
+      ],
+      "plugin": "source",
+      "origin": "claude-plugin"
+    },
+    {
+      "kind": "hook",
+      "id": "pretooluse-8-b3116e10",
+      "event": "PreToolUse",
+      "matcher": "mcp__plugin_context-mode_context-mode__ctx_execute_file",
+      "command": "node",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/hooks/pretooluse.mjs"
+      ],
+      "plugin": "source",
+      "origin": "claude-plugin"
+    },
+    {
+      "kind": "hook",
+      "id": "pretooluse-9-29ff511f",
+      "event": "PreToolUse",
+      "matcher": "mcp__plugin_context-mode_context-mode__ctx_batch_execute",
+      "command": "node",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/hooks/pretooluse.mjs"
+      ],
+      "plugin": "source",
+      "origin": "claude-plugin"
+    },
+    {
+      "kind": "hook",
+      "id": "sessionstart-12-4420a63c",
+      "event": "SessionStart",
+      "matcher": "",
+      "command": "node",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/hooks/sessionstart.mjs"
+      ],
+      "plugin": "source",
+      "origin": "claude-plugin"
+    },
+    {
+      "kind": "hook",
+      "id": "stop-13-58316f19",
+      "event": "Stop",
+      "matcher": "",
+      "command": "node",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/hooks/stop.mjs"
+      ],
+      "plugin": "source",
+      "origin": "claude-plugin"
+    },
+    {
+      "kind": "hook",
+      "id": "userpromptsubmit-11-14e9652e",
+      "event": "UserPromptSubmit",
+      "matcher": "",
+      "command": "node",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/hooks/userpromptsubmit.mjs"
+      ],
+      "plugin": "source",
+      "origin": "claude-plugin"
+    },
+    {
+      "kind": "knowledge",
+      "id": "docs",
+      "title": "docs",
+      "paths": [
+        "source/docs/UPSTREAM-CREDITS.md",
+        "source/docs/adapters/kimi-code.md",
+        "source/docs/adapters/openclaw.md",
+        "source/docs/adr/0001-sessiondb-multi-writer.md",
+        "source/docs/adr/0002-tool-description-style.md",
+        "source/docs/adr/0003-routing-deny-reasons.md",
+        "source/docs/adr/0004-stats-strict-compression-formula.md",
+        "source/docs/jetbrains-copilot.md",
+        "source/docs/platform-support.md"
+      ],
+      "origin": "classifier"
+    },
+    {
+      "kind": "mcp",
+      "id": "context-mode-source",
+      "title": "context-mode",
+      "command": "node",
+      "args": [
+        "start.mjs"
+      ],
+      "cwd": "source",
+      "setup": [
+        [
+          "npm",
+          "install"
+        ]
+      ],
+      "plugin": "source",
+      "group": "mcp-context-mode",
+      "origin": "claude-plugin"
+    },
+    {
+      "kind": "rules",
+      "id": "agents",
+      "title": "AGENTS.md",
+      "path": "source/configs/codex/AGENTS.md",
+      "format": "agents-md"
+    },
+    {
+      "kind": "rules",
+      "id": "agents-2",
+      "title": "AGENTS.md",
+      "path": "source/configs/kilo/AGENTS.md",
+      "format": "agents-md"
+    },
+    {
+      "kind": "rules",
+      "id": "agents-3",
+      "title": "AGENTS.md",
+      "path": "source/configs/openclaw/AGENTS.md",
+      "format": "agents-md"
+    },
+    {
+      "kind": "rules",
+      "id": "agents-4",
+      "title": "AGENTS.md",
+      "path": "source/configs/opencode/AGENTS.md",
+      "format": "agents-md"
+    },
+    {
+      "kind": "rules",
+      "id": "agents-5",
+      "title": "AGENTS.md",
+      "path": "source/configs/pi/AGENTS.md",
+      "format": "agents-md"
+    },
+    {
+      "kind": "rules",
+      "id": "agents-6",
+      "title": "AGENTS.md",
+      "path": "source/configs/zed/AGENTS.md",
+      "format": "agents-md"
+    },
+    {
+      "kind": "rules",
+      "id": "claude",
+      "title": "CLAUDE.md",
+      "path": "source/CLAUDE.md",
+      "format": "claude-md"
+    },
+    {
+      "kind": "rules",
+      "id": "claude-2",
+      "title": "CLAUDE.md",
+      "path": "source/configs/claude-code/CLAUDE.md",
+      "format": "claude-md"
+    },
+    {
+      "kind": "rules",
+      "id": "gemini",
+      "title": "GEMINI.md",
+      "path": "source/configs/antigravity/GEMINI.md",
+      "format": "gemini-md"
+    },
+    {
+      "kind": "rules",
+      "id": "gemini-2",
+      "title": "GEMINI.md",
+      "path": "source/configs/gemini-cli/GEMINI.md",
+      "format": "gemini-md"
+    },
+    {
+      "kind": "skill",
+      "path": "source/.claude/skills/context-mode-ops"
+    },
+    {
+      "kind": "skill",
+      "path": "source/skills/context-mode",
+      "plugin": "source",
+      "origin": "claude-plugin"
+    },
+    {
+      "kind": "skill",
+      "path": "source/skills/ctx-doctor",
+      "plugin": "source",
+      "origin": "claude-plugin"
+    },
+    {
+      "kind": "skill",
+      "path": "source/skills/ctx-index",
+      "plugin": "source",
+      "origin": "claude-plugin"
+    },
+    {
+      "kind": "skill",
+      "path": "source/skills/ctx-insight",
+      "plugin": "source",
+      "origin": "claude-plugin"
+    },
+    {
+      "kind": "skill",
+      "path": "source/skills/ctx-purge",
+      "plugin": "source",
+      "origin": "claude-plugin"
+    },
+    {
+      "kind": "skill",
+      "path": "source/skills/ctx-search",
+      "plugin": "source",
+      "origin": "claude-plugin"
+    },
+    {
+      "kind": "skill",
+      "path": "source/skills/ctx-stats",
+      "plugin": "source",
+      "origin": "claude-plugin"
+    },
+    {
+      "kind": "skill",
+      "path": "source/skills/ctx-upgrade",
+      "plugin": "source",
+      "origin": "claude-plugin"
+    }
+  ]
+}

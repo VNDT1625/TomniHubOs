@@ -1,5 +1,8 @@
-﻿import { bridge } from '@office-ai/platform';
+import { bridge } from '@office-ai/platform';
 import type { IDirOrFile, IFileMetadata, IWorkspaceFlatFile } from '@/common/adapter/ipcBridge';
+import type { AttachmentQuickView } from '@/common/chat/attachmentQuickView';
+import type { AttachmentQuickViewSelection } from '@/common/chat/attachmentQuickView';
+import { dialog } from 'electron';
 import { NativeFileGateway } from './nativeFileGateway';
 
 /**
@@ -15,6 +18,12 @@ export const fileGatewayChannels = {
   imageBase64: bridge.buildProvider<string | null, { path: string; workspace?: string }>('native-fs.image-base64'),
   fetchRemoteImage: bridge.buildProvider<string, { url: string }>('native-fs.fetch-remote-image'),
   read: bridge.buildProvider<string | null, { path: string; workspace?: string }>('native-fs.read'),
+  attachmentQuickView: bridge.buildProvider<AttachmentQuickView, { attachment_id: string }>(
+    'native-fs.attachment-quick-view'
+  ),
+  attachmentSelect: bridge.buildProvider<AttachmentQuickViewSelection[], Record<string, never>>(
+    'native-fs.attachment-select'
+  ),
   readBuffer: bridge.buildProvider<string | null, { path: string; workspace?: string }>('native-fs.read-buffer'),
   temp: bridge.buildProvider<string, { file_name: string }>('native-fs.temp'),
   write: bridge.buildProvider<boolean, { path: string; data: string }>('native-fs.write'),
@@ -33,6 +42,14 @@ export const registerFileGatewayBridge = (gateway = new NativeFileGateway()): vo
   fileGatewayChannels.imageBase64.provider(({ path }) => gateway.imageDataUrl(path));
   fileGatewayChannels.fetchRemoteImage.provider(({ url }) => gateway.fetchRemoteImage(url));
   fileGatewayChannels.read.provider(({ path }) => gateway.readText(path));
+  fileGatewayChannels.attachmentQuickView.provider(({ attachment_id }) => gateway.attachmentQuickView(attachment_id));
+  fileGatewayChannels.attachmentSelect.provider(async (_input) => {
+    const selection = await dialog.showOpenDialog({ properties: ['openFile', 'multiSelections'] });
+    return selection.filePaths.map((filePath) => ({
+      attachmentId: gateway.registerAttachmentQuickView(filePath).id,
+      path: filePath,
+    }));
+  });
   fileGatewayChannels.readBuffer.provider(({ path }) => gateway.readBase64(path));
   fileGatewayChannels.temp.provider(() => rejectUngovernedMutation());
   fileGatewayChannels.write.provider(() => rejectUngovernedMutation());

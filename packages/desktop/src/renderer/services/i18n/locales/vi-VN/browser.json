@@ -1,4 +1,33 @@
 {
+  "downloadGate": {
+    "title": "Xác nhận tải xuống",
+    "message": "Lưu \"{{filename}}\" từ {{source}}?",
+    "detail": "Loại tệp: {{extension}}. Dung lượng: {{size}}.",
+    "sizeUnknown": "không rõ dung lượng",
+    "noExtension": "không có",
+    "save": "Lưu",
+    "cancel": "Hủy"
+  },
+  "extensionStrip": {
+    "button": "Tiện ích",
+    "popupTitle": "Tiện ích",
+    "fullAccess": "Truy cập đầy đủ",
+    "accessRequested": "Yêu cầu truy cập trang này",
+    "empty": "Chưa có tiện ích nào được bật.",
+    "loadError": "Không tải được danh sách tiện ích.",
+    "pin": "Ghim lên thanh",
+    "unpin": "Bỏ ghim khỏi thanh",
+    "more": "Thêm",
+    "siteAccess": "Quyền truy cập trang",
+    "siteOnClick": "Khi bấm",
+    "siteOnSite": "Trên các trang đã chọn",
+    "siteAllSites": "Mọi trang",
+    "allowSite": "Cho phép trên trang này",
+    "uninstall": "Gỡ tiện ích",
+    "actionFailed": "Không lưu được thay đổi.",
+    
+"manage": "Quản lý tiện ích"
+  },
   "navTitle": "Trình duyệt",
   "title": "Trình duyệt",
   "subtitle": "Duyệt web ngay trong ứng dụng và để một mô hình AI điều khiển trang như một tác nhân duyệt web.",

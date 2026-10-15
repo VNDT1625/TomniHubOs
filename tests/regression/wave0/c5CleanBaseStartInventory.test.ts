@@ -89,6 +89,16 @@ describe('C5 clean base start inventory', () => {
     expect(bridgeSource).toContain('await designViuPackageActivationLifecycle.initialize();');
   });
 
+    it('does not eagerly activate the Browser or IDE native host on base Electron bootstrap', () => {
+    const baseBridge = readFileSync(resolve(PROJECT_ROOT, 'packages/desktop/src/process/bridge/index.ts'), 'utf8');
+    const packageBridge = readFileSync(resolve(PROJECT_ROOT, PACKAGE_BRIDGE_PATH), 'utf8');
+    expect(baseBridge).not.toContain('startDefaultBrowserRuntime(');
+    expect(baseBridge).not.toContain('startIdeTerminalRuntime(');
+    expect(packageBridge).toContain("createFixedPackageActivationLifecycle('com.tomni.browser'");
+    expect(packageBridge).toContain("createFixedPackageActivationLifecycle('com.tomni.ide'");
+    expect(packageBridge).toContain("listing.installedTrust === 'signed-first-party'");
+  });
+
   it('does not cross the package-bridge activation boundary on a clean or disabled base', async () => {
     let listing = { state: 'available', enabled: false } as Pick<PackageListing, 'state' | 'enabled'>;
     const status = vi.fn(async () => listing as PackageListing);

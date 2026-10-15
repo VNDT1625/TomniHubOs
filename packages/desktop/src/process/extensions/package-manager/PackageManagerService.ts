@@ -15,30 +15,31 @@ import {
   parseCommerceOrderLifecycle,
   parsePackageManifest,
   parseProductOffer,
-  PackageOperationError,
-  resolvePackageDependencyResult,
-  toPackageOperationFailure,
-  type CommerceOrderLifecycle,
-  type InstalledPackageRecord,
-  type PackageCatalogEntry,
-  type PackageAsset,
-  type PackageContributionChangedEvent,
-  type PackageContributionDiagnostic,
-  type PackageContributionState,
-  type PackageDependencyResolutionCandidate,
-  type PackageLifecycleState,
-  type PackageListFilter,
-  type PackageManifest,
-  type PackageListing,
-  type PackagePublicErrorCode,
-  type PackageTrust,
-  type PackageSearchRequest,
-  type PackageStateChangedEvent,
-} from '../../../common/packages';
+} from '../../../common/packages/manifest';
+import { PackageOperationError, resolvePackageDependencyResult, toPackageOperationFailure } from '../../../common/packages/dependencyResolver';
+import type {
+  CommerceOrderLifecycle,
+  InstalledPackageRecord,
+  PackageCatalogEntry,
+  PackageAsset,
+  PackageContributionChangedEvent,
+  PackageContributionDiagnostic,
+  PackageContributionState,
+  PackageDependencyResolutionCandidate,
+  PackageLifecycleState,
+  PackageListFilter,
+  PackageManifest,
+  PackageListing,
+  PackagePublicErrorCode,
+  PackageTrust,
+  PackageSearchRequest,
+  PackageStateChangedEvent,
+} from '../../../common/packages/types';
 import {
   computeArtifactIntegrity,
   copyArtifactSecurely,
   isPathInside,
+  isSetupOutputPath,
   packageArtifactManifestsMatch,
   readArtifactManifest,
   verifyArtifactSignature,
@@ -85,6 +86,16 @@ export type PackageManagerServiceDeps = {
   appVersion: string;
   catalog: readonly PackageCatalogEntry[];
   trustedKeys?: Readonly<Record<string, string>>;
+  /**
+   * Public keys of this machine's own packager (key ids start with `local:`). They verify only `local-built`
+   * packages and are never consulted for Store or first-party packages, so a local key cannot impersonate a Store key.
+   */
+  localTrustedKeys?: Readonly<Record<string, string>>;
+  /**
+   * Whether a local key id was revoked (`LocalSigningKeys.isRevoked`). A `local-built` package signed with a revoked key
+   * is `unsigned-revoked`: it stays installed, is never verified or trusted as signed. Defaults to no revoked key.
+   */
+  isRevokedLocalKey?: (keyId: string) => boolean;
   /** Keys pinned to Tomni's protected package namespace; generic store keys cannot elevate this trust tier. */
   firstPartyTrustedKeys?: Readonly<Record<string, string>>;
   stateStore?: PackageStateStore;
@@ -105,7 +116,7 @@ export type PackageManagerServiceDeps = {
    * for their verified artifact-read leases. This is not a package callback.
    */
   quiescePackageRuntime?: (packageId: string) => Promise<void>;
-  /** Restores an unchanged admitted endpoint when its requested mutation fails. */
+    /** Reconciles a fixed host against the durable post-mutation state on success or failure. */
   resumePackageRuntime?: (packageId: string) => Promise<void>;
   /**
    * Declares the commercial owner and offer for a paid package. Returning
@@ -128,6 +139,16 @@ export type PackageManagerService = {
   disable: (id: string) => Promise<PackageListing>;
   rollback: (id: string) => Promise<PackageListing>;
   uninstall: (id: string) => Promise<PackageListing>;
+  /**
+   * Admits a package directory built on this machine (signed with a local key) to the catalog as `local-built`.
+   * It does not install or enable anything; call `install` afterwards. The path must come from Main, never a renderer.
+   */
+  registerLocalPackage: (sourceDirectory: string) => Promise<PackageListing>;
+  /**
+   * Marks installed `local-built` packages whose local signing key was revoked as `unsigned-revoked`. Returns how many
+   * changed. Call it right after revoking a local key, then sync the connection registry.
+   */
+  reconcileLocalKeyRevocations: () => Promise<number>;
   contributions: () => Promise<PackageContributionState>;
   readAsset: (id: string, assetPath: string) => Promise<PackageAsset>;
   /**
@@ -267,11 +288,34 @@ const compareSearchResults = (left: PackageListing, right: PackageListing): numb
   return left.manifest.id.localeCompare(right.manifest.id);
 };
 
+/**
+ * A `local-built` entry is built and signed on this machine, so it gets the least privilege: no protected namespace,
+ * no privileged runtime, no Main contribution, no paid offer, and it must come from a directory, never a catalog URL.
+ */
+const assertLocalBuiltEntry = (entry: PackageCatalogEntry): void => {
+  const { manifest } = entry;
+  if (entry.delivery !== 'downloaded-package' || !entry.sourceDirectory || entry.artifactUrl !== undefined) {
+    throw new Error(`Local package ${manifest.id} must be installed from a local directory.`);
+  }
+  if (manifest.publisherId === 'com.tomni' || manifest.id.toLowerCase().startsWith('com.tomni.')) {
+    throw new Error(`Local package ${manifest.id} cannot use the protected com.tomni namespace.`);
+  }
+  if (manifest.modules.some((module) => module.runtime === 'trusted-react')) {
+    throw new Error(`Local package ${manifest.id} cannot use the trusted-react runtime.`);
+  }
+  if ((manifest.mainContributions?.length ?? 0) > 0) {
+    throw new Error(`Local package ${manifest.id} cannot declare Main contributions.`);
+  }
+  if (entry.offer !== undefined) throw new Error(`Local package ${manifest.id} cannot carry a paid offer.`);
+};
+
 export const createPackageManagerService = (deps: PackageManagerServiceDeps): PackageManagerService => {
   if (!path.isAbsolute(deps.rootDir)) throw new Error('Package root directory must be absolute.');
   if (!semver.valid(deps.appVersion)) throw new Error(`Invalid Tomni version: ${deps.appVersion}`);
 
   const catalog = new Map<string, PackageCatalogEntry>();
+  /** Packages admitted by `registerLocalPackage`; a catalog refresh keeps them and never lets them shadow a catalog id. */
+  const localEntries = new Map<string, PackageCatalogEntry>();
   const replaceCatalog = (rawEntries: readonly PackageCatalogEntry[]): void => {
     const next = new Map<string, PackageCatalogEntry>();
     for (const rawEntry of rawEntries) {
@@ -290,6 +334,9 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
           offer.package.publisherId !== manifest.publisherId)
       ) {
         throw new Error(`Package ${manifest.id} has an offer for a different package identity.`);
+      }
+      if (entry.trust === 'local-built') {
+        throw new Error(`Package ${entry.manifest.id} cannot claim local-built trust from a catalog.`);
       }
       if (
         entry.delivery === 'downloaded-package' &&
@@ -313,6 +360,7 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
     }
     catalog.clear();
     for (const [id, entry] of next) catalog.set(id, entry);
+    for (const [id, entry] of localEntries) if (!catalog.has(id)) catalog.set(id, entry);
   };
   replaceCatalog(deps.catalog);
 
@@ -324,10 +372,25 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
   const stateStore = deps.stateStore ?? new JsonPackageStateStore(path.join(rootDir, 'installed.json'));
   const trustedKeys = deps.trustedKeys ?? {};
   const firstPartyTrustedKeys = deps.firstPartyTrustedKeys ?? {};
+  const localTrustedKeys = deps.localTrustedKeys ?? {};
+  const isRevokedLocalKey = deps.isRevokedLocalKey ?? ((): boolean => false);
+  for (const keyId of Object.keys(localTrustedKeys)) {
+    if (!keyId.startsWith('local:') || keyId in trustedKeys || keyId in firstPartyTrustedKeys) {
+      throw new Error(`Local package key id is not allowed: ${keyId}`);
+    }
+  }
+  /** `local-built` packages are verified only with local keys; every other tier only with Store keys. */
+  const keysFor = (trust: PackageTrust | undefined): Readonly<Record<string, string>> =>
+    trust === 'local-built' ? localTrustedKeys : trustedKeys;
   const now = deps.now ?? Date.now;
   const randomId = deps.randomId ?? randomUUID;
   const readAssetFile = deps.readAssetFile ?? ((assetPath: string): Promise<string> => readFile(assetPath, 'utf8'));
   const transientStates = new Map<string, PackageLifecycleState>();
+  /**
+   * Listing snapshots of packages removed in this session. A removed package that is no longer in the catalog
+   * has no entry left to build a listing from, so uninstall stays idempotent and status stays answerable.
+   */
+  const removedListings = new Map<string, PackageListing>();
   const operations = new Map<string, RunningOperation>();
   const assetReadLeases = new Map<string, AssetReadLeaseState>();
   const inFlightAssetReads = new Map<string, Promise<PackageAsset>>();
@@ -598,6 +661,17 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
     return pinnedKey !== undefined && pinnedKey === trustedKeys[keyId];
   };
 
+  /** A local-built payload whose signing key was revoked. Such a payload is never verified as signed again. */
+  const isRevokedLocalPayload = (manifest: PackageManifest | undefined, trust: PackageTrust | undefined): boolean => {
+    const keyId = manifest?.artifact?.signature.keyId;
+    return (
+      (trust === 'local-built' || trust === 'unsigned-revoked') &&
+      keyId !== undefined &&
+      keyId.startsWith('local:') &&
+      isRevokedLocalKey(keyId)
+    );
+  };
+
   const reconcileOwnedPayload = async (
     record: InstalledPackageRecord,
     version: string,
@@ -613,8 +687,13 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
     if (evidence.manifest && !packageArtifactManifestsMatch(evidence.manifest, manifest)) {
       throw new Error('Owned package payload does not match its durable registry manifest.');
     }
-    verifyArtifactSignature(manifest, trustedKeys);
-    const integrity = await computeArtifactIntegrity(payloadPath);
+    const revokedLocalKey = isRevokedLocalPayload(manifest, evidence.trust);
+    if (evidence.trust === 'unsigned-revoked' && !revokedLocalKey) {
+      throw new Error('Owned package payload is not signed by a revoked local key.');
+    }
+    if (!revokedLocalKey) verifyArtifactSignature(manifest, keysFor(evidence.trust));
+    // A sealed payload is hashed without setup output (see SETUP_OUTPUT_RULE_VERSION); every shipped file is exact.
+    const integrity = await computeArtifactIntegrity(payloadPath, undefined, { setupOutputs: 'exclude' });
     if (integrity.integrity !== manifest.artifact?.integrity || integrity.sizeBytes !== manifest.artifact.sizeBytes) {
       throw new Error('Owned package payload integrity verification failed.');
     }
@@ -628,7 +707,13 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
       evidence.provenance?.scope !== undefined &&
       evidence.provenance.version === manifest.version &&
       evidence.provenance.integrity === manifest.artifact?.integrity;
-    const trust: PackageTrust = durableFirstPartyIdentity ? 'signed-first-party' : 'signed-store';
+    const trust: PackageTrust = durableFirstPartyIdentity
+      ? 'signed-first-party'
+      : revokedLocalKey
+        ? 'unsigned-revoked'
+        : evidence.trust === 'local-built'
+          ? 'local-built'
+          : 'signed-store';
     const provenance =
       evidence.provenance?.scope &&
       evidence.provenance.version === manifest.version &&
@@ -713,15 +798,26 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
           record.provenance.scope !== activePayload.provenance.scope ||
           record.provenance.version !== activePayload.provenance.version ||
           record.provenance.integrity !== activePayload.provenance.integrity;
-        if (metadataChanged) {
+        // Auto-recovery: a package quarantined only because its sealed payload failed verification is installed
+        // again once that verification passes. It comes back disabled: enabling it still needs the normal approval.
+        // A revoked local key is never recovered here (its trust is `unsigned-revoked`).
+        const recovered =
+          record.state === 'quarantined' &&
+          record.lastError === 'PACKAGE_PAYLOAD_INCONSISTENT' &&
+          activePayload.trust !== 'unsigned-revoked';
+        if (metadataChanged || recovered) {
           await stateStore.save({
             ...record,
+            ...(recovered
+              ? { state: 'installed' as const, enabled: false, lastError: undefined, updatedAt: now() }
+              : {}),
             manifest: activePayload.manifest,
             trust: activePayload.trust,
             provenance: activePayload.provenance,
           });
         }
         clearReconciliationDiagnostic(record.id);
+        if (recovered) emit(record.id, 'installed');
         continue;
       } catch {
         if (!previousVersion) {
@@ -891,6 +987,8 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
     let changedContributions = false;
     for (const record of stateStore.list()) {
       if (record.delivery !== 'downloaded-package') continue;
+      // Local keys are not Store keys; a local package is checked by reconcileRevokedLocalKeys and at each enable.
+      if (record.trust === 'local-built' || record.trust === 'unsigned-revoked') continue;
       const manifest = record.manifest;
       const signingKeyId = manifest?.artifact?.signature.keyId;
       if (!manifest || !signingKeyId || trustedKeys[signingKeyId] !== undefined) continue;
@@ -924,6 +1022,50 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
     if (changedContributions) emitContributionChanged();
   };
 
+  /**
+   * A revoked local key (`LocalSigningKeys.revoke`) keeps its `local-built` packages installed, but they stop being
+   * trusted as signed: their trust becomes `unsigned-revoked`. A package with a sandboxed runtime has that runtime
+   * stopped and is disabled. Only records whose trust changes are written, so the call is idempotent.
+   * Returns how many installed records changed.
+   */
+  const reconcileRevokedLocalKeys = async (): Promise<number> => {
+    let changed = 0;
+    for (const record of stateStore.list()) {
+      if (record.delivery !== 'downloaded-package') continue;
+      const trust =
+        record.trust === 'local-built' && isRevokedLocalPayload(record.manifest, 'local-built')
+          ? 'unsigned-revoked'
+          : record.trust;
+      const previousTrust =
+        record.previousTrust === 'local-built' && isRevokedLocalPayload(record.previousManifest, 'local-built')
+          ? 'unsigned-revoked'
+          : record.previousTrust;
+      if (trust === record.trust && previousTrust === record.previousTrust) continue;
+
+      const sandboxed = [record.manifest, record.previousManifest].some(
+        (manifest) =>
+          manifest?.modules.some((module: PackageManifest['modules'][number]) => module.runtime === 'sandboxed-web') ===
+          true
+      );
+      if (sandboxed && !deps.revokePackageSandbox) {
+        throw new Error(`Cannot apply local key revocation for ${record.id}: sandbox revocation is unavailable.`);
+      }
+      await deps.quiescePackageRuntime?.(record.id);
+      if (sandboxed) await deps.revokePackageSandbox!(record.id);
+
+      await stateStore.save({
+        ...record,
+        trust,
+        ...(previousTrust === undefined ? {} : { previousTrust }),
+        ...(sandboxed ? { enabled: false } : {}),
+        updatedAt: now(),
+      });
+      changed += 1;
+      emit(record.id, 'installed');
+    }
+    return changed;
+  };
+
   const initialize = async (): Promise<void> => {
     await stateStore.initialize();
     if (deps.catalogLoader) replaceCatalog(await deps.catalogLoader());
@@ -931,6 +1073,7 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
     await recoverFilesystem();
 
     await reconcileCatalogRevocations();
+    await reconcileRevokedLocalKeys();
 
     await restoreContributionRegistryFailClosed();
 
@@ -992,7 +1135,13 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
       .toSorted(compareSearchResults);
   };
 
-  const status = async (id: string): Promise<PackageListing> => listingFor(entryFor(id));
+  const status = async (id: string): Promise<PackageListing> => {
+    if (!catalog.has(id) && !stateStore.get(id)) {
+      const removed = removedListings.get(id);
+      if (removed) return structuredClone(removed);
+    }
+    return listingFor(entryFor(id));
+  };
   const acquireAssetReadLease = (id: string): (() => void) | undefined => {
     if (operations.has(id)) return undefined;
     let lease = assetReadLeases.get(id);
@@ -1053,7 +1202,7 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
       const runtimeManifest = installed.manifest ?? entry.manifest;
       let expectedArtifact: NonNullable<PackageManifest['artifact']>;
       try {
-        verifyArtifactSignature(runtimeManifest, trustedKeys);
+        verifyArtifactSignature(runtimeManifest, keysFor(installed.trust ?? entry.trust));
         const declaredArtifact = runtimeManifest.artifact;
         if (!declaredArtifact) throw new Error(`Package ${id} does not declare runtime artifact integrity.`);
         expectedArtifact = declaredArtifact;
@@ -1061,15 +1210,18 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
         await rejectRuntimeVerificationFailure(installed, error);
       }
 
+      const relativeTarget = path.relative(packageRoot, resolvedTarget).replaceAll(path.sep, '/');
+      if (isSetupOutputPath(relativeTarget)) throw new Error('Package asset is setup output, not package content.');
       const content = await readAssetFile(resolvedTarget);
       if (Buffer.byteLength(content, 'utf8') > MAX_RUNTIME_ASSET_BYTES) {
         throw new Error('Package asset exceeds the runtime size limit.');
       }
       try {
-        const activeIntegrity = await computeArtifactIntegrity(packageRoot, {
-          relativePath: path.relative(packageRoot, resolvedTarget).replaceAll(path.sep, '/'),
-          content,
-        });
+        const activeIntegrity = await computeArtifactIntegrity(
+          packageRoot,
+          { relativePath: relativeTarget, content },
+          { setupOutputs: 'exclude' }
+        );
         if (
           activeIntegrity.integrity !== expectedArtifact.integrity ||
           activeIntegrity.sizeBytes !== expectedArtifact.sizeBytes
@@ -1158,14 +1310,17 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
       if (!stat.isFile() || stat.isSymbolicLink() || !isPathInside(resolvedRoot, resolvedTarget)) {
         throw new Error('Package runtime entry is not a safe regular file.');
       }
+      if (isSetupOutputPath(path.relative(packageRoot, resolvedTarget).replaceAll(path.sep, '/'))) {
+        throw new Error('Package runtime entry is setup output, not package content.');
+      }
       if (stat.size > MAX_RUNTIME_ASSET_BYTES) throw new Error('Package runtime entry exceeds the size limit.');
 
       const runtimeManifest = installed.manifest ?? entry.manifest;
       const expectedArtifact = runtimeManifest.artifact;
       if (!expectedArtifact) throw new Error(`Package ${id} does not declare runtime artifact integrity.`);
       try {
-        verifyArtifactSignature(runtimeManifest, trustedKeys);
-        const activeIntegrity = await computeArtifactIntegrity(packageRoot);
+        verifyArtifactSignature(runtimeManifest, keysFor(installed.trust ?? entry.trust));
+        const activeIntegrity = await computeArtifactIntegrity(packageRoot, undefined, { setupOutputs: 'exclude' });
         if (
           activeIntegrity.integrity !== expectedArtifact.integrity ||
           activeIntegrity.sizeBytes !== expectedArtifact.sizeBytes
@@ -1274,8 +1429,9 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
       if (!packageArtifactManifestsMatch(entry.manifest, sourceManifest)) {
         throw new Error(`Artifact manifest does not match the Store catalog for ${entry.manifest.id}.`);
       }
-      verifyArtifactSignature(sourceManifest, trustedKeys);
-      const integrity = await computeArtifactIntegrity(resolvedSource);
+      verifyArtifactSignature(sourceManifest, keysFor(entry.trust));
+      // A signed archive never carries setup output: it is refused here, so nothing unsigned can ride along.
+      const integrity = await computeArtifactIntegrity(resolvedSource, undefined, { setupOutputs: 'reject' });
       if (
         integrity.integrity !== sourceManifest.artifact?.integrity ||
         integrity.sizeBytes !== sourceManifest.artifact.sizeBytes
@@ -1286,7 +1442,7 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
       stage = path.join(stagingDir, `${entry.manifest.id}-${entry.manifest.version}-${randomId()}`);
       const target = path.join(packagesDir, entry.manifest.id, entry.manifest.version);
       await copyArtifactSecurely(resolvedSource, stage);
-      const stagedIntegrity = await computeArtifactIntegrity(stage);
+      const stagedIntegrity = await computeArtifactIntegrity(stage, undefined, { setupOutputs: 'reject' });
       if (
         stagedIntegrity.integrity !== sourceManifest.artifact.integrity ||
         stagedIntegrity.sizeBytes !== sourceManifest.artifact.sizeBytes
@@ -1297,7 +1453,7 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
 
       await mkdir(path.dirname(target), { recursive: true });
       if (await exists(target)) {
-        const existingIntegrity = await computeArtifactIntegrity(target);
+        const existingIntegrity = await computeArtifactIntegrity(target, undefined, { setupOutputs: 'exclude' });
         if (
           existingIntegrity.integrity !== sourceManifest.artifact.integrity ||
           existingIntegrity.sizeBytes !== sourceManifest.artifact.sizeBytes
@@ -1540,6 +1696,9 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
     const installed = stateStore.get(id);
     if (!installed || installed.state !== 'installed') throw new Error(`Package ${id} is not installed.`);
     if (installed.enabled) return listingFor(entry);
+    if (installed.trust === 'unsigned-revoked') {
+      throw new Error(`Package ${id} was signed with a revoked local key; rebuild and reinstall it.`);
+    }
     const manifest = installed.manifest;
     if (!manifest || manifest.id !== id || manifest.version !== installed.version) {
       throw new Error(`Package ${id} has no valid installed manifest.`);
@@ -1662,7 +1821,12 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
   };
 
   const performUninstall = async (id: string): Promise<PackageListing> => {
-    const entry = entryFor(id);
+    const knownEntry = catalog.get(id) ?? installedEntryFor(id);
+    if (!knownEntry && !stateStore.get(id)) {
+      const removed = removedListings.get(id);
+      if (removed) return structuredClone(removed);
+    }
+    const entry = knownEntry ?? entryFor(id);
     const installed = stateStore.get(id);
     if (!installed) {
       contributionRegistry.remove(id);
@@ -1759,7 +1923,9 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
         );
         transientStates.delete(id);
         emit(id, 'available');
-        return listingFor(entry);
+        const removedListing = listingFor(entry);
+        removedListings.set(id, structuredClone(removedListing));
+        return removedListing;
       } catch (error) {
         const restoreArtifact = async (): Promise<void> => {
           for (const { activePath, trashedPath } of trashedPayloads.toReversed()) {
@@ -1832,11 +1998,12 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
       .then(async (): Promise<PackageListing> => {
         if (kind !== 'enabling') await deps.quiescePackageRuntime?.(id);
         await waitForAssetReadLeases(id);
-        try {
+                try {
           return await operation();
-        } catch (error) {
+        } finally {
+          // Resolve the durable state after every mutation, not only failures:
+          // install/update must reactivate; successful disable/uninstall must stay stopped.
           if (kind !== 'enabling') await deps.resumePackageRuntime?.(id);
-          throw error;
         }
       });
     mutationQueue = queued.then(
@@ -1846,6 +2013,45 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
     const promise = queued.finally(() => operations.delete(id));
     operations.set(id, { kind, promise });
     return promise;
+  };
+
+  const registerLocalPackage = async (sourceDirectory: string): Promise<PackageListing> => {
+    if (Object.keys(localTrustedKeys).length === 0) throw new Error('Local packages are not enabled.');
+    if (!path.isAbsolute(sourceDirectory)) throw new Error('Local package source must be an absolute directory.');
+    const resolved = await realpath(sourceDirectory);
+    if (isPathInside(rootDir, resolved)) {
+      throw new Error('Local package source must be outside the package installation root.');
+    }
+    const manifest = await readArtifactManifest(resolved);
+    verifyArtifactSignature(manifest, localTrustedKeys);
+    const integrity = await computeArtifactIntegrity(resolved);
+    if (integrity.integrity !== manifest.artifact?.integrity || integrity.sizeBytes !== manifest.artifact.sizeBytes) {
+      throw new Error(`Local package integrity verification failed for ${manifest.id}.`);
+    }
+    const entry: PackageCatalogEntry = {
+      manifest,
+      delivery: 'downloaded-package',
+      trust: 'local-built',
+      sourceDirectory: resolved,
+      installScope: 'optional',
+    };
+    assertLocalBuiltEntry(entry);
+    const known = catalog.get(manifest.id);
+    if (known !== undefined && known.trust !== 'local-built') {
+      throw new Error(`Local package ${manifest.id} conflicts with a catalog package.`);
+    }
+    const installed = stateStore.get(manifest.id);
+    if (
+      installed?.state === 'installed' &&
+      installed.trust !== undefined &&
+      installed.trust !== 'local-built' &&
+      installed.trust !== 'unsigned-revoked'
+    ) {
+      throw new Error(`Local package ${manifest.id} cannot replace an installed catalog package.`);
+    }
+    localEntries.set(manifest.id, entry);
+    catalog.set(manifest.id, entry);
+    return listingFor(entry);
   };
 
   return {
@@ -1860,6 +2066,15 @@ export const createPackageManagerService = (deps: PackageManagerServiceDeps): Pa
     disable: (id) => runOperation(id, 'disabling', () => performDisable(id)),
     rollback: (id) => runOperation(id, 'rolling-back', () => performRollback(id)),
     uninstall: (id) => runOperation(id, 'uninstalling', () => performUninstall(id)),
+    registerLocalPackage,
+    reconcileLocalKeyRevocations: () => {
+      const queued = mutationQueue.catch((): undefined => undefined).then(() => reconcileRevokedLocalKeys());
+      mutationQueue = queued.then(
+        (): undefined => undefined,
+        (): undefined => undefined
+      );
+      return queued;
+    },
     contributions: async () => contributionState(),
     readAsset,
     acquireVerifiedRuntimeEntry,

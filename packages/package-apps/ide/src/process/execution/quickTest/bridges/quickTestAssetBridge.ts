@@ -96,7 +96,7 @@ export const quickTestAssetChannels = {
   remove: bridge.buildProvider<UnderstandResult<boolean>, RemoveAssetRequest>(QT_ASSET_CHANNELS.remove),
 };
 
-const dataDir = (rootPath: string): string => path.join(rootPath, '.omni', 'quick-test');
+const dataDir = (rootPath: string): string => path.join(rootPath, '.tomni', 'quick-test');
 const statePath = (rootPath: string): string => path.join(dataDir(rootPath), 'assets.json');
 
 export const readQuickTestAssetState = async (rootPath: string): Promise<QuickTestAssetState> => {

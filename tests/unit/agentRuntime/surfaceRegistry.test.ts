@@ -166,7 +166,7 @@ describe('surface registry discovery', () => {
 });
 
 describe('surface resolution and fallback', () => {
-  it('registers workflow, orchestration and testing as Core capabilities', () => {
+  it('registers workflow and orchestration as Core capabilities', () => {
     for (const manifest of createBuiltinSurfaceManifests()) {
       expect(manifest.capabilities).toEqual(
         expect.arrayContaining([
@@ -180,7 +180,6 @@ describe('surface resolution and fallback', () => {
             serverName: 'tomny-agent-orchestrator',
             toolPatterns: expect.arrayContaining(['agent_spawn', 'agent_resume', 'agent_close']),
           }),
-          expect.objectContaining({ id: 'core.testing', serverName: 'tomny-testing', toolPatterns: ['test_*'] }),
         ])
       );
     }
@@ -244,7 +243,7 @@ describe('surface resolution and fallback', () => {
     const result = registry.resolve({
       ...fullRequest,
       surfaceId: 'ide',
-      availableCapabilityIds: ['core.agent-orchestrator', 'core.testing', 'surface.ide'],
+      availableCapabilityIds: ['core.agent-orchestrator', 'surface.ide'],
     });
 
     expect(result.ok).toBe(true);

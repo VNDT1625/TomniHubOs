@@ -1,0 +1,2648 @@
+<!doctype html>
+<html lang="vi" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TomniHubOS — Home v3 Wireframe (Agent Grid + Tabs Rail)</title>
+        <!-- 2026-10-15 Right rail System Monitor: opened via the existing + tab chooser, alongside Console/Activity/Explorer; compact CPU/RAM charts, per-core CPU, hardware facts, active Tomni tasks, sortable/filterable Windows OS-wide and Tomni Electron processes. Windows CIM shows GPU engine peak proxy, disk read/write and network send/receive with unavailable states for missing counters. No OS task termination or fabricated counters. -->
+    <!-- 2026-10-15 Terminal workspace reference: footer Terminal switches Home centre Agent Overview/Chat composer to Human Terminal Overview/interactive xterm; Console is a selectable tab inside the existing right rail, not a Chat/Agent tile. Rail Console is interactive when Chat Mode is active, while Terminal Mode uses the full main PTY and the rail becomes a read-only mirror. Chat and Terminal are mutually exclusive in the centre. Runtime layout and styles live in the desktop global stylesheet. -->
+    <!-- Rich assistant message cards and horizontal image galleries use v3 card/text tokens; temporary Preview document tabs live within the existing right rail without altering shell layout. Realtime route reuses this very same tabbed/resizable rail for user-customizable Weather/Market/GitHub/Hugging Face widgets; the center remains a full-width 1-3-1 news stream, and clicking a widget loads its focused center route. No second nested sidebar. -->
+    <style>
+      /* ============ TOKENS (kế thừa nguyên hệ v2) ============ */
+      :root,
+      html[data-theme='dark'] {
+        --bg-0: #0c0d0f;
+        --bg-1: #141518;
+        --bg-2: #1b1d21;
+        --bg-3: #232529;
+        --line: rgba(255, 255, 255, 0.08);
+        --line-strong: rgba(255, 255, 255, 0.16);
+        --tx-0: #fafbfc;
+        --tx-1: #e4e9f0;
+        --tx-2: #cbd3de;
+        --glass: rgba(14, 15, 18, 0.52);
+        --glass-line: rgba(255, 255, 255, 0.14);
+        --glass-hi: rgba(255, 255, 255, 0.06);
+        --accent-bg: #f4f5f7;
+        --accent-tx: #0c0d0f;
+        --track: #232529;
+        --shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+        --scrim: rgba(8, 10, 15, 0.82);
+        --pop: rgba(20, 22, 28, 0.78);
+        --card: rgba(255, 255, 255, 0.06);
+        --card-inner: rgba(0, 0, 0, 0.18);
+        --card-line: rgba(255, 255, 255, 0.12);
+      }
+      html[data-theme='light'] {
+        --bg-0: #f5f5f4;
+        --bg-1: #ffffff;
+        --bg-2: #ececea;
+        --bg-3: #e3e3e1;
+        --line: rgba(0, 0, 0, 0.12);
+        --line-strong: rgba(0, 0, 0, 0.24);
+        --tx-0: #0a0b0d;
+        --tx-1: #22252a;
+        --tx-2: #3a3d44;
+        --glass: rgba(255, 255, 255, 0.58);
+        --glass-line: rgba(0, 0, 0, 0.16);
+        --glass-hi: rgba(255, 255, 255, 0.65);
+        --accent-bg: #16171a;
+        --accent-tx: #f5f5f4;
+        --track: #e3e3e1;
+        --shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+        --scrim: rgba(222, 228, 240, 0.8);
+        --pop: rgba(255, 255, 255, 0.8);
+        --card: rgba(255, 255, 255, 0.38);
+        --card-inner: rgba(255, 255, 255, 0.55);
+        --card-line: rgba(0, 0, 0, 0.12);
+      }
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        height: 100%;
+      }
+      body {
+        font-family: 'Segoe UI', system-ui, sans-serif;
+        /* v3 has no background of its own: glass layers sit on whatever is behind the app (user wallpaper / desktop). */
+        background: var(--wall, transparent) center / cover no-repeat fixed;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--tx-0);
+      }
+      button {
+        font: inherit;
+        color: inherit;
+        background: none;
+        border: none;
+        cursor: pointer;
+      }
+
+      /* ============ APP FRAME 1440x860 ============ */
+      .app {
+        width: 1440px;
+        height: 860px;
+        position: relative;
+        overflow: hidden;
+        background: var(--scrim, transparent);
+        border-radius: 12px;
+        -webkit-backdrop-filter: blur(16px) saturate(1.25);
+        backdrop-filter: blur(16px) saturate(1.25);
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
+        display: grid;
+        grid-template-rows: 36px 1fr 29px;
+        grid-template-columns: 232px 1fr 300px;
+        grid-template-areas:
+          'title title title'
+          'sider main rail'
+          'status status status';
+      }
+
+      html[data-theme='light'] .app {
+        border: 1px solid rgba(0, 0, 0, 0.1);
+        box-shadow: 0 24px 64px rgba(0, 0, 0, 0.18);
+      }
+
+      /* ============ GLASS ============ */
+      .glass {
+        background: var(--glass);
+        -webkit-backdrop-filter: blur(16px) saturate(1.6);
+        backdrop-filter: blur(16px) saturate(1.6);
+        border-bottom: 1px solid var(--glass-line);
+        box-shadow: inset 0 1px 0 var(--glass-hi);
+      }
+      html[data-theme='light'] .glass {
+        -webkit-backdrop-filter: blur(16px) saturate(1.6);
+        backdrop-filter: blur(16px) saturate(1.6);
+      }
+
+      /* ============ DOTS TRẠNG THÁI (4 màu chức năng duy nhất) ============ */
+      .dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        flex: none;
+        display: inline-block;
+      }
+      .d-g {
+        background: #3fb950;
+      }
+      .d-y {
+        background: #d29922;
+      }
+      .d-r {
+        background: #f85149;
+      }
+      .d-gr {
+        background: #8b8e98;
+      }
+
+      .icon-btn {
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        flex: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--tx-1);
+        font-size: 13px;
+        position: relative;
+      }
+      .icon-btn:hover {
+        background: var(--bg-3);
+        color: var(--tx-0);
+      }
+      .mono {
+        font-family: Consolas, monospace;
+      }
+      .spacer {
+        flex: 1;
+      }
+
+      /* ============ 1. HEADER 36px ============ */
+      .titlebar {
+        grid-area: title;
+        position: relative;
+        z-index: 30;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 0 12px;
+      }
+      .cmdk {
+        position: absolute;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 420px;
+        height: 32px;
+        border-radius: 8px;
+        background: var(--card);
+        border: 1px solid var(--card-line);
+        box-shadow: inset 0 1px 0 var(--glass-hi);
+        -webkit-backdrop-filter: blur(16px);
+        backdrop-filter: blur(16px);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 0 12px;
+        color: var(--tx-2);
+        font-size: 13px;
+      }
+      .cmdk kbd {
+        margin-left: auto;
+        font-size: 11px;
+        color: var(--tx-2);
+        border: 1px solid var(--line);
+        border-radius: 4px;
+        padding: 1px 5px;
+        font-family: inherit;
+      }
+      @media (max-width: 1100px) {
+        .cmdk {
+          position: static;
+          width: auto;
+          min-width: 0;
+          flex: 1 1 auto;
+          transform: none;
+        }
+        .spacer {
+          display: none;
+        }
+      }
+      @media (max-width: 720px) {
+        .cmdk {
+          padding-inline: 8px;
+        }
+        .cmdk kbd {
+          display: none;
+        }
+      }
+
+      .bell-dot {
+        position: absolute;
+        top: 5px;
+        right: 5px;
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: #d29922;
+        box-shadow: 0 0 0 2px var(--bg-1);
+      }
+      .avatar {
+        width: 26px;
+        height: 26px;
+        border-radius: 50%;
+        background: var(--bg-3);
+        border: 1px solid var(--line-strong);
+        color: var(--tx-1);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 11px;
+        font-weight: 600;
+      }
+      .avatar.lg {
+        width: 36px;
+        height: 36px;
+        font-size: 13px;
+      }
+      .avatar-menu {
+        position: absolute;
+        top: 44px;
+        right: 12px;
+        z-index: 80;
+        display: none;
+        width: 240px;
+        padding: 6px;
+        border-radius: 12px;
+        background: var(--bg-1);
+        border: 1px solid var(--line-strong);
+        box-shadow: var(--shadow);
+      }
+      .avatar-menu.open {
+        display: block;
+      }
+      .am-head {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 8px;
+      }
+      .am-head .meta {
+        min-width: 0;
+      }
+      .am-head .meta b {
+        display: block;
+        font-size: 12.5px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .am-member {
+        display: inline-block;
+        margin-top: 3px;
+        font-size: 9.5px;
+        letter-spacing: 0.08em;
+        padding: 1px 6px;
+        border-radius: 5px;
+        background: var(--bg-3);
+        color: var(--tx-2);
+      }
+      .am-wallet {
+        padding: 6px 8px;
+        font-size: 11.5px;
+        color: var(--tx-1);
+      }
+      .am-sep {
+        height: 1px;
+        background: var(--line);
+        margin: 5px 6px;
+      }
+      .am-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        padding: 7px 8px;
+        border-radius: 7px;
+        font-size: 12.5px;
+        color: var(--tx-1);
+        text-align: left;
+      }
+      .am-item:hover {
+        background: var(--bg-3);
+        color: var(--tx-0);
+      }
+      .am-item .val {
+        margin-left: auto;
+        color: var(--tx-2);
+        font-size: 11.5px;
+      }
+      .win-controls {
+        display: flex;
+        gap: 6px;
+        margin-left: 6px;
+        align-items: center;
+      }
+      .win-btn {
+        width: 28px;
+        height: 26px;
+        border-radius: 6px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--tx-2);
+        font-size: 11px;
+      }
+      .win-btn:hover {
+        background: var(--bg-3);
+        color: var(--tx-0);
+      }
+
+      /* ============ 2. SIDEBAR 232px ============ */
+      .sider {
+        grid-area: sider;
+        position: relative;
+        z-index: 20;
+        border-right: 1px solid var(--glass-line);
+        display: flex;
+        flex-direction: column;
+        padding: 12px 10px;
+        gap: 2px;
+        overflow: hidden;
+      }
+      /* Brand + primary navigation remain fixed. Section labels stay visible;
+         only each list below them scrolls independently. */
+      .sider-section {
+        display: flex;
+        min-height: 0;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      .sider-section-scroll {
+        min-height: 0;
+        flex: 1 1 auto;
+        overflow-y: auto;
+      }
+      .sider-apps {
+        max-height: min(248px, 45%);
+        flex: 0 1 auto;
+      }
+      /* One quiet structural line introduces Apps; the two resize handles were removed. */
+      .sider-divider {
+        height: 1px;
+        flex: 0 0 1px;
+        margin: 10px 12px 8px;
+        background: var(--line-strong);
+      }
+      .sider-workspaces {
+        flex: 1 1 0;
+        margin-top: 8px;
+        border-top: 1px solid var(--line-strong);
+      }
+      .sider.is-resized .sider-workspaces {
+        min-height: 160px;
+      }
+      .sider-brand {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0;
+        padding: 2px 8px 18px;
+        font-weight: 700;
+        font-size: 13px;
+        letter-spacing: 0.14em;
+      }
+      .sider-brand::after {
+        position: absolute;
+        bottom: 7px;
+        left: 50%;
+        width: 32px;
+        height: 1px;
+        background: var(--line-strong);
+        content: '';
+        transform: translateX(-50%);
+      }
+      .sider-brand .chev {
+        margin-left: auto;
+        color: var(--tx-2);
+        letter-spacing: 0;
+      }
+      .nav-item {
+        height: 32px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 0 12px;
+        font-size: 13px;
+        color: var(--tx-1);
+        cursor: pointer;
+      }
+      .nav-item:hover {
+        background: var(--bg-3);
+        color: var(--tx-0);
+      }
+      .nav-item.active {
+        background: var(--accent-bg);
+        color: var(--accent-tx);
+        font-weight: 600;
+      }
+      .nav-item .n-icon {
+        width: 16px;
+        text-align: center;
+        opacity: 0.85;
+      }
+      .nav-item .n-chev {
+        margin-left: auto;
+        color: var(--tx-2);
+        font-size: 11px;
+      }
+      .nav-badge {
+        margin-left: auto;
+        min-width: 17px;
+        height: 17px;
+        padding: 0 5px;
+        border-radius: 9px;
+        background: var(--accent-bg);
+        color: var(--accent-tx);
+        font-size: 10.5px;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .side-label {
+        font-size: 10.5px;
+        font-weight: 600;
+        letter-spacing: 0.07em;
+        color: var(--tx-2);
+        padding: 14px 12px 6px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .side-label .plus {
+        cursor: pointer;
+      }
+      .side-label .plus:hover {
+        color: var(--tx-0);
+      }
+      .ws-folder {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 4px 12px;
+        font-size: 12.5px;
+        color: var(--tx-1);
+      }
+      .ws-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 4px 12px 4px 28px;
+        font-size: 12.5px;
+        color: var(--tx-2);
+      }
+      .ws-item:hover {
+        color: var(--tx-0);
+      }
+      .show-more {
+        font-size: 12px;
+        color: var(--tx-2);
+        padding: 4px 12px 4px 28px;
+        cursor: pointer;
+      }
+      .show-more:hover {
+        color: var(--tx-0);
+      }
+
+      /* popup Xem thêm app */
+      .app-more-pop {
+        position: absolute;
+        left: 16px;
+        z-index: 60;
+        display: none;
+        width: 196px;
+        padding: 6px;
+        border-radius: 10px;
+        background: var(--bg-1);
+        border: 1px solid var(--line-strong);
+        box-shadow: var(--shadow);
+      }
+      .app-more-pop.open {
+        display: block;
+      }
+      .app-more-pop .nav-item {
+        height: 30px;
+        font-size: 12.5px;
+      }
+
+      /* ============ 3. CENTER ============ */
+      .main {
+        grid-area: main;
+        position: relative;
+        margin: 6px 6px -9px;
+        z-index: 10;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+      }
+      /* Installed package surfaces replace this centre only; their own scrolling
+         stays inside this frame and never overlaps sidebar, rail, or footer. */
+      .main.package-surface {
+        overflow: hidden;
+      }
+      /* lớp kính tách ra ::before (không phải backdrop-root) để ô chat phía dưới còn nhìn xuyên tới nền;
+     đáy nhạt dần cho vùng composer */
+      .main::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        z-index: -1;
+        pointer-events: none;
+        background: linear-gradient(
+          180deg,
+          rgba(11, 12, 15, 0.64) 0%,
+          rgba(11, 12, 15, 0.64) 55%,
+          rgba(11, 12, 15, 0.52) 100%
+        );
+        -webkit-backdrop-filter: blur(16px) saturate(1.4);
+        backdrop-filter: blur(16px) saturate(1.4);
+      }
+      html[data-theme='light'] .main::before {
+        background: linear-gradient(
+          180deg,
+          rgba(255, 255, 255, 0.56) 0%,
+          rgba(255, 255, 255, 0.56) 55%,
+          rgba(255, 255, 255, 0.44) 100%
+        );
+        -webkit-backdrop-filter: blur(16px) saturate(1.4);
+        backdrop-filter: blur(16px) saturate(1.4);
+      }
+      .agents-wrap {
+        flex: 1;
+        min-height: 0;
+        position: relative;
+        padding: 16px;
+        overflow-y: auto;
+      }
+      .agents-wrap::-webkit-scrollbar {
+        width: 8px;
+      }
+      .agents-wrap::-webkit-scrollbar-thumb {
+        background: var(--bg-3);
+        border-radius: 4px;
+      }
+
+      .agent-grid {
+        display: grid;
+        gap: 12px;
+        align-content: start;
+        grid-template-columns: repeat(2, minmax(160px, 1fr));
+        grid-auto-rows: min-content;
+      }
+      .agent-grid.six {
+        grid-template-columns: repeat(2, minmax(160px, 1fr));
+      }
+
+      .tile {
+        background: var(--card);
+        border: 1px solid var(--card-line);
+        border-radius: 12px;
+        box-shadow: inset 0 1px 0 var(--glass-hi);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        max-height: 340px;
+        cursor: default;
+        user-select: none;
+      }
+      .tile.dragging {
+        opacity: 0.4;
+      }
+      .tile.drag-over {
+        outline: 2px dashed var(--tx-2);
+        outline-offset: -2px;
+      }
+      .tile-head {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        padding: 8px 10px;
+        border-bottom: 1px solid var(--line);
+        font-size: 12px;
+        flex: none;
+      }
+      .tile-head .t-name {
+        font-weight: 600;
+      }
+      .tile-head .t-task {
+        color: var(--tx-2);
+        font-size: 11px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .tile-head .t-badge {
+        margin-left: auto;
+        font-size: 10px;
+        color: var(--tx-2);
+        font-family: Consolas, monospace;
+        white-space: nowrap;
+      }
+      .tile-progress {
+        height: 4px;
+        border-radius: 2px;
+        background: var(--track);
+        flex: none;
+        margin: 8px 10px 0;
+      }
+      .tile-progress i {
+        display: block;
+        height: 100%;
+        background: var(--tx-2);
+        border-radius: 2px;
+      }
+      .tile-body {
+        flex: 1;
+        min-height: 0;
+        padding: 8px 10px;
+        overflow-y: auto;
+        font-size: 11.5px;
+        color: var(--tx-1);
+        line-height: 1.55;
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+      }
+      .log-line {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .cursor {
+        display: inline-block;
+        width: 7px;
+        height: 12px;
+        background: var(--tx-1);
+        vertical-align: -2px;
+        animation: blink 1s steps(1) infinite;
+      }
+      @keyframes blink {
+        50% {
+          opacity: 0;
+        }
+      }
+      .chat-line {
+        color: var(--tx-2);
+        font-size: 11px;
+      }
+      .chat-line b {
+        color: var(--tx-1);
+        font-weight: 600;
+      }
+      .q-text {
+        color: var(--tx-0);
+        font-size: 12px;
+        margin-bottom: 6px;
+      }
+      .q-btns {
+        display: flex;
+        gap: 6px;
+        margin-top: auto;
+        padding-top: 6px;
+      }
+      .q-btn {
+        height: 24px;
+        padding: 0 10px;
+        border-radius: 6px;
+        font-size: 11.5px;
+        border: 1px solid var(--line-strong);
+        color: var(--tx-1);
+      }
+      .q-btn:hover {
+        background: var(--bg-3);
+        color: var(--tx-0);
+      }
+      .q-btn.primary {
+        background: var(--accent-bg);
+        color: var(--accent-tx);
+        border-color: transparent;
+        font-weight: 600;
+      }
+
+      .surface {
+        flex: 1;
+        min-height: 0;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        background: var(--card-inner);
+      }
+      .surface-url {
+        height: 20px;
+        flex: none;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        padding: 0 8px;
+        font-size: 10px;
+        color: var(--tx-2);
+        border-bottom: 1px solid var(--line);
+        font-family: Consolas, monospace;
+        white-space: nowrap;
+        overflow: hidden;
+      }
+      .surface-view {
+        flex: 1;
+        min-height: 110px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--tx-2);
+        font-size: 10.5px;
+        font-family: Consolas, monospace;
+        text-align: center;
+      }
+
+      .tile-empty {
+        border: 1.5px dashed var(--line-strong);
+        border-radius: 12px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        color: var(--tx-2);
+        font-size: 12px;
+        cursor: pointer;
+        min-height: 160px;
+      }
+      .tile-empty:hover {
+        color: var(--tx-1);
+        border-color: var(--tx-2);
+      }
+      .tile-empty .plus-lg {
+        font-size: 22px;
+      }
+
+      /* overlay phóng to / preview file */
+      .center-overlay {
+        position: absolute;
+        inset: 16px;
+        z-index: 25;
+        display: none;
+        background: var(--bg-1);
+        border: 1px solid var(--line-strong);
+        border-radius: 12px;
+        box-shadow: var(--shadow);
+        flex-direction: column;
+        overflow: hidden;
+      }
+      .center-overlay.open {
+        display: flex;
+      }
+      .ov-head {
+        height: 38px;
+        flex: none;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 0 12px;
+        border-bottom: 1px solid var(--line);
+        font-size: 12.5px;
+        font-weight: 600;
+      }
+      .ov-head .x {
+        margin-left: auto;
+      }
+      .ov-body {
+        flex: 1;
+        min-height: 0;
+        padding: 14px;
+        font-size: 12.5px;
+        color: var(--tx-1);
+        line-height: 1.6;
+        overflow-y: auto;
+      }
+      .ov-note {
+        flex: none;
+        padding: 6px 12px;
+        border-top: 1px solid var(--line);
+        font-family: Consolas, monospace;
+        font-size: 10.5px;
+        color: var(--tx-2);
+      }
+      .fake-doc {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--bg-2);
+        padding: 16px;
+        height: 100%;
+        color: var(--tx-2);
+        font-size: 11.5px;
+        line-height: 1.8;
+      }
+      .fake-doc h5 {
+        color: var(--tx-1);
+        font-size: 13px;
+        margin-bottom: 8px;
+      }
+      .fake-doc .bar {
+        height: 6px;
+        border-radius: 3px;
+        background: var(--bg-3);
+        margin: 6px 0;
+      }
+
+      /* context menu */
+      .ctx-menu {
+        position: fixed;
+        z-index: 100;
+        display: none;
+        min-width: 168px;
+        background: var(--bg-1);
+        border: 1px solid var(--line-strong);
+        border-radius: 10px;
+        box-shadow: var(--shadow);
+        padding: 5px;
+      }
+      .ctx-menu.open {
+        display: block;
+      }
+      .ctx-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        padding: 6px 10px;
+        border-radius: 6px;
+        font-size: 12.5px;
+        color: var(--tx-1);
+        text-align: left;
+      }
+      .ctx-item:hover {
+        background: var(--bg-3);
+        color: var(--tx-0);
+      }
+      .ctx-item .ck {
+        margin-left: auto;
+        font-family: Consolas, monospace;
+        font-size: 11px;
+        color: var(--tx-2);
+      }
+      .ctx-sep {
+        height: 1px;
+        background: var(--line);
+        margin: 4px 6px;
+      }
+
+      /* composer sticky */
+      .sticky-note {
+        flex: none;
+        padding: 6px 16px 2px;
+        font-family: Consolas, monospace;
+        font-size: 10.5px;
+        color: var(--tx-2);
+      }
+      .composer {
+        flex: none;
+        padding: 8px 16px 14px;
+      }
+      .sendbox {
+        background: rgba(8, 9, 12, 0.34);
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        box-shadow: inset 0 1px 0 var(--glass-hi);
+        -webkit-backdrop-filter: blur(28px) saturate(1.5);
+        backdrop-filter: blur(28px) saturate(1.5);
+        border-radius: 14px;
+        padding: 12px 14px 10px;
+      }
+      .composer-context {
+        display: flex;
+        min-height: 34px;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin: 0 36px;
+        padding: 2px 10px;
+        border: 1px solid var(--line);
+        border-top: 0;
+        border-radius: 0 0 20px 20px;
+        color: var(--tx-2);
+        background: rgba(8, 9, 12, 0.34);
+        font-size: 12px;
+      }
+      .composer-context span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      html[data-theme='light'] .composer-context {
+        background: rgba(255, 255, 255, 0.44);
+      }
+      html[data-theme='light'] .sendbox {
+        background: rgba(255, 255, 255, 0.44);
+        border-color: rgba(0, 0, 0, 0.18);
+      }
+      html[data-theme='light'] .suggest-chip {
+        background: rgba(255, 255, 255, 0.4);
+      }
+
+      .sendbox-editor {
+        min-height: 40px;
+        color: var(--tx-0);
+        font: inherit;
+        font-size: 13.5px;
+        line-height: 1.65;
+      }
+      .attachment-token {
+        display: inline-flex;
+        max-width: 190px;
+        align-items: center;
+        gap: 4px;
+        margin: 0 2px;
+        padding: 1px 6px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        color: var(--tx-1);
+        background: var(--chip);
+        font-size: 11px;
+        white-space: nowrap;
+        vertical-align: baseline;
+      }
+      .attachment-token .token-name {
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .attachment-rail {
+        display: flex;
+        min-width: 0;
+        align-items: center;
+        gap: 6px;
+        margin: 7px 0 2px;
+      }
+      .attachment-toggle,
+      .attachment-item {
+        display: inline-flex;
+        height: 24px;
+        flex: 0 0 auto;
+        align-items: center;
+        gap: 5px;
+        padding: 0 7px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        color: var(--tx-1);
+        background: var(--chip);
+        font-size: 11px;
+      }
+      .attachment-list {
+        display: flex;
+        min-width: 0;
+        flex: 1;
+        align-items: center;
+        gap: 6px;
+        overflow-x: auto;
+        overflow-y: hidden;
+        white-space: nowrap;
+      }
+      .attachment-quick-view {
+        position: absolute;
+        right: 14px;
+        bottom: 100%;
+        z-index: 10;
+        width: min(360px, calc(100vw - 40px));
+        max-height: 210px;
+        margin-bottom: 8px;
+        overflow: auto;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        color: var(--tx-1);
+        background: var(--pop);
+        box-shadow: 0 12px 28px rgba(0, 0, 0, 0.3);
+        font:
+          11px/1.5 Consolas,
+          monospace;
+      }
+      .attachment-quick-view b {
+        display: block;
+        padding: 7px 9px;
+        border-bottom: 1px solid var(--line);
+        font-family: inherit;
+      }
+      .attachment-quick-view pre {
+        margin: 0;
+        padding: 9px;
+        white-space: pre-wrap;
+      }
+      .sendbox textarea {
+        width: 100%;
+        border: none;
+        outline: none;
+        resize: none;
+        background: transparent;
+        font: inherit;
+        font-size: 13.5px;
+        color: var(--tx-0);
+        height: 40px;
+      }
+      .sendbox textarea::placeholder {
+        color: var(--tx-2);
+      }
+      .sendbox-bar {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 6px;
+      }
+      .model-chip {
+        height: 32px;
+        padding: 0 10px;
+        border-radius: 8px;
+        font-size: 12.5px;
+        background: var(--card-inner);
+        border: 1px solid var(--card-line);
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--tx-1);
+      }
+      .btn-primary {
+        height: 36px;
+        min-width: 36px;
+        padding: 0 14px;
+        border-radius: 9px;
+        background: var(--accent-bg);
+        color: var(--accent-tx);
+        font-size: 13px;
+        font-weight: 600;
+        border: none;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+      }
+      .suggest-row {
+        display: flex;
+        gap: 8px;
+        margin-top: 10px;
+        overflow-x: auto;
+      }
+      .suggest-chip {
+        height: 32px;
+        padding: 0 12px;
+        border-radius: 8px;
+        font-size: 12.5px;
+        flex: none;
+        border: 1px solid var(--card-line);
+        background: rgba(8, 9, 12, 0.3);
+        color: var(--tx-1);
+        -webkit-backdrop-filter: blur(16px);
+        backdrop-filter: blur(16px);
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        cursor: pointer;
+      }
+      .suggest-chip:hover {
+        background: var(--bg-3);
+        color: var(--tx-0);
+      }
+
+      /* popup/menu: kính đậm hơn để chữ vẫn đọc rõ */
+      .avatar-menu,
+      .app-more-pop,
+      .ctx-menu,
+      .tab-dd,
+      .float-panel,
+      .toast,
+      .center-overlay {
+        background: var(--pop);
+        -webkit-backdrop-filter: blur(16px) saturate(1.4);
+        backdrop-filter: blur(16px) saturate(1.4);
+      }
+
+      /* ============ 4. RIGHT PANEL 300px — TABS ============ */
+      .rail {
+        grid-area: rail;
+        position: relative;
+        z-index: 20;
+        border-left: 1px solid var(--glass-line);
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+      }
+      .tabbar {
+        min-width: 0;
+        flex: none;
+        display: flex;
+        align-items: center;
+        gap: 2px;
+        padding: 8px 8px 0;
+        border-bottom: 1px solid var(--glass-line);
+        overflow-x: auto;
+      }
+      .tabbar::-webkit-scrollbar {
+        height: 4px;
+      }
+      .tab-btn {
+        min-width: 0;
+        height: 30px;
+        padding: 0 11px;
+        border-radius: 8px 8px 0 0;
+        flex: 0 1 auto;
+        font-size: 12px;
+        color: var(--tx-2);
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        overflow: hidden;
+        border: 1px solid transparent;
+        border-bottom: none;
+      }
+      .tab-btn .tl {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .tab-btn:hover {
+        color: var(--tx-0);
+      }
+      .tab-btn.active {
+        color: var(--tx-0);
+        background: var(--card);
+        border-color: var(--card-line);
+        box-shadow: inset 0 1px 0 var(--glass-hi);
+        -webkit-backdrop-filter: blur(16px);
+        backdrop-filter: blur(16px);
+      }
+      .tab-btn .tx {
+        width: 16px;
+        height: 16px;
+        margin-right: -4px;
+        border-radius: 4px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 9px;
+        color: var(--tx-2);
+        opacity: 0;
+      }
+      .tab-btn:hover .tx,
+      .tab-btn.active .tx {
+        opacity: 1;
+      }
+      .tab-btn .tx:hover {
+        background: var(--bg-3);
+        color: var(--tx-0);
+      }
+      .tab-add {
+        color: var(--tx-2);
+        font-size: 14px;
+      }
+      .tab-panels {
+        flex: 1;
+        min-height: 0;
+        position: relative;
+        background: transparent;
+      }
+      .tab-panel {
+        position: absolute;
+        inset: 0;
+        padding: 12px;
+        overflow-y: auto;
+        display: none;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .tab-panel.active {
+        display: flex;
+      }
+      .tab-panel::-webkit-scrollbar {
+        width: 8px;
+      }
+      .tab-panel::-webkit-scrollbar-thumb {
+        background: var(--bg-3);
+        border-radius: 4px;
+      }
+
+      .panel-head {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-bottom: 8px;
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .panel-head .pop {
+        margin-left: auto;
+        font-size: 11px;
+        color: var(--tx-2);
+      }
+      .panel-head .pop:hover {
+        color: var(--tx-0);
+      }
+
+      .file-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 5px 8px;
+        border-radius: 7px;
+        font-size: 12.5px;
+        color: var(--tx-1);
+        cursor: pointer;
+      }
+      .ws-card {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        flex: 1;
+      }
+      .ws-title {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 6px;
+        font-size: 12.5px;
+        color: var(--tx-0);
+      }
+      .ws-tag {
+        font-size: 10px;
+        padding: 1px 7px;
+        border-radius: 6px;
+        background: var(--accent-bg);
+        color: var(--accent-tx);
+        font-weight: 600;
+      }
+      .ws-path {
+        padding: 2px 6px 8px;
+        font-size: 10.5px;
+        color: var(--tx-2);
+      }
+      .ws-files {
+        overflow-y: auto;
+        min-height: 0;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .ws-files::-webkit-scrollbar {
+        width: 6px;
+      }
+      .ws-files::-webkit-scrollbar-thumb {
+        background: var(--line-strong);
+        border-radius: 3px;
+      }
+      .file-row {
+        min-width: 0;
+        white-space: nowrap;
+      }
+      .file-row:hover {
+        background: var(--bg-2);
+        color: var(--tx-0);
+      }
+      .file-row[draggable='true'] {
+        cursor: grab;
+      }
+      .file-row.dragging {
+        cursor: grabbing;
+        opacity: 0.56;
+      }
+      .file-row.drop-target {
+        background: var(--bg-2);
+        box-shadow:
+          inset 2px 0 0 var(--tx-0),
+          inset 0 0 0 1px var(--line-strong);
+        color: var(--tx-0);
+      }
+      .file-row .f-meta {
+        margin-left: auto;
+        font-size: 10.5px;
+        color: var(--tx-2);
+        font-family: Consolas, monospace;
+      }
+      .rail .file-row,
+      .rail .file-row .f-meta {
+        color: #eaf0f7;
+        -webkit-text-stroke: 0.25px rgba(0, 0, 0, 0.9);
+        paint-order: stroke fill;
+        text-shadow:
+          0 1px 1px rgba(0, 0, 0, 0.98),
+          1px 0 1px rgba(0, 0, 0, 0.88),
+          -1px 0 1px rgba(0, 0, 0, 0.88);
+      }
+      .f-tree {
+        font-size: 12.5px;
+        color: var(--tx-1);
+        padding: 2px 4px 6px;
+      }
+
+      .meter-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12.5px;
+        color: var(--tx-1);
+        padding: 4px 0;
+      }
+      .meter-row .pct {
+        margin-left: auto;
+        font-family: Consolas, monospace;
+        font-size: 11.5px;
+        color: var(--tx-2);
+      }
+      .meter {
+        height: 4px;
+        border-radius: 2px;
+        background: var(--track);
+        overflow: hidden;
+        margin: 2px 0 8px;
+      }
+      .meter i {
+        display: block;
+        height: 100%;
+        background: var(--tx-1);
+        border-radius: 2px;
+      }
+      .note-row {
+        display: flex;
+        gap: 8px;
+        padding: 6px 0;
+        font-size: 12.5px;
+        color: var(--tx-1);
+        align-items: baseline;
+      }
+      .note-row time {
+        font-family: Consolas, monospace;
+        font-size: 10.5px;
+        color: var(--tx-2);
+        flex: none;
+      }
+      .diff-placeholder,
+      .model-row {
+        padding: 14px 10px;
+        font-size: 12px;
+        color: var(--tx-2);
+        border: 1px dashed var(--line-strong);
+        border-radius: 10px;
+        text-align: center;
+        line-height: 1.6;
+      }
+      .model-row {
+        text-align: left;
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 8px;
+      }
+      .model-row b {
+        color: var(--tx-1);
+        font-family: Consolas, monospace;
+        font-size: 11.5px;
+        font-weight: 400;
+      }
+
+      /* dropdown thêm tab */
+      .tab-dd {
+        position: absolute;
+        z-index: 70;
+        display: none;
+        min-width: 140px;
+        background: var(--bg-1);
+        border: 1px solid var(--line-strong);
+        border-radius: 10px;
+        box-shadow: var(--shadow);
+        padding: 5px;
+      }
+      .tab-dd.open {
+        display: block;
+      }
+
+      /* panel nổi pop-out */
+      .float-panel {
+        position: absolute;
+        z-index: 80;
+        width: 280px;
+        background: var(--bg-1);
+        border: 1px solid var(--line-strong);
+        border-radius: 12px;
+        box-shadow: var(--shadow);
+        display: none;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      .float-panel.open {
+        display: flex;
+      }
+      .float-head {
+        height: 32px;
+        flex: none;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 0 10px;
+        font-size: 12px;
+        font-weight: 600;
+        border-bottom: 1px solid var(--line);
+        cursor: move;
+        user-select: none;
+      }
+      .float-head .x {
+        margin-left: auto;
+      }
+      .float-body {
+        padding: 12px;
+        font-size: 12px;
+        color: var(--tx-1);
+        overflow-y: auto;
+        max-height: 260px;
+      }
+
+      /* ============ 5. STATUS BAR 29px ============ */
+      .statusbar {
+        grid-area: status;
+        z-index: 30;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 0 14px;
+        font-family: Consolas, monospace;
+        font-size: 11px;
+        color: var(--tx-2);
+        border-top: 1px solid var(--glass-line);
+      }
+      .sb-btn {
+        height: 22px;
+        padding: 0 8px;
+        border-radius: 6px;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font: inherit;
+        color: var(--tx-1);
+      }
+      .sb-btn:hover {
+        background: var(--bg-3);
+        color: var(--tx-0);
+      }
+      #sbTerminal {
+        border: 1px solid var(--card-line);
+        color: var(--tx-0);
+        font-weight: 600;
+      }
+      .sb-btn.on {
+        background: var(--card);
+        color: var(--tx-0);
+      }
+      .sb-btn.static {
+        cursor: default;
+      }
+      .sb-btn.static:hover {
+        background: none;
+        color: var(--tx-1);
+      }
+      .sb-ver {
+        color: var(--tx-2);
+        padding: 0 4px;
+      }
+      .statusbar {
+        gap: 4px;
+      }
+      .term-panel {
+        position: absolute;
+        left: 232px;
+        right: 300px;
+        bottom: 29px;
+        height: 200px;
+        z-index: 25;
+        display: none;
+        flex-direction: column;
+        background: var(--pop);
+        -webkit-backdrop-filter: blur(16px);
+        backdrop-filter: blur(16px);
+        border-top: 1px solid var(--glass-line);
+        font-family: Consolas, monospace;
+        font-size: 12px;
+      }
+      .term-panel.open {
+        display: flex;
+      }
+      .term-head {
+        height: 28px;
+        flex: none;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 0 12px;
+        border-bottom: 1px solid var(--line);
+        color: var(--tx-1);
+      }
+      .term-head .x {
+        margin-left: auto;
+        cursor: pointer;
+      }
+      .term-body {
+        flex: 1;
+        padding: 8px 12px;
+        color: var(--tx-0);
+        line-height: 1.6;
+        overflow: auto;
+      }
+      .term-body i {
+        color: var(--tx-2);
+        font-style: normal;
+      }
+      .statusbar .right {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--tx-1);
+      }
+
+      /* ============ TOAST ============ */
+      .toast {
+        position: absolute;
+        right: 16px;
+        bottom: 44px;
+        z-index: 90;
+        max-width: 320px;
+        padding: 10px 14px;
+        border-radius: 10px;
+        background: var(--bg-1);
+        border: 1px solid var(--line-strong);
+        box-shadow: var(--shadow);
+        font-size: 12px;
+        color: var(--tx-1);
+        line-height: 1.5;
+        display: none;
+        gap: 8px;
+        align-items: flex-start;
+      }
+      .toast.open {
+        display: flex;
+      }
+      .toast .t-dot {
+        margin-top: 5px;
+      }
+
+      /* ============ 6. DEMO CONTROLS ============ */
+      .demo {
+        position: fixed;
+        right: 16px;
+        bottom: 16px;
+        z-index: 120;
+        background: #000;
+        color: #fff;
+        border: 1px solid rgba(255, 255, 255, 0.25);
+        border-radius: 12px;
+        padding: 12px;
+        width: 260px;
+        font-size: 11.5px;
+      }
+      .demo-open {
+        position: fixed;
+        right: 16px;
+        bottom: 16px;
+        z-index: 120;
+        background: #000;
+        color: #fff;
+        border: 1px solid rgba(255, 255, 255, 0.25);
+        border-radius: 10px;
+        padding: 6px 10px;
+        font-size: 11.5px;
+      }
+      .demo-open[hidden] {
+        display: none;
+      }
+      .demo[hidden] {
+        display: none;
+      }
+      .demo h5 {
+        font-size: 10px;
+        letter-spacing: 0.1em;
+        color: #999;
+        margin-bottom: 8px;
+      }
+      .demo button {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        width: 100%;
+        padding: 6px 9px;
+        margin: 3px 0;
+        border-radius: 7px;
+        background: #1a1a1a;
+        color: #eee;
+        font-size: 11.5px;
+        text-align: left;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+      }
+      .demo button:hover {
+        background: #2a2a2a;
+      }
+      .demo button.on {
+        outline: 1px solid #d29922;
+      }
+      .demo .row2 {
+        display: flex;
+        gap: 6px;
+      }
+      .demo .row2 button {
+        flex: 1;
+        justify-content: center;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app" id="app">
+      <!-- ============ HEADER 36px ============ -->
+      <header class="titlebar glass">
+        <div class="icon-btn">←</div>
+        <div class="icon-btn">→</div>
+        <div class="cmdk">⌕&nbsp;&nbsp;Tìm kiếm hoặc gõ lệnh…<kbd>Ctrl K</kbd></div>
+        <div class="spacer"></div>
+        <div class="icon-btn" title="Thông báo">◖<span class="bell-dot"></span></div>
+        <div class="icon-btn" id="avatarBtn" style="width: auto; padding: 0 4px"><div class="avatar">N</div></div>
+        <div class="win-controls">
+          <div class="win-btn">─</div>
+          <div class="win-btn">□</div>
+          <div class="win-btn">✕</div>
+        </div>
+
+        <!-- avatar dropdown -->
+        <div class="avatar-menu" id="avatarMenu">
+          <div class="am-head">
+            <div class="avatar lg">N</div>
+            <div class="meta"><b>ndt16022005@gmail.com</b><span class="am-member">MEMBER</span></div>
+          </div>
+          <div class="am-wallet mono">Ví TOM: 5.00</div>
+          <div class="am-sep"></div>
+          <button class="am-item" id="amTheme">Giao diện: <span class="val" id="amThemeVal">Tối ▾</span></button>
+          <div class="am-sep"></div>
+          <button class="am-item" id="amSettings">⚙ Cài đặt <span class="val">Trang riêng</span></button>
+        </div>
+      </header>
+
+      <!-- ============ SIDEBAR 232px ============ -->
+      <aside class="sider glass">
+        <div class="sider-brand">TOMNY <span class="chev">‹</span></div>
+
+        <div class="nav-item active"><span class="n-icon">⌂</span>Home</div>
+        <div class="nav-item"><span class="n-icon">◫</span>Company</div>
+        <div class="nav-item"><span class="n-icon">❏</span>Artifacts</div>
+        <div class="nav-item"><span class="n-icon">◷</span>Schedule</div>
+        <div class="nav-item"><span class="n-icon">▦</span>Store</div>
+
+        <div class="sider-divider" aria-hidden="true"></div>
+
+        <div class="sider-section sider-apps">
+          <div class="side-label">ỨNG DỤNG</div>
+          <div class="sider-section-scroll">
+            <div class="nav-item"><span class="n-icon">◎</span>Browser<span class="n-chev">›</span></div>
+            <div class="nav-item"><span class="n-icon">▤</span>Docs<span class="n-chev">›</span></div>
+            <div class="nav-item"><span class="n-icon">↯</span>Automation</div>
+            <div class="nav-item"><span class="n-icon">±</span>Calc</div>
+            <div class="nav-item"><span class="n-icon">▢</span>Terminal</div>
+            <div class="nav-item" id="appMoreBtn" style="color: var(--tx-2)">
+              <span class="n-icon">＋</span>Xem thêm (12)
+            </div>
+          </div>
+        </div>
+
+        <div class="sider-section sider-workspaces">
+          <div class="side-label">COMPANY <span class="plus">＋</span></div>
+          <div class="sider-section-scroll">
+            <div class="ws-folder">▾ ACME Inc.</div>
+            <div class="ws-item" style="padding-left: 28px">▾ Phòng AI</div>
+            <div class="ws-item" style="padding-left: 44px"><span class="dot d-g"></span>train-model</div>
+            <div class="ws-item" style="padding-left: 44px"><span class="dot d-gr"></span>data-hunt</div>
+            <div class="ws-item" style="padding-left: 28px">▾ Phòng Dev</div>
+            <div class="ws-item" style="padding-left: 44px"><span class="dot d-g"></span>dev-backend</div>
+            <div class="ws-item" style="padding-left: 28px"><span class="dot d-gr"></span>research-lab</div>
+            <div class="show-more">Show more (3)</div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- popup Xem thêm app -->
+      <div class="app-more-pop" id="appMorePop" aria-label="Tất cả ứng dụng">
+        <div class="nav-item"><span class="n-icon">◫</span>Mail</div>
+        <div class="nav-item"><span class="n-icon">▥</span>Calendar</div>
+        <div class="nav-item"><span class="n-icon">⌘</span>IDE</div>
+        <div class="nav-item"><span class="n-icon">⎇</span>Git</div>
+        <div class="nav-item"><span class="n-icon">◈</span>Notes</div>
+        <div class="nav-item"><span class="n-icon">▨</span>Media</div>
+      </div>
+
+      <!-- ============ CENTER ============ -->
+      <main class="main">
+        <div class="agents-wrap" id="agentsWrap">
+          <!-- UCON Bot (2026-10-16): live Home tiles render the identity/status avatar on Canvas 2D; no CSS/HTML recreation of the robot in this static layout wireframe. Its rear orbital apparatus converges when thinking and separates into visual panels while working. -->
+          <div class="agent-grid" id="agentGrid"></div>
+        </div>
+
+        <!-- overlay phóng to agent / preview file -->
+        <div class="center-overlay" id="centerOverlay"></div>
+
+        <div class="sticky-note">▲ sticky — shell-level, không re-mount khi đổi trang</div>
+        <div class="composer">
+          <div class="sendbox">
+            <div class="sendbox-editor" contenteditable="true">
+              Hãy so sánh <span class="attachment-token">▣ <span class="token-name">before.txt</span> ×</span> với
+              <span class="attachment-token">▣ <span class="token-name">after.txt</span> ×</span>.
+            </div>
+            <div class="attachment-rail">
+              <button class="attachment-toggle">📎 2 ⌃</button>
+              <div class="attachment-list">
+                <span class="attachment-item">▣ before.txt ×</span>
+                <span class="attachment-item">▣ after.txt ×</span>
+              </div>
+            </div>
+            <div class="attachment-quick-view">
+              <b>before.txt · text excerpt</b>
+              <pre>
+Q3 revenue: 1.24M
+Margin: 36.8%
+… scroll for the bounded preview …</pre>
+            </div>
+            <div class="sendbox-bar">
+              <div class="model-chip">◈ Tomny Agentic <span style="color: var(--tx-2)">▾</span></div>
+              <div class="spacer"></div>
+              <div class="icon-btn">＋</div>
+              <div class="icon-btn">✎</div>
+              <div class="icon-btn">◎</div>
+              <div class="icon-btn">▤</div>
+              <button class="btn-primary">Gửi ➤</button>
+            </div>
+          </div>
+          <div class="composer-context" aria-label="Ngữ cảnh tác vụ">
+            <span>▱ Workspace mặc định</span>
+            <span>◈ Tomny Agentic</span>
+          </div>
+        </div>
+      </main>
+
+      <!-- ============ RIGHT PANEL 300px — TABS ============ -->
+      <aside class="rail glass">
+        <div class="tabbar" id="tabbar">
+          <button class="tab-btn active" data-tab="files" data-label="Explorer">
+            <span class="tl">Explorer</span><span class="tx" title="Đóng tab">✕</span>
+          </button>
+          <button class="tab-btn tab-add" id="tabAdd">＋</button>
+        </div>
+        <div class="tab-panels" id="tabPanels">
+          <div class="tab-panel active" data-panel="files">
+            <div class="panel-head">Explorer <button class="pop" data-pop="files" title="Bứt ra">↗</button></div>
+            <div class="ws-card">
+              <div class="ws-title">
+                <span>▾ <b id="wsName">Dev</b></span
+                ><span class="ws-tag" id="wsTag">Mặc định</span>
+              </div>
+              <div class="ws-path mono" id="wsPath">~/TomniHubOS/Dev</div>
+              <div class="ws-files">
+                <div class="file-row" data-file="q3.pdf">
+                  <span>❏</span>q3.pdf <span class="dot d-g" style="margin-left: 2px"></span
+                  ><span class="f-meta">đang dùng bởi A</span>
+                </div>
+                <div class="file-row" data-file="slides.pptx">
+                  <span>❏</span>slides.pptx <span class="dot d-y" style="margin-left: 2px"></span
+                  ><span class="f-meta">B · chờ duyệt</span>
+                </div>
+                <div class="file-row" data-file="v2.png">
+                  <span>◫</span>v2.png <span class="dot d-gr" style="margin-left: 2px"></span
+                  ><span class="f-meta">không hoạt động</span>
+                </div>
+                <div class="file-row" data-file="report-q3.docx">
+                  <span>❏</span>report-q3.docx <span class="dot d-g" style="margin-left: 2px"></span
+                  ><span class="f-meta">đang dùng bởi A</span>
+                </div>
+                <div class="file-row" data-file="sales_q3.xlsx">
+                  <span>▦</span>sales_q3.xlsx <span class="dot d-g" style="margin-left: 2px"></span
+                  ><span class="f-meta">đang dùng bởi A</span>
+                </div>
+                <div class="file-row" data-file="schema.sql">
+                  <span>❏</span>schema.sql <span class="dot d-y" style="margin-left: 2px"></span
+                  ><span class="f-meta">B · chờ duyệt</span>
+                </div>
+                <div class="file-row" data-file="migration.sql">
+                  <span>❏</span>migration.sql <span class="dot d-y" style="margin-left: 2px"></span
+                  ><span class="f-meta">B · chờ duyệt</span>
+                </div>
+                <div class="file-row" data-file="deck-dau-tu.pptx">
+                  <span>❏</span>deck-dau-tu.pptx <span class="dot d-gr" style="margin-left: 2px"></span
+                  ><span class="f-meta">không hoạt động</span>
+                </div>
+                <div class="file-row" data-file="market-q3.md">
+                  <span>❏</span>market-q3.md <span class="dot d-gr" style="margin-left: 2px"></span
+                  ><span class="f-meta">không hoạt động</span>
+                </div>
+                <div class="file-row" data-file="logo.svg">
+                  <span>◫</span>logo.svg <span class="dot d-gr" style="margin-left: 2px"></span
+                  ><span class="f-meta">không hoạt động</span>
+                </div>
+                <div class="file-row" data-file="cover.png">
+                  <span>◫</span>cover.png <span class="dot d-gr" style="margin-left: 2px"></span
+                  ><span class="f-meta">không hoạt động</span>
+                </div>
+                <div class="file-row" data-file="config.json">
+                  <span>❏</span>config.json <span class="dot d-gr" style="margin-left: 2px"></span
+                  ><span class="f-meta">không hoạt động</span>
+                </div>
+                <div class="file-row" data-file="notes.txt">
+                  <span>❏</span>notes.txt <span class="dot d-gr" style="margin-left: 2px"></span
+                  ><span class="f-meta">không hoạt động</span>
+                </div>
+                <div class="file-row" data-file="train-model.py">
+                  <span>❏</span>train-model.py <span class="dot d-g" style="margin-left: 2px"></span
+                  ><span class="f-meta">đang dùng bởi C</span>
+                </div>
+                <div class="file-row" data-file="data-hunt.csv">
+                  <span>▦</span>data-hunt.csv <span class="dot d-gr" style="margin-left: 2px"></span
+                  ><span class="f-meta">không hoạt động</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="tab-panel" data-panel="diff">
+            <div class="panel-head">Diff <button class="pop" data-pop="diff" title="Bứt ra">↗</button></div>
+            <div class="diff-placeholder">Chọn agent đang có thay đổi<br />để xem diff</div>
+          </div>
+
+          <div class="tab-panel" data-panel="params">
+            <div class="panel-head">Thông số <button class="pop" data-pop="params" title="Bứt ra">↗</button></div>
+            <div class="meter-row">CPU<span class="pct">36%</span></div>
+            <div class="meter"><i style="width: 36%"></i></div>
+            <div class="meter-row">RAM<span class="pct">85%</span></div>
+            <div class="meter"><i style="width: 85%"></i></div>
+            <div class="meter-row">Đĩa<span class="pct">61%</span></div>
+            <div class="meter"><i style="width: 61%"></i></div>
+          </div>
+
+          <div class="tab-panel" data-panel="notif">
+            <div class="panel-head">Thông báo <button class="pop" data-pop="notif" title="Bứt ra">↗</button></div>
+            <div class="note-row"><time>09:41</time>Tomny Core đã sẵn sàng</div>
+            <div class="note-row"><time>09:40</time>Agent A hoàn thành bước 2/3</div>
+            <div class="note-row"><time>09:38</time>Lịch tác vụ sẵn sàng</div>
+          </div>
+
+          <div class="tab-panel" data-panel="model">
+            <div class="panel-head">Model <button class="pop" data-pop="model" title="Bứt ra">↗</button></div>
+            <div class="model-row"><b>ag/tomny-agentic-1</b><span>đang dùng</span></div>
+            <div class="model-row"><b>ag/gemini-3.8-flash</b><span>sẵn sàng</span></div>
+            <div class="model-row"><b>ag/local-llama-3.3</b><span>ngoại tuyến</span></div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- dropdown thêm tab -->
+      <div class="tab-dd" id="tabDd">
+        <button class="ctx-item" data-addtab="files">Workspace</button>
+      </div>
+
+      <!-- panel nổi -->
+      <div class="float-panel" id="floatPanel">
+        <div class="float-head" id="floatHead">
+          <span id="floatTitle"></span
+          ><button class="x icon-btn" id="floatClose" style="width: 24px; height: 24px; font-size: 11px">✕</button>
+        </div>
+        <div class="float-body" id="floatBody"></div>
+      </div>
+
+      <!-- toast -->
+      <div class="toast" id="toast"><span class="dot d-y t-dot"></span><span id="toastMsg"></span></div>
+
+      <!-- ============ STATUS BAR 28px ============ -->
+      <div class="term-panel" id="termPanel">
+        <div class="term-head">
+          <span>Terminal</span><span style="color: var(--tx-2)">powershell</span><span class="x" id="termClose">✕</span>
+        </div>
+        <div class="term-body">
+          <i>PS C:\TomniHubOS&gt;</i> mtui --json map intent "home"<br /><i>PS C:\TomniHubOS&gt;</i>
+          <span class="cursor"></span>
+        </div>
+      </div>
+      <footer class="statusbar glass">
+        <button class="sb-btn" title="Tác vụ đang chạy"><span class="dot d-g"></span>4 agent</button>
+        <button class="sb-btn" title="Ping chờ xử lý"><span class="dot d-y"></span>1 ping</button>
+        <button class="sb-btn" title="Model đang dùng">◈ Tomny Agentic</button>
+        <span class="right">
+          <button class="sb-btn">Hỗ trợ</button>
+          <button class="sb-btn">Report Issue</button>
+          <span class="sb-ver">v1.0.0</span>
+          <button class="sb-btn" id="sbTerminal" title="Terminal (Ctrl+`)">&gt;_ Terminal</button>
+          <span class="sb-btn static"><span class="dot d-g"></span>Core: Hoạt động tốt</span>
+        </span>
+      </footer>
+    </div>
+
+    <!-- ============ 6. DEMO CONTROLS ============ -->
+    <button id="demoOpen" class="demo-open" hidden>⚙ Demo</button>
+    <div class="demo" id="demoPanel">
+      <h5 style="display: flex; justify-content: space-between; align-items: center">
+        DEMO CONTROLS<span id="demoClose" style="cursor: pointer; font-size: 13px; padding: 0 4px" title="Tắt">✕</span>
+      </h5>
+      <button data-theme-toggle>◐ Sáng / Tối</button>
+      <h5 style="margin-top: 8px">BACKGROUND</h5>
+      <div class="row2">
+        <button id="wallGif">GIF…</button>
+      </div>
+      <input type="file" id="wallGifFile" accept="image/gif,image/*" hidden />
+      <div class="row2" style="margin-top: 6px">
+        <button id="grid4" class="on">4 ô · 2×2</button>
+        <button id="grid6">6 ô · 2×3</button>
+      </div>
+      <div class="row2">
+        <button id="addAgent">＋ Thêm agent</button>
+        <button id="rmAgent">－ Bớt agent</button>
+      </div>
+      <button id="simE">▲ Giả lập: agent E cần xác nhận</button>
+      <button id="toastOverload">⚠ Ping quá tải</button>
+    </div>
+
+    <script>
+      (function () {
+        'use strict';
+
+        var termPanel = document.getElementById('termPanel'),
+          sbTerm = document.getElementById('sbTerminal');
+        function toggleTerm() {
+          var o = termPanel.classList.toggle('open');
+          sbTerm.classList.toggle('on', o);
+        }
+        sbTerm.addEventListener('click', toggleTerm);
+        document.getElementById('termClose').addEventListener('click', toggleTerm);
+
+        var demoPanel = document.getElementById('demoPanel'),
+          demoOpen = document.getElementById('demoOpen');
+        document.getElementById('demoClose').addEventListener('click', function () {
+          demoPanel.hidden = true;
+          demoOpen.hidden = false;
+        });
+        demoOpen.addEventListener('click', function () {
+          demoPanel.hidden = false;
+          demoOpen.hidden = true;
+        });
+
+        /* ================= ĐỔI BACKGROUND (test kính trên nền khác nhau) ================= */
+        var wallBtns = document.querySelectorAll('.wall');
+        function setWall(v, btn) {
+          document.documentElement.style.setProperty('--wall', v);
+          wallBtns.forEach(function (b) {
+            b.classList.remove('on');
+          });
+          document.getElementById('wallGif').classList.remove('on');
+          if (btn) btn.classList.add('on');
+        }
+        wallBtns.forEach(function (b) {
+          b.addEventListener('click', function () {
+            setWall(b.dataset.wall, b);
+          });
+        });
+        var gifBtn = document.getElementById('wallGif'),
+          gifFile = document.getElementById('wallGifFile');
+        gifBtn.addEventListener('click', function () {
+          gifFile.click();
+        });
+        gifFile.addEventListener('change', function () {
+          var f = gifFile.files[0];
+          if (!f) return;
+          setWall('url("' + URL.createObjectURL(f) + '")', gifBtn);
+        });
+
+        /* ================= DỮ LIỆU AGENT ================= */
+        var AGENTS = [
+          {
+            id: 'A',
+            name: 'agent-alpha',
+            task: 'Tóm tắt báo cáo Q3',
+            st: 'g',
+            follow: true,
+            ping: true,
+            type: 'log',
+            prog: 60,
+          },
+          { id: 'B', name: 'dev-backend', task: 'migration v2.4', st: 'y', follow: true, ping: true, type: 'question' },
+          { id: 'C', name: 'research-web', task: 'đối thủ q3', st: 'g', follow: false, ping: true, type: 'surface' },
+          { id: 'D', name: 'edit-slides', task: 'deck nhà đầu tư', st: 'gr', follow: true, ping: false, type: 'chat' },
+          {
+            id: 'E',
+            name: 'log-monitor',
+            task: 'theo dõi log prod',
+            st: 'g',
+            follow: false,
+            ping: false,
+            type: 'chat',
+          },
+          {
+            id: 'F',
+            name: 'data-pipeline',
+            task: 'etl hằng ngày',
+            st: 'g',
+            follow: false,
+            ping: true,
+            type: 'log',
+            prog: 25,
+          },
+        ];
+        var gridAgents = ['A', 'B', 'C', 'D']; // thứ tự slot
+        var gridSize = 4; // 4 | 6
+        var byId = {};
+        AGENTS.forEach(function (a) {
+          byId[a.id] = a;
+        });
+
+        var grid = document.getElementById('agentGrid');
+        var wrap = document.getElementById('agentsWrap');
+        var overlay = document.getElementById('centerOverlay');
+        var ctxMenu = null;
+
+        function esc(s) {
+          return s;
+        }
+
+        function bodyHTML(a) {
+          if (!a.ping) {
+            return (
+              '<div class="chat-line"><b>Bạn:</b> Tiếp tục chỉnh slide 4 nhé.</div>' +
+              '<div class="chat-line"><b>' +
+              a.name +
+              ':</b> Đã nhận, chờ ping để chạy.</div>' +
+              '<div class="chat-line" style="margin-top:auto;color:var(--tx-2)">⏸ ping đang tắt — surface ngủ</div>'
+            );
+          }
+          switch (a.type) {
+            case 'log':
+              return (
+                '<div class="log-line">✓ 1. Đọc sales_q3.xlsx</div>' +
+                '<div class="log-line">✓ 2. Tính tổng doanh thu</div>' +
+                '<div class="log-line">▶ 3. Viết tóm tắt… <span class="cursor"></span></div>'
+              );
+            case 'question':
+              if (a.answered) {
+                return (
+                  '<div class="log-line">✓ Đã xác nhận: chạy migration</div>' +
+                  '<div class="log-line">▶ Đang chạy… <span class="cursor"></span></div>'
+                );
+              }
+              return (
+                '<div class="q-text">Chạy migration trên prod?</div>' +
+                '<div class="q-btns">' +
+                '<button class="q-btn primary" data-act="yes">Chạy</button>' +
+                '<button class="q-btn" data-act="no">Không</button>' +
+                '<button class="q-btn" data-act="retry">Hỏi lại</button></div>'
+              );
+            case 'surface':
+              return (
+                '<div class="surface">' +
+                '<div class="surface-url">◎ https://example.com/market-q3-report</div>' +
+                '<div class="surface-view">BROWSER SNAPSHOT<br>· cập nhật 2s ·</div></div>'
+              );
+            default:
+              return (
+                '<div class="chat-line"><b>Bạn:</b> Gộp slide 2 và 3 lại.</div>' +
+                '<div class="chat-line"><b>' +
+                a.name +
+                ':</b> Xong, xem qua thử nhé.</div>'
+              );
+          }
+        }
+
+        function tileHTML(a, idx) {
+          var badge = a.ping
+            ? a.follow
+              ? '<span class="t-badge">▶ follow</span>'
+              : ''
+            : '<span class="t-badge">⏸</span>';
+          var prog = a.ping && a.prog ? '<div class="tile-progress"><i style="width:' + a.prog + '%"></i></div>' : '';
+          return (
+            '<div class="tile-head">' +
+            '<span class="dot d-' +
+            a.st +
+            '"></span>' +
+            '<span class="t-name">' +
+            a.name +
+            '</span>' +
+            '<span class="t-task">' +
+            esc(a.task) +
+            '</span>' +
+            badge +
+            '</div>' +
+            prog +
+            '<div class="tile-body">' +
+            bodyHTML(a) +
+            '</div>'
+          );
+        }
+
+        function render() {
+          grid.classList.toggle('six', gridSize === 6);
+          grid.innerHTML = '';
+          for (var i = 0; i < gridSize; i++) {
+            var id = gridAgents[i];
+            if (id) {
+              var a = byId[id];
+              var el = document.createElement('div');
+              el.className = 'tile';
+              el.dataset.id = id;
+              el.dataset.idx = i;
+              el.draggable = true;
+              el.innerHTML = tileHTML(a, i);
+              grid.appendChild(el);
+            } else {
+              var em = document.createElement('div');
+              em.className = 'tile-empty';
+              em.innerHTML = '<span class="plus-lg">＋</span><span>Bắt đầu agent mới</span>';
+              grid.appendChild(em);
+            }
+          }
+        }
+
+        /* ================= RENDER + EVENTS (delegation) ================= */
+        render();
+
+        var wsName = document.getElementById('wsName'),
+          wsTag = document.getElementById('wsTag'),
+          wsPath = document.getElementById('wsPath');
+        var WS = {
+          A: '~/TomniHubOS/Dev/reports',
+          B: '~/TomniHubOS/Dev/backend',
+          C: '~/TomniHubOS/Dev/research',
+          D: '~/TomniHubOS/Dev/slides',
+        };
+        function setWs(a) {
+          if (a) {
+            wsName.textContent = a.name;
+            wsTag.textContent = 'Agent ' + a.id;
+            wsPath.textContent = WS[a.id] || '~/TomniHubOS/Dev/' + a.name;
+          } else {
+            wsName.textContent = 'Dev';
+            wsTag.textContent = 'Mặc định';
+            wsPath.textContent = '~/TomniHubOS/Dev';
+          }
+        }
+        grid.addEventListener('click', function (e) {
+          var t0 = e.target.closest('.tile');
+          if (t0 && byId[t0.dataset.id]) setWs(byId[t0.dataset.id]);
+          else if (!t0) setWs(null);
+          var btn = e.target.closest('.q-btn');
+          if (!btn) return;
+          var tile = e.target.closest('.tile');
+          if (!tile) return;
+          var a = byId[tile.dataset.id];
+          if (btn.dataset.act === 'yes') {
+            a.answered = true;
+            a.st = 'g';
+            render();
+          } else if (btn.dataset.act === 'no') {
+            a.type = 'chat';
+            a.answered = false;
+            a.st = 'gr';
+            render();
+          } else if (btn.dataset.act === 'retry') {
+            showToast('Agent B: đang hỏi lại với ngữ cảnh đầy đủ…');
+          }
+        });
+
+        /* ---- double-click: overlay phóng to ---- */
+        grid.addEventListener('dblclick', function (e) {
+          var tile = e.target.closest('.tile');
+          if (!tile) return;
+          openAgentOverlay(byId[tile.dataset.id]);
+        });
+
+        function openAgentOverlay(a) {
+          overlay.innerHTML =
+            '<div class="ov-head"><span class="dot d-' +
+            a.st +
+            '"></span>' +
+            a.name +
+            ' — ' +
+            a.task +
+            '<button class="x icon-btn" id="ovClose" style="width:26px;height:26px;font-size:11px">— Thu nhỏ</button></div>' +
+            '<div class="ov-body">' +
+            '<div class="chat-line"><b>Bạn:</b> ' +
+            a.task +
+            '</div>' +
+            '<div class="chat-line"><b>' +
+            a.name +
+            ':</b> Đã nhận tác vụ, đang xử lý theo kế hoạch.</div>' +
+            '<div class="chat-line"><b>' +
+            a.name +
+            ':</b> ' +
+            (a.ping
+              ? bodyHTML(a)
+                  .replace(/<[^>]+>/g, ' ')
+                  .trim()
+              : 'Ping đang tắt, agent ngủ.') +
+            '</div>' +
+            '<div class="chat-line"><b>Bạn:</b> Cứ tiếp tục, có vấn đề gì thì hỏi lại.</div>' +
+            '</div>' +
+            '<div class="ov-note">double-click ô để mở · — Thu nhỏ để đóng</div>';
+          overlay.classList.add('open');
+          document.getElementById('ovClose').onclick = closeOverlay;
+        }
+
+        function closeOverlay() {
+          overlay.classList.remove('open');
+          overlay.innerHTML = '';
+        }
+
+        /* ---- right-click: context menu ---- */
+        var ctx = document.createElement('div');
+        ctx.className = 'ctx-menu';
+        ctxMenu = ctx;
+        document.body.appendChild(ctx);
+
+        grid.addEventListener('contextmenu', function (e) {
+          var tile = e.target.closest('.tile');
+          if (!tile) return;
+          e.preventDefault();
+          var a = byId[tile.dataset.id];
+          ctx.innerHTML =
+            '<button class="ctx-item" data-c="follow">▸ Follow <span class="ck">' +
+            (a.follow ? '[✓]' : '[ ]') +
+            '</span></button>' +
+            '<button class="ctx-item" data-c="ping">▸ Ping <span class="ck">' +
+            (a.ping ? '[✓]' : '[ ]') +
+            '</span></button>' +
+            '<div class="ctx-sep"></div>' +
+            '<button class="ctx-item" data-c="expand">Mở rộng</button>' +
+            '<button class="ctx-item" data-c="stop">Dừng agent</button>';
+          ctx.dataset.id = a.id;
+          ctx.classList.add('open');
+          var x = Math.min(e.clientX, window.innerWidth - 190);
+          var y = Math.min(e.clientY, window.innerHeight - 170);
+          ctx.style.left = x + 'px';
+          ctx.style.top = y + 'px';
+        });
+
+        ctx.addEventListener('click', function (e) {
+          var item = e.target.closest('.ctx-item');
+          if (!item) return;
+          var a = byId[ctx.dataset.id];
+          var c = item.dataset.c;
+          if (c === 'follow') {
+            a.follow = !a.follow;
+            render();
+          } else if (c === 'ping') {
+            a.ping = !a.ping;
+            render();
+          } else if (c === 'expand') {
+            openAgentOverlay(a);
+          } else if (c === 'stop') {
+            a.ping = false;
+            a.follow = false;
+            a.st = 'gr';
+            a.type = 'chat';
+            render();
+            showToast('Đã dừng ' + a.name + '.');
+          }
+          ctx.classList.remove('open');
+        });
+        document.addEventListener('click', function (e) {
+          if (!e.target.closest('.ctx-menu')) ctx.classList.remove('open');
+          if (!e.target.closest('#appMoreBtn') && !e.target.closest('#appMorePop')) appMorePop.classList.remove('open');
+          if (!e.target.closest('#tabAdd') && !e.target.closest('#tabDd')) tabDd.classList.remove('open');
+        });
+
+        /* ---- drag & drop đổi chỗ ---- */
+        var dragIdx = null;
+        grid.addEventListener('dragstart', function (e) {
+          var t = e.target.closest('.tile');
+          if (!t) return;
+          dragIdx = +t.dataset.idx;
+          t.classList.add('dragging');
+        });
+        grid.addEventListener('dragend', function () {
+          dragIdx = null;
+          render();
+        });
+        grid.addEventListener('dragover', function (e) {
+          var t = e.target.closest('.tile');
+          if (t && dragIdx !== null) {
+            e.preventDefault();
+            t.classList.add('drag-over');
+          }
+        });
+        grid.addEventListener('dragleave', function (e) {
+          var t = e.target.closest('.tile');
+          if (t) t.classList.remove('drag-over');
+        });
+        grid.addEventListener('drop', function (e) {
+          var t = e.target.closest('.tile');
+          if (!t || dragIdx === null) return;
+          e.preventDefault();
+          var to = +t.dataset.idx,
+            from = dragIdx;
+          if (from === to) return;
+          var moved = gridAgents.splice(from, 1)[0];
+          gridAgents.splice(to, 0, moved);
+          render();
+        });
+
+        /* ================= SIDEBAR popup ================= */
+        var appMorePop = document.getElementById('appMorePop');
+        var appMoreBtn = document.getElementById('appMoreBtn');
+        appMoreBtn.addEventListener('click', function () {
+          var r = appMoreBtn.getBoundingClientRect(),
+            ar = document.getElementById('app').getBoundingClientRect();
+          appMorePop.style.top = r.top - ar.top + 30 + 'px';
+          appMorePop.classList.toggle('open');
+        });
+
+        /* ================= FILE PREVIEW OVERLAY ================= */
+        var draggedFile = null;
+
+        document.querySelectorAll('.file-row').forEach(function (row) {
+          row.setAttribute('draggable', 'true');
+          row.addEventListener('dragstart', function () {
+            draggedFile = row;
+            row.classList.add('dragging');
+          });
+          row.addEventListener('dragend', function () {
+            row.classList.remove('dragging');
+            draggedFile = null;
+          });
+          row.addEventListener('dragover', function (event) {
+            if (row === draggedFile) return;
+            event.preventDefault();
+            row.classList.add('drop-target');
+          });
+          row.addEventListener('dragleave', function () {
+            row.classList.remove('drop-target');
+          });
+          row.addEventListener('drop', function (event) {
+            if (!draggedFile || row === draggedFile) return;
+            event.preventDefault();
+            row.classList.remove('drop-target');
+            var folderName = window.prompt('Tên folder mới:', 'Nhóm mới');
+            if (folderName && folderName.trim()) {
+              showToast(
+                'Tạo folder “' +
+                  folderName.trim() +
+                  '” chứa ' +
+                  draggedFile.dataset.file +
+                  ' và ' +
+                  row.dataset.file +
+                  '.'
+              );
+            }
+          });
+          row.addEventListener('click', function () {
+            var f = row.dataset.file;
+            overlay.innerHTML =
+              '<div class="ov-head">' +
+              f +
+              ' <button class="x icon-btn" id="ovClose" style="width:26px;height:26px;font-size:11px">× đóng</button></div>' +
+              '<div class="ov-body"><div class="fake-doc">' +
+              '<h5>' +
+              f +
+              '</h5>' +
+              '<div class="bar" style="width:70%"></div><div class="bar" style="width:92%"></div>' +
+              '<div class="bar" style="width:55%"></div><div class="bar" style="width:80%"></div>' +
+              '<div class="bar" style="width:64%"></div>' +
+              '<div style="margin-top:10px">… nội dung giả lập …</div>' +
+              '</div></div>' +
+              '<div class="ov-note">file tự thành context cho tin nhắn kế tiếp</div>';
+            overlay.classList.add('open');
+            document.getElementById('ovClose').onclick = closeOverlay;
+          });
+        });
+
+        /* ================= TABS ================= */
+        var tabbar = document.getElementById('tabbar');
+        var tabAdd = document.getElementById('tabAdd');
+        var tabDd = document.getElementById('tabDd');
+        var openTabs = ['files'];
+        var activeTab = 'files';
+
+        tabbar.addEventListener('click', function (e) {
+          var b = e.target.closest('.tab-btn');
+          if (!b) return;
+          if (e.target.closest('.tx')) {
+            closeTab(b.dataset.tab);
+            return;
+          }
+          if (b.dataset.tab) {
+            activateTab(b.dataset.tab);
+          }
+        });
+        function mkTab(id, label) {
+          var nb = document.createElement('button');
+          nb.className = 'tab-btn';
+          nb.dataset.tab = id;
+          nb.dataset.label = label;
+          nb.innerHTML = '<span class="tl"></span><span class="tx" title="Đóng tab">✕</span>';
+          nb.querySelector('.tl').textContent = label;
+          tabbar.insertBefore(nb, tabAdd);
+          return nb;
+        }
+        function closeTab(id) {
+          var i = openTabs.indexOf(id);
+          if (i < 0) return;
+          if (openTabs.length <= 1) {
+            showToast('Giữ ít nhất 1 tab — mở thêm bằng ＋ trước khi đóng.');
+            return;
+          }
+          openTabs.splice(i, 1);
+          var btn = document.querySelector('.tab-btn[data-tab="' + id + '"]');
+          if (btn) btn.remove();
+          var pnl = document.querySelector('.tab-panel[data-panel="' + id + '"]');
+          if (pnl) pnl.classList.remove('active');
+          if (activeTab === id) activateTab(openTabs[Math.min(i, openTabs.length - 1)]);
+        }
+        function activateTab(id) {
+          activeTab = id;
+          document.querySelectorAll('.tab-btn[data-tab]').forEach(function (b) {
+            b.classList.toggle('active', b.dataset.tab === id);
+          });
+          document.querySelectorAll('.tab-panel').forEach(function (p) {
+            p.classList.toggle('active', p.dataset.panel === id);
+          });
+        }
+        tabAdd.addEventListener('click', function () {
+          var r = tabAdd.getBoundingClientRect();
+          tabDd.style.left = r.left + 'px';
+          tabDd.style.top = r.bottom + 6 + 'px';
+          tabDd.classList.toggle('open');
+        });
+        tabDd.addEventListener('click', function (e) {
+          var b = e.target.closest('[data-addtab]');
+          if (!b) return;
+          var id = b.dataset.addtab;
+          if (openTabs.indexOf(id) >= 0) {
+            activateTab(id);
+          } else {
+            if (openTabs.length >= 4) {
+              showToast('Giữ tối đa 4 tab — bứt ra (↗) hoặc đóng bớt tab trước.');
+            } else {
+              openTabs.push(id);
+              mkTab(id, b.textContent);
+              activateTab(id);
+            }
+          }
+          tabDd.classList.remove('open');
+        });
+
+        /* ---- pop-out ↗ ---- */
+        var floatPanel = document.getElementById('floatPanel');
+        var floatTitle = document.getElementById('floatTitle');
+        var floatBody = document.getElementById('floatBody');
+        var popped = null;
+
+        document.querySelectorAll('.pop').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            var id = btn.dataset.pop;
+            var panel = document.querySelector('.tab-panel[data-panel="' + id + '"]');
+            var label = document.querySelector('.tab-btn[data-tab="' + id + '"]');
+            popped = id;
+            floatTitle.textContent = label ? label.dataset.label : id;
+            floatBody.innerHTML = '';
+            Array.prototype.slice.call(panel.children).forEach(function (ch) {
+              if (!ch.classList.contains('panel-head')) floatBody.appendChild(ch.cloneNode(true));
+            });
+            floatPanel.style.left = '620px';
+            floatPanel.style.top = '140px';
+            floatPanel.classList.add('open');
+            var i = openTabs.indexOf(id);
+            if (i >= 0) openTabs.splice(i, 1);
+            if (label) label.remove();
+            panel.classList.remove('active');
+            activateTab(openTabs[Math.min(i < 0 ? 0 : i, openTabs.length - 1)] || 'files');
+            showToast('Tab đã bứt ra thành panel nổi — kéo header để di chuyển, × để trả về rail.');
+          });
+        });
+        document.getElementById('floatClose').addEventListener('click', function () {
+          if (!popped) return;
+          var id = popped;
+          popped = null;
+          floatPanel.classList.remove('open');
+          mkTab(id, floatTitle.textContent);
+          openTabs.push(id);
+          activateTab(id);
+        });
+
+        /* drag panel nổi */
+        (function () {
+          var head = document.getElementById('floatHead'),
+            dragging = false,
+            ox = 0,
+            oy = 0;
+          head.addEventListener('mousedown', function (e) {
+            if (e.target.closest('button')) return;
+            dragging = true;
+            ox = e.clientX - floatPanel.offsetLeft;
+            oy = e.clientY - floatPanel.offsetTop;
+            document.addEventListener('mousemove', mv);
+            document.addEventListener('mouseup', up);
+          });
+          function mv(e) {
+            if (!dragging) return;
+            floatPanel.style.left = e.clientX - ox + 'px';
+            floatPanel.style.top = e.clientY - oy + 'px';
+          }
+          function up() {
+            dragging = false;
+            document.removeEventListener('mousemove', mv);
+            document.removeEventListener('mouseup', up);
+          }
+        })();
+
+        /* ================= TOAST ================= */
+        var toast = document.getElementById('toast'),
+          toastTimer = null;
+        function showToast(msg) {
+          document.getElementById('toastMsg').textContent = msg;
+          toast.classList.add('open');
+          clearTimeout(toastTimer);
+          toastTimer = setTimeout(function () {
+            toast.classList.remove('open');
+          }, 4200);
+        }
+
+        /* ================= AVATAR MENU ================= */
+        var avatarMenu = document.getElementById('avatarMenu');
+        document.getElementById('avatarBtn').addEventListener('click', function (e) {
+          e.stopPropagation();
+          avatarMenu.classList.toggle('open');
+        });
+        document.addEventListener('click', function (e) {
+          if (!e.target.closest('#avatarMenu') && !e.target.closest('#avatarBtn')) avatarMenu.classList.remove('open');
+        });
+        document.getElementById('amTheme').addEventListener('click', function () {
+          var h = document.documentElement;
+          var toDark = h.dataset.theme !== 'dark';
+          h.dataset.theme = toDark ? 'dark' : 'light';
+          document.getElementById('amThemeVal').textContent = toDark ? 'Tối ▾' : 'Sáng ▾';
+        });
+        document.getElementById('amSettings').addEventListener('click', function () {
+          showToast('Settings mở ở trang riêng');
+          avatarMenu.classList.remove('open');
+        });
+
+        /* ================= THEME ================= */
+        document.querySelectorAll('[data-theme-toggle]').forEach(function (b) {
+          b.addEventListener('click', function () {
+            var h = document.documentElement;
+            h.dataset.theme = h.dataset.theme === 'dark' ? 'light' : 'dark';
+          });
+        });
+
+        /* ================= DEMO CONTROLS ================= */
+        var g4 = document.getElementById('grid4'),
+          g6 = document.getElementById('grid6');
+        function setGrid(n) {
+          gridSize = n;
+          g4.classList.toggle('on', n === 4);
+          g6.classList.toggle('on', n === 6);
+          while (gridAgents.length > n) gridAgents.pop();
+          render();
+        }
+        g4.onclick = function () {
+          setGrid(4);
+        };
+        g6.onclick = function () {
+          setGrid(6);
+        };
+
+        document.getElementById('addAgent').onclick = function () {
+          var next = ['E', 'F'].filter(function (id) {
+            return gridAgents.indexOf(id) < 0;
+          })[0];
+          if (!next) {
+            showToast('Không còn agent mẫu (E, F) để thêm.');
+            return;
+          }
+          if (gridAgents.length >= gridSize) setGrid(6);
+          gridAgents.push(next);
+          render();
+        };
+        document.getElementById('rmAgent').onclick = function () {
+          if (!gridAgents.length) {
+            showToast('Lưới đã trống.');
+            return;
+          }
+          gridAgents.pop();
+          render();
+        };
+
+        document.getElementById('simE').onclick = function () {
+          var a = byId['E'];
+          if (gridAgents.indexOf('E') < 0) {
+            if (gridAgents.length >= gridSize) setGrid(6);
+            gridAgents.push('E');
+          }
+          // nhảy về ô không-ping đầu tiên (demo: ô 4)
+          var i = gridAgents.indexOf('E');
+          gridAgents.splice(i, 1);
+          gridAgents.splice(3, 0, 'E');
+          a.st = 'y';
+          a.ping = true;
+          a.type = 'question';
+          a.answered = false;
+          render();
+          showToast('Agent E (log-monitor) cần xác nhận — đã nhảy lên ô 4.');
+        };
+
+        document.getElementById('toastOverload').onclick = function () {
+          showToast('Khuyến nghị tối đa 2 surface sống — RAM 85%, ping ô này có thể giảm ~12 FPS');
+        };
+      })();
+    </script>
+  </body>
+</html>

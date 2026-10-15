@@ -109,6 +109,8 @@ const NATIVE_FILE_PROVIDER_EVENTS = [
   'native-fs.image-base64',
   'native-fs.fetch-remote-image',
   'native-fs.read',
+  'native-fs.attachment-quick-view',
+  'native-fs.attachment-select',
   'native-fs.read-buffer',
   'native-fs.temp',
   'native-fs.write',
@@ -177,6 +179,7 @@ const CRON_PROVIDER_EVENTS = [
   'cron.save-skill',
   'cron.has-skill',
   'cron.delete-skill',
+  'cron.list-run-conversations',
 ] as const;
 
 const TEAM_PROVIDER_EVENTS = [
@@ -212,6 +215,7 @@ const COMPANY_PROVIDER_EVENTS = [
   'company.run-conversation',
   'company.resolve-permission',
   'company.cancel-conversation',
+  'company.route-group-message',
 ] as const;
 
 const PACKAGE_PLATFORM_PROVIDER_EVENTS = [
@@ -242,7 +246,17 @@ const SYSTEM_INFO_PROVIDER_EVENTS = [
   'system-info.get-snapshot',
   'system-info.set-process-priority',
   'system-info.start-stream',
-  'system-info.stop-stream',
+    'system-info.stop-stream',
+  'system-settings:get-background-sleep-metrics',
+
+] as const;
+
+const STORAGE_CENTER_PROVIDER_EVENTS = [
+  'storage-center.get-summary',
+  'storage-center.get-policy',
+  'storage-center.update-policy',
+  'storage-center.run-cleanup',
+  'storage-center.preview-cleanup',
 ] as const;
 
 const OMNI_GATEWAY_PROVIDER_EVENTS = [
@@ -262,6 +276,78 @@ const OMNI_GATEWAY_PROVIDER_EVENTS = [
   'omni-gateway.revoke-oauth-client',
   'omni-gateway.set-remote-access',
 ] as const;
+
+
+const LIVE_IMAGE_OUTPUT_PROVIDER_EVENTS = ['conversation.native.live-image.read'] as const;
+
+describe('live image output adapter IPC', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.clearAllMocks();
+    vi.unstubAllEnvs();
+    mocks.handler = undefined;
+    mocks.isPackaged = false;
+    mocks.fromWebContents.mockReturnValue({ isDestroyed: vi.fn(() => false) });
+    vi.stubEnv('ELECTRON_RENDERER_URL', 'http://localhost:5173');
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('dispatches verified image reads only for the trusted desktop main frame', async () => {
+    const handler = await registerAdapterHandler();
+
+    await expect(
+      handler(trustedSenderEvent(), JSON.stringify({ name: LIVE_IMAGE_OUTPUT_PROVIDER_EVENTS[0], data: {} }))
+    ).resolves.toBeUndefined();
+
+    expect(mocks.emit).toHaveBeenCalledWith(LIVE_IMAGE_OUTPUT_PROVIDER_EVENTS[0], {});
+  });
+
+  it('fails closed before a live image read reaches the provider', async () => {
+    const handler = await registerAdapterHandler();
+
+    await expect(
+      handler(
+        trustedSenderEvent('https://untrusted.example/settings'),
+        JSON.stringify({ name: LIVE_IMAGE_OUTPUT_PROVIDER_EVENTS[0], data: {} })
+      )
+    ).rejects.toThrow('Untrusted live image output IPC sender');
+
+    expect(mocks.emit).not.toHaveBeenCalled();
+  });
+});
+
+describe('package command list adapter IPC', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.clearAllMocks();
+    vi.unstubAllEnvs();
+    mocks.handler = undefined;
+    mocks.isPackaged = false;
+    mocks.fromWebContents.mockReturnValue({ isDestroyed: vi.fn(() => false) });
+    vi.stubEnv('ELECTRON_RENDERER_URL', 'http://localhost:5173');
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('lists package commands for the trusted desktop main frame only', async () => {
+    const handler = await registerAdapterHandler();
+    const name = 'subscribe-conversation.native.package-commands';
+
+    await expect(handler(trustedSenderEvent(), JSON.stringify({ name, data: {} }))).resolves.toBeUndefined();
+    expect(mocks.emit).toHaveBeenCalledWith(name, {});
+
+    mocks.emit.mockClear();
+    await expect(
+      handler(trustedSenderEvent('https://untrusted.example/settings'), JSON.stringify({ name, data: {} }))
+    ).rejects.toThrow('Untrusted package command IPC sender');
+    expect(mocks.emit).not.toHaveBeenCalled();
+  });
+});
 
 describe('native auto-update adapter IPC', () => {
   beforeEach(() => {
@@ -647,6 +733,103 @@ describe('Cron adapter IPC', () => {
 
     expect(mocks.emit).not.toHaveBeenCalled();
   });
+
+  it('guards the subscribe- spelling real renderer invokes use', async () => {
+    const handler = await registerAdapterHandler();
+    mocks.isPackaged = true;
+    const untrusted = () => trustedSenderEvent('https://untrusted.example/settings');
+
+    await Promise.all(
+      CRON_PROVIDER_EVENTS.map((name) =>
+        expect(handler(untrusted(), JSON.stringify({ name: `subscribe-${name}`, data: {} }))).rejects.toThrow(
+          'Untrusted cron IPC sender'
+        )
+      )
+    );
+    await expect(
+      handler(untrusted(), JSON.stringify({ name: 'subscribe-hub-activity.respond', data: {} }))
+    ).rejects.toThrow('Untrusted Hub activity IPC sender');
+    await expect(
+      handler(untrusted(), JSON.stringify({ name: 'subscribe-live-sessions.snapshot', data: {} }))
+    ).rejects.toThrow('Untrusted live sessions IPC sender');
+    await expect(
+      handler(untrusted(), JSON.stringify({ name: 'subscribe-live-sessions.report', data: {} }))
+    ).rejects.toThrow('Untrusted live sessions IPC sender');
+
+    expect(mocks.emit).not.toHaveBeenCalled();
+  });
+});
+
+describe('Notification hub adapter IPC', () => {
+  const NOTIFICATION_HUB_EVENTS = [
+    'notification-hub.snapshot',
+    'notification-hub.mark-read',
+    'notification-hub.mark-all-read',
+    'notification-hub.remove',
+    'notification-hub.clear',
+    'notification-hub.reclassify',
+    'notification-hub.feedback',
+    'notification-hub.summary',
+    'notification-hub.list-os-apps',
+    'notification-hub.save-connector',
+    'notification-hub.remove-connector',
+    'notification-hub.test-connector',
+    'notification-hub.sync-now',
+    'notification-hub.save-rules',
+  ];
+
+  beforeEach(() => {
+    vi.resetModules();
+    vi.clearAllMocks();
+    vi.unstubAllEnvs();
+    mocks.handler = undefined;
+    mocks.isPackaged = false;
+    mocks.fromWebContents.mockReturnValue({ isDestroyed: vi.fn(() => false) });
+    vi.stubEnv('ELECTRON_RENDERER_URL', 'http://localhost:5173');
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('dispatches every notification hub provider for the trusted desktop main frame', async () => {
+    const handler = await registerAdapterHandler();
+
+    await Promise.all(
+      NOTIFICATION_HUB_EVENTS.map((name) =>
+        expect(
+          handler(trustedSenderEvent(), JSON.stringify({ name: `subscribe-${name}`, data: {} }))
+        ).resolves.toBeUndefined()
+      )
+    );
+
+    expect(mocks.emit).toHaveBeenCalledTimes(NOTIFICATION_HUB_EVENTS.length);
+  });
+
+  it('rejects untrusted senders before mail passwords or connectors reach the hub', async () => {
+    const handler = await registerAdapterHandler();
+    mocks.isPackaged = true;
+    const cases = [
+      destroyedSenderEvent,
+      subframeSenderEvent,
+      () => trustedSenderEvent('https://untrusted.example/settings'),
+      () => trustedSenderEvent('file:///C:/untrusted/index.html'),
+    ];
+
+    await Promise.all(
+      cases.flatMap((event) =>
+        NOTIFICATION_HUB_EVENTS.flatMap((name) =>
+          [name, `subscribe-${name}`].map((spelling) =>
+            expect(handler(event(), JSON.stringify({ name: spelling, data: {} }))).rejects.toThrow(
+              'Untrusted notification hub IPC sender'
+            )
+          )
+        )
+      )
+    );
+
+    expect(mocks.emit).not.toHaveBeenCalled();
+  });
 });
 
 describe('Team adapter IPC', () => {
@@ -944,6 +1127,56 @@ describe('package platform adapter IPC', () => {
           expect(handler(event(), JSON.stringify({ name, data: {} }))).rejects.toThrow(
             'Untrusted package platform IPC sender'
           )
+        )
+      )
+    );
+
+    expect(mocks.emit).not.toHaveBeenCalled();
+  });
+});
+
+describe('Storage Center adapter IPC', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.clearAllMocks();
+    vi.unstubAllEnvs();
+    mocks.handler = undefined;
+    mocks.isPackaged = false;
+    mocks.fromWebContents.mockReturnValue({ isDestroyed: vi.fn(() => false) });
+    vi.stubEnv('ELECTRON_RENDERER_URL', 'http://localhost:5173');
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('dispatches only exact Storage Center providers for the trusted desktop main frame', async () => {
+    const handler = await registerAdapterHandler();
+
+    await Promise.all(
+      STORAGE_CENTER_PROVIDER_EVENTS.map((name) =>
+        expect(handler(trustedSenderEvent(), JSON.stringify({ name, data: {} }))).resolves.toBeUndefined()
+      )
+    );
+
+    expect(mocks.emit).toHaveBeenCalledTimes(STORAGE_CENTER_PROVIDER_EVENTS.length);
+    expect(mocks.emit.mock.calls.map(([name]) => name)).toEqual(STORAGE_CENTER_PROVIDER_EVENTS);
+  });
+
+  it('rejects destroyed, subframe, wrong-origin, and wrong-file Storage Center senders before dispatch', async () => {
+    const handler = await registerAdapterHandler();
+    mocks.isPackaged = true;
+    const cases = [
+      destroyedSenderEvent,
+      subframeSenderEvent,
+      () => trustedSenderEvent('https://untrusted.example/settings'),
+      () => trustedSenderEvent('file:///C:/untrusted/index.html'),
+    ];
+
+    await Promise.all(
+      cases.flatMap((event) =>
+        STORAGE_CENTER_PROVIDER_EVENTS.map((name) =>
+          expect(handler(event(), JSON.stringify({ name, data: {} }))).rejects.toThrow('Untrusted Storage Center IPC sender')
         )
       )
     );

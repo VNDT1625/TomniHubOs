@@ -3,6 +3,7 @@ import type { IConversationMcpStatus } from '@/common/config/storage';
 import { isBackendHttpError } from '@/common/adapter/httpBridge';
 import type { AgentStreamErrorInfo } from '@/common/chat/chatLib';
 import { isSideQuestionSupported } from '@/common/chat/sideQuestion';
+import { parseSlashCommandName } from '@/common/chat/slash/compatibility';
 import { parseError, uuid } from '@/common/utils';
 import AgentModeSelector from '@/renderer/components/agent/AgentModeSelector';
 import ContextUsageIndicator from '@/renderer/components/agent/ContextUsageIndicator';
@@ -63,6 +64,21 @@ const useAcpSendBoxDraft = getSendBoxDraftHook('acp', {
 
 const EMPTY_AT_PATH: Array<string | FileOrFolderItem> = [];
 const EMPTY_UPLOAD_FILES: string[] = [];
+
+/** Display the unsupported command reason without leaking internal bridge error syntax. */
+const displayCommandFailure = (message: string): string | undefined => {
+  const found = /CLI_COMMAND_UNSUPPORTED:([a-zA-Z0-9_.:-]{1,80}):([a-z-]{3,50})/u.exec(message);
+  if (!found) return undefined;
+  const [, name, reason] = found;
+  const reasons: Record<string, string> = {
+    'provider-authentication-required': 'Sign in to the connected CLI first, then retry.',
+    'provider-unavailable': 'The CLI is unavailable; reconnect before retrying.',
+    'requires-ui': 'This command needs a dedicated interface not yet supported by Tomni.',
+    'requires-session': 'This command needs a session operation that Tomni cannot safely perform yet.',
+    'unknown-command': 'The connected CLI did not advertise this command.',
+  };
+  return `/${name}: ${reasons[reason] ?? 'This command is unavailable in this conversation.'}`;
+};
 
 const buildSendFailureError = (error: unknown, message: string): AgentStreamErrorInfo => {
   if (isBackendHttpError(error) && error.code === 'BAD_GATEWAY') {
@@ -273,11 +289,15 @@ const AcpSendBox: React.FC<{
   const executeCommand = useCallback(
     async ({ input, files }: Pick<ConversationCommandQueueItem, 'input' | 'files'>) => {
       if (teamPermission) await teamPermission.warmupSession();
-      const displayMessage = buildDisplayMessage(input, files, workspacePath || '');
+            const displayMessage = buildDisplayMessage(input, files, workspacePath || '');
+      const slashName = parseSlashCommandName(input);
+      const nativeCommand = Boolean(slashName && slashCommands.some(
+        (command) => (command.source === 'acp' || command.source === 'codex') && command.name === slashName
+      ));
       // Goal commands (/goal, /goal-all) expand into a full autonomous instruction
       // for the agent; the bubble keeps showing the raw `/goal ...` text.
-      const goalExpansion = expandGoalCommand(input);
-      const modelBase = goalExpansion ?? expandBuild0Command(input) ?? displayMessage;
+            const goalExpansion = nativeCommand ? null : expandGoalCommand(input);
+      const modelBase = nativeCommand ? input : goalExpansion ?? expandBuild0Command(input) ?? displayMessage;
       if (goalExpansion) {
         const parsedGoal = parseGoalCommand(input);
         if (parsedGoal) setGoalMode(conversation_id, parsedGoal.variant, parsedGoal.requirement);
@@ -291,18 +311,22 @@ const AcpSendBox: React.FC<{
         // import or request optional IDE implementations before a Surface is used.
         let outgoingMessage = modelBase;
         // A pinned Team task is a real execution contract, not only a visual label.
-        outgoingMessage = withTeamTaskDirective(outgoingMessage, conversation_id);
-        // Goal Mode steering: bind every ordinary turn to the mandatory pipeline.
-        outgoingMessage = withGoalSteeringDirective(outgoingMessage, conversation_id);
-        // Keep the model replying in the app's active language even though the
-        // codebase/files are mostly English (the visible bubble keeps raw text).
-        outgoingMessage = withResponseLanguageDirective(outgoingMessage, conversation_id);
+                if (!nativeCommand) {
+          outgoingMessage = withTeamTaskDirective(outgoingMessage, conversation_id);
+          // Goal Mode steering: bind every ordinary turn to the mandatory pipeline.
+          outgoingMessage = withGoalSteeringDirective(outgoingMessage, conversation_id);
+          // Do not prepend natural-language steering directives to provider slash commands.
+          outgoingMessage = withResponseLanguageDirective(outgoingMessage, conversation_id);
+        }
         // Wait for the server-assigned msg_id before rendering the optimistic
         // user bubble so the local row uses the same id as the DB row and
         // subsequent WebSocket stream events — avoids duplicate bubbles when
         // useMessageLstCache reloads.
         const { msg_id } = await ipcBridge.acpConversation.sendMessage.invoke({
-          input: outgoingMessage,
+                    // Always identify commands from the exact user text in Main, even while discovery is loading.
+          // Renderer steering stays in model_input for ordinary turns and is discarded for native CLI commands.
+          input,
+          model_input: outgoingMessage,
           conversation_id,
           files,
         });
@@ -320,7 +344,11 @@ const AcpSendBox: React.FC<{
         });
         emitter.emit('chat.history.refresh');
       } catch (error: unknown) {
-        const errorMsg = parseError(error) ?? t('common.unknownError');
+                const errorMsg = parseError(error) ?? t('common.unknownError');
+        const displayError = displayCommandFailure(errorMsg) ?? errorMsg;
+        if (errorMsg.includes('CLI_COMMAND_UNSUPPORTED')) {
+          setContent(input); // Preserve the unsupported command for editing instead of silently losing it.
+        }
 
         // Archived conversation (e.g. legacy Gemini). Backend signals this
         // via HTTP 410 + code='CONVERSATION_ARCHIVED' — identified by code,
@@ -334,7 +362,8 @@ const AcpSendBox: React.FC<{
           throw error;
         }
 
-        const isAuthError =
+                const isAuthError =
+          errorMsg.includes('provider-authentication-required') ||
           errorMsg.includes('[ACP-AUTH-') ||
           errorMsg.includes('authentication failed') ||
           errorMsg.includes('认证失败');
@@ -346,7 +375,7 @@ const AcpSendBox: React.FC<{
             type: 'error',
             data: t('acp.auth.failed', {
               backend,
-              error: errorMsg,
+                            error: displayError,
               defaultValue: `${backend} authentication failed:
 
 {{error}}
@@ -366,9 +395,9 @@ Please check your local CLI tool authentication status`,
               conversation_id,
               created_at: Date.now(),
               content: {
-                content: errorMsg,
+                                content: displayError,
                 type: 'error',
-                error: buildSendFailureError(error, errorMsg),
+                error: buildSendFailureError(error, displayError),
               },
             },
             true
@@ -383,7 +412,7 @@ Please check your local CLI tool authentication status`,
         emitter.emit('acp.workspace.refresh');
       }
     },
-    [backend, checkAndUpdateTitle, conversation_id, setAiProcessing, t, workspacePath]
+        [backend, checkAndUpdateTitle, conversation_id, setAiProcessing, t, workspacePath, slashCommands, setContent]
   );
 
   const {
@@ -409,7 +438,8 @@ Please check your local CLI tool authentication status`,
   });
 
   const onSendHandler = async (message: string) => {
-    if (isGoalOffCommand(message)) {
+        if (!slashCommands.some((command) => (command.source === 'acp' || command.source === 'codex') &&
+      command.name === parseSlashCommandName(message)) && isGoalOffCommand(message)) {
       clearGoalMode(conversation_id);
       Message.info(t('conversation.goalCommand.modeOff'));
       return;

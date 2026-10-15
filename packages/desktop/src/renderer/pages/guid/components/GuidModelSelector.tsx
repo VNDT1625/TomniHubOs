@@ -5,16 +5,38 @@
  */
 
 import type { IProvider, TProviderWithModel } from '@/common/config/storage';
+import { ROUTER9_REASONING_EFFORTS, TOMNI_GATEWAY_PROVIDER_ID, type Router9ReasoningEffort } from '@/common/router9';
 import { iconColors } from '@/renderer/styles/colors';
 import { getModelDisplayLabel } from '@/renderer/utils/model/agentLogo';
 import type { AcpModelInfo } from '../types';
 import { getAvailableModels } from '../utils/modelUtils';
 import { Button, Dropdown, Menu, Tooltip } from '@arco-design/web-react';
 import { Brain, Down, Plus } from '@icon-park/react';
+import OpenAI from '@lobehub/icons/es/OpenAI/components/Mono';
+import Claude from '@lobehub/icons/es/Claude/components/Mono';
+import Gemini from '@lobehub/icons/es/Gemini/components/Mono';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useProvidersQuery } from '@/renderer/hooks/agent/useModelProviderList';
+
+type ProviderLogoProps = { platform?: string };
+const ProviderLogo: React.FC<ProviderLogoProps> = ({ platform }) => {
+  const brand = platform?.toLowerCase();
+  const Icon =
+    brand === 'openai'
+      ? OpenAI
+      : brand === 'anthropic' || brand === 'claude'
+        ? Claude
+        : brand === 'gemini' || brand === 'google'
+          ? Gemini
+          : null;
+  return (
+    <span className='guid-provider-logo' aria-hidden='true'>
+      {Icon ? <Icon size={16} /> : <Brain theme='outline' size='16' />}
+    </span>
+  );
+};
 
 type GuidModelSelectorProps = {
   // Gemini model state
@@ -22,6 +44,7 @@ type GuidModelSelectorProps = {
   modelList: IProvider[];
   current_model: TProviderWithModel | undefined;
   setCurrentModel: (model: TProviderWithModel) => Promise<void>;
+  setReasoningEffort?: (reasoningEffort?: Router9ReasoningEffort) => Promise<void>;
 
   // ACP model state
   currentAcpCachedModelInfo: AcpModelInfo | null;
@@ -34,6 +57,7 @@ const GuidModelSelector: React.FC<GuidModelSelectorProps> = ({
   modelList,
   current_model,
   setCurrentModel,
+  setReasoningEffort,
   currentAcpCachedModelInfo,
   selectedAcpModel,
   setSelectedAcpModel,
@@ -52,6 +76,7 @@ const GuidModelSelector: React.FC<GuidModelSelectorProps> = ({
 
   const autoModelLabel = t('guid.hubHome.status.automatic', { defaultValue: 'Tự động (Auto)' });
   const isAutoGemini = !current_model || current_model.use_model === 'auto' || current_model.id === 'auto';
+  const isManagedGateway = current_model?.id === TOMNI_GATEWAY_PROVIDER_ID;
 
   const geminiSelectedLabel = React.useMemo(() => {
     if (isAutoGemini) return `${autoModelLabel} (Laya Decision)`;
@@ -61,13 +86,16 @@ const GuidModelSelector: React.FC<GuidModelSelectorProps> = ({
 
   const geminiButtonLabel = React.useMemo(() => {
     if (isAutoGemini) return `${autoModelLabel} (Laya Decision)`;
-    return getModelDisplayLabel({
+    const label = getModelDisplayLabel({
       selected_value: current_model?.use_model,
       selectedLabel: geminiSelectedLabel,
       defaultModelLabel,
       fallbackLabel: defaultModelLabel,
     });
-  }, [current_model?.use_model, defaultModelLabel, geminiSelectedLabel, isAutoGemini, autoModelLabel]);
+    return isManagedGateway && current_model?.reasoning_effort
+      ? `${label} · ${t(`settings.router9.reasoning.${current_model.reasoning_effort}`)}`
+      : label;
+  }, [current_model?.reasoning_effort, current_model?.use_model, defaultModelLabel, geminiSelectedLabel, isAutoGemini, isManagedGateway, autoModelLabel, t]);
 
   const acpSelectedLabel = React.useMemo(() => {
     if (selectedAcpModel === 'auto') return autoModelLabel;
@@ -141,7 +169,15 @@ const GuidModelSelector: React.FC<GuidModelSelectorProps> = ({
                     const available_models = getAvailableModels(provider);
                     if (available_models.length === 0) return null;
                     return (
-                      <Menu.ItemGroup title={provider.name} key={provider.id}>
+                      <Menu.ItemGroup
+                        title={
+                          <span className='guid-provider-heading'>
+                            <ProviderLogo platform={provider.platform} />
+                            {provider.name}
+                          </span>
+                        }
+                        key={provider.id}
+                      >
                         {available_models.map((modelName) => {
                           // 获取模型健康状态
                           const matchedProvider = modelConfig?.find((p) => p.id === provider.id);
@@ -186,6 +222,18 @@ const GuidModelSelector: React.FC<GuidModelSelectorProps> = ({
                     {t('settings.addModel')}
                   </Menu.Item>,
                 ]}
+            {isManagedGateway && (
+              <Menu.ItemGroup title={t("settings.router9.reasoningLabel")} key="reasoning-effort">
+                <Menu.Item key="reasoning-auto" data-testid="guid-reasoning-option-auto" className={!current_model?.reasoning_effort ? "!bg-2" : ""} onClick={() => void setReasoningEffort?.(undefined)}>
+                  {t("settings.router9.reasoning.auto")}
+                </Menu.Item>
+                {ROUTER9_REASONING_EFFORTS.map((effort) => (
+                  <Menu.Item key={`reasoning-${effort}`} data-testid={`guid-reasoning-option-${effort}`} className={current_model?.reasoning_effort === effort ? "!bg-2" : ""} onClick={() => void setReasoningEffort?.(effort)}>
+                    {t(`settings.router9.reasoning.${effort}`)}
+                  </Menu.Item>
+                ))}
+              </Menu.ItemGroup>
+            )}
           </Menu>
         }
       >
@@ -196,7 +244,7 @@ const GuidModelSelector: React.FC<GuidModelSelectorProps> = ({
           data-testid='guid-model-selector'
         >
           <span className='flex items-center gap-6px min-w-0'>
-            <Brain theme='outline' size='14' fill={iconColors.secondary} className='shrink-0' />
+            <ProviderLogo platform={isGeminiMode ? current_model?.platform : undefined} />
             {isAutoGemini && <div className='w-6px h-6px rounded-full shrink-0 bg-blue-500' />}
             <span>{geminiButtonLabel}</span>
             <Down theme='outline' size='12' fill={iconColors.secondary} className='shrink-0' />
@@ -255,7 +303,7 @@ const GuidModelSelector: React.FC<GuidModelSelectorProps> = ({
         >
           <Button className={'sendbox-model-btn guid-config-btn'} shape='round' size='small'>
             <span className='flex items-center gap-6px min-w-0'>
-              <Brain theme='outline' size='14' fill={iconColors.secondary} className='shrink-0' />
+              <ProviderLogo platform={isGeminiMode ? current_model?.platform : undefined} />
               <span>{acpButtonLabel}</span>
               <Down theme='outline' size='12' fill={iconColors.secondary} className='shrink-0' />
             </span>
@@ -273,7 +321,7 @@ const GuidModelSelector: React.FC<GuidModelSelectorProps> = ({
           style={{ cursor: 'default' }}
         >
           <span className='flex items-center gap-6px min-w-0'>
-            <Brain theme='outline' size='14' fill={iconColors.secondary} className='shrink-0' />
+            <ProviderLogo platform={isGeminiMode ? current_model?.platform : undefined} />
             <span>{acpButtonLabel}</span>
           </span>
         </Button>
@@ -301,7 +349,15 @@ const GuidModelSelector: React.FC<GuidModelSelectorProps> = ({
             const available_models = getAvailableModels(provider);
             if (available_models.length === 0) return null;
             return (
-              <Menu.ItemGroup title={provider.name} key={provider.id}>
+              <Menu.ItemGroup
+                title={
+                  <span className='guid-provider-heading'>
+                    <ProviderLogo platform={provider.platform} />
+                    {provider.name}
+                  </span>
+                }
+                key={provider.id}
+              >
                 {available_models.map((modelName) => (
                   <Menu.Item
                     key={provider.id + modelName}
@@ -322,7 +378,7 @@ const GuidModelSelector: React.FC<GuidModelSelectorProps> = ({
     >
       <Button className={'sendbox-model-btn guid-config-btn'} shape='round' size='small'>
         <span className='flex items-center gap-6px min-w-0'>
-          <Brain theme='outline' size='14' fill={iconColors.secondary} className='shrink-0' />
+          <ProviderLogo platform={isGeminiMode ? current_model?.platform : undefined} />
           <span>{selectedAcpModel === 'auto' || !selectedAcpModel ? autoModelLabel : selectedAcpModel}</span>
           <Down theme='outline' size='12' fill={iconColors.secondary} className='shrink-0' />
         </span>

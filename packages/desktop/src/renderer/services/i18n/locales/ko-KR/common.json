@@ -1,4 +1,93 @@
 {
+  "superSearch": {
+    "placeholder": {
+      "hub": "검색…",
+      "browser": "{{engine}}(으)로 검색…"
+    },
+    "ariaLabel": "슈퍼 검색",
+    "scopeLabel": "검색 범위",
+    "scope": {
+      "all": "전체"
+    },
+    "source": {
+      "local": "앱 내",
+      "apps": "앱",
+      "web": "웹"
+    },
+    "state": {
+      "loading": "검색 중…",
+      "empty": "결과 없음",
+      "error": "이 소스에서 오류가 발생했습니다. 다른 소스는 계속 작동합니다",
+      "timeout": "이 소스의 응답이 너무 느립니다",
+      "unavailable": "소스가 준비되지 않았습니다",
+      "noBridge": "연결되었지만 검색 실행 브리지가 아직 연결되지 않았습니다",
+      "disabled": "이 소스는 꺼져 있습니다. 소스 설정에서 켜세요."
+    },
+    "hint": {
+      "empty": "입력하여 검색하세요. fb: abc 같은 접두사로 하나의 소스만 검색할 수 있습니다.",
+      "scopeOnly": "{{source}} 검색 중 — 검색어를 입력하세요."
+    },
+    "rank": "#{{rank}} · 상위 {{percent}}%",
+    "rankTitle": "{{source}}에서 {{rank}}/{{count}}위 — 상위 {{percent}}%",
+    "resultCount": "결과 {{count}}개",
+    "footer": "↑↓ 선택 · Enter 열기 · Esc 닫기",
+    "close": "닫기",
+    "clear": "지우기",
+    "engineLabel": "검색 엔진",
+    "config": {
+      "title": "검색 소스",
+      "source": "Source",
+      "remove": "Remove",
+      "addCustom": "Add a site search",
+      "customHelp": "Paste the search link of any site and put {q} where the keyword goes, e.g. https://www.google.com/maps/search/{q}",
+      "customName": "Name",
+      "customUrl": "Search link with {q}",
+      "customInvalid": "Needs a name, a unique alias and an http(s) link containing {q}",
+      "add": "Add",
+      "open": "소스 설정",
+      "enabled": "켜짐",
+      "inAll": "전체에 포함",
+      "alias": "별칭",
+      "aliasInvalid": "별칭이 잘못되었거나 이미 사용 중입니다",
+      "connectedNote": "연결된 타사 소스는 켜기 전까지 꺼져 있으며, 쿼리는 켜진 소스로만 전송됩니다.",
+      "reset": "기본값으로 재설정",
+      "done": "완료",
+      "none": "연결된 검색 도구가 없습니다"
+    },
+    "web": {
+      "searchWith": "{{engine}}에서 “{{query}}” 검색",
+      "openSite": "{{site}} 열기"
+    },
+    "local": {
+      "untitledConversation": "제목 없는 대화",
+      "restartApp": "앱 다시 시작",
+      "actionSubtitle": "동작",
+      "pageSubtitle": "페이지",
+      "settings": "설정",
+      "page": {
+        "home": "홈",
+        "history": "기록",
+        "scheduled": "예약 작업",
+        "store": "스토어",
+        "browser": "브라우저",
+        "ide": "IDE",
+        "company": "회사",
+        "git": "Git",
+        "account": "계정",
+        "settings": "설정"
+      }
+    },
+    "settings": {
+      "theme": "테마 및 색상 구성",
+      "cssTheme": "사용자 지정 CSS 테마",
+      "wallpaper": "배경화면",
+      "interfaceLanguage": "인터페이스 언어",
+      "modelProviders": "모델 제공자 및 API 키",
+      "mcpServers": "MCP 서버 및 커넥터",
+      "skills": "스킬",
+      "webui": "원격 / WebUI 접근"
+    }
+  },
   "send": "전송",
   "cancel": "취소",
   "save": "저장",
@@ -11,6 +100,7 @@
   "skills": "스킬",
   "workspace": "프로젝트",
   "settings": "설정",
+  "home": "홈",
   "system": "시스템",
   "about": "소개",
   "back": "채팅으로 돌아가기",
@@ -23,6 +113,7 @@
   "loading": "기다려주세요...",
   "copy": "복사",
   "reply": "인용",
+  "copiedInline": "복사됨",
   "copySuccess": "복사됨",
   "copyFailed": "복사 실패",
   "download": "다운로드",
@@ -89,6 +180,17 @@
   "fileAttach.uploading": "업로드 중...",
   "fileAttach.uploadSuccess": "업로드 성공",
   "fileAttach.cancelUpload": "업로드 취소",
+  "attachmentQuickView": {
+    "showAttachments": "첨부 파일 표시 ({{count}})",
+    "hideAttachments": "첨부 파일 숨기기 ({{count}})",
+    "remove": "{{label}} 제거",
+    "label": "{{label}} 빠른 보기",
+    "loading": "미리 보기 로드 중…",
+    "unsupported": "이 파일 형식은 여기에서 미리 볼 수 없습니다.",
+    "directory": "폴더는 여기에서 미리 볼 수 없습니다.",
+    "too-large": "이 파일은 빠른 보기에 너무 큽니다.",
+    "unavailable": "이 파일을 더 이상 사용할 수 없습니다."
+  },
   "expand": "펼치기",
   "name": "이름",
   "added": "추가됨",
@@ -98,5 +200,267 @@
   "import": "가져오기",
   "processing": "처리 중...",
   "optional": "(선택 사항)",
-  "clear": "지우기"
+  "clear": "지우기",
+  "notificationHub": {
+    "title": "알림",
+    "summary": "긴급 {{p0}} · 중요 {{p1}} · 걸러짐 {{filtered}}",
+    "layaOn": "Laya가 새 알림을 분류하고 있습니다.",
+    "layaOff": "Laya가 실행 중이 아니어서 기본 규칙으로 분류합니다.",
+    "taskCreated": "할 일을 만들었습니다",
+    "taskFailed": "할 일을 만들지 못했습니다",
+    "tabs": {
+      "focus": "집중",
+      "digest": "요약",
+      "filtered": "걸러짐",
+      "sources": "소스"
+    },
+    "empty": {
+      "focus": "지금 처리할 것이 없습니다.",
+      "digest": "아직 업데이트가 없습니다.",
+      "filtered": "걸러진 항목이 없습니다."
+    },
+    "level": {
+      "P0": "긴급",
+      "P1": "중요",
+      "P2": "요약",
+      "P3": "걸러짐"
+    },
+    "by": {
+      "laya": "Laya 분류",
+      "rules": "규칙 분류",
+      "user": "직접 지정",
+      "llm": "내 모델이 분류함"
+    },
+    "actions": {
+      "open": "열기",
+      "createTask": "할 일로",
+      "move": "이동",
+      "markRead": "읽음",
+      "remove": "삭제",
+      "alwaysImportant": "이 발신자는 항상 긴급",
+      "alwaysMute": "이 발신자는 항상 걸러내기",
+      "syncAll": "지금 소스 확인",
+      "markAllRead": "모두 읽음",
+      "clearTab": "이 탭 비우기",
+      "boostSender": "이 사람은 항상 긴급",
+      "muteSender": "이 사람은 항상 필터링",
+      "muteSource": "{{name}} 음소거",
+      "unmuteSource": "{{name}} 음소거 해제",
+      "settings": "알림 설정"
+    },
+    "event": {
+      "needsInput": "{{name}}에서 답변을 기다립니다",
+      "failed": "{{name}} 실패",
+      "done": "{{name}} 완료",
+      "scheduleFailed": "예약 작업 {{name}} 실패",
+      "scheduleDone": "예약 작업 {{name}} 완료",
+      "webUnread": "{{name}}: 읽지 않음 {{count}}개 (+{{added}})",
+      "ramHigh": "메모리가 부족해지고 있습니다",
+      "ramHighBody": "RAM 사용률 {{percent}}%({{used}} / {{total}} GB). 필요 없는 모델이나 탭을 닫으세요."
+    },
+    "errors": {
+      "label": "이름을 입력하세요.",
+      "host": "서버 주소가 올바르지 않습니다.",
+      "user": "이메일 또는 사용자 이름을 입력하세요.",
+      "port": "포트는 1~65535 사이여야 합니다.",
+      "password": "비밀번호가 너무 깁니다.",
+      "url": "http 또는 https 피드 주소를 사용하세요.",
+      "origin": "facebook.com 같은 사이트를 입력하세요.",
+      "kind": "알 수 없는 소스 유형입니다.",
+      "missing": "이 소스는 더 이상 없습니다.",
+      "limit": "소스 한도(30개)에 도달했습니다.",
+      "busy": "이 소스는 이미 동기화 중입니다.",
+      "unknown": "문제가 발생했습니다. 다시 시도하세요.",
+      "channel": "YouTube 채널 링크, @핸들 또는 채널 ID를 입력하세요.",
+      "unsupported": "이 시스템에서는 사용할 수 없습니다."
+    },
+    "sources": {
+      "title": "연결된 소스",
+      "add": "소스 추가",
+      "intro": "Tomny는 허용한 것만 읽습니다: 읽음으로 표시하지 않고 메일 헤더, 공개 피드, 선택한 앱의 Windows 알림, 그리고 허용한 사이트의 경우 탭 제목의 읽지 않은 개수와 사이트 자체 알림.",
+      "none": "아직 소스가 없습니다. 메일 계정, 피드 또는 사이트를 추가하세요.",
+      "kind": {
+        "imap": "메일",
+        "feed": "피드",
+        "web": "사이트",
+        "youtube": "YouTube",
+        "os": "데스크톱 앱"
+      },
+      "lastError": "오류: {{error}}",
+      "lastSync": "{{time}} 확인",
+      "webPassive": "내장 브라우저에서 사이트를 열면 업데이트됩니다",
+      "neverSynced": "아직 확인 안 함",
+      "noPassword": "비밀번호 없음",
+      "enabled": "사용",
+      "syncNow": "지금 확인",
+      "edit": "편집",
+      "remove": "삭제",
+      "removeConfirm": "이 소스와 저장된 비밀번호를 삭제할까요?",
+      "provider": "제공업체",
+      "presets": {
+        "gmail": "Gmail",
+        "outlook": "Outlook / Microsoft 365",
+        "yahoo": "Yahoo 메일",
+        "icloud": "iCloud 메일",
+        "custom": "기타 IMAP 서버"
+      },
+      "presetHint": {
+        "gmail": "2단계 인증을 켠 뒤 myaccount.google.com/apppasswords에서 앱 비밀번호를 만들어 붙여 넣으세요. Gmail 설정에서 IMAP을 켜야 합니다.",
+        "outlook": "2단계 로그인을 사용한다면 Microsoft 계정 보안 페이지의 앱 비밀번호를 사용하세요. 일부 회사 계정은 IMAP을 막습니다.",
+        "yahoo": "Yahoo 계정 보안에서 앱 비밀번호를 만들어 붙여 넣으세요.",
+        "icloud": "account.apple.com에서 앱 암호를 만들어 붙여 넣으세요.",
+        "custom": "제공업체의 IMAP 서버를 입력하세요. TLS 연결만 사용합니다."
+      },
+      "user": "이메일 또는 사용자 이름",
+      "password": "앱 비밀번호",
+      "passwordKeep": "비워 두면 저장된 비밀번호를 유지합니다",
+      "host": "IMAP 서버",
+      "port": "포트",
+      "mailbox": "폴더",
+      "url": "피드 주소(RSS 또는 Atom)",
+      "webHint": "내장 브라우저에서 로그인하는 사이트를 선택하세요. Tomny는 탭 제목의 읽지 않은 개수와, 허용한 경우 사이트가 띄우는 알림을 확인합니다. 페이지 내용은 절대 읽지 않습니다.",
+      "origin": "사이트",
+      "label": "이름",
+      "interval": "확인 간격(분)",
+      "cancel": "취소",
+      "save": "저장",
+      "saved": "소스를 저장했습니다",
+      "syncOk": "확인 완료: 새 항목 {{count}}개",
+      "syncFailed": "확인 실패: {{error}}",
+      "cardTitle": "출처 및 계정",
+      "osApps": "포함할 앱",
+      "osHint": "다른 Windows 앱이 표시한 알림을 읽습니다(Zalo, Telegram, Discord, Outlook, 브라우저). 앱을 선택하거나, 아무것도 선택하지 않으면 Tomny를 제외한 모든 앱이 포함됩니다.",
+      "osNone": "아직 앱 알림이 없거나 Windows가 아닙니다.",
+      "osAllApps": "모든 앱",
+      "preview": "짧은 미리보기 유지",
+      "previewHint": "끄기: 보낸 사람과 제목만 읽습니다.",
+      "youtubeHint": "채널 링크, @핸들 또는 채널 ID를 붙여 넣으세요. 새 업로드는 YouTube 공개 피드에서 가져오며 로그인이나 API 키가 필요 없습니다.",
+      "channel": "YouTube 채널",
+      "capture": "사이트 자체 알림 받기",
+      "captureHint": "페이지가 알림을 띄우면(AI 답변 완료, 새 메시지 등) 허브로 전달되며 중요한 경우에만 알립니다."
+    },
+    "rules": {
+      "title": "필터 규칙",
+      "useLaya": "Laya가 알림 분류",
+      "layaRunning": "Laya가 이 기기에서 실행 중입니다.",
+      "layaStopped": "Laya가 실행 중이 아니며, 이 기능만을 위해 시작하지 않습니다.",
+      "systemAlerts": "긴급 알림은 시스템 알림으로도 표시",
+      "vip": "항상 긴급인 발신자",
+      "muted": "항상 걸러낼 발신자",
+      "urgent": "긴급 키워드",
+      "vipPlaceholder": "한 줄에 하나: boss@company.com 또는 company.com",
+      "mutedPlaceholder": "한 줄에 하나: news@shop.com 또는 shop.com",
+      "urgentPlaceholder": "한 줄에 하나(예: 마감)",
+      "save": "규칙 저장",
+      "saved": "규칙을 저장했습니다"
+    },
+    "delivery": {
+      "interrupt": "알림됨",
+      "digest": "피드에 있음",
+      "silent": "숨김"
+    },
+    "view": {
+      "toolbar": "알림 필터",
+      "search": "알림 검색",
+      "groupBy": "그룹 기준",
+      "group": {
+        "time": "최신순",
+        "level": "중요도별",
+        "source": "출처별",
+        "account": "계정별"
+      },
+      "source": "출처",
+      "allSources": "모든 출처",
+      "unreadOnly": "읽지 않은 항목만",
+      "noAccount": "기타"
+    },
+    "sourceKind": {
+      "agent": "Tomny 에이전트",
+      "schedule": "일정",
+      "team": "팀",
+      "system": "Tomny",
+      "email": "메일",
+      "feed": "피드",
+      "web": "사이트",
+      "youtube": "YouTube",
+      "os": "데스크톱 앱",
+      "app": "Tomny 앱"
+    },
+    "missed": {
+      "title": "놓친 알림",
+      "period": {
+        "today": "오늘",
+        "24h": "24시간",
+        "7d": "7일"
+      },
+      "none": "이 기간에 새 항목이 없습니다.",
+      "counts": "알림 {{total}}개, 읽지 않음 {{unread}}개 · 긴급 {{p0}} · 중요 {{p1}} · 요약 {{p2}} · 필터링됨 {{p3}}",
+      "askAgent": "Tomny 에이전트에게 “내가 놓친 게 뭐야?”라고 물으면 요약을 작성해 줍니다."
+    },
+    "catalog": {
+      "title": "연결할 수 있는 항목",
+      "intro": "작동함: Tomny가 직접 가져옵니다. 로그인된 사이트: 내장 브라우저에서 사이트에 로그인한 동안 작동합니다. 어댑터만: 계획됨, 먼저 제공자 연동이 필요합니다.",
+      "support": {
+        "working": "작동함",
+        "session": "로그인된 사이트",
+        "adapter-ready": "어댑터만"
+      },
+      "group": {
+        "mail": "메일",
+        "ai": "AI 어시스턴트",
+        "social": "소셜",
+        "messages": "메시지",
+        "video": "동영상",
+        "desktop": "데스크톱",
+        "apps": "앱"
+      }
+    },
+    "triage": {
+      "cardTitle": "Laya 분류",
+      "title": "방해해도 되는 항목",
+      "intro": "규칙, 내 목록, 내가 열거나 닫은 항목이 이 기기에서 무료로 먼저 결정합니다. Laya가 이미 실행 중이면 도와줍니다.",
+      "interrupt": "알림 대상",
+      "interruptHint": "나머지는 모두 피드에서 대기합니다.",
+      "p0p1": "긴급 + 중요",
+      "learn": "내가 열거나 닫은 항목에서 학습",
+      "learnHint": "보낸 사람을 한 단계 올리거나 내립니다. 그것만으로 긴급하게 만들지는 않습니다.",
+      "packageApps": "Tomny 앱의 알림",
+      "packageAppsHint": "notifications.show를 선언한 설치된 앱은 알림을 보낼 수 있지만, 스스로 긴급으로 표시할 수는 없습니다.",
+      "retention": "알림 보관 기간(일)",
+      "muted": "음소거된 출처",
+      "mutedNone": "음소거된 출처가 없습니다."
+    },
+    "llm": {
+      "title": "불분명한 항목을 모델에 묻기",
+      "enable": "불분명한 항목에 모델 사용",
+      "intro": "기본값은 꺼짐입니다. 규칙으로 분류할 수 없는 항목만 코드, 숫자, 링크, 주소를 제거한 뒤 작은 배치로 보냅니다. 일일 한도를 넘지 않습니다.",
+      "model": "모델",
+      "modelPlaceholder": "작고 저렴한 모델 ID",
+      "dailyLimit": "하루 최대 항목 수",
+      "includeSnippet": "가린 미리보기도 보내기",
+      "includeSnippetHint": "끄기: 출처, 보낸 사람 도메인, 가린 제목만 보냅니다.",
+      "usage": "오늘 사용량: {{used}} / {{limit}}",
+      "inactive": "비활성",
+      "lastRun": "마지막 배치 {{time}}",
+      "error": {
+        "budget": "오늘 한도에 도달함",
+        "no-model": "이 모델을 제공할 수 있는 제공자가 없음",
+        "unparsed": "모델의 답변을 읽을 수 없음"
+      },
+      "errorGeneric": "마지막 오류: {{error}}"
+    },
+    "flash": {
+      "title": "빠른 알림",
+      "empty": "지금 확인할 항목이 없습니다.",
+      "viewAll": "모두 보기",
+      "viewAllMore": "모두 보기(+{{count}}개)"
+    },
+    "page": {
+      "subtitle": "받은 모든 알림, 소스, Laya 설정.",
+      "tabs": {
+        "feed": "알림",
+        "triage": "Laya 및 예산"
+      }
+    }
+  }
 }

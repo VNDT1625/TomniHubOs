@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "Tab Notes",
+  "version": "1.2.0",
+  "description": "Hand-written fixture: keeps a short note per tab.",
+  "permissions": ["storage", "tabs", "contextMenus", "history"],
+  "host_permissions": ["<all_urls>"],
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [{ "matches": ["https://*.example.com/*"], "js": ["content.js"] }],
+  "action": { "default_popup": "popup.html" }
+}

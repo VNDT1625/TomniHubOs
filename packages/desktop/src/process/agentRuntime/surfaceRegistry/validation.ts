@@ -15,6 +15,7 @@ const TARGET_KINDS = new Set<SurfaceTargetKind>(['builtin', 'acp', 'cli', 'local
 const PERMISSION_MODES = new Set<SurfacePermissionMode>(['read-only', 'workspace-write', 'full-access']);
 const CONTEXT_SLICES = new Set<SurfaceContextSlice>(['agent', 'personal', 'workspace', 'conversation', 'surface']);
 const CAPABILITY_KINDS = new Set<SurfaceCapabilityKind>(['mcp', 'native', 'skill', 'bridge']);
+const CAPABILITY_AVAILABILITY = new Set(['core', 'portable', 'surface-only']);
 const PERMISSION_RANK: Record<SurfacePermissionMode, number> = {
   'read-only': 0,
   'workspace-write': 1,
@@ -215,6 +216,13 @@ export const validateSurfaceManifest = (value: unknown): SurfaceManifestValidati
         issues.push({ path: `${path}.serverName`, code: 'required', message: 'MCP bindings require a server name.' });
       }
       validateStringArray(candidate.toolPatterns, `${path}.toolPatterns`, issues, { required: true });
+      if (candidate.availability !== undefined && !CAPABILITY_AVAILABILITY.has(candidate.availability as string)) {
+        issues.push({
+          path: `${path}.availability`,
+          code: 'unknown-availability',
+          message: 'Availability must be core, portable or surface-only.',
+        });
+      }
       if (!PERMISSION_MODES.has(candidate.minimumPermissionMode as SurfacePermissionMode)) {
         issues.push({
           path: `${path}.minimumPermissionMode`,

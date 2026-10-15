@@ -53,7 +53,9 @@ const start = async (opts: {
           return false;
         }
       : undefined,
-    isOriginAllowed: (origin) => origin === 'https://chat.openai.com',
+    isOriginAllowed: (origin, req) =>
+      origin === 'https://chat.openai.com' ||
+      (origin === 'https://mcp.omni-mcp.xyz' && req?.headers['x-forwarded-host'] === 'mcp.omni-mcp.xyz'),
     buildIdeServer: () => buildServer(),
   });
   current = { host, port: host.port };
@@ -250,5 +252,32 @@ describe('omniGatewayHost — multi-mode auth gate', () => {
     // Discovery is reachable WITHOUT any bearer.
     expect(await getPath(port, '/.well-known/oauth-authorization-server')).toBe(200);
     expect(await getPath(port, '/oauth/anything')).toBe(200);
+  });
+
+  it('allows same-origin or trusted custom domain requests based on request context', async () => {
+    const { port } = await start({ mode: 'oauth' });
+    const response = await new Promise<GatewayResponse>((resolve, reject) => {
+      const request = http.request(
+        {
+          host: '127.0.0.1',
+          port,
+          path: '/ide/mcp',
+          method: 'OPTIONS',
+          headers: {
+            origin: 'https://mcp.omni-mcp.xyz',
+            'x-forwarded-host': 'mcp.omni-mcp.xyz',
+            'access-control-request-method': 'POST',
+          },
+        },
+        (res) => {
+          res.resume();
+          res.on('end', () => resolve({ code: res.statusCode ?? 0, headers: res.headers }));
+        }
+      );
+      request.on('error', reject);
+      request.end();
+    });
+    expect(response.code).toBe(204);
+    expect(response.headers['access-control-allow-origin']).toBe('https://mcp.omni-mcp.xyz');
   });
 });

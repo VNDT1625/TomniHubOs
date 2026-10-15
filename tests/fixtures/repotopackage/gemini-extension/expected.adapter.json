@@ -1,0 +1,43 @@
+{
+  "connections": [
+    {
+      "kind": "command",
+      "id": "review",
+      "title": "review",
+      "description": "Review the current diff",
+      "path": "source/commands/review.toml",
+      "format": "gemini-toml",
+      "origin": "gemini-extension"
+    },
+    {
+      "kind": "command",
+      "id": "tools-lint",
+      "title": "tools/lint",
+      "path": "source/commands/tools/lint.toml",
+      "format": "gemini-toml",
+      "origin": "gemini-extension"
+    },
+    {
+      "kind": "mcp",
+      "id": "demo-local",
+      "title": "demo-local",
+      "command": "node",
+      "args": ["dist/server.js"],
+      "cwd": "source",
+      "env": [{ "name": "DEMO_TOKEN", "required": true }],
+      "origin": "gemini-extension"
+    },
+    {
+      "kind": "mcp",
+      "id": "demo-remote",
+      "title": "demo-remote",
+      "transport": "http",
+      "url": "https://mcp.example.com/mcp",
+      "origin": "gemini-extension"
+    }
+  ],
+  "openItems": [
+    { "kind": "env-value", "name": "DEMO_API_KEY", "path": "source/gemini-extension.json" },
+    { "kind": "env-value", "name": "DEMO_TOKEN" }
+  ]
+}

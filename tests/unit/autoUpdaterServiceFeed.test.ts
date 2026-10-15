@@ -36,22 +36,24 @@ const importService = async (feedUrl: string | undefined, isPackaged = true) => 
 
   vi.doMock('electron-updater', () => ({ autoUpdater }));
   vi.doMock('electron-log', () => ({ default: log }));
-  vi.doMock('electron', () => ({
-    app: {
-      isPackaged,
-      getVersion: vi.fn(() => '1.0.0'),
-      getPath: vi.fn(() => '/tmp/tomny-test'),
-    },
-  }));
+  const app = {
+    quit: vi.fn(),
+    exit: vi.fn(),
+    isPackaged,
+    getVersion: vi.fn(() => '1.0.0'),
+    getPath: vi.fn(() => '/tmp/tomny-test'),
+  };
+  vi.doMock('electron', () => ({ app }));
 
-  await import('@process/services/autoUpdaterService');
-  return { autoUpdater, log };
+  const { autoUpdaterService } = await import('@process/services/autoUpdaterService');
+  return { autoUpdater, autoUpdaterService, app, log };
 };
 
 describe('autoUpdaterService update feed override', () => {
   afterEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
+    vi.restoreAllMocks();
     if (originalFeedUrl === undefined) delete process.env.TOMNY_UPDATE_FEED_URL;
     else process.env.TOMNY_UPDATE_FEED_URL = originalFeedUrl;
   });
@@ -94,5 +96,56 @@ describe('autoUpdaterService update feed override', () => {
 
     expect(autoUpdater.setFeedURL).not.toHaveBeenCalled();
     expect(log.error).toHaveBeenCalledWith('Invalid TOMNY_UPDATE_FEED_URL:', expect.any(Error));
+  });
+
+  it('checks and downloads a newer release in the background without running an installer', async () => {
+    const { autoUpdater, autoUpdaterService } = await importService(undefined);
+    autoUpdater.checkForUpdates.mockResolvedValue({ isUpdateAvailable: true, updateInfo: { version: '2.0.0' } });
+    autoUpdater.downloadUpdate.mockResolvedValue(['Tomny-2.0.0.exe']);
+    autoUpdaterService.initialize();
+
+    await autoUpdaterService.checkForUpdatesAndDownload();
+
+    expect(autoUpdater.checkForUpdates).toHaveBeenCalledOnce();
+    expect(autoUpdater.downloadUpdate).toHaveBeenCalledOnce();
+    expect(autoUpdater.quitAndInstall).not.toHaveBeenCalled();
+  });
+
+  it('does not download when there is no newer release', async () => {
+    const { autoUpdater, autoUpdaterService } = await importService(undefined);
+    autoUpdater.checkForUpdates.mockResolvedValue({ isUpdateAvailable: false });
+    autoUpdaterService.initialize();
+
+    await autoUpdaterService.checkForUpdatesAndDownload();
+
+    expect(autoUpdater.downloadUpdate).not.toHaveBeenCalled();
+  });
+
+  it('never exits to install before the verified download finishes', async () => {
+    const { autoUpdater, autoUpdaterService, app } = await importService(undefined);
+    autoUpdaterService.initialize();
+
+    expect(() => autoUpdaterService.quitAndInstall()).toThrow('Update installer is not downloaded yet.');
+    expect(app.quit).not.toHaveBeenCalled();
+    expect(autoUpdater.quitAndInstall).not.toHaveBeenCalled();
+  });
+
+  it('installs silently after shared cleanup without scheduling a Windows hard exit', async () => {
+    const { autoUpdater, autoUpdaterService, app } = await importService(undefined);
+    const platform = vi.spyOn(process, 'platform', 'get').mockReturnValue('win32');
+    const timeout = vi.spyOn(globalThis, 'setTimeout');
+    autoUpdaterService.initialize();
+    autoUpdaterService.triggerEventForTest('update-downloaded', { version: '2.0.0' });
+
+    autoUpdaterService.quitAndInstall();
+    expect(app.quit).toHaveBeenCalledOnce();
+    expect(autoUpdater.quitAndInstall).not.toHaveBeenCalled();
+
+    const { completeAppTermination } = await import('@process/startup/appTermination');
+    completeAppTermination();
+    expect(autoUpdater.quitAndInstall).toHaveBeenCalledWith(true, true);
+    expect(timeout).not.toHaveBeenCalled();
+    platform.mockRestore();
+    timeout.mockRestore();
   });
 });

@@ -72,7 +72,7 @@ export type UseCompanyPipeline = {
 // ---------------------------------------------------------------------------
 
 /** sessionStorage key holding the per-company pipeline snapshot (reload survival). */
-const PIPELINE_SNAPSHOT_KEY = 'github.com/VNDT1625/OmniAgentpany.pipeline.snapshots';
+const PIPELINE_SNAPSHOT_KEY = 'tomny.company.pipeline.snapshots';
 
 /**
  * sessionStorage key holding the per-company run INPUT (goal + structure + rules
@@ -81,7 +81,7 @@ const PIPELINE_SNAPSHOT_KEY = 'github.com/VNDT1625/OmniAgentpany.pipeline.snapsh
  * never asked it to stop, so we resume without prompting. (The renderer-driven
  * loop cannot resume mid-flight, so "resume" means re-running the same goal.)
  */
-const PIPELINE_INPUT_KEY = 'github.com/VNDT1625/OmniAgentpany.pipeline.inputs';
+const PIPELINE_INPUT_KEY = 'tomny.company.pipeline.inputs';
 
 /** Persisted snapshot map: company id → last snapshot. */
 type PersistMap = Record<string, PipelineSnapshot>;
@@ -166,6 +166,24 @@ type PipelineSession = {
 /** Live sessions, keyed by company id. Outlives component mounts. */
 const sessions = new Map<string, PipelineSession>();
 
+/** Listeners told when a run is added or any run's snapshot changes (sidebar live-session reporting). */
+const runListeners = new Set<() => void>();
+const notifyRuns = (): void => {
+  for (const listener of runListeners) listener();
+};
+
+/** Snapshot of every company run this renderer holds. */
+export const listCompanyRuns = (): { companyId: string; snapshot: PipelineSnapshot }[] =>
+  [...sessions].map(([companyId, session]) => ({ companyId, snapshot: session.store.getSnapshot() }));
+
+/** Subscribe to changes in {@link listCompanyRuns}; returns an unsubscribe function. */
+export const subscribeCompanyRuns = (listener: () => void): (() => void) => {
+  runListeners.add(listener);
+  return () => {
+    runListeners.delete(listener);
+  };
+};
+
 /**
  * Restore a persisted snapshot for a fresh module load (renderer reload). The
  * renderer-driven run cannot survive a hard reload, so a snapshot still marked
@@ -204,7 +222,9 @@ const getSession = (companyId: string): PipelineSession => {
       clearInput(companyId);
     }
   });
+  store.subscribe(notifyRuns);
   sessions.set(companyId, session);
+  notifyRuns();
 
   // AUTO-RESUME: a run interrupted by a renderer reload (F5) is restarted from
   // its goal — the user never asked it to stop. We only resume when the saved

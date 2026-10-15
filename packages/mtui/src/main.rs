@@ -19,12 +19,15 @@ mod suggest;
 mod tasks;
 mod understand;
 mod undo;
+mod workspace_metadata;
 
 use clap::Parser;
 use cli::{
     Commands, CompassQuery, ConflictQuery, EditOperation, ExpQuery, HistoryType, MapQuery,
-    MemoryQuery, PolicyQuery, PricingQuery, TasksQuery, UnderstandQuery, VerifyCommand,
+    MemoryQuery, PolicyQuery, PricingQuery, TasksQuery, UnderstandAction, UnderstandQuery,
+    VerifyCommand,
 };
+use error::MtuiError;
 use output::OutputMode;
 use std::io::Read;
 
@@ -65,7 +68,15 @@ fn main() {
     }
 }
 
+/// With `MTUI_TRACE_TIMING` set, prints how long each start-up phase took, to find slow commands.
+fn trace_phase(started: &std::time::Instant, label: &str) {
+    if std::env::var_os("MTUI_TRACE_TIMING").is_some() {
+        eprintln!("[mtui timing] {} +{}ms", label, started.elapsed().as_millis());
+    }
+}
+
 fn run(cli: cli::Cli, output_mode: OutputMode) -> Result<(), error::MtuiError> {
+    let started = std::time::Instant::now();
     let project_root = config::resolve_project_root().map_err(|e| error::MtuiError::Internal {
         message: format!("Failed to resolve project root: {}", e),
     })?;
@@ -74,7 +85,13 @@ fn run(cli: cli::Cli, output_mode: OutputMode) -> Result<(), error::MtuiError> {
         message: format!("Failed to load config: {}", e),
     })?;
 
+    trace_phase(&started, "project root and config");
     config::ensure_config_dir(&project_root).ok();
+    trace_phase(&started, "config dir");
+    if !matches!(cli.command, Commands::Gc(_)) {
+        backup::gc::auto_gc_if_due(&project_root, &cfg);
+    }
+    trace_phase(&started, "auto gc check");
 
     match cli.command {
         Commands::New(args) => {
@@ -123,13 +140,62 @@ fn run(cli: cli::Cli, output_mode: OutputMode) -> Result<(), error::MtuiError> {
             }
         }
 
+        Commands::EditMany(many_args) => {
+            let raw = match (&many_args.spec, many_args.stdin) {
+                (Some(path), false) => std::fs::read_to_string(path).map_err(|e| MtuiError::InvalidArgument {
+                    message: format!("Cannot read edit spec {}: {}", path, e),
+                    suggestion: "Pass an existing JSON file with --spec".to_string(),
+                })?,
+                (None, true) => {
+                    let mut text = String::new();
+                    std::io::Read::read_to_string(&mut std::io::stdin(), &mut text).map_err(|e| {
+                        MtuiError::InvalidArgument {
+                            message: format!("Cannot read edits from stdin: {}", e),
+                            suggestion: "Pipe a JSON array of {file, edits}".to_string(),
+                        }
+                    })?;
+                    text
+                }
+                _ => {
+                    return Err(MtuiError::InvalidArgument {
+                        message: "Give the edits with exactly one of --spec FILE or --stdin".to_string(),
+                        suggestion: "Example: mtui edit-many --spec edits.json".to_string(),
+                    });
+                }
+            };
+            let files: Vec<ops::FileEdits> = serde_json::from_str(raw.trim_start_matches('\u{feff}')).map_err(|e| {
+                MtuiError::InvalidArgument {
+                    message: format!("Edits are not a JSON array of {{file, edits}}: {}", e),
+                    suggestion: "Example: [{\"file\":\"a.ts\",\"edits\":[{\"old\":\"x\",\"new\":\"y\"}]}]".to_string(),
+                }
+            })?;
+            let result = ops::replace_files(&project_root, &files, many_args.dry_run, &cfg)?;
+
+            match output_mode {
+                OutputMode::Json => output::print_json(&output::SuccessResponse::new(&result)),
+                OutputMode::Human => {
+                    if result.dry_run || !result.changed {
+                        println!("Would edit {} files", result.file_count);
+                    } else {
+                        println!("Edited {} files", result.file_count);
+                        println!("Undo all: mtui undo --group {}", result.group_id);
+                    }
+                    for file in &result.files {
+                        println!("{}  matches={}  {}", file.file, file.matches, file.diff_summary);
+                    }
+                }
+            }
+        }
+
         Commands::Edit(args) => match args.operation {
             EditOperation::Replace(replace_args) => {
+                let old_text = resolve_edit_text(replace_args.old.as_deref(), replace_args.old_file.as_deref(), "old")?;
+                let new_text = resolve_edit_text(replace_args.new.as_deref(), replace_args.new_file.as_deref(), "new")?;
                 let result = ops::replace_text(
                     &project_root,
                     std::path::Path::new(&args.file),
-                    &replace_args.old,
-                    &replace_args.new,
+                    &old_text,
+                    &new_text,
                     replace_args.all,
                     replace_args.dry_run,
                     replace_args.expect_hash.as_deref(),
@@ -170,6 +236,90 @@ fn run(cli: cli::Cli, output_mode: OutputMode) -> Result<(), error::MtuiError> {
                         println!("Matches: {:?}", result.matches);
                         println!("Diff: {}", result.diff_summary);
                         println!("Undo: mtui undo --operation {}", result.operation_id);
+                    }
+                }
+            }
+
+            EditOperation::Regex(regex_args) => {
+                let result = ops::replace_regex(
+                    &project_root,
+                    std::path::Path::new(&args.file),
+                    &regex_args.pattern,
+                    &regex_args.replacement,
+                    regex_args.all,
+                    regex_args.dry_run,
+                    regex_args.expect_hash.as_deref(),
+                    regex_args.accept_stale.as_deref(),
+                    &cfg,
+                )?;
+
+                match output_mode {
+                    OutputMode::Json => output::print_json(&output::SuccessResponse::new(&result)),
+                    OutputMode::Human => {
+                        if regex_args.dry_run || !result.changed {
+                            println!("Would edit {}", result.file);
+                        } else {
+                            println!("Edited {}", result.file);
+                            println!("Undo: mtui undo --operation {}", result.operation_id);
+                        }
+                        println!("Operation: {}", result.operation);
+                        println!("Matches: {:?}", result.matches);
+                        println!("Diff: {}", result.diff_summary);
+                    }
+                }
+            }
+
+            EditOperation::ReplaceMany(many_args) => {
+                let raw = match (&many_args.spec, many_args.stdin) {
+                    (Some(path), false) => std::fs::read_to_string(path).map_err(|e| MtuiError::InvalidArgument {
+                        message: format!("Cannot read edit spec {}: {}", path, e),
+                        suggestion: "Pass an existing JSON file with --spec".to_string(),
+                    })?,
+                    (None, true) => {
+                        let mut text = String::new();
+                        std::io::Read::read_to_string(&mut std::io::stdin(), &mut text).map_err(|e| {
+                            MtuiError::InvalidArgument {
+                                message: format!("Cannot read edits from stdin: {}", e),
+                                suggestion: "Pipe a JSON array of edits".to_string(),
+                            }
+                        })?;
+                        text
+                    }
+                    _ => {
+                        return Err(MtuiError::InvalidArgument {
+                            message: "Give the edits with exactly one of --spec FILE or --stdin".to_string(),
+                            suggestion: "Example: mtui edit FILE replace-many --spec edits.json".to_string(),
+                        }
+                        .into());
+                    }
+                };
+                let edits: Vec<ops::ReplaceEdit> =
+                    serde_json::from_str(raw.trim_start_matches('\u{feff}')).map_err(|e| MtuiError::InvalidArgument {
+                        message: format!("Edits are not a JSON array of {{old,new,all?}}: {}", e),
+                        suggestion: "Example: [{\"old\":\"a\",\"new\":\"b\"}]".to_string(),
+                    })?;
+                let result = ops::replace_many(
+                    &project_root,
+                    std::path::Path::new(&args.file),
+                    &edits,
+                    many_args.dry_run,
+                    many_args.expect_hash.as_deref(),
+                    many_args.accept_stale.as_deref(),
+                    &cfg,
+                )?;
+
+                match output_mode {
+                    OutputMode::Json => output::print_json(&output::SuccessResponse::new(&result)),
+                    OutputMode::Human => {
+                        if many_args.dry_run || !result.changed {
+                            println!("Would edit {} ({} replacements)", result.file, edits.len());
+                        } else {
+                            println!("Edited {}", result.file);
+                            println!("Undo: mtui undo --operation {}", result.operation_id);
+                        }
+                        println!("Operation: {}", result.operation);
+                        println!("Matches: {:?}", result.matches);
+                        println!("Diff: {}", result.diff_summary);
                     }
                 }
             }
@@ -417,6 +567,45 @@ fn run(cli: cli::Cli, output_mode: OutputMode) -> Result<(), error::MtuiError> {
             let conn = history::open_db(&project_root).map_err(|e| error::MtuiError::Internal {
                 message: format!("Database error: {}", e),
             })?;
+
+            if let Some(group) = args.group.as_deref() {
+                let members = history::list_group_operations(&conn, group).map_err(|e| error::MtuiError::Internal {
+                    message: format!("Database error: {}", e),
+                })?;
+                if members.is_empty() {
+                    return Err(error::MtuiError::UndoNotAvailable {
+                        message: format!("No operations found for group {}", group),
+                        suggestion: "Use the group id printed by `mtui edit-many`".to_string(),
+                    });
+                }
+                // Newest first, so each file is restored on top of a state that still matches its backup.
+                let mut undone = Vec::new();
+                for member in &members {
+                    let result = undo::undo_operation(&project_root, member)?;
+                    record_undo(&conn, &project_root, &result);
+                    undone.push(result);
+                }
+                match output_mode {
+                    OutputMode::Json => {
+                        #[derive(serde::Serialize)]
+                        struct GroupUndo<'a> {
+                            group: &'a str,
+                            undone: &'a [undo::UndoResult],
+                        }
+                        output::print_json(&output::SuccessResponse::new(&GroupUndo {
+                            group,
+                            undone: &undone,
+                        }));
+                    }
+                    OutputMode::Human => {
+                        println!("Undone group {} ({} files)", group, undone.len());
+                        for result in &undone {
+                            println!("Restored: {}", result.file);
+                        }
+                    }
+                }
+                return Ok(());
+            }
 
             let operation = if args.last || args.operation.is_none() {
                 history::get_last_operation(&conn).map_err(|e| error::MtuiError::Internal {
@@ -851,7 +1040,7 @@ fn run(cli: cli::Cli, output_mode: OutputMode) -> Result<(), error::MtuiError> {
                     output::print_json(&output::SuccessResponse::new(&result));
                 }
                 OutputMode::Human => {
-                    println!("Spec: .tomny/specs/{}/", result.spec);
+                    println!("Spec: .tomni/specs/{}/", result.spec);
                     println!(
                         "Tasks: {}/{} done, {} pending, {} active, {} blocked",
                         result.counts.done,
@@ -1169,6 +1358,55 @@ fn run(cli: cli::Cli, output_mode: OutputMode) -> Result<(), error::MtuiError> {
             }
         }
 
+        Commands::Understand(args) => match args.action {
+            UnderstandAction::Build(build_args) => {
+                let result = understand::build::build(
+                    &project_root,
+                    &understand::build::BuildOptions {
+                        full: build_args.full,
+                        max_files: build_args.max_files,
+                        ignore_patterns: cfg.ignore.patterns.clone(),
+                    },
+                )?;
+                match output_mode {
+                    OutputMode::Json => output::print_json(&output::SuccessResponse::new(&result)),
+                    OutputMode::Human => {
+                        println!(
+                            "Understand {} ({}): {} files, {} modules, {} edges ({} added, {} changed, {} removed, {} summaries preserved){}",
+                            result.mode,
+                            result.kind,
+                            result.file_count,
+                            result.module_count,
+                            result.edge_count,
+                            result.added_count,
+                            result.changed_count,
+                            result.removed_count,
+                            result.preserved_summary_count,
+                            if result.truncated { " (truncated)" } else { "" }
+                        );
+                        println!("cache: {}", result.path);
+                    }
+                }
+            }
+            UnderstandAction::Status => {
+                let result = understand::build::status(&project_root);
+                match output_mode {
+                    OutputMode::Json => output::print_json(&output::SuccessResponse::new(&result)),
+                    OutputMode::Human => {
+                        println!(
+                            "exists: {}, files: {}, modules: {}, edges: {}, stale paths: {}",
+                            result.exists,
+                            result.file_count,
+                            result.module_count,
+                            result.edge_count,
+                            result.stale_marker_paths
+                        );
+                        println!("{}", result.recommendation);
+                    }
+                }
+            }
+        },
+
         Commands::Analyze(args) => {
             let is_type = args.target.as_deref() == Some("type");
             if is_type {
@@ -1243,6 +1481,28 @@ fn run(cli: cli::Cli, output_mode: OutputMode) -> Result<(), error::MtuiError> {
                 }
             }
         }
+
+        Commands::Glob(args) => {
+            let result = ops::glob_files(
+                &project_root,
+                std::path::Path::new(&args.dir),
+                &args.pattern,
+                args.limit,
+                &cfg,
+            )?;
+            match output_mode {
+                OutputMode::Json => output::print_json(&output::SuccessResponse::new(&result)),
+                OutputMode::Human => {
+                    for file in &result.files {
+                        println!("{file}");
+                    }
+                    if result.truncated {
+                        println!("... truncated at {} files", result.limit);
+                    }
+                }
+            }
+        }
+
 
         Commands::Stats(args) => {
             let target =
@@ -1618,6 +1878,12 @@ fn run(cli: cli::Cli, output_mode: OutputMode) -> Result<(), error::MtuiError> {
                         println!("  Potential space to free: {:.2} MB", result.freed_bytes as f64 / 1_048_576.0);
                         println!("  Directories to remove: {}", result.deleted_dirs);
                         println!("  Files to remove: {}", result.deleted_files);
+                        println!(
+                            "  Old diffs / verify logs to remove: {} / {} ({:.2} MB)",
+                            result.diff_files_removed,
+                            result.verify_logs_removed,
+                            result.aux_freed_bytes as f64 / 1_048_576.0
+                        );
                     } else {
                         println!("MTUI GC completed:");
                         println!("  Space freed: {:.2} MB", result.freed_bytes as f64 / 1_048_576.0);
@@ -1625,6 +1891,12 @@ fn run(cli: cli::Cli, output_mode: OutputMode) -> Result<(), error::MtuiError> {
                         println!("  Directories removed: {}", result.deleted_dirs);
                         println!("  Files removed: {}", result.deleted_files);
                         println!("  Remaining files: {}", result.remaining_files);
+                        println!(
+                            "  Old diffs / verify logs removed: {} / {} ({:.2} MB)",
+                            result.diff_files_removed,
+                            result.verify_logs_removed,
+                            result.aux_freed_bytes as f64 / 1_048_576.0
+                        );
                     }
                 }
             }
@@ -1632,6 +1904,52 @@ fn run(cli: cli::Cli, output_mode: OutputMode) -> Result<(), error::MtuiError> {
     }
 
     Ok(())
+}
+
+/// The old or new text of `edit replace`, either inline or read exactly as written from a file.
+fn resolve_edit_text(
+    inline: Option<&str>,
+    file: Option<&str>,
+    name: &str,
+) -> Result<String, error::MtuiError> {
+    match (inline, file) {
+        (Some(text), None) => Ok(text.to_string()),
+        (None, Some(path)) => std::fs::read_to_string(path).map_err(|e| error::MtuiError::InvalidArgument {
+            message: format!("Cannot read the {} text from {}: {}", name, path, e),
+            suggestion: format!("Pass an existing UTF-8 file with --{}-file", name),
+        }),
+        (Some(_), Some(_)) => Err(error::MtuiError::InvalidArgument {
+            message: format!("The {} text was given twice", name),
+            suggestion: format!("Use either the positional {} text or --{}-file, not both", name, name),
+        }),
+        (None, None) => Err(error::MtuiError::InvalidArgument {
+            message: format!("The {} text is missing", name),
+            suggestion: format!("Pass the {} text, or --{}-file PATH", name, name),
+        }),
+    }
+}
+
+/// Records an undo in the history, the same way a single `undo` does.
+fn record_undo(conn: &rusqlite::Connection, project_root: &std::path::Path, result: &undo::UndoResult) {
+    let short_id = &uuid::Uuid::new_v4().to_string()[..8];
+    let record = history::OperationRecord {
+        operation_id: format!("undo_{}", short_id),
+        command: "undo".to_string(),
+        operation_type: "undo".to_string(),
+        cwd: std::env::current_dir().unwrap_or_default().display().to_string(),
+        project_path: project_root.display().to_string(),
+        file_path: Some(result.file.clone()),
+        before_hash: None,
+        after_hash: None,
+        backup_path: None,
+        diff_path: None,
+        changed: true,
+        created_at: chrono::Utc::now().to_rfc3339(),
+        agent_id: std::env::var("MTUI_AGENT_ID").ok(),
+        task_id: std::env::var("MTUI_TASK_ID").ok(),
+        plan_id: std::env::var("MTUI_PLAN_ID").ok(),
+    };
+    history::record_operation(conn, &record).ok();
 }
 
 fn resolve_new_content(args: &cli::NewArgs) -> Result<String, error::MtuiError> {

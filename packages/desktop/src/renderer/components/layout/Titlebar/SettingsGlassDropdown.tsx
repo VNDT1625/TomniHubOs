@@ -4,15 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useCallback, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Popover, Tooltip } from '@arco-design/web-react';
-import { Down, Gift, Logout, Moon, Pic, Robot, SettingTwo, Shield, SunOne, User } from '@icon-park/react';
+import { Down, Gift, Home, Logout, Moon, Pic, Robot, SettingTwo, Shield, SunOne, User } from '@icon-park/react';
 import { useAuth } from '@/renderer/hooks/context/AuthContext';
 import { useThemeContext } from '@/renderer/hooks/context/ThemeContext';
 import { changeLanguage } from '@/renderer/services/i18n';
-import '@/renderer/styles/glassmorphism.css';
+import { fetchTomProfile, isSupabaseConfigured } from '@/renderer/services/supabaseAuth';
 
 const LANGUAGE_OPTIONS = [
   { code: 'vi-VN', shortLabel: 'VI', label: 'Tiếng Việt' },
@@ -21,9 +21,20 @@ const LANGUAGE_OPTIONS = [
   { code: 'ja-JP', shortLabel: '日', label: '日本語' },
 ] as const;
 
-export const SettingsGlassDropdown: React.FC = () => {
+type SettingsGlassDropdownProps = {
+  /** 'home' = v3 avatar menu: profile, credit, language, theme, settings. */
+  variant?: 'default' | 'home';
+};
+
+export const SettingsGlassDropdown: React.FC<SettingsGlassDropdownProps> = ({ variant = 'default' }) => {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const isSettingsRoute = pathname.startsWith('/settings');
+  const contextActionPath = isSettingsRoute ? '/guid' : '/settings/model';
+  const contextActionLabel = isSettingsRoute
+    ? t('common.home', { defaultValue: 'Trang chủ' })
+    : t('guid.hubHome.account.settings', { defaultValue: 'Cài đặt' });
   const { user, logout } = useAuth();
   const { theme, setTheme } = useThemeContext();
 
@@ -32,7 +43,7 @@ export const SettingsGlassDropdown: React.FC = () => {
   }, [setTheme, theme]);
 
   const accountName = useMemo(() => {
-    return user?.username || 'Tomni User';
+  return user?.username || 'Tomny User';
   }, [user]);
 
   const accountInitials = useMemo(() => {
@@ -57,6 +68,79 @@ export const SettingsGlassDropdown: React.FC = () => {
     await logout();
     void navigate('/login', { replace: true });
   }, [logout, navigate]);
+
+  const [credit, setCredit] = useState<number | null>(null);
+  useEffect(() => {
+    if (variant !== 'home' || !user?.id || !isSupabaseConfigured()) return undefined;
+    const controller = new AbortController();
+    void fetchTomProfile(user.id, undefined, { signal: controller.signal, timeoutMs: 5000 })
+      .then((profile) => setCredit(profile?.balance_tom ?? null))
+      .catch(() => setCredit(null));
+    return () => controller.abort();
+  }, [user?.id, variant]);
+
+  const homeContent = (
+    <div className='hub-account-menu'>
+      <div className='hub-account-head'>
+        <span className='hub-account-avatar hub-account-avatar--lg'>{accountInitials}</span>
+        <div className='hub-account-meta'>
+          <b title={accountName}>{accountName}</b>
+          <span className='hub-account-tier'>{t('guid.hubHome.account.member', { defaultValue: 'MEMBER' })}</span>
+        </div>
+      </div>
+      <div className='hub-account-credit'>
+        <span>{t('guid.hubHome.account.credit', { defaultValue: 'Số dư TOM' })}</span>
+        <b>
+          {credit === null
+            ? '—'
+            : credit.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
+        </b>
+      </div>
+      <div className='hub-account-sep' />
+      <div className='hub-account-row'>
+        <span>{t('guid.hubHome.account.language', { defaultValue: 'Ngôn ngữ' })}</span>
+        <span className='hub-account-seg'>
+          {LANGUAGE_OPTIONS.map((opt) => (
+            <button
+              key={opt.code}
+              type='button'
+              title={opt.label}
+              className={i18n.language === opt.code ? 'hub-on' : ''}
+              onClick={() => void changeLanguage(opt.code)}
+            >
+              {opt.shortLabel}
+            </button>
+          ))}
+        </span>
+      </div>
+      <div className='hub-account-row'>
+        <span>{t('guid.hubHome.account.theme', { defaultValue: 'Giao diện' })}</span>
+        <span className='hub-account-seg'>
+          <button type='button' className={theme === 'dark' ? 'hub-on' : ''} onClick={() => void setTheme('dark')}>
+            <Moon theme='outline' size={12} fill='currentColor' />
+            {t('guid.hubHome.account.dark', { defaultValue: 'Tối' })}
+          </button>
+          <button type='button' className={theme === 'light' ? 'hub-on' : ''} onClick={() => void setTheme('light')}>
+            <SunOne theme='outline' size={12} fill='currentColor' />
+            {t('guid.hubHome.account.light', { defaultValue: 'Sáng' })}
+          </button>
+        </span>
+      </div>
+      <div className='hub-account-sep' />
+      <button type='button' className='hub-account-item' onClick={() => handleNavigate(contextActionPath)}>
+        {isSettingsRoute ? (
+          <Home theme='outline' size={14} fill='currentColor' />
+        ) : (
+          <SettingTwo theme='outline' size={14} fill='currentColor' />
+        )}
+        {contextActionLabel}
+      </button>
+      <button type='button' className='hub-account-item' onClick={handleLogout}>
+        <Logout theme='outline' size={14} fill='currentColor' />
+        {t('common.logout', { defaultValue: 'Đăng xuất' })}
+      </button>
+    </div>
+  );
 
   const popoverContent = (
     <div className='tomni-glass-panel' style={{ width: '280px', padding: '0 0 8px 0' }}>
@@ -91,12 +175,16 @@ export const SettingsGlassDropdown: React.FC = () => {
           <span className='text-10px px-4px py-1px rounded bg-blue-500/20 text-blue-400 font-semibold'>Account</span>
         </button>
 
-        <button type='button' className='tomni-glass-item' onClick={() => handleNavigate('/settings/model')}>
+        <button type='button' className='tomni-glass-item' onClick={() => handleNavigate(contextActionPath)}>
           <div className='tomni-glass-item-left'>
             <span className='tomni-glass-item-icon'>
-              <SettingTwo theme='outline' size={16} fill='currentColor' />
+              {isSettingsRoute ? (
+                <Home theme='outline' size={16} fill='currentColor' />
+              ) : (
+                <SettingTwo theme='outline' size={16} fill='currentColor' />
+              )}
             </span>
-            <span>Cài đặt hệ thống</span>
+            <span>{contextActionLabel}</span>
           </div>
         </button>
 
@@ -211,6 +299,21 @@ export const SettingsGlassDropdown: React.FC = () => {
       </div>
     </div>
   );
+
+  if (variant === 'home') {
+    return (
+      <Popover trigger='click' position='br' className='hub-account-popover' content={homeContent}>
+        <button
+          type='button'
+          className='hub-account-trigger app-titlebar__no-drag'
+          title={accountName}
+          aria-label={accountName}
+        >
+          <span className='hub-account-avatar'>{accountInitials}</span>
+        </button>
+      </Popover>
+    );
+  }
 
   return (
     <Popover trigger='click' position='br' className='tomni-glass-popover-content' content={popoverContent}>

@@ -5,6 +5,8 @@ import {
   BUILTIN_SLASH_ITEMS,
   BUILTIN_KNOWLEDGE_ITEMS,
   BUILTIN_PIPELINE_ITEMS,
+  packageCommandPaletteItems,
+  packageSlashCommands,
 } from '../../../packages/desktop/src/renderer/utils/chat/commandPalette';
 
 describe('commandPalette', () => {
@@ -85,6 +87,63 @@ describe('commandPalette', () => {
       const items = filterPaletteItems('#', 'mem');
       expect(items).toHaveLength(1);
       expect(items[0].key).toBe('memory');
+    });
+  });
+
+  describe('package commands', () => {
+    const commands = [
+      { name: 'triage', description: 'Triage an issue', packageId: 'com.community.kit', argumentHint: '[issue]' },
+      { name: 'kit:boost', description: 'Boost it', packageId: 'com.community.kit' },
+    ];
+
+    it('appear in the / palette with the package as badge, and are found by name', () => {
+      const items = filterPaletteItems('/', 'triage', packageCommandPaletteItems(commands));
+      expect(items).toHaveLength(1);
+      expect(items[0]).toMatchObject({
+        key: 'triage',
+        label: '/triage',
+        badge: 'com.community.kit',
+        insertText: '/triage ',
+        category: 'package',
+        description: 'Triage an issue ([issue])',
+      });
+    });
+
+    it('are found by their prefixed name and sit after the built-ins', () => {
+      const all = filterPaletteItems('/', '', packageCommandPaletteItems(commands));
+      expect(all.slice(0, BUILTIN_SLASH_ITEMS.length)).toEqual(BUILTIN_SLASH_ITEMS);
+      expect(filterPaletteItems('/', 'kit:b', packageCommandPaletteItems(commands)).map((i) => i.key)).toEqual([
+        'kit:boost',
+      ]);
+    });
+
+    it('never shadow a built-in word if one slips through', () => {
+      const items = filterPaletteItems(
+        '/',
+        'boost',
+        packageCommandPaletteItems([{ name: 'boost', description: 'Mine', packageId: 'p' }])
+      );
+      expect(items.filter((item) => item.key === 'boost')).toHaveLength(1);
+      expect(items.find((item) => item.key === 'boost')?.category).not.toBe('package');
+    });
+
+    it('map to slash-menu items of source package that are inserted, not run', () => {
+      expect(packageSlashCommands(commands)[0]).toEqual({
+        name: 'triage',
+        description: 'Triage an issue ([issue])',
+        kind: 'template',
+        source: 'package',
+        selectionBehavior: 'insert',
+        insertText: '/triage ',
+        hint: 'com.community.kit',
+        packageId: 'com.community.kit',
+        argumentHint: '[issue]',
+      });
+    });
+
+    it('keeps a prefixed name as one token while typing', () => {
+      const input = '/kit:bo';
+      expect(getActivePaletteQuery(input, input.length)).toMatchObject({ prefix: '/', query: 'kit:bo' });
     });
   });
 });

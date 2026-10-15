@@ -1,4 +1,52 @@
 {
+  "assistantAgentMd": "agent.md",
+  "assistantPluginTitle": "外掛",
+  "assistantPluginHint": "此助手在對話中使用的 MCP 伺服器與套件工具。",
+  "assistantPluginOther": "其他",
+  "assistantPluginEmpty": "尚未安裝外掛。",
+  "assistantItemOff": "關閉",
+  "assistantHookTitle": "掛鉤",
+  "assistantHookHint": "掛鉤僅在您已核准並啟用後執行。選取掛鉤不會核准它。",
+  "assistantHookInactive": "未啟用",
+  "assistantHookNeedsApproval": "需要核准",
+  "assistantHookEmpty": "尚未設定掛鉤。",
+  "assistantBundleExport": "匯出",
+  "assistantBundleImport": "匯入",
+  "assistantBundleExportFailed": "匯出失敗（{{code}}）。",
+  "assistantBundleImportFailed": "匯入失敗（{{code}}）。",
+  "assistantBundleImported": "已載入助手，請檢查後儲存。",
+  
+"assistantPromptsTitle": "範例提示",
+  "assistantPromptPlaceholder": "範例提示",
+  "assistantPromptAdd": "新增提示",
+  "assistantPromptRemove": "刪除提示",
+  "assistantPromptsLimit": "最多 {{count}} 條範例提示。",
+  
+"backgroundSleep": {
+    "title": "背景休眠與服務",
+    "refresh": "重新整理",
+    "explainer": "關閉至系統匣會暫停媒體；執行中的工作繼續，獨立服務由各自設定管理。",
+    "agents": "Agent 工作",
+    "agentsDesc": "在背景完成工作，閒置控制器自動休眠。",
+    "automatic": "自動",
+    "mcp": "MCP 工具閘道",
+    "mcpDesc": "Tomni 在系統匣時維持執行，遠端存取另行設定。",
+    "webui": "WebUI",
+    "webuiDesc": "僅在明確啟用時執行。請至 WebUI 設定管理存取與初始密碼。",
+    "notifications": "桌面通知",
+    "notificationsDesc": "Tomni 隱藏時仍接收工作完成通知。",
+    "scheduler": "排程工作",
+    "schedulerDesc": "Tomni 留在系統匣時於桌面程序執行。",
+    "unknown": "未知",
+    "running": "執行中 · 設定",
+    "configure": "設定",
+    "metricsTitle": "Electron 資源測量",
+        "cpuChange": "休眠前後的 CPU",
+    "ramChange":  "休眠後工作集變化",
+    "currentRam": "目前工作集總和",
+    "notMeasured": "等待完整休眠測量",
+    "metricsDisclaimer": "Electron 程序工作集加總，不等於實際獨佔 RAM，亦不含獨立 sidecar。"
+  },
   "personalSecrets": {
     "allowedHostnamesLabel": "允許的瀏覽器主機名稱",
     "allowedHostnamesPlaceholder": "example.com",
@@ -6,6 +54,13 @@
     "allowedHostnamesInvalid": "請輸入 1–20 個唯一且精確的主機名稱，不要包含通訊協定、路徑、連接埠或萬用字元。",
     "allowedHostnamesTagLabel": "允許的主機",
     "legacyTargetsMissing": "未設定允許的主機 — 編輯前保持封鎖",
+    "destinationsLabel": "允許輸入的位置",
+    "destinationsDescription": "選擇應用程式可以在哪裡輸入此密鑰組。只有選擇網頁表單時才需要主機名稱。",
+    "destinationBrowser": "網頁表單",
+    "destinationTerminal": "終端機",
+    "destinationProcess": "程序 / 部署",
+    "destinationsRequired": "請至少選擇一個可使用此密鑰組的位置。",
+    "destinationsTagLabel": "使用位置",
     "nameRequired": "請輸入密鑰組名稱。",
     "variablesInvalid": "每個變數都需要有效且不重複的名稱和值。",
     "createdSuccess": "密鑰組已建立。",
@@ -367,7 +422,7 @@
     "accessKeyId": "Access Key ID",
     "secretAccessKey": "Secret Access Key",
     "profile": "AWS Profile",
-    "profileHint": "Profile name from ~/.aws/config (e.g., \u0027default\u0027)",
+    "profileHint": "Profile name from ~/.aws/config (e.g., 'default')",
     "testConnection": "Test Connection",
     "connectionSuccess": "Connection successful! AWS credentials are valid.",
     "connectionFailed": "Connection failed. Please check your credentials.",
@@ -381,6 +436,26 @@
   "fontSize": "介面縮放",
   "fontSizeDescription": "調整應用的整體縮放比例（Zoom），讓所有元素更符合閱讀習慣。",
   "fontSizeReset": "恢復預設縮放",
+  "markdownColors": {
+    "label": "文字顏色",
+    "description": "聊天訊息中標題、粗體、連結、檔案路徑、行內程式碼與引用的顏色。變更會立即套用，且只儲存在這台裝置上。",
+    "resetAll": "全部重設",
+    "resetToken": "重設",
+    "previewLabel": "預覽",
+    "previewBody": "內文包含",
+    "tokens": {
+      "h1": "標題 1",
+      "h2": "標題 2",
+      "h3": "標題 3",
+      "text": "內文",
+      "bold": "粗體",
+      "link": "連結",
+      "path": "檔案路徑",
+      "codeFg": "行內程式碼文字",
+      "codeBg": "行內程式碼背景",
+      "quote": "引用"
+    }
+  },
   "lightMode": "淺色",
   "darkMode": "深色",
   "devConsole": {
@@ -403,7 +478,222 @@
   "agent": "代理",
   "tools": "工具",
   "capabilities": "能力擴展",
+  "hooks": {
+    "title": "鉤子",
+    "description": "鉤子是在對話中發生事件時執行的小程式。它們只能攔截或加上備註，永遠不能授予權限。每個鉤子都需要你核准，並與其確切內容綁定。",
+    "unavailable": "此視窗中無法使用鉤子。",
+    "dismiss": "關閉提示",
+    "loading": "正在載入鉤子…",
+    "refresh": "重新整理",
+    "runAll": "執行鉤子",
+    "allOffNote": "所有鉤子均已關閉。下方內容即使已核准也不會執行。",
+    "sourceSwitch": "執行此來源的鉤子",
+    "source": {
+      "package": "來自套件",
+      "user": "你自己的",
+      "workspace": "來自工作區"
+    },
+    "sourceHint": {
+      "package": "已安裝的套件可以附帶鉤子。它們以「程式加參數」的方式執行，絕不經過 shell。",
+      "user": "你自己新增的鉤子。在你核准之前保持關閉。",
+      "workspace": "來自專案 .claude/settings.json 的鉤子。在你允許該工作區並逐一核准之前保持關閉。"
+    },
+    "sourceEmpty": "這裡沒有鉤子。",
+    "status": {
+      "ready": "已開啟",
+      "needs-approval": "需要核准",
+      "needs-consent": "工作區未獲允許",
+      "stale": "已變更，已關閉",
+      "disabled": "已關閉",
+      "unsupported": "不支援",
+      "forbidden": "不允許"
+    },
+    "statusHint": {
+      "needs-approval": "先閱讀它將執行的內容，再核准。",
+      "needs-consent": "請先為此工作區允許鉤子。",
+      "stale": "命令或其指令碼在你核准後發生了變化，因此已被關閉。請重新檢視。",
+      "disabled": "已核准，但你已將其關閉。",
+      "unsupported": "尚不支援此事件，因此永遠不會執行。",
+      "forbidden": "套件鉤子必須是「程式加參數」，不能是 shell 命令列。"
+    },
+    "inactiveBySwitch": "上方的某個開關已關閉，因此這個鉤子不會執行。",
+    "row": {
+      "event": "事件",
+      "matcher": "比對器",
+      "matchAll": "全部",
+      "timeout": "時間限制",
+      "seconds": "{{count}} 秒",
+      "command": "確切命令",
+      "runsExec": "直接執行程式「{{program}}」，帶 {{count}} 個參數。不經過 shell。",
+      "runsShell": "透過你的 shell 執行這一行。shell 可以執行任何內容，請仔細閱讀。",
+      "form": {
+        "exec": "程式",
+        "shell": "Shell 命令列"
+      },
+      "approvedAt": "核准於 {{time}}"
+    },
+    "action": {
+      "review": "檢視並核准",
+      "reapprove": "重新檢視",
+      "enable": "開啟",
+      "disable": "關閉",
+      "remove": "移除"
+    },
+    "dialog": {
+      "title": "核準此鉤子？",
+      "intro": "核准後，每當其事件發生時，它都會在你的電腦上執行。它只能攔截或加上備註，永遠不能授予權限。",
+      "hashNote": "你的核准與這一確切內容綁定。如果命令或指令碼發生變化，它會被關閉，直到你再次核准。",
+      "approve": "核准",
+      "cancel": "取消",
+      "loading": "正在讀取它將執行的內容…"
+    },
+    "line": {
+      "source": "來源",
+      "plugin": "套件",
+      "event": "事件",
+      "matcher": "比對器",
+      "form": "類型",
+      "command": "命令",
+      "args": "參數",
+      "timeout": "時間限制（秒）",
+      "file": "納入核准的指令碼檔案",
+      "unpinned": "未納入核准",
+      "network": "網路"
+    },
+    "networkUnrestricted": "此版本不限制網路：指令碼可以使用網路。",
+    "confirmTitle": "核准鉤子",
+    "confirmApprove": "此鉤子將在其事件發生時在你的電腦上執行。要核准嗎？",
+    "coverage": {
+      "title": "工具鉤子能攔截什麼",
+      "summary": "工具鉤子只有對 Tomny 代理才能攔截所有工具。透過 ACP 連接的代理僅在其請求權限時（詢問模式）才受涵蓋。Codex 從不向 Tomny 請求權限，因此工具鉤子無法攔截它。",
+      "ownHooks": "有些代理還會執行其自身設定中的鉤子，Tomny 無法控制它們。",
+      "agent": {
+        "tomny": "Tomny 代理",
+        "acpAsk": "ACP 代理（詢問模式）",
+        "acpAuto": "ACP 代理（其他模式）",
+        "codex": "Codex",
+        "remote": "遠端代理"
+      },
+      "preLabel": "工具執行前",
+      "postLabel": "工具執行後",
+      "pre": {
+        "all-tools": "可攔截所有工具",
+        "permission-requests-only": "只能攔截請求權限的工具",
+        "none": "無法攔截工具"
+      },
+      "post": {
+        "result-text": "可看到工具結果",
+        "metadata-only": "只能看到工具已執行",
+        "none": "不執行"
+      }
+    },
+    "audit": {
+      "title": "最近的執行",
+      "empty": "尚未執行過鉤子。",
+      "note": "僅保留長度和代碼，從不儲存輸入或輸出。",
+      "col": {
+        "time": "時間",
+        "event": "事件",
+        "source": "來源",
+        "hook": "鉤子",
+        "decision": "決定",
+        "exit": "結束碼",
+        "duration": "時長",
+        "result": "結果"
+      },
+      "decision": {
+        "deny": "拒絕了工具",
+        "ask": "詢問了你",
+        "block": "已攔截",
+        "stop": "停止了本輪",
+        "none": "無決定"
+      },
+      "timedOut": "已逾時",
+      "stale": "核准後發生變化；已關閉",
+      "ok": "已完成"
+    },
+    "create": {
+      "title": "新增你自己的鉤子",
+      "event": "事件",
+      "matcher": "比對器（選填）",
+      "matcherHint": "用於工具事件的工具名稱模式。留空表示所有工具。",
+      "command": "程式或命令列",
+      "args": "參數，每行一個",
+      "argsHint": "留空則透過 shell 執行該行，而不是作為程式執行。",
+      "timeout": "時間限制（秒）",
+      "submit": "新增鉤子",
+      "note": "新鉤子在你檢視並核准之前保持關閉。"
+    },
+    "done": {
+      "approved": "鉤子已核准並開啟。",
+      "created": "鉤子已新增。請檢視後核准。",
+      "removed": "鉤子已移除。"
+    },
+    "error": {
+      "DENIED": "此視窗無權變更鉤子。",
+      "INVALID_REQUEST": "該鉤子定義無效。",
+      "NOT_FOUND": "該鉤子已不存在，清單已重新整理。",
+      "CANCELLED": "已取消核准，未做任何變更。",
+      "UNAVAILABLE": "鉤子目前無法使用。",
+      "UNSUPPORTED": "尚不支援此事件。",
+      "FORBIDDEN": "無法開啟或移除此鉤子。",
+      "NEEDS_CONSENT": "請先為此工作區允許鉤子。",
+      "HASH_MISMATCH": "自你閱讀後該鉤子已發生變化，請重新檢視。",
+      "APPROVAL_REQUIRED": "必須先重新核准此鉤子。",
+      "IO_ERROR": "無法儲存變更，請重試。"
+    }
+  },
   "capabilitiesTab": {
+
+    "assistants": "助理",
+    "hooks": "Hook",
+    "plugins": "外掛",
+    "pluginsDescription": "為 Tomny 提供額外工具的 MCP 伺服器與已安裝的套件。",
+    "packagesTitle": "已安裝的套件",
+    "packagesEmpty": "尚未安裝套件。",
+    "externalTitle": "供外部應用程式使用 Tomny",
+    "externalDescription": "允許 Claude Desktop、Cursor 等應用程式透過 MCP 呼叫 Tomny。",
+    "removePlugin": "移除外掛",
+    "removeConfirmTitle": "刪除此項目？",
+    "removeConfirmContent": "將刪除「{{name}}」，且無法復原。",
+    "pluginBadge": "外掛",
+    "explainer": "外掛 = 一整套，可包含 MCP 伺服器、技能、Hook 和規則。MCP = 單一工具伺服器。工具 Schema = 傳送給模型的每個工具描述。",
+    "tipPlugin": "外掛 = 一整套，可包含 MCP 伺服器、技能、Hook 和規則。",
+    "tipMcp": "MCP = 單一工具伺服器。",
+    "tipToolSchema": "工具 Schema = 傳送給模型的每個工具描述。",
+    "typeMcp": "MCP",
+    "builtinTitle": "Tomny 內建",
+    "builtinHint": "Tomny 內建的工具伺服器。僅在可於此處變更的地方顯示開關。",
+    "builtinToolsCount": "{{count}} 個工具",
+    "builtinImageGenHint": "請在下方的圖像生成區段開啟或關閉。",
+    "builtinEmpty": "沒有內建工具伺服器。",
+    "builtinGroupOn": "已開啟",
+    "builtinGroupAvailable": "可用 / 未開啟",
+    "builtinGroupEmptyOn": "沒有已開啟的內建伺服器。",
+    "builtinGroupEmptyAvailable": "所有內建伺服器都已開啟。",
+    "builtinToggleAria": "切換 {{name}}",
+
+    "hubTabAvailable": "可用",
+    "hubTabInstalled": "已安裝",
+    "hubTabCustom": "自訂",
+    "hubSearchPlaceholder": "依名稱或描述搜尋",
+    "hubFilterAll": "全部",
+    "hubNoMatch": "沒有符合搜尋或篩選條件的項目。",
+    "hubEmptyCustom": "你還沒有自訂 MCP 伺服器，請在下方新增。",
+    "hubCustomHint": "你自己新增的 MCP 伺服器。屬於外掛的伺服器會顯示在「已安裝」中。",
+    "hubAutoStartCaption": "Tomny 開啟時會重新啟用，前提是授權仍然有效。",
+    "hubDetails": "詳情",
+    "hubCollapse": "收合",
+    "hubEnableAria": "開啟或關閉 {{name}}",
+    "statusOn": "已開啟",
+    "statusOff": "已關閉",
+    "userMcpTitle": "你的 MCP 伺服器",
+    "installedPluginsTitle": "已安裝的外掛",
+    "fromPluginSkills": "來自外掛：{{name}} · {{count}} 個技能",
+    "fromPluginHooks": "來自外掛：{{name}} · {{count}} 個 Hook",
+    "manageInPlugin": "在外掛中管理",
+    "pluginGroupNote": "隨外掛一起開啟或關閉，此項目沒有單獨的開關。",
+    "viewSkill": "檢視",
     "skills": "技能",
     "tools": "工具"
   },
@@ -939,7 +1229,7 @@
     "pluginEnabled": "Lark bot enabled",
     "pluginDisabled": "Lark bot disabled",
     "enableFailed": "Failed to enable Lark plugin",
-    "testAndConnect": "Test \u0026 Connect",
+    "testAndConnect": "Test & Connect",
     "credentialsSaved": "Credentials already configured. Enter new values to update.",
     "defaultModelDesc": "用於 Lark 對話的模型",
     "connectionStatus": "Connection Status",
@@ -1273,5 +1563,33 @@
       "confirmed": "偏好已確認。"
     }
   },
-  "personal": "個人"
+  "personal": "個人",
+  "notificationSettings": {
+    "sourcesHint": "傳送通知的郵件、訂閱源和網站在通知中心管理。",
+    "openCenter": "開啟通知中心",
+    "quietFrom": "從",
+    "quietTo": "到"
+  },
+  "pipelineSettings": {
+    "defaultChainTitle": "預設聊天管線",
+    "defaultChainDesc": "每則訊息在模型回答前後經過的步驟。",
+    "editDefault": "編輯預設管線",
+    "stageOn": "開啟",
+    "stageOff": "關閉",
+    "chainOff": "管線已關閉：訊息直接傳給模型。",
+    "loadFailed": "無法載入管線。",
+    "perConversationHint": "每個對話都可以用聊天框中的管線按鈕單獨修改，重新啟動後仍會保留。",
+    "plannedNotice": "下面的程式碼防護措施仍在規劃中，尚未接入聊天，因此無法開啟。"
+  },
+  "notActive": {
+    "title": "尚未啟用",
+    "aiConfig": "這些參數尚未傳送給模型，因此修改不會生效。",
+    "privacy": "這裡的開關目前不控制任何內容。密鑰遮蔽和外傳資料檢查一律開啟且無法關閉；YOLO 模式在每個對話中單獨選擇。",
+    "profile": "這裡只有登出真正可用。同步、拒絕用於訓練、匯出和清除歷史尚未接通，因此已關閉。",
+    "billing": "Tomny 尚未統計 token 或費用，因此不顯示方案、用量或支出上限。模型提供商會直接向你收費。"
+  },
+  "profileSettings": {
+    "noAccount": "未登入"
+  },
+  "mcpInAppNotice": "This list shows only MCP servers you connected or created from a repository. Tools built into TomniHubOS (tomny_*) are chosen by surface and are not MCP connectors."
 }

@@ -7,7 +7,15 @@
 import type { TabBounds } from '@/common/packages/browserHost';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { browserClient, type BrowserTabInfo } from './browserBridgeClient';
-import { consumeRequestedActiveTab, loadAgentModel, normalizeUrl, saveAgentModel } from './constants';
+import {
+  BROWSER_HOME_URL,
+  consumeRequestedActiveTab,
+  loadAgentModel,
+  normalizeUrl,
+  saveAgentModel,
+  subscribeActiveTabRequests,
+  subscribeTabsRefresh,
+} from './constants';
 
 /**
  * Connection status of the Main-process browser bridge.
@@ -118,6 +126,21 @@ export function useBrowserState(): UseBrowserState {
 
   const retry = useCallback(() => setProbeToken((n) => n + 1), []);
 
+  // The sidebar can open, close or focus tabs while this page is showing: reload the list and follow its focus.
+  useEffect(() => subscribeTabsRefresh(() => void refreshTabs()), [refreshTabs]);
+  useEffect(
+    () =>
+      subscribeActiveTabRequests((id) => {
+        void (async () => {
+          await refreshTabs();
+          if (!aliveRef.current) return;
+          setActiveTabId(id);
+          void browserClient.show({ id }).catch(() => {});
+        })();
+      }),
+    [refreshTabs]
+  );
+
   // Apply live URL/title changes pushed from the Main process (incl. in-page SPA
   // navigations like switching YouTube videos) so the address bar tracks the
   // page without polling. Patches the matching tab in place.
@@ -186,8 +209,9 @@ export function useBrowserState(): UseBrowserState {
   const openTab = useCallback(
     async (url?: string) => {
       try {
-        const target = url ? normalizeUrl(url) : undefined;
-        const result = await browserClient.openTab(target ? { url: target } : {});
+        // A tab opened without an address starts on the home page instead of staying blank.
+        const target = url ? normalizeUrl(url) : BROWSER_HOME_URL;
+        const result = await browserClient.openTab({ url: target });
         if (!aliveRef.current) return;
         setActiveTabId(result.id);
         await refreshTabs();
@@ -197,6 +221,15 @@ export function useBrowserState(): UseBrowserState {
     },
     [refreshTabs]
   );
+
+  // Opening the Browser app with nothing open goes straight to the home page. Decided once, when the first tab
+  // list arrives, so closing the last tab later does not fight the user.
+  const homeDecidedRef = useRef(false);
+  useEffect(() => {
+    if (status !== 'ready' || homeDecidedRef.current) return;
+    homeDecidedRef.current = true;
+    if (tabs.length === 0) void openTab();
+  }, [status, tabs, openTab]);
 
   const closeTab = useCallback(
     async (id: string) => {

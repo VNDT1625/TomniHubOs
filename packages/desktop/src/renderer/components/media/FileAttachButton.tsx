@@ -6,15 +6,36 @@
 
 import type { IConversationMcpStatus, IConversationMcpStatusKind } from '@/common/config/storage';
 import { ipcBridge } from '@/common';
+import { mcpService } from '@/common/adapter/ipcBridge';
 import { Button, Message, Trigger } from '@arco-design/web-react';
-import { FolderOpen, Lightning, Paperclip, Plus, Right, Shield } from '@icon-park/react';
+import { Down, FolderOpen, Lightning, Link, Paperclip, Plus, Right, Shield } from '@icon-park/react';
 import { useConversationContextSafe } from '@/renderer/hooks/context/ConversationContext';
 import { iconColors } from '@/renderer/styles/colors';
 import { isElectronDesktop } from '@/renderer/utils/platform';
 import { FileService } from '@/renderer/services/FileService';
 import type { FileMetadata } from '@/renderer/services/FileService';
+import { SkillDocumentModal } from '@/renderer/components/skills/SkillDocumentModal';
+import {
+  ATTACH_MENU_TRIGGER,
+  buildAttachMenuModel,
+  packageIdOfMcp,
+  pendingPluginEntries,
+  type AttachCategory,
+  type AttachMcpEntry,
+  type AttachPackageGroup,
+  type AttachSkillEntry,
+  type SkillViewerTarget,
+} from '@/renderer/components/media/attachMenu/attachMenuModel';
+import { MenuItem } from '@/renderer/components/media/attachMenu/AttachMenuItem';
+import { AutoSelectRow } from '@/renderer/components/media/attachMenu/AutoSelectRow';
+import { HookMenuList, useActiveHookRows } from '@/renderer/components/media/attachMenu/HookColumn';
+import { PluginGroup } from '@/renderer/components/media/attachMenu/PluginGroup';
+import {
+  useEnableInstalledPlugin,
+  useInstalledPlugins,
+} from '@/renderer/components/media/attachMenu/useInstalledPlugins';
 import { emitter } from '@/renderer/utils/emitter';
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import useSWR from 'swr';
@@ -24,32 +45,17 @@ interface FileAttachButtonProps {
   onLocalFilesAdded?: (files: FileMetadata[]) => void;
   loadedSkills?: string[];
   loadedMcpStatuses?: IConversationMcpStatus[];
+  /** Auto mode: when true the manual lists are hidden. The switch row renders only when the toggle is provided. */
+  autoSelect?: boolean;
+  onToggleAutoSelect?: () => void;
 }
 
-const MenuItem: React.FC<{
-  icon: React.ReactNode;
-  label: React.ReactNode;
-  description?: React.ReactNode;
-  suffix?: React.ReactNode;
-  onClick?: () => void;
-  className?: string;
-  title?: string;
-}> = ({ icon, label, description, suffix, onClick, className = '', title }) => (
-  <div
-    className={`flex items-center gap-10px px-12px py-9px rounded-8px cursor-pointer hover:bg-fill-2 transition-colors text-14px text-t-primary select-none ${className}`}
-    onClick={onClick}
-    title={title}
-  >
-    <span className='flex-shrink-0 inline-flex items-center justify-center color-#86909c w-18px leading-none'>
-      {icon}
-    </span>
-    <span className='min-w-0 flex-1'>
-      <span className='block leading-none'>{label}</span>
-      {description ? <span className='mt-4px block text-12px leading-16px text-t-secondary'>{description}</span> : null}
-    </span>
-    {suffix}
-  </div>
-);
+/** Shared attach-menu model; re-exported so existing imports of this module keep working. */
+export {
+  ATTACH_MENU_TRIGGER,
+  buildAttachMenuModel,
+  packageIdOfMcp,
+} from '@/renderer/components/media/attachMenu/attachMenuModel';
 
 const MCP_STATUS_CLASS_NAME: Record<IConversationMcpStatusKind, string> = {
   loaded: 'text-[var(--color-success-6)]',
@@ -77,6 +83,8 @@ const FileAttachButton: React.FC<FileAttachButtonProps> = ({
   onLocalFilesAdded,
   loadedSkills,
   loadedMcpStatuses,
+  autoSelect = false,
+  onToggleAutoSelect,
 }) => {
   const conversationContext = useConversationContextSafe();
   const { t } = useTranslation();
@@ -84,30 +92,90 @@ const FileAttachButton: React.FC<FileAttachButtonProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [open, setOpen] = useState(false);
-  const [skillsOpen, setSkillsOpen] = useState(false);
-  const [mcpOpen, setMcpOpen] = useState(false);
+  const [category, setCategory] = useState<AttachCategory | undefined>(undefined);
+  const [collapsedPackages, setCollapsedPackages] = useState<ReadonlySet<string>>(() => new Set());
+  const [viewer, setViewer] = useState<SkillViewerTarget | undefined>(undefined);
 
   const skillNames = loadedSkills ?? conversationContext?.loadedSkills ?? [];
   const mcpStatuses = buildLoadedMcpStatuses(
     loadedMcpStatuses ?? conversationContext?.loadedMcpStatuses,
     conversationContext?.loadedMcpServers
   );
-  const { data: skillIndex } = useSWR(skillNames.length > 0 ? 'skills-index' : null, () =>
+  const hasSkills = skillNames.length > 0;
+  const hookRows = useActiveHookRows();
+  const installedPlugins = useInstalledPlugins();
+  const enablePlugin = useEnableInstalledPlugin();
+
+  const { data: skillIndex } = useSWR(hasSkills ? 'skills-index' : null, () =>
     ipcBridge.fs.listAvailableSkills.invoke()
   );
-  const descriptionByName = new Map((skillIndex ?? []).map((s) => [s.name, s.description]));
+  const { data: mcpServers, mutate: refreshMcpServers } = useSWR(
+    mcpStatuses.length > 0 || installedPlugins.length > 0 ? 'attach-menu-mcp-servers' : null,
+    () => mcpService.listServers.invoke()
+  );
+  useEffect(() => {
+    const refresh = () => {
+      void refreshMcpServers();
+    };
+    window.addEventListener('tomni-packages-changed', refresh);
+    return () => window.removeEventListener('tomni-packages-changed', refresh);
+  }, [refreshMcpServers]);
+
+  // An installed plugin whose server is not in the catalog is off (or not yet loaded). It is listed as a pending entry,
+  // exactly as in the Home menu. Nothing is listed until the catalog has loaded, so an on plugin never shows as off.
+  const catalogIds = new Set([...(mcpServers ?? []).map((server) => server.id), ...mcpStatuses.map((item) => item.id)]);
+  const mcpEntries: AttachMcpEntry[] = [
+    ...mcpStatuses.map((item) => ({ item, packageId: packageIdOfMcp(item, mcpServers) })),
+    ...(mcpServers === undefined ? [] : pendingPluginEntries(installedPlugins, catalogIds)),
+  ];
+  const hasPlugins = mcpEntries.length > 0;
+
+  const { data: packageRows } = useSWR(hasSkills || hasPlugins ? 'attach-menu-packages' : null, () =>
+    ipcBridge.packagePlatform.list.invoke(undefined)
+  );
+
+  const skillByName = new Map((skillIndex ?? []).map((skill) => [skill.name, skill] as const));
+  const packageNames = new Map((packageRows ?? []).map((row) => [row.manifest.id, row.manifest.name] as const));
+  const model = buildAttachMenuModel(
+    mcpEntries,
+    skillNames.map((name) => {
+      const indexed = skillByName.get(name);
+      return { name, description: indexed?.description, packageId: indexed?.packageId };
+    }),
+    packageNames
+  );
 
   const handleSkillClick = useCallback((name: string) => {
     setOpen(false);
+    setCategory(undefined);
     emitter.emit('sendbox.fill', `/${name} `);
+  }, []);
+
+  const handleVisibleChange = useCallback((visible: boolean) => {
+    setOpen(visible);
+    if (!visible) setCategory(undefined);
   }, []);
 
   const handleOpenMcpSettings = useCallback(() => {
     setOpen(false);
-    setSkillsOpen(false);
-    setMcpOpen(false);
+    setCategory(undefined);
     void navigate('/settings/capabilities?tab=tools');
   }, [navigate]);
+
+  const togglePackageGroup = useCallback((packageId: string) => {
+    setCollapsedPackages((current) => {
+      const next = new Set(current);
+      if (next.has(packageId)) next.delete(packageId);
+      else next.add(packageId);
+      return next;
+    });
+  }, []);
+
+  const openViewer = useCallback((target: SkillViewerTarget) => {
+    setOpen(false);
+    setCategory(undefined);
+    setViewer(target);
+  }, []);
 
   const handleLocalFileChange = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -128,11 +196,9 @@ const FileAttachButton: React.FC<FileAttachButtonProps> = ({
   );
 
   const isDesktop = isElectronDesktop();
-  const hasSkills = skillNames.length > 0;
-  const hasMcpServers = mcpStatuses.length > 0;
   const plusIcon = <Plus theme='outline' size='14' strokeWidth={2} fill={iconColors.primary} />;
 
-  if (isDesktop && !hasSkills && !hasMcpServers) {
+  if (isDesktop && !hasSkills && !hasPlugins && hookRows.length === 0 && !onToggleAutoSelect) {
     return (
       <Button
         type='secondary'
@@ -144,169 +210,255 @@ const FileAttachButton: React.FC<FileAttachButtonProps> = ({
     );
   }
 
-  const cardStyle: React.CSSProperties = {
-    backgroundColor: 'var(--color-bg-2, #fff)',
-    borderRadius: 12,
-    boxShadow: '0 4px 24px rgba(0,0,0,0.13)',
-    border: '1px solid var(--color-border-1, #e5e6eb)',
-    padding: '6px 0',
-    minWidth: 220,
-    zIndex: 1050,
+  const pluginOffLabel = t('guid.hubHome.connections.status.off', { defaultValue: 'Off' });
+  const mcpTagText = t('conversation.attachMenu.mcpTag', { defaultValue: 'MCP' });
+  const pluginLabel = t('conversation.attachMenu.pluginLabel', { defaultValue: 'Plugin' });
+  const pluginCountLabel = (count: number) =>
+    t('conversation.attachMenu.pluginCount', { count, defaultValue: '{{count}} plugin' });
+  const skillLabel = (count: number) =>
+    t('conversation.attachMenu.skillCount', { count, defaultValue: '{{count}} skill' });
+
+  const renderMcpRow = (entry: AttachMcpEntry) => {
+    const { item } = entry;
+    if (entry.pending) {
+      return (
+        <MenuItem
+          key={`mcp-${item.id}-pending`}
+          icon={<Shield theme='outline' size={15} strokeWidth={2.5} />}
+          label={
+            <>
+              {item.name} <span className='attach-menu__tag'>{pluginOffLabel}</span>
+            </>
+          }
+          onClick={() => {
+            if (entry.packageId !== undefined) void enablePlugin(entry.packageId);
+          }}
+          testId={`attach-mcp-${item.id}`}
+        />
+      );
+    }
+    return (
+      <MenuItem
+        key={`mcp-${item.id}-${item.status}`}
+        icon={<Shield theme='outline' size={15} strokeWidth={2.5} />}
+        label={
+          <>
+            {item.name} <span className='attach-menu__tag'>{mcpTagText}</span>
+          </>
+        }
+        suffix={
+          item.status === 'loaded' ? undefined : (
+            <span className={`text-12px leading-none ${MCP_STATUS_CLASS_NAME[item.status]}`}>
+              {t(`conversation.mcp.status.${item.status}` as const)}
+            </span>
+          )
+        }
+        className='cursor-default'
+        title={item.reason}
+        testId={`attach-mcp-${item.id}`}
+      />
+    );
   };
 
-  const skillsPanel = (
-    <div style={{ ...cardStyle, minWidth: 180 }} onClick={(e) => e.stopPropagation()}>
-      {skillNames.map((name) => (
-        <MenuItem
-          key={name}
-          icon={<Lightning theme='outline' size={15} strokeWidth={2.5} />}
-          label={name}
-          onClick={() => handleSkillClick(name)}
-          className='mx-6px'
-        />
-      ))}
+  const nameOf = (packageId: string): string => packageNames.get(packageId) ?? packageId;
+
+  const renderSkillRow = (entry: AttachSkillEntry) => (
+    <div key={`skill-${entry.name}`} className='attach-menu__skill-row' data-testid={`attach-skill-${entry.name}`}>
+      <MenuItem
+        icon={<Lightning theme='outline' size={15} strokeWidth={2.5} />}
+        label={entry.name}
+        description={entry.description || undefined}
+        onClick={() => handleSkillClick(entry.name)}
+        title={entry.name}
+        className='attach-menu__skill-main'
+      />
+      <Button
+        type='text'
+        size='mini'
+        className='attach-menu__view'
+        data-testid={`attach-skill-view-${entry.name}`}
+        onClick={(event) => {
+          event.stopPropagation();
+          openViewer({
+            name: entry.name,
+            packageId: entry.packageId,
+            packageName: entry.packageId === undefined ? undefined : nameOf(entry.packageId),
+          });
+        }}
+      >
+        {t('conversation.attachMenu.viewSkill', { defaultValue: 'Xem' })}
+      </Button>
     </div>
   );
 
-  const mcpPanel = (
-    <div
-      style={{
-        ...cardStyle,
-        minWidth: 220,
-        width: 'min(320px, calc(100vw - 96px))',
-        maxWidth: 320,
-      }}
-      onClick={(e) => e.stopPropagation()}
-    >
-      {mcpStatuses.map((item) => (
-        <MenuItem
-          key={`${item.id}-${item.status}`}
-          icon={<Shield theme='outline' size={15} strokeWidth={2.5} />}
-          label={item.name}
-          suffix={
-            item.status === 'loaded' ? undefined : (
-              <span className={`text-12px leading-none ${MCP_STATUS_CLASS_NAME[item.status]}`}>
-                {t(`conversation.mcp.status.${item.status}` as const)}
-              </span>
-            )
-          }
-          className='mx-6px cursor-default hover:bg-transparent'
-          title={item.reason}
-        />
-      ))}
-      <div style={{ margin: '4px 12px', height: 1, backgroundColor: 'var(--color-border-1, #e5e6eb)' }} />
-      <div className='px-12px py-8px'>
-        <div className='text-12px leading-16px text-t-secondary whitespace-normal break-words'>
-          {t('conversation.mcp.managementHint', {
-            defaultValue:
-              'If an MCP looks abnormal, it is usually caused by the MCP JSON configuration. Go to Tools settings and test it there.',
-          })}
-        </div>
-        <Button
-          type='text'
-          size='mini'
-          className='mt-6px h-auto! px-0! text-12px! inline-flex! items-center! gap-4px!'
-          onClick={handleOpenMcpSettings}
+  const renderPackageGroup = (group: AttachPackageGroup) => {
+    const collapsed = collapsedPackages.has(group.packageId);
+    const rows = group.mcp.map((entry) => renderMcpRow(entry));
+    return (
+      <div
+        key={`group-${group.packageId}`}
+        className='attach-menu__group'
+        data-testid={`attach-menu-group-${group.packageId}`}
+      >
+        <button
+          type='button'
+          className='attach-menu__group-header'
+          aria-expanded={!collapsed}
+          data-testid={`attach-menu-group-toggle-${group.packageId}`}
+          onClick={() => togglePackageGroup(group.packageId)}
         >
-          <span className='leading-none'>
-            {t('conversation.mcp.openSettings', {
-              defaultValue: 'Open Tools settings',
-            })}
+          <span className='attach-menu__group-name'>{group.name}</span>
+          <span className='attach-menu__group-counts'>
+            {`${pluginCountLabel(group.mcp.length)}  ·  ${skillLabel(group.skills.length)}`}
           </span>
-          <span className='inline-flex h-12px w-12px flex-shrink-0 items-center justify-center'>
-            <Right theme='outline' size={12} strokeWidth={3} className='block' />
-          </span>
-        </Button>
+          {collapsed ? (
+            <Right theme='outline' size={12} strokeWidth={3} />
+          ) : (
+            <Down theme='outline' size={12} strokeWidth={3} />
+          )}
+        </button>
+        {collapsed ? null : <div className='attach-menu__group-body'>{rows}</div>}
       </div>
-    </div>
+    );
+  };
+
+  // Skills of one plugin: one collapsed row per plugin. Loaded skills here are click-to-insert, so there is no checkbox.
+  const renderSkillPluginGroup = (group: AttachPackageGroup) => (
+    <PluginGroup
+      key={`group-${group.packageId}`}
+      groupKey={`skills:${group.packageId}`}
+      testId={`attach-menu-group-${group.packageId}`}
+      name={group.name}
+      countLabel={skillLabel(group.skills.length)}
+    >
+      {group.skills.map((entry) => renderSkillRow(entry))}
+    </PluginGroup>
   );
+
+  const renderPanel = (): React.ReactNode => {
+    if (category === undefined) return null;
+    if (category === 'hooks') return <HookMenuList hooks={hookRows} packageNames={packageNames} />;
+    const standalone =
+      category === 'mcp'
+        ? model.standalone.mcp.map((entry) => renderMcpRow(entry))
+        : model.standalone.skills.map((entry) => renderSkillRow(entry));
+    const groups = model.packages.filter((group) =>
+      category === 'mcp' ? group.mcp.length > 0 : group.skills.length > 0
+    );
+    return (
+      <>
+        <div className='attach-menu__panel-scroll'>
+          {standalone}
+          {groups.map((group) => (category === 'skills' ? renderSkillPluginGroup(group) : renderPackageGroup(group)))}
+        </div>
+        {category === 'mcp' ? (
+          <div className='attach-menu__panel-footer'>
+            <div className='text-12px leading-16px text-t-secondary whitespace-normal break-words'>
+              {t('conversation.mcp.managementHint', {
+                defaultValue:
+                  'If an MCP looks abnormal, it is usually caused by the MCP JSON configuration. Go to Tools settings and test it there.',
+              })}
+            </div>
+            <Button
+              type='text'
+              size='mini'
+              className='mt-6px h-auto! px-0! text-12px! inline-flex! items-center! gap-4px!'
+              data-testid='attach-open-mcp-settings'
+              onClick={handleOpenMcpSettings}
+            >
+              <span className='leading-none'>
+                {t('conversation.mcp.openSettings', {
+                  defaultValue: 'Open Tools settings',
+                })}
+              </span>
+              <span className='inline-flex h-12px w-12px flex-shrink-0 items-center justify-center'>
+                <Right theme='outline' size={12} strokeWidth={3} className='block' />
+              </span>
+            </Button>
+          </div>
+        ) : null}
+      </>
+    );
+  };
 
   const menu = (
-    <div style={cardStyle} onClick={(e) => e.stopPropagation()}>
-      {/* Loaded items stay above file actions so the session snapshot is visible */}
-      {(hasMcpServers || hasSkills) && (
-        <>
-          {hasMcpServers && (
+    <div className='attach-menu' onClick={(e) => e.stopPropagation()} data-testid='attach-menu'>
+      <div className='attach-menu__main'>
+        {onToggleAutoSelect ? <AutoSelectRow autoSelect={autoSelect} onToggleAutoSelect={onToggleAutoSelect} /> : null}
+        {/* Loaded items stay above file actions so the session snapshot is visible */}
+        {!autoSelect && (hasPlugins || hasSkills || hookRows.length > 0) && (
+          <>
+            {hasPlugins && (
+              <div className='px-6px'>
+                <MenuItem
+                  icon={<Shield theme='outline' size={15} strokeWidth={2.5} />}
+                  label={`${pluginLabel} · ${mcpEntries.length}`}
+                  suffix={<Right theme='outline' size={12} strokeWidth={3} style={{ color: '#c9cdd4' }} />}
+                  active={category === 'mcp'}
+                  onClick={() => setCategory('mcp')}
+                  testId='attach-category-mcp'
+                />
+              </div>
+            )}
+            {hasSkills && (
+              <div className='px-6px'>
+                <MenuItem
+                  icon={<Lightning theme='outline' size={15} strokeWidth={2.5} />}
+                  label={`${t('conversation.skills.loaded', { defaultValue: 'Loaded Skills' })} · ${skillNames.length}`}
+                  suffix={<Right theme='outline' size={12} strokeWidth={3} style={{ color: '#c9cdd4' }} />}
+                  active={category === 'skills'}
+                  onClick={() => setCategory('skills')}
+                  testId='attach-category-skills'
+                />
+              </div>
+            )}
             <div className='px-6px'>
-              <Trigger
-                popup={() => mcpPanel}
-                trigger='hover'
-                position='right'
-                popupVisible={mcpOpen}
-                onVisibleChange={setMcpOpen}
-                mouseEnterDelay={100}
-                mouseLeaveDelay={150}
-              >
-                <div>
-                  <MenuItem
-                    icon={<Shield theme='outline' size={15} strokeWidth={2.5} />}
-                    label={`${t('conversation.mcp.loaded', { defaultValue: 'Loaded MCP' })} · ${mcpStatuses.length}`}
-                    suffix={<Right theme='outline' size={12} strokeWidth={3} style={{ color: '#c9cdd4' }} />}
-                  />
-                </div>
-              </Trigger>
+              <MenuItem
+                icon={<Link theme='outline' size={15} strokeWidth={2.5} />}
+                label={`${t('conversation.attachMenu.hookLabel', { defaultValue: 'Hook' })} · ${hookRows.length}`}
+                suffix={<Right theme='outline' size={12} strokeWidth={3} style={{ color: '#c9cdd4' }} />}
+                active={category === 'hooks'}
+                onClick={() => setCategory('hooks')}
+                testId='attach-category-hooks'
+              />
             </div>
-          )}
-          {hasSkills && (
-            <div className='px-6px'>
-              <Trigger
-                popup={() => skillsPanel}
-                trigger='hover'
-                position='right'
-                popupVisible={skillsOpen}
-                onVisibleChange={setSkillsOpen}
-                mouseEnterDelay={100}
-                mouseLeaveDelay={150}
-              >
-                <div>
-                  <MenuItem
-                    icon={<Lightning theme='outline' size={15} strokeWidth={2.5} />}
-                    label={`${t('conversation.skills.loaded', { defaultValue: 'Loaded Skills' })} · ${skillNames.length}`}
-                    suffix={<Right theme='outline' size={12} strokeWidth={3} style={{ color: '#c9cdd4' }} />}
-                  />
-                </div>
-              </Trigger>
-            </div>
-          )}
-          <div style={{ margin: '4px 12px', height: 1, backgroundColor: 'var(--color-border-1, #e5e6eb)' }} />
-        </>
-      )}
+            <div className='attach-menu__divider' />
+          </>
+        )}
 
-      {/* 文件操作最常用，在最下（离 + 最近） */}
-      <div className='px-6px'>
-        {!isDesktop && (
+        {/* 文件操作最常用，在最下（离 + 最近） */}
+        <div className='px-6px'>
+          {!isDesktop && (
+            <MenuItem
+              icon={<FolderOpen theme='outline' size={15} strokeWidth={2.5} />}
+              label={t('common.fileAttach.myDevice', { defaultValue: 'Upload from device' })}
+              onClick={() => {
+                fileInputRef.current?.click();
+                setOpen(false);
+              }}
+            />
+          )}
           <MenuItem
-            icon={<FolderOpen theme='outline' size={15} strokeWidth={2.5} />}
-            label={t('common.fileAttach.myDevice', { defaultValue: 'Upload from device' })}
+            icon={<Paperclip theme='outline' size={15} strokeWidth={2.5} />}
+            label={t('common.fileAttach.addFiles', { defaultValue: 'Add files' })}
             onClick={() => {
-              fileInputRef.current?.click();
+              openFileSelector();
               setOpen(false);
             }}
           />
-        )}
-        <MenuItem
-          icon={<Paperclip theme='outline' size={15} strokeWidth={2.5} />}
-          label={t('common.fileAttach.addFiles', { defaultValue: 'Add files' })}
-          onClick={() => {
-            openFileSelector();
-            setOpen(false);
-          }}
-        />
+        </div>
       </div>
+      {category !== undefined && !autoSelect ? (
+        <div className='attach-menu__panel' data-testid='attach-menu-panel' data-category={category}>
+          {renderPanel()}
+        </div>
+      ) : null}
     </div>
   );
 
   return (
     <>
-      <Trigger
-        popup={() => menu}
-        trigger='click'
-        position='tl'
-        popupVisible={open}
-        onVisibleChange={setOpen}
-        clickToClose
-        popupAlign={{ bottom: 8 }}
-      >
+      <Trigger popup={() => menu} {...ATTACH_MENU_TRIGGER} popupVisible={open} onVisibleChange={handleVisibleChange}>
         <Button
           type='secondary'
           shape='circle'
@@ -324,6 +476,14 @@ const FileAttachButton: React.FC<FileAttachButtonProps> = ({
         onChange={handleLocalFileChange}
         data-testid='tomnyagentic-file-upload-input'
       />
+      {viewer ? (
+        <SkillDocumentModal
+          name={viewer.name}
+          packageId={viewer.packageId}
+          packageName={viewer.packageName}
+          onClose={() => setViewer(undefined)}
+        />
+      ) : null}
     </>
   );
 };

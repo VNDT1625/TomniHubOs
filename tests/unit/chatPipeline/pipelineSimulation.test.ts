@@ -3,18 +3,30 @@ import {
   ChatPipelineExecutor,
   ChatStageRegistry,
   LayaSecurityStage,
-  MockContext7Stage,
-  ToolRouterStage,
+  ToolSchemaStage,
   type ChatPipelineDefinition,
   type IChatStage,
 } from '../../../packages/desktop/src/process/services/chatPipeline';
+
+/** Test double for a retrieve-phase package stage; the product has no built-in documentation retriever. */
+const docsRetrieverStage: IChatStage = {
+  id: 'test:docs-retriever',
+  displayName: 'Docs retriever (test double)',
+  description: 'Appends a fixed documentation snippet to the context',
+  phase: 'retrieve',
+  defaultEnabled: false,
+  async execute(input) {
+    const snippet = '[docs: python and react reference]';
+    return { decision: 'continue', context: input.context ? `${input.context}\n\n${snippet}` : snippet };
+  },
+};
 
 describe('ChatPipelineExecutor.simulate (Dry-run Preflight Probe)', () => {
   it('successfully simulates pipeline and accurately tracks latency and context byte growth', async () => {
     const registry = new ChatStageRegistry();
     registry.registerBuiltin(new LayaSecurityStage());
-    registry.registerBuiltin(new ToolRouterStage());
-    registry.registerPackageStage(new MockContext7Stage(), 'com.context7.docs-retriever');
+    registry.registerBuiltin(new ToolSchemaStage());
+    registry.registerPackageStage(docsRetrieverStage, 'test:docs-retriever');
 
     const definition: ChatPipelineDefinition = {
       schemaVersion: 1,
@@ -29,14 +41,14 @@ describe('ChatPipelineExecutor.simulate (Dry-run Preflight Probe)', () => {
           enabled: true,
         },
         {
-          id: 'step-context7',
-          stageRegistryId: 'com.context7.docs-retriever',
+          id: 'step-docs',
+          stageRegistryId: 'test:docs-retriever',
           phase: 'retrieve',
           enabled: true,
         },
         {
           id: 'step-tool',
-          stageRegistryId: 'builtin:tool-router',
+          stageRegistryId: 'builtin:tool-schema',
           phase: 'pre_model',
           enabled: true,
         },
@@ -57,7 +69,7 @@ describe('ChatPipelineExecutor.simulate (Dry-run Preflight Probe)', () => {
 
     // Initial context check
     expect(result.initialContextBytes).toBeGreaterThan(0);
-    // Context7 should have added doc content, increasing context bytes
+    // The retrieve stage should have added doc content, increasing context bytes
     expect(result.finalContextBytes).toBeGreaterThan(result.initialContextBytes);
     expect(result.addedContextBytes).toBe(result.finalContextBytes - result.initialContextBytes);
 
@@ -68,10 +80,10 @@ describe('ChatPipelineExecutor.simulate (Dry-run Preflight Probe)', () => {
     expect(layaMetric?.decision).toBe('continue');
     expect(layaMetric?.durationMs).toBeGreaterThanOrEqual(0);
 
-    const context7Metric = result.stageMetrics.find((m) => m.stageId === 'step-context7');
-    expect(context7Metric).toBeDefined();
-    expect(context7Metric?.status).toBe('ok');
-    expect(context7Metric?.addedContextBytes).toBeGreaterThan(0);
+    const docsMetric = result.stageMetrics.find((m) => m.stageId === 'step-docs');
+    expect(docsMetric).toBeDefined();
+    expect(docsMetric?.status).toBe('ok');
+    expect(docsMetric?.addedContextBytes).toBeGreaterThan(0);
 
     const toolMetric = result.stageMetrics.find((m) => m.stageId === 'step-tool');
     expect(toolMetric).toBeDefined();
@@ -164,7 +176,7 @@ describe('ChatPipelineExecutor.simulate (Dry-run Preflight Probe)', () => {
     const result = await executor.simulate({ definition });
     expect(result.success).toBe(false);
     expect(result.failedStageId).toBe('step-ghost');
-    expect(result.errorMessage).toContain("Stage 'package:ghost-stage-not-installed' không tồn tại");
+    expect(result.errorMessage).toBe('STAGE_NOT_FOUND');
     expect(result.stageMetrics[0].status).toBe('error');
   });
 
@@ -248,5 +260,177 @@ describe('ChatPipelineExecutor.simulate (Dry-run Preflight Probe)', () => {
     expect(result.failedStageId).toBe('step-laya');
     expect(result.errorMessage).toContain('chặn truy vấn kiểm thử');
     expect(result.errorMessage).toContain('PROMPT_INJECTION_BLOCKED');
+  });
+});
+
+describe('direction boundary', () => {
+  const setup = () => {
+    const registry = new ChatStageRegistry();
+    const calls: string[] = [];
+    const controller = new AbortController();
+    for (const phase of ['pre_query', 'retrieve', 'pre_model', 'post_model'] as const) {
+      registry.registerBuiltin({
+        id: phase,
+        displayName: phase,
+        description: phase,
+        phase,
+        defaultEnabled: true,
+        async execute(input) {
+          calls.push(phase);
+          if (input.config?.cancel) controller.abort();
+          return { decision: 'rewrite', query: `${input.query}:${phase}` };
+        },
+      });
+    }
+    const definition = registry.createDefaultDefinition();
+    const executor = new ChatPipelineExecutor(registry);
+    return { definition, executor, calls, controller };
+  };
+
+  it.each([undefined, 'input', 'output'] as const)(
+    'routes %s in order and excludes disabled stages',
+    async (direction) => {
+      const { definition, executor, calls, controller } = setup();
+      definition.stages.push({
+        id: 'disabled',
+        stageRegistryId: 'missing-disabled',
+        phase: 'post_model',
+        enabled: false,
+      });
+      definition.stages.push({ ...definition.stages[3]!, id: 'output-copy' });
+      const result = await executor.simulate({ definition, probeQuery: 'text', direction, signal: controller.signal });
+      expect(result.success).toBe(true);
+      const expected = direction === 'output' ? ['post_model', 'post_model'] : ['pre_query', 'retrieve', 'pre_model'];
+      expect(calls).toEqual(expected);
+      expect(result.finalQuery).toBe(['text', ...expected].join(':'));
+    }
+  );
+
+  it.each(['input', 'output'] as const)(
+    'fails closed before side effects for invalid references in %s',
+    async (direction) => {
+      for (const error of ['STAGE_NOT_FOUND', 'STAGE_PHASE_MISMATCH']) {
+        const { definition, executor, calls, controller } = setup();
+        definition.stages.push({
+          id: 'bad',
+          stageRegistryId: error === 'STAGE_NOT_FOUND' ? 'missing' : 'post_model',
+          phase: 'pre_query',
+          enabled: true,
+        });
+        const result = await executor.simulate({
+          definition,
+          probeQuery: 'text',
+          direction,
+          signal: controller.signal,
+        });
+        expect(result.success).toBe(false);
+        expect(result.errorMessage).toBe(error);
+        expect(calls).toEqual([]);
+      }
+    }
+  );
+
+  it.each(['input', 'output'] as const)(
+    'does not accept a rewrite after final-stage cancellation in %s',
+    async (direction) => {
+      const { definition, executor, calls, controller } = setup();
+      const phase = direction === 'output' ? 'post_model' : 'pre_model';
+      definition.stages = definition.stages
+        .filter((ref) => ref.phase === phase)
+        .map((ref) => ({ ...ref, config: { cancel: true } }));
+      const result = await executor.simulate({ definition, probeQuery: 'text', direction, signal: controller.signal });
+      expect(result.success).toBe(false);
+      expect(result.errorMessage).toBe('SIMULATION_ABORTED');
+      expect(calls).toEqual([phase]);
+      expect(result.finalQuery).toBe('text');
+    }
+  );
+
+  it('bounds dry-run inputs before invoking stages, matching production execution', async () => {
+    const registry = new ChatStageRegistry();
+    let calls = 0;
+    registry.registerBuiltin({
+      id: 'test:input',
+      displayName: 'test',
+      description: 'test',
+      phase: 'pre_query',
+      defaultEnabled: true,
+      async execute() {
+        calls += 1;
+        return { decision: 'continue' };
+      },
+    });
+    const result = await new ChatPipelineExecutor(registry).simulate({
+      definition: registry.createDefaultDefinition(),
+      probeQuery: 'x'.repeat(128_001),
+    });
+    expect(result.success).toBe(false);
+    expect(result.errorMessage).toBe('PIPELINE_INPUT_TOO_LARGE');
+    expect(calls).toBe(0);
+  });
+
+  it('blocks dry-run context expansion before later stages', async () => {
+    const registry = new ChatStageRegistry();
+    let reachedSecond = false;
+    registry.registerBuiltin({
+      id: 'test:expand',
+      displayName: 'expander',
+      description: 'expander',
+      phase: 'pre_query',
+      defaultEnabled: true,
+      async execute() {
+        return { decision: 'continue', context: 'x'.repeat(200) };
+      },
+    });
+    registry.registerBuiltin({
+      id: 'test:second',
+      displayName: 'second',
+      description: 'second',
+      phase: 'pre_query',
+      defaultEnabled: true,
+      async execute() {
+        reachedSecond = true;
+        return { decision: 'continue' };
+      },
+    });
+    const result = await new ChatPipelineExecutor(registry).simulate({
+      definition: { ...registry.createDefaultDefinition(), limits: { maxContextBytes: 100 } },
+    });
+    expect(result.success).toBe(false);
+    expect(result.errorMessage).toBe('PIPELINE_OUTPUT_TOO_LARGE');
+    expect(reachedSecond).toBe(false);
+  });
+
+  it('honors the same finite run deadline in dry-run mode', async () => {
+    const registry = new ChatStageRegistry();
+    registry.registerBuiltin({
+      id: 'test:hang',
+      displayName: 'hanging simulation',
+      description: 'timeout',
+      phase: 'pre_query',
+      defaultEnabled: true,
+      defaultTimeoutMs: 999_999,
+      async execute() {
+        return new Promise(() => undefined);
+      },
+    });
+    const result = await new ChatPipelineExecutor(registry).simulate({
+      definition: { ...registry.createDefaultDefinition(), limits: { maxTotalTimeoutMs: 10 } },
+    });
+    expect(result.success).toBe(false);
+    expect(result.errorMessage).toContain('STAGE_TIMEOUT');
+    expect(result.totalDurationMs).toBeLessThan(500);
+  });
+
+  it('honors a pre-aborted empty or disabled pipeline', async () => {
+    const direction = 'output' as const;
+    const { definition, executor, calls, controller } = setup();
+    definition.enabled = false;
+    definition.stages = [];
+    controller.abort();
+    const result = await executor.simulate({ definition, probeQuery: 'text', direction, signal: controller.signal });
+    expect(result.success).toBe(false);
+    expect(result.errorMessage).toBe('SIMULATION_ABORTED');
+    expect(calls).toEqual([]);
   });
 });

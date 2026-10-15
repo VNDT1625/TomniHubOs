@@ -5,7 +5,7 @@
  */
 
 import { createHash } from 'node:crypto';
-import { chmod, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { appendFile, chmod, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { CoreTelemetryEvent, CoreTelemetrySink } from './types';
 
@@ -70,6 +70,8 @@ export class JsonlCoreTelemetrySink implements CoreTelemetrySink {
   private initialized = false;
   private envelopes: TelemetryEnvelope[] = [];
   private pending: Promise<void> = Promise.resolve();
+  /** True once the file holds the canonical journal, so each append only adds one line. */
+  private fileReady = false;
 
   public constructor(private readonly filePath: string) {}
 
@@ -85,6 +87,7 @@ export class JsonlCoreTelemetrySink implements CoreTelemetrySink {
     this.envelopes = parseValidPrefix(text);
     const canonical = this.serialize();
     if (canonical !== text) await this.replaceFile(canonical);
+    this.fileReady = this.envelopes.length > 0;
     this.initialized = true;
   }
 
@@ -102,7 +105,14 @@ export class JsonlCoreTelemetrySink implements CoreTelemetrySink {
       };
       this.envelopes.push(envelope);
       try {
-        await this.replaceFile(this.serialize());
+        // Append-only: the journal is rewritten only when it does not exist yet. Rewriting every line per event made
+        // each append cost O(journal size) of synchronous JSON work on the main thread.
+        if (this.fileReady) {
+          await appendFile(this.filePath, `${JSON.stringify(envelope)}\n`, { encoding: 'utf8', mode: 0o600 });
+        } else {
+          await this.replaceFile(this.serialize());
+          this.fileReady = true;
+        }
       } catch (error) {
         this.envelopes.pop();
         throw error;

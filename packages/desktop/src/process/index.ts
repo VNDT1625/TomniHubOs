@@ -21,8 +21,11 @@ import './utils/initBridge';
 import { whenAccountBackgroundLifecycleReady } from './bridge';
 import { runNativeMcpBootstrap } from './resources/mcpRegistry/nativeMcpBootstrap';
 import './services/i18n'; // Initialize i18n for main process
+import { startMainThreadWatchdog } from './services/diagnostics/mainThreadWatchdog';
 
 export const initializeProcess = async () => {
+  // Diagnostics: logs a [Watchdog] report when the main thread stalls (dev, or TOMNY_WATCHDOG=1).
+  startMainThreadWatchdog({ isPackaged: app.isPackaged });
   const t0 = performance.now();
   const mark = (label: string) => console.log(`[Tomny:process] ${label} +${Math.round(performance.now() - t0)}ms`);
 

@@ -56,6 +56,10 @@ interface EventTypes {
   'sendbox.fill': [string]; // prompt text to fill
   'sendbox.reply': [ReplyQuote]; // reply/quote a message
   'sendbox.reply.clear': void; // clear reply quote
+  // Coach mark: dim the screen except one catalogued control and explain it (never acts without the user).
+  'ui.spotlight': [{ targetId: string; note?: string }];
+  // /schedule left a draft for the new-task form while the Schedule page is already open.
+  'cron.schedule-draft': void;
   'staroffice.install.request': [{ conversation_id: string; text: string; detectedUrl?: string | null }];
   'staroffice.install.finished': [{ conversation_id: string }];
   // Super: toggle the in-chat live-browser frames panel for a conversation.
@@ -67,6 +71,14 @@ interface EventTypes {
   // Browser: ask the Browser page to open its AI chat dock (e.g. when a URL is
   // opened from outside the app / default-browser hand-off).
   'browser.openChat': void;
+  // Browser: the header Super Search asks the Browser page to open a URL in its active tab.
+  'browser.openUrl': [string];
+  // Browser: the header Super Search panel opened/closed; the native view must yield to it.
+  'browser.overlay': [boolean];
+  // Browser: the active tab URL, so the header Super Search can show it like an address bar.
+  'browser.url': [string];
+  // Browser: nav controls hosted by the header Super Search (the page has no address row of its own).
+  'browser.command': ['back' | 'forward' | 'reload' | 'controls' | 'subtitles'];
   // IDE Agent Hooks: a fired hook wants the IDE Chat surface to run a prompt
   // (the workspace root + the prompt to send to a new/active agent tab).
   'ide.hook.askAgent': [{ rootPath: string; prompt: string; hookName: string; filePaths?: string[] }];
@@ -125,4 +137,18 @@ export const useAddEventListener = <T extends EventEmitter.EventNames<EventTypes
   useEffect(() => {
     return addEventListener(event, fn);
   }, deps || []);
+};
+
+let requestedBrowserUrl: string | null = null;
+
+/** Super Search hand-off: remember a URL for the Browser page to open once it mounts. */
+export const requestBrowserUrl = (url: string): void => {
+  requestedBrowserUrl = url;
+};
+
+/** Read and clear the pending Browser URL (null when none). */
+export const consumeRequestedBrowserUrl = (): string | null => {
+  const url = requestedBrowserUrl;
+  requestedBrowserUrl = null;
+  return url;
 };

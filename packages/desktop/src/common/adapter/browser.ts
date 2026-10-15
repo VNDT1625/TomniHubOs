@@ -245,7 +245,12 @@ if (win.electronAPI) {
             return response.json() as Promise<unknown>;
           })
           .then((payload) => {
-            emitterRef?.emit(`subscribe.callback-${name.slice('subscribe-'.length)}${request?.id ?? ''}`, payload);
+            // Backend replies use a { success, data } envelope; callers expect the bare data.
+            const result =
+              payload && typeof payload === 'object' && 'data' in payload
+                ? (payload as { data: unknown }).data
+                : payload;
+            emitterRef?.emit(`subscribe.callback-${name.slice('subscribe-'.length)}${request?.id ?? ''}`, result);
           })
           .catch(() => {
             // Keep the WebSocket path as the fallback for real Core deployments.

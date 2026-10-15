@@ -16,6 +16,24 @@ export const PACKAGE_MANIFEST_FILE = 'tomny-package.json';
 const MAX_ARTIFACT_FILES = 20_000;
 const MAX_PACKAGE_MANIFEST_BYTES = 256 * 1024;
 
+/**
+ * Setup output rule, version 1. The setup of a source-backed MCP server (for example `npm install`) writes its
+ * dependencies to `source/node_modules`. That directory is never part of the signed artifact. An archive that
+ * contains it is refused at install, and a sealed installed payload is hashed without it (`setupOutputs: 'exclude'`).
+ * Every other file of the payload is still hashed exactly. The runtime never executes from the sealed payload: a
+ * source-backed server runs from a copy under the app data folder (see `mcpSourceRuntime`), so setup and runtime
+ * self-healing cannot change the signed files. Bump the version when this rule changes.
+ */
+export const SETUP_OUTPUT_RULE_VERSION = 1;
+export const SETUP_OUTPUT_DIRECTORY = 'source/node_modules';
+
+/** How a package folder treats setup output while it is hashed. */
+export type SetupOutputMode = 'include' | 'exclude' | 'reject';
+
+/** True for the setup output directory itself or anything below it (a relative path with `/` separators). */
+export const isSetupOutputPath = (relativePath: string): boolean =>
+  relativePath === SETUP_OUTPUT_DIRECTORY || relativePath.startsWith(`${SETUP_OUTPUT_DIRECTORY}/`);
+
 type ArtifactFile = {
   absolutePath: string;
   relativePath: string;
@@ -27,12 +45,20 @@ type ArtifactContentOverride = {
   content: string;
 };
 
+export type ArtifactIntegrityOptions = Readonly<{
+  /** Default `include`: every file is hashed, which is what an archive and its manifest are checked with. */
+  setupOutputs?: SetupOutputMode;
+}>;
+
 const isInside = (parent: string, candidate: string): boolean => {
   const relative = path.relative(parent, candidate);
   return relative === '' || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative));
 };
 
-const scanArtifact = async (sourceDirectory: string): Promise<{ root: string; files: ArtifactFile[] }> => {
+const scanArtifact = async (
+  sourceDirectory: string,
+  setupOutputs: SetupOutputMode = 'include'
+): Promise<{ root: string; files: ArtifactFile[] }> => {
   if (!path.isAbsolute(sourceDirectory)) throw new Error('Package source directory must be absolute.');
   const root = await realpath(sourceDirectory);
   const files: ArtifactFile[] = [];
@@ -44,12 +70,18 @@ const scanArtifact = async (sourceDirectory: string): Promise<{ root: string; fi
       const stat = await lstat(absolutePath);
       if (stat.isSymbolicLink()) throw new Error(`Package artifacts cannot contain symbolic links: ${entry.name}`);
       if (!isInside(root, absolutePath)) throw new Error('Package entry escapes its source directory.');
+      const relativePath = path.relative(root, absolutePath).replaceAll(path.sep, '/');
       if (stat.isDirectory()) {
+        if (relativePath === SETUP_OUTPUT_DIRECTORY) {
+          // Setup output: refused in an archive, skipped (not walked) in a sealed payload.
+          if (setupOutputs === 'reject')
+            throw new Error(`Package artifacts cannot contain setup output: ${SETUP_OUTPUT_DIRECTORY}`);
+          if (setupOutputs === 'exclude') continue;
+        }
         await visit(absolutePath);
         continue;
       }
       if (!stat.isFile()) throw new Error(`Unsupported package entry: ${entry.name}`);
-      const relativePath = path.relative(root, absolutePath).replaceAll(path.sep, '/');
       if (relativePath === PACKAGE_MANIFEST_FILE) continue;
       files.push({ absolutePath, relativePath, size: stat.size });
       if (files.length > MAX_ARTIFACT_FILES) throw new Error(`Package exceeds ${MAX_ARTIFACT_FILES} files.`);
@@ -65,9 +97,15 @@ const scanArtifact = async (sourceDirectory: string): Promise<{ root: string; fi
 
 export const computeArtifactIntegrity = async (
   sourceDirectory: string,
-  contentOverride?: ArtifactContentOverride
+  contentOverride?: ArtifactContentOverride,
+  options: ArtifactIntegrityOptions = {}
 ): Promise<{ integrity: string; sizeBytes: number }> => {
-  const { files } = await scanArtifact(sourceDirectory);
+  const mode = options.setupOutputs ?? 'include';
+  // A file under setup output is never hashed, so it can never be served as verified content.
+  if (contentOverride !== undefined && mode !== 'include' && isSetupOutputPath(contentOverride.relativePath)) {
+    throw new Error('Package setup output is not part of the verified payload.');
+  }
+  const { files } = await scanArtifact(sourceDirectory, mode);
   const hash = createHash('sha256');
   let sizeBytes = 0;
 

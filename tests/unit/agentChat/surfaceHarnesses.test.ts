@@ -41,19 +41,18 @@ describe('surface harness prompts', () => {
     expect(prompt).toContain('agenda, comparison, timeline, process, metrics and architecture');
   });
 
-  it('keeps the IDE surface prompt short and opens an action gate only for tool work', () => {
+  it('keeps the IDE surface prompt short and loads tools with one search only for tool work', () => {
     const prompt = buildSurfaceHarnessPrompt(resolvedSurface('ide'));
 
     expect(prompt).toContain('[Tomny Surface: IDE]');
-    expect(prompt).toContain('only for tool or external-action turns');
-    expect(prompt).toContain('casual chat never use StartAction');
-    expect(prompt).not.toContain('Open the current user action exactly once with StartAction');
-    expect(prompt).toContain('After StartAction opens the gate');
-    expect(prompt).toContain('Use ToolSearch');
+    expect(prompt).toContain('For tool turns');
+    expect(prompt).toContain('casual chat directly');
+    expect(prompt).not.toContain('StartAction');
+    expect(prompt).toContain('ONE ToolSearch');
     expect(prompt).toContain('call each loaded IDE or MCP tool directly');
     expect(prompt).toContain('Secret Context values remain hidden');
     expect(prompt.length).toBeLessThan(900);
-    expect(prompt).toContain('persistent ToolMap summary');
+    expect(prompt).toContain('tool guide');
     expect(prompt).not.toContain('surface-owned nested schema');
     expect(prompt).not.toContain('tomny-ide');
   });

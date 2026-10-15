@@ -6,13 +6,12 @@
 
 import { configService } from '@/common/config/configService';
 import { isElectronDesktop } from '@/renderer/utils/platform';
-import { useAddEventListener } from '@/renderer/utils/emitter';
+import { consumeRequestedBrowserUrl, emitter, useAddEventListener } from '@/renderer/utils/emitter';
 import { Button, Message, Switch } from '@arco-design/web-react';
 import { Compass } from '@icon-park/react';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import AddressBar from './components/AddressBar';
 import AgentChatPanel from './components/AgentChatPanel';
 import AgentModePicker from './components/AgentModePicker';
 import BridgeNotice from './components/BridgeNotice';
@@ -32,6 +31,7 @@ import {
 } from './constants';
 import { useAgentChat } from './useAgentChat';
 import { useBrowserState } from './useBrowserState';
+import { useDomOverlayGuard } from './useDomOverlayGuard';
 
 /**
  * Embedded browser + web-agent surface (Requirement 1 — criteria 1.1, 1.2,
@@ -152,6 +152,80 @@ const BrowserPage: React.FC = () => {
     []
   );
 
+  // Header Super Search hand-off: a URL requested before this page mounted opens once the
+  // bridge is ready; a request that arrives while mounted is consumed by the listener below.
+  useEffect(() => {
+    if (status !== 'ready') return;
+    const url = consumeRequestedBrowserUrl();
+    if (url) void navigate(url);
+  }, [status, navigate]);
+
+  useAddEventListener(
+    'browser.openUrl',
+    () => {
+      const url = consumeRequestedBrowserUrl();
+      if (url) void navigate(url);
+    },
+    [navigate]
+  );
+
+  // The header Super Search carries the nav controls now that the page has no address row.
+  useAddEventListener(
+    'browser.command',
+    (command) => {
+      if (command === 'back') goBack();
+      else if (command === 'forward') goForward();
+      else if (command === 'reload') reload();
+      else if (command === 'controls') setControlsExpanded((v) => !v);
+      else setSubtitlesEnabled((v) => !v);
+    },
+    [goBack, goForward, reload]
+  );
+
+  // The header Super Search shows the active page URL like an address bar.
+  const activeUrl = activeTab?.url ?? '';
+  useEffect(() => {
+    emitter.emit('browser.url', activeUrl);
+  }, [activeUrl]);
+  useEffect(() => () => void emitter.emit('browser.url', ''), []);
+
+  // The header Super Search panel paints in the DOM, so the native view yields while it is open.
+  const searchOverlayOpenRef = useRef(false);
+  useAddEventListener(
+    'browser.overlay',
+    (open) => {
+      if (open === searchOverlayOpenRef.current) return;
+      searchOverlayOpenRef.current = open;
+      if (open) beginOverlay();
+      else endOverlay();
+    },
+    [beginOverlay, endOverlay]
+  );
+
+  // Any DOM popup (header menu, select, modal) must paint above the native view. While one is
+  // open, freeze the page into a snapshot and hide the native view so the page stays visible.
+  const domPopupOpen = useDomOverlayGuard(isDesktop && Boolean(activeTabId));
+  const [snapshot, setSnapshot] = useState<string | null>(null);
+  useEffect(() => {
+    if (!domPopupOpen || !activeTabId) return;
+    let cancelled = false;
+    let began = false;
+    void browserClient
+      .capture({ id: activeTabId })
+      .catch((): null => null)
+      .then((dataUrl) => {
+        if (cancelled) return;
+        setSnapshot(dataUrl);
+        began = true;
+        beginOverlay();
+      });
+    return () => {
+      cancelled = true;
+      if (began) endOverlay();
+      setSnapshot(null);
+    };
+  }, [domPopupOpen, activeTabId, beginOverlay, endOverlay]);
+
   // Push the zoom factor to the active tab whenever it or the tab changes.
   useEffect(() => {
     if (!activeTabId) return;
@@ -187,8 +261,7 @@ const BrowserPage: React.FC = () => {
 
   if (!isDesktop) {
     return (
-      <div className='flex flex-col h-full w-full'>
-        <PageHeader />
+      <div className='hub-route-surface flex flex-col h-full w-full'>
         <div className='flex flex-col items-center gap-12px py-56px text-center'>
           <span className='size-48px flex-center rd-full bg-fill-2 text-t-tertiary'>
             <Compass theme='outline' size='24' />
@@ -201,8 +274,7 @@ const BrowserPage: React.FC = () => {
 
   if (status === 'unavailable') {
     return (
-      <div className='flex flex-col h-full w-full'>
-        <PageHeader />
+      <div className='hub-route-surface flex flex-col h-full w-full'>
         <BridgeNotice onRetry={retry} />
       </div>
     );
@@ -273,18 +345,6 @@ const BrowserPage: React.FC = () => {
             </div>
           </div>
         )}
-        <AddressBar
-          currentUrl={activeTab?.url ?? ''}
-          disabled={controlsDisabled}
-          subtitlesEnabled={subtitlesEnabled}
-          controlsExpanded={controlsExpanded}
-          onSubmit={(input) => void navigate(input)}
-          onBack={goBack}
-          onForward={goForward}
-          onReload={reload}
-          onToggleSubtitles={setSubtitlesEnabled}
-          onToggleControls={() => setControlsExpanded((v) => !v)}
-        />
       </div>
 
       <div className='flex gap-12px flex-1 min-h-0'>
@@ -293,6 +353,7 @@ const BrowserPage: React.FC = () => {
           hasActiveTab={hasActiveTab}
           subtitlesEnabled={subtitlesEnabled}
           subtitleCues={subtitleCues}
+          snapshot={snapshot}
           onBoundsChange={reportBounds}
           onOpenTab={() => void openTab()}
         />
@@ -309,23 +370,7 @@ const BrowserPage: React.FC = () => {
     );
   }
 
-  return (
-    <div className='flex flex-col h-full w-full'>
-      <PageHeader />
-      {shellContent}
-    </div>
-  );
-};
-
-/** Compact page heading (title + one-line subtitle). */
-const PageHeader: React.FC = () => {
-  const { t } = useTranslation();
-  return (
-    <header className='mb-12px'>
-      <h2 className='m-0 text-20px font-700 text-t-primary'>{t('browser.title')}</h2>
-      <p className='m-0 mt-2px text-13px text-t-secondary'>{t('browser.subtitle')}</p>
-    </header>
-  );
+  return <div className='hub-route-surface hub-route-surface--bleed flex flex-col h-full w-full'>{shellContent}</div>;
 };
 
 export default BrowserPage;

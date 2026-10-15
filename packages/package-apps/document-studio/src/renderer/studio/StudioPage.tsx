@@ -19,7 +19,7 @@
  * Renderer-only.
  */
 
-import React, { Suspense, useEffect, useState } from 'react';
+import React, { Suspense, useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import {
   getLastStudioView,
@@ -34,6 +34,11 @@ import { useEditorToolsProvider } from '@package-apps/document-studio/renderer/s
 import { useMakeVideoAgentHarness } from '@renderer/pages/studio/makevideo/makeVideoAgentHarness';
 import type { CollabJoinData } from '@package-apps/shared/renderer/collaboration/collabClient';
 import { MUSIC_STUDIO_ENABLED } from '@/common/config/constants';
+import { useReportLiveSessions } from '@/renderer/hooks/useReportLiveSessions';
+import {
+  DOCUMENT_STUDIO_APP_ID,
+  buildStudioLiveSessions,
+} from '@package-apps/document-studio/renderer/studio/liveSessions';
 
 const AutomationView = React.lazy(() => import('@renderer/pages/studio/automation/AutomationView'));
 const MakeVideoView = React.lazy(() => import('@renderer/pages/studio/makevideo/MakeVideoView'));
@@ -74,6 +79,8 @@ const StudioPage: React.FC<StudioPageProps> = ({ onOpenIde }) => {
   const [openFiles, setOpenFiles] = useState<string[]>(() => (view.mode === 'editor' ? [view.filePath] : []));
   // Bump to force a re-read of the starred flag after toggling from the editor.
   const [, setStarTick] = useState(0);
+  const liveSessions = useMemo(() => buildStudioLiveSessions(openFiles), [openFiles]);
+  useReportLiveSessions(DOCUMENT_STUDIO_APP_ID, liveSessions);
 
   useEffect(() => {
     if (view.mode !== 'peer') setLastStudioView(view);

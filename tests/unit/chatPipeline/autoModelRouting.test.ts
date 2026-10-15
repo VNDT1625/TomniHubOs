@@ -18,7 +18,8 @@ describe('Auto Model Selection (Autonomous Model Switcher)', () => {
     expect(result.grounding?.modelRouting).toMatchObject({
       recommendedTier: 'strong',
       selectedModel: 'claude-3-7-sonnet-20250219',
-      autoSwitched: true,
+      autoSwitched: false,
+      autoProposed: true,
       complexity: 'coding_task',
     });
   });
@@ -40,7 +41,8 @@ describe('Auto Model Selection (Autonomous Model Switcher)', () => {
 
     expect(result.decision).toBe('continue');
     expect(result.grounding?.selectedModel).toBe('gpt-4o');
-    expect(result.grounding?.modelRouting?.autoSwitched).toBe(true);
+    expect(result.grounding?.modelRouting?.autoSwitched).toBe(false);
+    expect(result.grounding?.modelRouting?.autoProposed).toBe(true);
   });
 
   it('selects fast-cheap model for simple chat in auto mode', async () => {

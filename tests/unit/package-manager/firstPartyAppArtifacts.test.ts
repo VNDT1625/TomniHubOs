@@ -795,6 +795,7 @@ describe('signed first-party app package artifacts', () => {
         expect(sourceInputs.some((input) => input.includes('/package-apps/design/src/renderer/viu/'))).toBe(true);
         expect(sourceInputs.some((input) => excludedOwnerPaths.some((owner) => input.includes(owner)))).toBe(false);
         expect(excludedBundleMarkers.some((marker) => javascript.toLowerCase().includes(marker))).toBe(false);
+        // This historical signed release still requires 1.0.0; new builds target >=0.0.0.
         expect(manifest.engines.tomni).toBe('>=1.0.0');
         expect(manifest.permissions).toEqual(['workspace.read', 'workspace.write']);
         expect(manifest.dependencies).toEqual([]);

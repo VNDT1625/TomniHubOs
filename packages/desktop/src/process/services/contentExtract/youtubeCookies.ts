@@ -13,7 +13,7 @@
  * get HTTP 429 ("rate-limited") after a few videos, and several caption tracks
  * are gated behind a PO token that only a signed-in session carries. Tomny's
  * embedded browser already runs in the user's REAL persistent session
- * (`session.defaultSession` — see browserViewManager "Session choice"), so the
+ * (the persistent Browser profile session — see browserViewManager "Session choice"), so the
  * cleanest way past 429 + the caption gate is to hand yt-dlp those very cookies
  * instead of waiting for the rate limit to cool down.
  *

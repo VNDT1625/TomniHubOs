@@ -118,6 +118,32 @@ const createInitStyle = (
     color: var(--text-primary);
     margin: 16px 0;
   }
+  /* ==highlight== and GitHub alerts (see remarkRichText) */
+  mark {
+    background: linear-gradient(transparent 12%, rgba(250, 204, 21, 0.45) 12%, rgba(250, 204, 21, 0.45) 92%, transparent 92%);
+    color: inherit;
+    padding: 0 3px;
+    border-radius: 3px;
+  }
+  blockquote.md-alert {
+    --alert: 59, 130, 246;
+    border-left: 4px solid rgb(var(--alert));
+    background: rgba(var(--alert), 0.1);
+    border-radius: 0 8px 8px 0;
+    padding: 4px 14px 6px;
+  }
+  blockquote.md-alert-tip { --alert: 34, 197, 94; }
+  blockquote.md-alert-important { --alert: 168, 85, 247; }
+  blockquote.md-alert-warning { --alert: 245, 158, 11; }
+  blockquote.md-alert-caution { --alert: 239, 68, 68; }
+  blockquote.md-alert > p { margin-block: 6px; }
+  blockquote.md-alert > p.md-alert-title {
+    margin-block-start: 6px;
+    margin-block-end: 2px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    color: rgb(var(--alert));
+  }
   pre {
     max-width: 100%;
     overflow-x: auto;
@@ -202,10 +228,67 @@ const createInitStyle = (
     }
   }
 
-  /* User Custom CSS (injected into Shadow DOM) */
+  /* Dense rendering for constrained surfaces such as Hub activity tiles. */
+   .markdown-shadow-body--compact,
+   .markdown-shadow-body--compact * {
+     font-size: 14px;
+     line-height: 21px;
+   }
+   .markdown-shadow-body--compact p {
+     margin-block: 4px;
+   }
+   .markdown-shadow-body--compact li {
+     margin-block: 2px;
+   }
+   .markdown-shadow-body--compact ol,
+   .markdown-shadow-body--compact ul {
+     margin-block: 4px;
+     padding-inline-start: 18px;
+   }
+   .markdown-shadow-body--compact h1 {
+     margin-block: 2px;
+     font-size: 18px;
+     line-height: 24px;
+   }
+   .markdown-shadow-body--compact h2,
+   .markdown-shadow-body--compact h3,
+   .markdown-shadow-body--compact h4,
+   .markdown-shadow-body--compact h5,
+   .markdown-shadow-body--compact h6 {
+     margin-block: 4px 2px;
+     font-size: 15px;
+     line-height: 21px;
+   }
+   .markdown-shadow-body--compact code:not(pre code) {
+     padding: 1px 3px;
+   }
+
+   /* User Custom CSS (injected into Shadow DOM) */
   ${customCss || ''}
   `;
   return style;
+};
+
+/**
+ * Share trusted, global Rich UI rules with Markdown's isolated Shadow DOM.
+ * Model responses only provide data; styling always comes from tomni-ui.css.
+ */
+let richUiCssText: string | undefined;
+const getRichUiCssText = (): string => {
+  if (richUiCssText) return richUiCssText;
+  const rules: string[] = [];
+  for (const sheet of document.styleSheets) {
+    try {
+      for (const rule of sheet.cssRules) {
+        if (/^\.tomni-(?:rich-ui|html-live|md-)|^@keyframes tomni-rich-ui-|^@media \(prefers-reduced-motion: reduce\)/.test(rule.cssText.trimStart())) rules.push(rule.cssText);
+      }
+    } catch {
+      // Ignore cross-origin stylesheets; only local trusted app CSS may be copied.
+    }
+  }
+  const css = rules.join('\n');
+  if (css) richUiCssText = css;
+  return css;
 };
 
 // Cache for KaTeX stylesheet to share across Shadow DOM instances
@@ -310,7 +393,9 @@ const ShadowView = ({ children }: { children: React.ReactNode }) => {
       if (styleRef.current) {
         styleRef.current.remove();
       }
-      const newStyle = createInitStyle(currentTheme, cssVars, customCss, isMobile);
+                  const newStyle = createInitStyle(currentTheme, cssVars, customCss, isMobile);
+      const richUiCss = getRichUiCssText();
+      if (richUiCss) newStyle.textContent += '\n' + richUiCss;
       styleRef.current = newStyle;
       shadowRoot.appendChild(newStyle);
 

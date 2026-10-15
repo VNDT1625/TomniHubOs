@@ -65,10 +65,17 @@ import {
   type TabUpdate,
 } from '@/common/packages/browserHost';
 import type { BrowserWindow } from 'electron';
-import { session } from 'electron';
+import { getBrowserProfileSession } from '@process/integrations/browserExtensions/profile';
+import {
+  WEB_EMBED_OPEN_APP_CHANNEL,
+  type OpenAppRequest,
+  type OpenAppResult,
+} from '@/common/integrations/webEmbed/webEmbed';
+import type { WebEmbedAppService } from '@process/integrations/runtime/webEmbedApps';
+import { createWebEmbedTabOpener, type GuardedWebContents } from '@process/integrations/runtime/webEmbedTabs';
 import { createBrowserViewManager } from './browserViewManager';
-import type { BrowserTabId, IBrowserViewManager } from './browserViewManager';
-import type { AgentEvent, AgentHistoryMessage, IWebAgentRunner } from './webAgentRunner';
+import type { BrowserTabId, CreateTabOptions, IBrowserViewManager } from './browserViewManager';
+import type { IWebAgentRunner } from './webAgentRunner';
 
 export { BROWSER_HOST_CHANNELS as BROWSER_CHANNELS } from '@/common/packages/browserHost';
 export type {
@@ -100,6 +107,8 @@ import { createContentExtractService } from '@process/services/contentExtract';
 import { createYtDlpTranscript, writeYoutubeCookieFile } from '@process/services/contentExtract';
 import { createPagePerception, redactAgentVisibleText } from './pagePerception';
 import { getDefaultBrowserStatus, setAsDefaultBrowser } from '@process/bridge/defaultBrowser';
+import { getLiveSessionRegistry } from '@process/system/liveSessions/liveSessionRegistry';
+import { attachBrowserLiveSessions } from '@process/system/liveSessions/browserSessions';
 
 // ---------------------------------------------------------------------------
 // Typed channels (declared here because ipcBridge.ts has no browser namespace)
@@ -119,6 +128,7 @@ export const browserChannels = {
   setVisible: bridge.buildProvider<void, SetVisibleRequest>(BROWSER_CHANNELS.setVisible),
   hide: bridge.buildProvider<void, BrowserTabIdRequest>(BROWSER_CHANNELS.hide),
   hideAll: bridge.buildProvider<void, void>(BROWSER_CHANNELS.hideAll),
+  capture: bridge.buildProvider<string | null, BrowserTabIdRequest>(BROWSER_CHANNELS.capture),
   listTabs: bridge.buildProvider<BrowserTabInfo[], void>(BROWSER_CHANNELS.listTabs),
   destroyTab: bridge.buildProvider<void, BrowserTabIdRequest>(BROWSER_CHANNELS.destroyTab),
   getAgentMode: bridge.buildProvider<AgentModeState, BrowserTabIdRequest>(BROWSER_CHANNELS.getAgentMode),
@@ -133,6 +143,8 @@ export const browserChannels = {
   setPersona: bridge.buildProvider<void, { persona: string }>(BROWSER_CHANNELS.setPersona),
   getDefaultBrowserStatus: bridge.buildProvider<DefaultBrowserStatus, void>(BROWSER_CHANNELS.getDefaultBrowserStatus),
   setAsDefaultBrowser: bridge.buildProvider<DefaultBrowserStatus, void>(BROWSER_CHANNELS.setAsDefaultBrowser),
+  /** Opens a `web-embed` app by package and connection id. Takes no partition and no URL (T5.3). */
+  openApp: bridge.buildProvider<OpenAppResult, OpenAppRequest>(WEB_EMBED_OPEN_APP_CHANNEL),
 };
 
 // ---------------------------------------------------------------------------
@@ -185,8 +197,26 @@ const createAgentModeStore = (): Pick<BrowserServices, 'isAgentMode' | 'setAgent
   };
 };
 
+/** Stable error code returned when a renderer tries to pick a session partition. */
+export const BROWSER_PARTITION_FORBIDDEN = 'BROWSER_PARTITION_FORBIDDEN';
+
+/**
+ * Convert a renderer `openTab` request into tab options. A renderer-supplied
+ * `partition` is refused; Main alone decides the session (default: Browser profile).
+ *
+ * @throws Error whose message starts with {@link BROWSER_PARTITION_FORBIDDEN}.
+ */
+export const toRendererTabOptions = (request: OpenTabRequest | undefined): CreateTabOptions => {
+  const { partition, ...options } = request ?? {};
+  if (partition !== undefined) {
+    throw new Error(`${BROWSER_PARTITION_FORBIDDEN}: the renderer cannot choose a session partition`);
+  }
+  return options;
+};
+
 /** Lazily-built default services, shared across repeated registrations. */
 let defaultServices: BrowserServices | undefined;
+let detachLiveSessions: (() => void) | undefined;
 
 /** Browser commands fail closed whenever its reviewed package is not active. */
 let browserBridgeActive = false;
@@ -218,13 +248,31 @@ const guardBrowserRuntime = <T extends object>(value: T): T =>
  *
  * @param getWindow Accessor returning the main window to attach tab views to.
  */
+const tabUpdateListeners = new Set<(update: TabUpdate) => void>();
+
 export const getBrowserServices = (getWindow: () => BrowserWindow | null | undefined): BrowserServices => {
+  // No Main caller, package extension or web agent may resurrect WebContents after Browser removal.
+  requireActiveBrowserPackage();
   if (defaultServices) return defaultServices;
   const viewManager = createBrowserViewManager({
     getWindow,
     // Push live URL/title changes (including in-page SPA navigation) to the
     // renderer so the address bar tracks the page without polling.
-    onTabUpdate: (update) => browserChannels.tabUpdated.emit(update),
+    onTabUpdate: (update) => {
+      browserChannels.tabUpdated.emit(update);
+      for (const listener of tabUpdateListeners) listener(update);
+    },
+  });
+  // The sidebar's Active section lists browser tabs even while the Browser screen is not shown.
+  detachLiveSessions?.();
+  detachLiveSessions = attachBrowserLiveSessions(getLiveSessionRegistry(), {
+    listTabs: () => viewManager.listTabs(),
+    onTabUpdate: (listener) => {
+      tabUpdateListeners.add(listener);
+      return () => {
+        tabUpdateListeners.delete(listener);
+      };
+    },
   });
   const sharedMemory = createBrowserMemory();
   const coordinator = getResourceCoordinator();
@@ -292,7 +340,8 @@ export const getBrowserServices = (getWindow: () => BrowserWindow | null | undef
   // down) and also clears the PO-token caption gate. Best-effort: if the user is
   // not signed in, the exporter returns null and yt-dlp just runs anonymously.
   const ytDlp = createYtDlpTranscript({
-    getCookieFile: (dir) => writeYoutubeCookieFile(session.defaultSession.cookies, dir),
+    // Cookies now live in the Browser profile session (copied once from the default one).
+    getCookieFile: (dir) => writeYoutubeCookieFile(getBrowserProfileSession().cookies, dir),
   });
   const contentExtract = createContentExtractService({ ytDlp, ytFallback: youtubeTranscript });
 
@@ -424,7 +473,16 @@ export type RegisterBrowserBridgeOptions = {
    * `services` or `viewManager` is provided.
    */
   getWindow?: () => BrowserWindow | null | undefined;
+  /**
+   * Where `openApp` gets the address and allowed origins of an app. Defaults to the connection runtime of the package
+   * manager, loaded on first use; tests inject a fake.
+   */
+  webEmbedApps?: () => Promise<Pick<WebEmbedAppService, 'launch'> | undefined>;
 };
+
+/** The app service of the connection runtime, loaded lazily so the Browser bridge does not depend on it at startup. */
+const defaultWebEmbedApps = async (): Promise<Pick<WebEmbedAppService, 'launch'> | undefined> =>
+  (await import('@process/extensions/package-manager/packageBridge')).getConnectionRuntime().apps;
 
 /**
  * Resolve the {@link BrowserServices} to wire, honouring the precedence
@@ -452,13 +510,35 @@ const resolveServices = (options: RegisterBrowserBridgeOptions): BrowserServices
  * @param options Injected services and/or the main-window accessor (see
  *   {@link RegisterBrowserBridgeOptions}).
  */
+let lastShownTabId: string | undefined;
+let tabUrlOf: ((id: string) => string | undefined) | undefined;
+
+/**
+ * The URL of the tab the Browser last made active (its `show` request), read from the tab's own web contents. The
+ * extension strip uses it for the active site. A tab that is gone or in the background gives undefined. The renderer
+ * never supplies a URL; it may name a tab, and that tab must be a live foreground one.
+ */
+export const activeBrowserTabUrl = (requestedId?: string): string | undefined => {
+  if (!browserBridgeActive) return undefined;
+  const id = requestedId ?? lastShownTabId;
+  return id === undefined ? undefined : tabUrlOf?.(id);
+};
+
 export function registerBrowserBridge(options: RegisterBrowserBridgeOptions = {}): void {
   browserBridgeActive = true;
   const services = guardBrowserRuntime(resolveServices(options));
   const viewManager = guardBrowserRuntime(services.viewManager);
+  tabUrlOf = (id) => viewManager.listTabs().find((tab) => tab.id === id && tab.background !== true)?.url;
 
   // Open a new embedded browser tab and return its stable id (criterion 1.1).
-  browserChannels.openTab.provider((request) => Promise.resolve({ id: viewManager.createTab(request) }));
+  // The renderer never chooses the session partition (gap G8): reject it with a stable error.
+  browserChannels.openTab.provider((request) => {
+    try {
+      return Promise.resolve({ id: viewManager.createTab(toRendererTabOptions(request)) });
+    } catch (error) {
+      return Promise.reject(error);
+    }
+  });
 
   // Navigate an existing tab to a URL (criterion 1.1).
   browserChannels.navigate.provider(({ id, url }) => viewManager.loadURL(id, url));
@@ -486,6 +566,7 @@ export function registerBrowserBridge(options: RegisterBrowserBridgeOptions = {}
 
   // Show / hide a tab without destroying it.
   browserChannels.show.provider(({ id }) => {
+    lastShownTabId = id;
     viewManager.show(id);
     return Promise.resolve();
   });
@@ -506,6 +587,9 @@ export function registerBrowserBridge(options: RegisterBrowserBridgeOptions = {}
     viewManager.hideAll();
     return Promise.resolve();
   });
+
+  // Snapshot a tab as a data URL so the renderer can paint it while DOM overlays cover the native view.
+  browserChannels.capture.provider(({ id }) => viewManager.capture(id));
 
   // List every managed tab with its live url/title and last-known bounds.
   browserChannels.listTabs.provider(() => Promise.resolve(viewManager.listTabs()));
@@ -565,6 +649,24 @@ export function registerBrowserBridge(options: RegisterBrowserBridgeOptions = {}
     requireActiveBrowserPackage();
     return setAsDefaultBrowser();
   });
+
+  // Open a `web-embed` app by id. Main chooses the address, the session partition and the allowed origins; a request
+  // that names any of them is refused (gap G8). The app's tab is guarded before it loads.
+  const webEmbedTabs = createWebEmbedTabOpener({
+    apps: options.webEmbedApps ?? defaultWebEmbedApps,
+    tabs: {
+      createTab: (tabOptions) => viewManager.createTab(tabOptions),
+      destroyTab: (id) => viewManager.destroyTab(id),
+      loadURL: (id, url) => viewManager.loadURL(id, url),
+      listTabs: () => viewManager.listTabs(),
+      // Narrowed to the few members the guard uses; the guard tests run against a fake of exactly these.
+      getGuardedContents: (id) => viewManager.getWebContents(id) as unknown as GuardedWebContents | undefined,
+    },
+  });
+  browserChannels.openApp.provider((request) => {
+    requireActiveBrowserPackage();
+    return webEmbedTabs.open(request);
+  });
 }
 
 /**
@@ -573,6 +675,11 @@ export function registerBrowserBridge(options: RegisterBrowserBridgeOptions = {}
  */
 export function disposeBrowserBridge(): void {
   browserBridgeActive = false;
+  lastShownTabId = undefined;
+  tabUrlOf = undefined;
+  tabUpdateListeners.clear();
+  detachLiveSessions?.();
+  detachLiveSessions = undefined;
   defaultServices?.viewManager.dispose();
   defaultServices = undefined;
 }

@@ -6,6 +6,8 @@
 
 ---
 
+> **Hiện trạng host (CURRENT):** bản hiện tại chạy được gói `web-surface-app`, `ui-theme`, `ide-viewer`, `mcp-tool-server` và `agent-skill` (xem mục Agent Skill bên dưới). MCP server không có runtime riêng: gói khai báo `contributions.mcpServers` (một công thức `npx`/`uvx` kèm quyền `mcp.server.stdio`) và host thêm nó vào danh mục MCP ở trạng thái tắt cho người dùng tự bật. Các runtime của manifest vẫn chỉ là `sandboxed-web` và `trusted-react`. `/repotopackage` vẫn nhận diện các archetype còn lại nhưng từ chối đóng gói thay vì tạo một gói không chạy được. Chi tiết ở [Feature status](../FEATURE_STATUS.md).
+
 ## 1. Nguyên Tắc Thiết Kế Cốt Lõi (Core Design Invariants)
 
 Hệ sinh thái ứng dụng của TomniHubOS được xây dựng trên 3 ranh giới kỹ thuật bất di bất dịch:
@@ -183,6 +185,15 @@ graph TD
 ```
 
 ---
+
+#### Agent Skill (`type: "agent-capsule"`, không có module, không có runtime)
+
+Repo có thư mục chứa `SKILL.md` (ví dụ `skills/<tên>/SKILL.md`, định dạng Agent Skills của Claude Code, Codex, Droid) là một bộ **hướng dẫn và mẫu cho agent**, không phải ứng dụng. `/repotopackage` nhận diện nó trước các kiểm tra web (repo skill thường kèm trang HTML mẫu).
+
+- Gói theo [cấu trúc chuẩn](package-shell-layout.md): nguyên repo trong `source/`, còn `adapter/adapter.json` liệt kê các thư mục skill (chỉ output build bị loại). Script bảo trì và manifest plugin của host khác nằm trong `source/` nhưng không được dùng.
+- Không có quyền nào (`permissions: []`); không có gì được chạy khi cài.
+- Sau khi tạo gói, `/repotopackage` giải nén các thư mục skill và nhập vào kho skill (`NativeSkillCatalog.import`). Skill cùng tên xuất hiện nhiều lần trong một repo (mỗi plugin host một bản) chỉ cài một lần, ưu tiên bản ở thư mục ngoài cùng; skill trùng tên với skill đã có bị thay bằng bản mới. Stage lọc skill của pipeline chat chọn skill khi cần, như với mọi skill khác.
+- Nếu repo vừa có MCP server chạy được vừa có skill, MCP server được ưu tiên.
 
 ## 4. Bảng So Sánh Quyền Hạn Hệ Thống (Least Privilege Matrix)
 

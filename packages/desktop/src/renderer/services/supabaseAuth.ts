@@ -1173,7 +1173,7 @@ export const redeemTomCode = async (
 ): Promise<{ success: boolean; amount: number; message: string }> => {
   const code = rawCode.trim().toUpperCase();
   const PROMO_CODES: Record<string, { amount: number; label: string }> = {
-    TOMNI2026: { amount: 20.0, label: 'Mã chào mừng TomniHubOS 2026' },
+  TOMNI2026: { amount: 20.0, label: 'Mã chào mừng Tomny 2026' },
     WELCOME50: { amount: 50.0, label: 'Quà tặng thành viên mới' },
     TOMDEV: { amount: 10.0, label: 'Gói hỗ trợ nhà phát triển' },
     PROTEST: { amount: 100.0, label: 'Thử nghiệm gói Pro' },

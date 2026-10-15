@@ -199,6 +199,33 @@ pub fn get_operation(
     }
 }
 
+/// Every operation of one batch (`GROUP` and `GROUP.<n>`), newest first, so they can be undone in reverse order.
+pub fn list_group_operations(
+    conn: &Connection,
+    group: &str,
+) -> anyhow::Result<Vec<OperationRecord>> {
+    let like = format!(
+        "{}.%",
+        group
+            .replace('\\', "\\\\")
+            .replace('%', "\\%")
+            .replace('_', "\\_")
+    );
+    let mut stmt = conn.prepare(
+        "SELECT operation_id FROM operations WHERE operation_id = ?1 OR operation_id LIKE ?2 ESCAPE '\\' ORDER BY rowid DESC",
+    )?;
+    let ids: Vec<String> = stmt
+        .query_map(rusqlite::params![group, like], |row| row.get(0))?
+        .collect::<Result<_, _>>()?;
+    let mut records = Vec::new();
+    for id in ids {
+        if let Some(record) = get_operation(conn, &id)? {
+            records.push(record);
+        }
+    }
+    Ok(records)
+}
+
 pub fn get_last_operation(conn: &Connection) -> anyhow::Result<Option<OperationRecord>> {
     let mut stmt = conn.prepare(
         "SELECT operation_id, command, operation_type, cwd, project_path, file_path, before_hash, after_hash, backup_path, diff_path, changed, created_at, agent_id, task_id, plan_id

@@ -9,6 +9,7 @@
 // Bundled into this preload via `externalizeDepsPlugin({ exclude: [...] })` so
 // Electron's sandbox-mode preload doesn't try to resolve it from node_modules.
 import '@sentry/electron/preload';
+
 import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron';
 import { ADAPTER_BRIDGE_EVENT_KEY } from '../common/adapter/constant';
 import {
@@ -23,6 +24,7 @@ import {
   PROVIDER_DISCOVERY_NATIVE_CHANNELS,
   CREATOR_PREVIEW_NATIVE_CHANNELS,
   PACKAGE_CAPABILITY_NATIVE_CHANNELS,
+  PACKAGE_MODEL_INVOKE_NATIVE_CHANNELS,
   MICROSOFT_STORE_NATIVE_CHANNELS,
   PACKAGE_APP_GROUP_NATIVE_CHANNELS,
   PUBLISHER_SUBMISSION_NATIVE_CHANNELS,
@@ -34,6 +36,58 @@ import {
   type PackageSurfaceAiRuntimePortBinding,
   type PackageSurfaceAiRuntimePortHandoff,
 } from '../common/types/platform/electron';
+
+import {
+  SESSION_MEMORY_CHANNELS,
+  type SessionMemoryRequest,
+  type SessionMemoryRememberRequest,
+  type SessionMemoryForgetRequest,
+} from '../common/types/platform/sessionMemory';
+import {
+  COMPANY_SECRETS_CHANNELS,
+  PACKAGE_SECRETS_ACCESS_CHANNEL,
+  PACKAGE_SECRETS_CHANNELS,
+  PACKAGE_SECRETS_LEGACY_CHANNEL,
+  SESSION_SECRETS_CHANNELS,
+  type ScopedSecretsNativeAPI,
+} from '../common/types/platform/sessionSecrets';
+import { EXPLORER_CHANNELS, type ExplorerActionRequest } from '../common/types/platform/explorer';
+import {
+  INSTALL_APPROVAL_CHANNELS,
+  LOCAL_KEY_CHANNELS,
+  PACKAGE_CONNECTIONS_CHANNELS,
+  type InstallApprovalRequest,
+  type InstallApprovalResponse,
+} from '../common/types/platform/packageConnections';
+import { SKILL_DOCUMENT_CHANNEL } from '../common/skills/skillDocument';
+
+import { EXTENSION_STRIP_CHANNELS } from '../common/integrations/extensions/stripContract';
+import {
+  REPO_STORE_CHANNELS,
+  type RepoStoreImportRequest,
+  type RepoStoreProgress,
+} from '../common/types/platform/repoStore';
+import { LAUNCHER_CHANNELS } from '../common/types/platform/launcher';
+import { REALTIME_CONTENT_CHANNEL, REALTIME_ARTICLE_CHANNEL, type RealtimeContentNativeAPI } from '../common/types/platform/realtimeContent';
+import { HOOK_SETTINGS_CHANNELS } from '../common/integrations/hooks/hookSettings';
+
+import {
+  FILE_VIEWER_CHANNELS,
+  LIBRARY_CHANNELS,
+  type FileViewerNativeAPI,
+  type LibraryNativeAPI,
+} from '../common/integrations/library/libraryContracts';
+
+/** One scoped secrets surface (a conversation or a company): five channels, nothing else. */
+const scopedSecretsApi = <Key extends 'sessionId' | 'companyId' | 'packageId'>(
+  channels: Readonly<Record<'list' | 'save' | 'remove' | 'reveal' | 'dismissRequest', string>>
+): ScopedSecretsNativeAPI<Key> => ({
+  list: (payload) => ipcRenderer.invoke(channels.list, payload),
+  save: (payload) => ipcRenderer.invoke(channels.save, payload),
+  remove: (payload) => ipcRenderer.invoke(channels.remove, payload),
+  reveal: (payload) => ipcRenderer.invoke(channels.reveal, payload),
+  dismissRequest: (payload) => ipcRenderer.invoke(channels.dismissRequest, payload),
+});
 
 const isSafeHandoffIdentifier = (value: unknown, maximumLength = 256): value is string =>
   typeof value === 'string' && value.length > 0 && value.length <= maximumLength && /^[A-Za-z0-9._:@/-]+$/.test(value);
@@ -125,6 +179,213 @@ contextBridge.exposeInMainWorld('electronAPI', {
   captureFeedbackScreenshot: () => ipcRenderer.invoke('feedback:capture-screenshot'),
   // Get current backend port dynamically via synchronous IPC
   getBackendPort: () => ipcRenderer.sendSync('get-backend-port') as number,
+  ...(process.env.TOMNY_E2E_TEST === '1'
+    ? {
+        e2e: {
+          resetNativeConversationCapture: () => ipcRenderer.invoke('e2e.native-conversation-capture.reset'),
+          getNativeConversationCapture: () => ipcRenderer.invoke('e2e.native-conversation-capture.get'),
+        },
+      }
+    : {}),
+  sessionMemory: {
+    snapshot: (payload: SessionMemoryRequest) => ipcRenderer.invoke(SESSION_MEMORY_CHANNELS.snapshot, payload),
+    remember: (payload: SessionMemoryRememberRequest) => ipcRenderer.invoke(SESSION_MEMORY_CHANNELS.remember, payload),
+    clear: (payload: SessionMemoryRequest) => ipcRenderer.invoke(SESSION_MEMORY_CHANNELS.clear, payload),
+    forget: (payload: SessionMemoryForgetRequest) => ipcRenderer.invoke(SESSION_MEMORY_CHANNELS.forget, payload),
+  },
+  sessionSecrets: scopedSecretsApi<'sessionId'>(SESSION_SECRETS_CHANNELS),
+  companySecrets: scopedSecretsApi<'companyId'>(COMPANY_SECRETS_CHANNELS),
+  packageSecrets: {
+    ...scopedSecretsApi<'packageId'>(PACKAGE_SECRETS_CHANNELS),
+    access: {
+      overview: (payload: { packageId: string }) =>
+        ipcRenderer.invoke(PACKAGE_SECRETS_ACCESS_CHANNEL, { ...payload, action: 'overview' }),
+      approve: (payload: { packageId: string; requestId: string }) =>
+        ipcRenderer.invoke(PACKAGE_SECRETS_ACCESS_CHANNEL, { ...payload, action: 'approve' }),
+      deny: (payload: { packageId: string; requestId: string }) =>
+        ipcRenderer.invoke(PACKAGE_SECRETS_ACCESS_CHANNEL, { ...payload, action: 'deny' }),
+      grant: (payload: { packageId: string; handle: string }) =>
+        ipcRenderer.invoke(PACKAGE_SECRETS_ACCESS_CHANNEL, { ...payload, action: 'grant' }),
+      revoke: (payload: { packageId: string; handle: string }) =>
+        ipcRenderer.invoke(PACKAGE_SECRETS_ACCESS_CHANNEL, { ...payload, action: 'revoke' }),
+    },
+    legacy: {
+      status: (payload: { packageId: string }) =>
+        ipcRenderer.invoke(PACKAGE_SECRETS_LEGACY_CHANNEL, { ...payload, action: 'status' }),
+      import: (payload: { packageId: string }) =>
+        ipcRenderer.invoke(PACKAGE_SECRETS_LEGACY_CHANNEL, { ...payload, action: 'import' }),
+    },
+  },
+  // Only the named fields cross; Main validates them again and refuses anything else (never a path).
+  launcher: {
+    link: (request: { packageId: string; connectionId: string }) => ipcRenderer.invoke(LAUNCHER_CHANNELS.link, request),
+    open: (request: { packageId: string; connectionId: string }) => ipcRenderer.invoke(LAUNCHER_CHANNELS.open, request),
+    download: (request: { packageId: string; connectionId: string }) =>
+      ipcRenderer.invoke(LAUNCHER_CHANNELS.download, request),
+  },
+  repoStore: {
+    import: (request: RepoStoreImportRequest) => ipcRenderer.invoke(REPO_STORE_CHANNELS.import, request),
+    checkUpdate: (request: { packageId: string }) =>
+      ipcRenderer.invoke(REPO_STORE_CHANNELS.checkUpdate, { packageId: request.packageId }),
+    onProgress: (listener: (progress: RepoStoreProgress) => void) => {
+      const onEvent = (_event: IpcRendererEvent, progress: RepoStoreProgress): void => {
+        if (progress && typeof progress.requestId === 'string') listener(progress);
+      };
+      ipcRenderer.on(REPO_STORE_CHANNELS.progress, onEvent);
+      return () => ipcRenderer.removeListener(REPO_STORE_CHANNELS.progress, onEvent);
+    },
+  },
+  extensionStrip: {
+    list: () => ipcRenderer.invoke(EXTENSION_STRIP_CHANNELS.list, {}),
+    setPinned: (payload: { id: string; pinned: boolean }) =>
+      ipcRenderer.invoke(EXTENSION_STRIP_CHANNELS.setPinned, { id: payload.id, pinned: payload.pinned }),
+    setSiteAccess: (payload: { id: string; mode: string }) =>
+      ipcRenderer.invoke(EXTENSION_STRIP_CHANNELS.setSiteAccess, { id: payload.id, mode: payload.mode }),
+    allowSite: (payload: { id: string }) => ipcRenderer.invoke(EXTENSION_STRIP_CHANNELS.allowSite, { id: payload.id }),
+    uninstall: (payload: { packageId: string }) =>
+      ipcRenderer.invoke(EXTENSION_STRIP_CHANNELS.uninstall, { packageId: payload.packageId }),
+  },
+  skillDocuments: {
+    read: (payload: { name: string; packageId?: string }) => ipcRenderer.invoke(SKILL_DOCUMENT_CHANNEL, payload),
+  },
+
+  localKeys: {
+    revoke: () => ipcRenderer.invoke(LOCAL_KEY_CHANNELS.revoke),
+  },
+  packageConnections: {
+    list: (payload: { packageId: string }) =>
+      ipcRenderer.invoke(PACKAGE_CONNECTIONS_CHANNELS.list, { packageId: payload.packageId }),
+    describe: (payload: { packageId: string; connectionKey: string }) =>
+      ipcRenderer.invoke(PACKAGE_CONNECTIONS_CHANNELS.describe, {
+        packageId: payload.packageId,
+        connectionKey: payload.connectionKey,
+      }),
+    enable: (payload: { packageId: string; connectionKey: string; approvalHash: string }) =>
+      ipcRenderer.invoke(PACKAGE_CONNECTIONS_CHANNELS.enable, {
+        packageId: payload.packageId,
+        connectionKey: payload.connectionKey,
+        approvalHash: payload.approvalHash,
+      }),
+    disable: (payload: { packageId: string; connectionKey: string }) =>
+      ipcRenderer.invoke(PACKAGE_CONNECTIONS_CHANNELS.disable, {
+        packageId: payload.packageId,
+        connectionKey: payload.connectionKey,
+      }),
+    setAutoStart: (payload: { packageId: string; connectionKey: string; autoStart: boolean }) =>
+      ipcRenderer.invoke(PACKAGE_CONNECTIONS_CHANNELS.setAutoStart, {
+        packageId: payload.packageId,
+        connectionKey: payload.connectionKey,
+        autoStart: payload.autoStart,
+      }),
+    setPackageEnabled: (payload: { packageId: string; enabled: boolean }) =>
+      ipcRenderer.invoke(PACKAGE_CONNECTIONS_CHANNELS.setPackageEnabled, {
+        packageId: payload.packageId,
+        enabled: payload.enabled,
+      }),
+
+    onInstallApprovalRequest: (listener: (request: InstallApprovalRequest) => void) => {
+      const onEvent = (_event: IpcRendererEvent, request: InstallApprovalRequest): void => {
+        if (request && typeof request.requestId === 'string') listener(request);
+      };
+      ipcRenderer.on(INSTALL_APPROVAL_CHANNELS.request, onEvent);
+      // A window that was reloaded while a request waited gets the still-pending requests again. Main keeps them until answered.
+      void ipcRenderer
+        .invoke(INSTALL_APPROVAL_CHANNELS.pending)
+        .then((items: unknown) => {
+          if (!Array.isArray(items)) return;
+          for (const item of items) onEvent({} as IpcRendererEvent, item as InstallApprovalRequest);
+        })
+        .catch((): undefined => undefined);
+      return () => ipcRenderer.removeListener(INSTALL_APPROVAL_CHANNELS.request, onEvent);
+    },
+    respondInstallApproval: (response: InstallApprovalResponse) =>
+      ipcRenderer.invoke(INSTALL_APPROVAL_CHANNELS.respond, response),
+
+    rulesList: () => ipcRenderer.invoke(PACKAGE_CONNECTIONS_CHANNELS.rulesList, {}),
+    rulesAttach: (payload: { packageId: string; connectionId: string; workspace: string }) =>
+      ipcRenderer.invoke(PACKAGE_CONNECTIONS_CHANNELS.rulesAttach, {
+        packageId: payload.packageId,
+        connectionId: payload.connectionId,
+        workspace: payload.workspace,
+      }),
+    rulesDetach: (payload: { packageId: string; connectionId: string; workspace: string }) =>
+      ipcRenderer.invoke(PACKAGE_CONNECTIONS_CHANNELS.rulesDetach, {
+        packageId: payload.packageId,
+        connectionId: payload.connectionId,
+        workspace: payload.workspace,
+      }),
+    servicesList: () => ipcRenderer.invoke(PACKAGE_CONNECTIONS_CHANNELS.servicesList, {}),
+    servicesStart: (payload: { packageId: string; connectionId: string }) =>
+      ipcRenderer.invoke(PACKAGE_CONNECTIONS_CHANNELS.servicesStart, {
+        packageId: payload.packageId,
+        connectionId: payload.connectionId,
+      }),
+    servicesStop: (payload: { packageId: string; connectionId: string }) =>
+      ipcRenderer.invoke(PACKAGE_CONNECTIONS_CHANNELS.servicesStop, {
+        packageId: payload.packageId,
+        connectionId: payload.connectionId,
+      }),
+  },
+  // Hook settings (design S10). Only the named fields cross; Main validates them again and refuses anything else.
+  hookSettings: {
+    list: () => ipcRenderer.invoke(HOOK_SETTINGS_CHANNELS.list, {}),
+    describe: (payload: { hookId: string }) =>
+      ipcRenderer.invoke(HOOK_SETTINGS_CHANNELS.describe, { hookId: payload.hookId }),
+    approve: (payload: { hookId: string; approvalHash: string }) =>
+      ipcRenderer.invoke(HOOK_SETTINGS_CHANNELS.approve, {
+        hookId: payload.hookId,
+        approvalHash: payload.approvalHash,
+      }),
+    setEnabled: (payload: { hookId: string; enabled: boolean }) =>
+      ipcRenderer.invoke(HOOK_SETTINGS_CHANNELS.setEnabled, { hookId: payload.hookId, enabled: payload.enabled }),
+    setDisableAll: (payload: { disabled: boolean }) =>
+      ipcRenderer.invoke(HOOK_SETTINGS_CHANNELS.setDisableAll, { disabled: payload.disabled }),
+    setSourceEnabled: (payload: { source: string; enabled: boolean }) =>
+      ipcRenderer.invoke(HOOK_SETTINGS_CHANNELS.setSourceEnabled, { source: payload.source, enabled: payload.enabled }),
+    createUser: (payload: { event: string; matcher?: string; command: string; args?: string[]; timeoutSec: number }) =>
+      ipcRenderer.invoke(HOOK_SETTINGS_CHANNELS.createUser, {
+        event: payload.event,
+        ...(payload.matcher === undefined ? {} : { matcher: payload.matcher }),
+        command: payload.command,
+        ...(payload.args === undefined ? {} : { args: payload.args }),
+        timeoutSec: payload.timeoutSec,
+      }),
+    removeUser: (payload: { hookId: string }) =>
+      ipcRenderer.invoke(HOOK_SETTINGS_CHANNELS.removeUser, { hookId: payload.hookId }),
+    audit: (payload?: { limit?: number }) =>
+      ipcRenderer.invoke(HOOK_SETTINGS_CHANNELS.audit, payload?.limit === undefined ? {} : { limit: payload.limit }),
+    coverage: () => ipcRenderer.invoke(HOOK_SETTINGS_CHANNELS.coverage, {}),
+  },
+    realtimeContent: {
+    read: (payload) => ipcRenderer.invoke(REALTIME_CONTENT_CHANNEL, payload),
+    readArticle: (payload) => ipcRenderer.invoke(REALTIME_ARTICLE_CHANNEL, payload),
+  } satisfies RealtimeContentNativeAPI,
+  explorer: {
+    open: (payload: { path?: string; pick?: boolean }) => ipcRenderer.invoke(EXPLORER_CHANNELS.open, payload),
+    list: (payload: { sessionId: string; relativePath: string }) => ipcRenderer.invoke(EXPLORER_CHANNELS.list, payload),
+    action: (payload: ExplorerActionRequest) => ipcRenderer.invoke(EXPLORER_CHANNELS.action, payload),
+    close: (payload: { sessionId: string }) => ipcRenderer.invoke(EXPLORER_CHANNELS.close, payload),
+    quickView: (payload: { sessionId: string; relativePath: string }) =>
+      ipcRenderer.invoke(EXPLORER_CHANNELS.quickView, payload),
+  },
+  // The Hub file viewer and Library: requests name a file only by an opaque id; Main resolves and re-validates it.
+  fileViewer: {
+    openFromExplorer: (payload) =>
+      ipcRenderer.invoke(FILE_VIEWER_CHANNELS.openFromExplorer, {
+        sessionId: payload.sessionId,
+        relativePath: payload.relativePath,
+      }),
+    read: (payload) => ipcRenderer.invoke(FILE_VIEWER_CHANNELS.read, { ref: payload.ref }),
+    openExternal: (payload) => ipcRenderer.invoke(FILE_VIEWER_CHANNELS.openExternal, { ref: payload.ref }),
+  } satisfies FileViewerNativeAPI,
+  library: {
+    list: () => ipcRenderer.invoke(LIBRARY_CHANNELS.list),
+    add: () => ipcRenderer.invoke(LIBRARY_CHANNELS.add),
+    addFromView: (payload) => ipcRenderer.invoke(LIBRARY_CHANNELS.addFromView, { viewId: payload.viewId }),
+    repick: (payload) => ipcRenderer.invoke(LIBRARY_CHANNELS.repick, { entryId: payload.entryId }),
+    remove: (payload) => ipcRenderer.invoke(LIBRARY_CHANNELS.remove, { entryId: payload.entryId }),
+  } satisfies LibraryNativeAPI,
+
   accountSession: {
     getStatus: () => ipcRenderer.invoke(ACCOUNT_SESSION_NATIVE_CHANNELS.getStatus),
     beginSignIn: () => ipcRenderer.invoke(ACCOUNT_SESSION_NATIVE_CHANNELS.beginSignIn),
@@ -207,6 +468,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     activate: (payload: unknown) => ipcRenderer.invoke(PACKAGE_CAPABILITY_NATIVE_CHANNELS.activate, payload),
     invoke: (payload: unknown) => ipcRenderer.invoke(PACKAGE_CAPABILITY_NATIVE_CHANNELS.invoke, payload),
     cancel: (payload: unknown) => ipcRenderer.invoke(PACKAGE_CAPABILITY_NATIVE_CHANNELS.cancel, payload),
+  },
+  packageModelInvoke: {
+    invoke: (payload: unknown) => ipcRenderer.invoke(PACKAGE_MODEL_INVOKE_NATIVE_CHANNELS.invoke, payload),
+    cancel: (payload: unknown) => ipcRenderer.invoke(PACKAGE_MODEL_INVOKE_NATIVE_CHANNELS.cancel, payload),
   },
   microsoftStore: {
     requestConsent: (payload: unknown) => ipcRenderer.invoke(MICROSOFT_STORE_NATIVE_CHANNELS.requestConsent, payload),

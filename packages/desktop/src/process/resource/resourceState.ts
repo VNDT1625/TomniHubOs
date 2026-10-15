@@ -101,7 +101,8 @@ const TASK_KINDS = [
   'ocr',
   'transcription',
   'docConvert',
-  'semanticIndex',
+    'semanticIndex',
+  'workflowTool',
 ] as const;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -151,6 +152,29 @@ const isResourceStateShape = (value: unknown): value is ResourceState => {
   );
 };
 
+/** Upgrade only the newly introduced lane, after validating the saved budget's existing fields. */
+const upgradeBudget = (value: unknown): unknown => {
+  if (!isRecord(value) || !isRecord(value.maxConcurrent)) return value;
+  const limits = value.maxConcurrent;
+  if (limits.workflowTool !== undefined) return value;
+  if (!TASK_KINDS.filter((kind) => kind !== 'workflowTool').every((kind) =>
+    Number.isInteger(limits[kind]) && isFiniteNonNegative(limits[kind])
+  )) return value;
+  return { ...value, maxConcurrent: { ...limits, workflowTool: 2 } };
+};
+const upgradeResourceState = (value: unknown): unknown => {
+  if (!isRecord(value)) return value;
+  return {
+    ...value,
+    budget: upgradeBudget(value.budget),
+    lastAdjustments: Array.isArray(value.lastAdjustments)
+      ? value.lastAdjustments.map((entry: unknown) => isRecord(entry)
+        ? { ...entry, from: upgradeBudget(entry.from), to: upgradeBudget(entry.to) }
+        : entry)
+      : value.lastAdjustments,
+  };
+};
+
 const isFileNotFound = (error: unknown): boolean => (error as NodeJS.ErrnoException | undefined)?.code === 'ENOENT';
 
 /**
@@ -166,7 +190,7 @@ export const loadResourceState = async (options?: ResourceStateLoadOptions): Pro
   const fsImpl = resolveFs(options);
   try {
     const raw = await fsImpl.readFile(filePath, 'utf-8');
-    const parsed: unknown = JSON.parse(raw);
+        const parsed: unknown = upgradeResourceState(JSON.parse(raw));
     if (isResourceStateShape(parsed)) return parsed;
     console.warn('[Resource] resource-state.json has unexpected shape; using default state');
   } catch (error) {
@@ -177,7 +201,7 @@ export const loadResourceState = async (options?: ResourceStateLoadOptions): Pro
 
   try {
     const raw = await fsImpl.readFile(path.join(resolveDir(options), RESOURCE_STATE_BACKUP_FILE), 'utf-8');
-    const parsed: unknown = JSON.parse(raw);
+        const parsed: unknown = upgradeResourceState(JSON.parse(raw));
     if (isResourceStateShape(parsed)) return parsed;
   } catch {
     // The recovery copy is unavailable or invalid, so use the supplied fallback.

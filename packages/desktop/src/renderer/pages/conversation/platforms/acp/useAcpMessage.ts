@@ -7,6 +7,8 @@
 import { ipcBridge } from '@/common';
 import { transformMessage, type IMessageAcpPermission } from '@/common/chat/chatLib';
 import type { AvailableCommand } from '@/common/chat/chatLib';
+import type { DiscoveredCliCommand } from '@/common/chat/slash/types';
+import { nativeCommandBlockReason } from '@/common/chat/slash/compatibility';
 import type { SlashCommandItem } from '@/common/chat/slash/types';
 import type { IResponseMessage } from '@/common/adapter/ipcBridge';
 import type { TokenUsageData } from '@/common/config/storage';
@@ -17,6 +19,22 @@ import type { ThoughtData } from '@/renderer/components/chat/ThoughtDisplay';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { noteAssistantReply } from '@/renderer/services/i18n/responseLanguage';
 import { enforceStrictIdeModeOnPermission } from '../strictIdeModeGuard';
+
+const asSlashItems = (commands: readonly DiscoveredCliCommand[], origin: 'acp' | 'codex-app-server' = 'acp'): SlashCommandItem[] =>
+  commands.map(({ name, description }) => ({
+    name,
+    description,
+    kind: 'template',
+        source: origin === 'codex-app-server' ? 'codex' : 'acp',
+    selectionBehavior: 'insert',
+    ...(nativeCommandBlockReason(name) ? { hint: `Unavailable: ${nativeCommandBlockReason(name)}` } : {}),
+  }));
+
+/** The native conversation bridge resolves the actual CLI and workspace in Main. */
+const fetchNativeSlashItems = async (conversation_id: string): Promise<SlashCommandItem[]> => {
+  const discovery = await ipcBridge.conversation.getCliCommands.invoke({ conversation_id });
+  return discovery.status === 'available' ? asSlashItems(discovery.commands, discovery.origin) : [];
+};
 
 export type UseAcpMessageReturn = {
   thought: ThoughtData;
@@ -48,7 +66,8 @@ export const useAcpMessage = (conversation_id: string, options?: { skipWarmup?: 
   const [aiProcessing, setAiProcessing] = useState(false); // New loading state for AI response
   const [tokenUsage, setTokenUsage] = useState<TokenUsageData | null>(null);
   const [context_limit, setContextLimit] = useState<number>(0);
-  const [slashCommands, setSlashCommands] = useState<SlashCommandItem[]>([]);
+    const [slashCommands, setSlashCommands] = useState<SlashCommandItem[]>([]);
+  const slashRequestIdRef = useRef(0);
 
   // Use refs to sync state for immediate access in event handlers
   const runningRef = useRef(running);
@@ -323,7 +342,9 @@ export const useAcpMessage = (conversation_id: string, options?: { skipWarmup?: 
               runningRef.current = false;
             }
             // Reset all loading states on error or disconnect so UI doesn't stay stuck
-            if (['error', 'disconnected'].includes(agentData.status)) {
+                        if (['error', 'disconnected'].includes(agentData.status)) {
+              ++slashRequestIdRef.current;
+              setSlashCommands([]);
               setRunning(false);
               runningRef.current = false;
               setAiProcessing(false);
@@ -411,23 +432,24 @@ export const useAcpMessage = (conversation_id: string, options?: { skipWarmup?: 
           // Model info updates are handled by AcpModelSelector, no action needed here
           break;
         case 'slash_commands_updated':
-          // Slash commands became available (often during bootstrap when
-          // agent_status events are suppressed). Update acpStatus so
-          // useSlashCommands re-fetches.
+                    // Refresh when a connected provider publishes a new command catalog.
           setAcpStatus((prev) => prev ?? 'session_active');
+          {
+            const requestId = ++slashRequestIdRef.current;
+            void fetchNativeSlashItems(conversation_id)
+              .then((items) => {
+                if (requestId === slashRequestIdRef.current) setSlashCommands(items);
+              })
+              .catch(() => {
+                if (requestId === slashRequestIdRef.current) setSlashCommands([]);
+              });
+          }
           break;
         case 'available_commands': {
           const cmdData = message.data as { commands?: AvailableCommand[] };
           if (cmdData?.commands && Array.isArray(cmdData.commands)) {
-            setSlashCommands(
-              cmdData.commands.map((c) => ({
-                name: c.name,
-                description: c.description,
-                kind: 'template' as const,
-                source: 'acp' as const,
-                selectionBehavior: 'insert' as const,
-              }))
-            );
+                        ++slashRequestIdRef.current;
+            setSlashCommands(asSlashItems(cmdData.commands));
           }
           break;
         }
@@ -501,9 +523,17 @@ export const useAcpMessage = (conversation_id: string, options?: { skipWarmup?: 
     ]
   );
 
-  useEffect(() => {
+    useEffect(() => {
     return ipcBridge.acpConversation.responseStream.on(handleResponseMessage);
   }, [handleResponseMessage]);
+
+  // Main broadcasts provider-native command replacements, including [] and process disconnects.
+  useEffect(() =>
+    ipcBridge.conversation.cliCommandsUpdated.on(({ conversation_id: id, catalog }) => {
+      if (id !== conversation_id) return;
+      ++slashRequestIdRef.current; // Invalidate slower discovery responses and stale HTTP-era fetches.
+      setSlashCommands(catalog.status === 'available' ? asSlashItems(catalog.commands, catalog.origin) : []);
+    }), [conversation_id]);
 
   // Reset state when conversation changes and restore actual running status
   useEffect(() => {
@@ -513,6 +543,7 @@ export const useAcpMessage = (conversation_id: string, options?: { skipWarmup?: 
     setAcpStatus(null);
     setTokenUsage(null);
     setContextLimit(0);
+        ++slashRequestIdRef.current;
     setSlashCommands([]);
     hasContentInTurnRef.current = false;
     turnFinishedRef.current = false;
@@ -585,33 +616,20 @@ export const useAcpMessage = (conversation_id: string, options?: { skipWarmup?: 
     };
   }, [conversation_id]);
 
-  // Fetch slash commands via HTTP after warmup completes.
-  // WebSocket push of available_commands arrives during warmup when no
-  // StreamRelay is listening, so the initial load must come from HTTP.
-  // Mirrors the tomnyagentic pattern: warmup first, then fetch.
-  // In team mode, warmup is deferred to first user input — skip here.
+    // ACP command discovery is Main-owned; the legacy HTTP catalog is not backed by native runtime.
+  // In team mode, warmup is deferred to the first user input.
   useEffect(() => {
     if (options?.skipWarmup) return;
     let cancelled = false;
+    const requestId = ++slashRequestIdRef.current;
     void warmupConversation(conversation_id)
-      .then(() => {
-        if (cancelled) return;
-        return ipcBridge.conversation.getSlashCommands.invoke({ conversation_id });
+      .then(() => fetchNativeSlashItems(conversation_id))
+      .then((items) => {
+        if (!cancelled && requestId === slashRequestIdRef.current) setSlashCommands(items);
       })
-      .then((result) => {
-        if (cancelled) return;
-        if (!result || !Array.isArray(result) || result.length === 0) return;
-        setSlashCommands(
-          result.map((c) => ({
-            name: c.command,
-            description: c.description,
-            kind: 'template' as const,
-            source: 'acp' as const,
-            selectionBehavior: 'insert' as const,
-          }))
-        );
-      })
-      .catch(() => {});
+      .catch(() => {
+        if (!cancelled && requestId === slashRequestIdRef.current) setSlashCommands([]);
+      });
     return () => {
       cancelled = true;
     };
@@ -630,22 +648,15 @@ export const useAcpMessage = (conversation_id: string, options?: { skipWarmup?: 
     setHasThinkingMessage(false);
   }, []);
 
-  const fetchSlashCommands = useCallback(() => {
-    void ipcBridge.conversation.getSlashCommands
-      .invoke({ conversation_id })
-      .then((result) => {
-        if (!result || !Array.isArray(result) || result.length === 0) return;
-        setSlashCommands(
-          result.map((c) => ({
-            name: c.command,
-            description: c.description,
-            kind: 'template' as const,
-            source: 'acp' as const,
-            selectionBehavior: 'insert' as const,
-          }))
-        );
+    const fetchSlashCommands = useCallback(() => {
+    const requestId = ++slashRequestIdRef.current;
+    void fetchNativeSlashItems(conversation_id)
+      .then((items) => {
+        if (requestId === slashRequestIdRef.current) setSlashCommands(items);
       })
-      .catch(() => {});
+      .catch(() => {
+        if (requestId === slashRequestIdRef.current) setSlashCommands([]);
+      });
   }, [conversation_id]);
 
   return {

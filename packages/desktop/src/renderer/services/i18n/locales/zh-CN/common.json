@@ -1,4 +1,93 @@
 {
+  "superSearch": {
+    "placeholder": {
+      "hub": "搜索…",
+      "browser": "使用 {{engine}} 搜索…"
+    },
+    "ariaLabel": "超级搜索",
+    "scopeLabel": "搜索范围",
+    "scope": {
+      "all": "全部"
+    },
+    "source": {
+      "local": "应用内",
+      "apps": "应用",
+      "web": "网页"
+    },
+    "state": {
+      "loading": "搜索中…",
+      "empty": "没有结果",
+      "error": "此来源出错，其他来源仍可使用",
+      "timeout": "此来源响应过慢",
+      "unavailable": "来源未就绪",
+      "noBridge": "已连接，但尚未接入搜索执行通道",
+      "disabled": "此来源已关闭，请在来源设置中开启。"
+    },
+    "hint": {
+      "empty": "输入以搜索。使用 fb: abc 之类的前缀可只搜索一个来源。",
+      "scopeOnly": "正在搜索 {{source}} — 请输入内容。"
+    },
+    "rank": "#{{rank}} · 前 {{percent}}%",
+    "rankTitle": "{{source}} 中第 {{rank}}/{{count}} 名 — 前 {{percent}}%",
+    "resultCount": "{{count}} 条结果",
+    "footer": "↑↓ 选择 · Enter 打开 · Esc 关闭",
+    "close": "关闭",
+    "clear": "清除",
+    "engineLabel": "搜索引擎",
+    "config": {
+      "title": "搜索来源",
+      "source": "Source",
+      "remove": "Remove",
+      "addCustom": "Add a site search",
+      "customHelp": "Paste the search link of any site and put {q} where the keyword goes, e.g. https://www.google.com/maps/search/{q}",
+      "customName": "Name",
+      "customUrl": "Search link with {q}",
+      "customInvalid": "Needs a name, a unique alias and an http(s) link containing {q}",
+      "add": "Add",
+      "open": "来源设置",
+      "enabled": "开启",
+      "inAll": "计入“全部”",
+      "alias": "别名",
+      "aliasInvalid": "别名无效或已被使用",
+      "connectedNote": "已连接的第三方来源默认关闭，开启后才会发送查询。",
+      "reset": "恢复默认",
+      "done": "完成",
+      "none": "未找到已连接的搜索工具"
+    },
+    "web": {
+      "searchWith": "在 {{engine}} 搜索“{{query}}”",
+      "openSite": "打开 {{site}}"
+    },
+    "local": {
+      "untitledConversation": "未命名对话",
+      "restartApp": "重启应用",
+      "actionSubtitle": "操作",
+      "pageSubtitle": "页面",
+      "settings": "设置",
+      "page": {
+        "home": "首页",
+        "history": "历史",
+        "scheduled": "计划任务",
+        "store": "商店",
+        "browser": "浏览器",
+        "ide": "IDE",
+        "company": "公司",
+        "git": "Git",
+        "account": "账户",
+        "settings": "设置"
+      }
+    },
+    "settings": {
+      "theme": "主题与配色",
+      "cssTheme": "自定义 CSS 主题",
+      "wallpaper": "壁纸",
+      "interfaceLanguage": "界面语言",
+      "modelProviders": "模型提供方与 API 密钥",
+      "mcpServers": "MCP 服务器与连接器",
+      "skills": "技能",
+      "webui": "远程 / WebUI 访问"
+    }
+  },
   "send": "发送",
   "cancel": "取消",
   "save": "保存",
@@ -11,6 +100,7 @@
   "skills": "技能",
   "workspace": "项目",
   "settings": "设置",
+  "home": "主页",
   "system": "系统",
   "about": "关于我们",
   "back": "返回聊天",
@@ -23,6 +113,7 @@
   "loading": "请稍候...",
   "copy": "复制",
   "reply": "引用",
+  "copiedInline": "已复制",
   "copySuccess": "已复制",
   "copyFailed": "Copy failed",
   "download": "下载",
@@ -89,6 +180,17 @@
   "fileAttach.uploading": "上传中...",
   "fileAttach.uploadSuccess": "上传成功",
   "fileAttach.cancelUpload": "取消上传",
+  "attachmentQuickView": {
+    "showAttachments": "显示附件 ({{count}})",
+    "hideAttachments": "隐藏附件 ({{count}})",
+    "remove": "移除 {{label}}",
+    "label": "{{label}} 的快速预览",
+    "loading": "正在加载预览…",
+    "unsupported": "此文件类型无法在此处预览。",
+    "directory": "无法在此处预览文件夹。",
+    "too-large": "此文件过大，无法快速预览。",
+    "unavailable": "此文件已不可用。"
+  },
   "expand": "展开",
   "name": "名称",
   "added": "已添加",
@@ -98,5 +200,267 @@
   "import": "导入",
   "processing": "处理中...",
   "optional": "（可选）",
-  "clear": "清除"
+  "clear": "清除",
+  "notificationHub": {
+    "title": "通知",
+    "summary": "紧急 {{p0}} · 重要 {{p1}} · 已过滤 {{filtered}}",
+    "layaOn": "Laya 正在分类新通知。",
+    "layaOff": "Laya 未运行，正在使用内置规则分类。",
+    "taskCreated": "已创建任务",
+    "taskFailed": "无法创建任务",
+    "tabs": {
+      "focus": "重点",
+      "digest": "摘要",
+      "filtered": "已过滤",
+      "sources": "来源"
+    },
+    "empty": {
+      "focus": "目前没有需要你处理的事。",
+      "digest": "暂无更新。",
+      "filtered": "没有被过滤的内容。"
+    },
+    "level": {
+      "P0": "紧急",
+      "P1": "重要",
+      "P2": "摘要",
+      "P3": "过滤"
+    },
+    "by": {
+      "laya": "Laya 分类",
+      "rules": "规则分类",
+      "user": "由你设置",
+      "llm": "由你的模型分类"
+    },
+    "actions": {
+      "open": "打开",
+      "createTask": "转为任务",
+      "move": "调整级别",
+      "markRead": "标为已读",
+      "remove": "删除",
+      "alwaysImportant": "此发件人始终紧急",
+      "alwaysMute": "始终过滤此发件人",
+      "syncAll": "立即检查来源",
+      "markAllRead": "全部标为已读",
+      "clearTab": "清空此标签",
+      "boostSender": "此人的消息始终紧急",
+      "muteSender": "始终过滤此人",
+      "muteSource": "将 {{name}} 静音",
+      "unmuteSource": "取消静音 {{name}}",
+      "settings": "通知设置"
+    },
+    "event": {
+      "needsInput": "{{name}} 等待你的回复",
+      "failed": "{{name}} 失败",
+      "done": "{{name}} 已完成",
+      "scheduleFailed": "计划任务 {{name}} 失败",
+      "scheduleDone": "计划任务 {{name}} 已完成",
+      "webUnread": "{{name}}：{{count}} 条未读 (+{{added}})",
+      "ramHigh": "内存即将不足",
+      "ramHighBody": "内存已使用 {{percent}}%（{{used}} / {{total}} GB）。请关闭不需要的模型或标签页。"
+    },
+    "errors": {
+      "label": "请输入名称。",
+      "host": "服务器地址无效。",
+      "user": "请输入邮箱或用户名。",
+      "port": "端口须在 1 到 65535 之间。",
+      "password": "密码过长。",
+      "url": "请使用 http 或 https 的订阅地址。",
+      "origin": "请输入站点，例如 facebook.com。",
+      "kind": "未知的来源类型。",
+      "missing": "此来源已不存在。",
+      "limit": "已达到 30 个来源的上限。",
+      "busy": "此来源正在同步。",
+      "unknown": "出了点问题，请重试。",
+      "channel": "请输入 YouTube 频道链接、@handle 或频道 ID。",
+      "unsupported": "此系统不支持。"
+    },
+    "sources": {
+      "title": "已连接的来源",
+      "add": "添加来源",
+      "intro": "Tomny 只读取你允许的内容：邮件标头（不会标为已读）、公开订阅源、你所选应用的 Windows 通知，以及已允许网站的标签页标题中的未读数和网站自身的通知。",
+      "none": "还没有来源。添加邮箱、订阅或网站。",
+      "kind": {
+        "imap": "邮件",
+        "feed": "订阅",
+        "web": "网站",
+        "youtube": "YouTube",
+        "os": "桌面应用"
+      },
+      "lastError": "错误：{{error}}",
+      "lastSync": "检查于 {{time}}",
+      "webPassive": "在内置浏览器中打开该网站时更新",
+      "neverSynced": "尚未检查",
+      "noPassword": "未保存密码",
+      "enabled": "启用",
+      "syncNow": "立即检查",
+      "edit": "编辑",
+      "remove": "删除",
+      "removeConfirm": "删除此来源及其保存的密码？",
+      "provider": "服务商",
+      "presets": {
+        "gmail": "Gmail",
+        "outlook": "Outlook / Microsoft 365",
+        "yahoo": "Yahoo 邮箱",
+        "icloud": "iCloud 邮件",
+        "custom": "其他 IMAP 服务器"
+      },
+      "presetHint": {
+        "gmail": "先开启两步验证，再到 myaccount.google.com/apppasswords 创建应用专用密码并粘贴到这里。需在 Gmail 设置中启用 IMAP。",
+        "outlook": "如开启两步登录，请在 Microsoft 账户安全页面创建应用密码。部分工作账户禁止 IMAP。",
+        "yahoo": "在 Yahoo 账户安全中创建应用密码并粘贴到这里。",
+        "icloud": "在 account.apple.com 创建 App 专用密码并粘贴到这里。",
+        "custom": "输入服务商的 IMAP 服务器。仅使用 TLS 连接。"
+      },
+      "user": "邮箱或用户名",
+      "password": "应用专用密码",
+      "passwordKeep": "留空则保留已保存的密码",
+      "host": "IMAP 服务器",
+      "port": "端口",
+      "mailbox": "文件夹",
+      "url": "订阅地址（RSS 或 Atom）",
+      "webHint": "选择你在内置浏览器中登录的网站。Tomny 会关注其标签页标题中的未读数，以及（经你允许）网站发出的通知；绝不读取页面内容。",
+      "origin": "网站",
+      "label": "名称",
+      "interval": "检查间隔（分钟）",
+      "cancel": "取消",
+      "save": "保存",
+      "saved": "已保存来源",
+      "syncOk": "已检查：{{count}} 条新内容",
+      "syncFailed": "检查失败：{{error}}",
+      "cardTitle": "来源和账号",
+      "osApps": "包含的应用",
+      "osHint": "读取其他 Windows 应用显示的通知（Zalo、Telegram、Discord、Outlook、浏览器）。选择应用，或全部不选以包含除 Tomny 外的所有应用。",
+      "osNone": "尚未发现应用通知，或当前系统不是 Windows。",
+      "osAllApps": "所有应用",
+      "preview": "保留简短预览",
+      "previewHint": "关闭：仅读取发件人和主题。",
+      "youtubeHint": "粘贴频道链接、@handle 或频道 ID。新上传内容来自 YouTube 的公开订阅源；无需登录或 API 密钥。",
+      "channel": "YouTube 频道",
+      "capture": "接收网站自身的通知",
+      "captureHint": "当页面发出通知（AI 回答已就绪、有新消息）时，通知会进入中心，仅在重要时提醒。"
+    },
+    "rules": {
+      "title": "过滤规则",
+      "useLaya": "让 Laya 分类通知",
+      "layaRunning": "Laya 正在本机运行。",
+      "layaStopped": "Laya 未运行；Tomny 不会只为此启动它。",
+      "systemAlerts": "紧急通知同时发送系统提醒",
+      "vip": "始终紧急的发件人",
+      "muted": "始终过滤的发件人",
+      "urgent": "紧急关键词",
+      "vipPlaceholder": "每行一个：boss@company.com 或 company.com",
+      "mutedPlaceholder": "每行一个：news@shop.com 或 shop.com",
+      "urgentPlaceholder": "每行一个，例如：截止",
+      "save": "保存规则",
+      "saved": "已保存规则"
+    },
+    "delivery": {
+      "interrupt": "已提醒",
+      "digest": "在信息流中",
+      "silent": "已隐藏"
+    },
+    "view": {
+      "toolbar": "筛选通知",
+      "search": "搜索通知",
+      "groupBy": "分组方式",
+      "group": {
+        "time": "最新优先",
+        "level": "按重要程度",
+        "source": "按来源",
+        "account": "按账号"
+      },
+      "source": "来源",
+      "allSources": "所有来源",
+      "unreadOnly": "仅未读",
+      "noAccount": "其他"
+    },
+    "sourceKind": {
+      "agent": "Tomny 智能体",
+      "schedule": "计划任务",
+      "team": "团队",
+      "system": "Tomny",
+      "email": "邮件",
+      "feed": "订阅源",
+      "web": "网站",
+      "youtube": "YouTube",
+      "os": "桌面应用",
+      "app": "Tomny 应用"
+    },
+    "missed": {
+      "title": "你错过了什么",
+      "period": {
+        "today": "今天",
+        "24h": "24 小时",
+        "7d": "7 天"
+      },
+      "none": "此期间没有新内容。",
+      "counts": "{{total}} 条通知，{{unread}} 条未读 · {{p0}} 紧急 · {{p1}} 重要 · {{p2}} 摘要 · {{p3}} 已过滤",
+      "askAgent": "向任意 Tomny 智能体提问“我错过了什么？”即可获得书面摘要。"
+    },
+    "catalog": {
+      "title": "可连接的内容",
+      "intro": "可用：Tomny 自行获取。已登录网站：在内置浏览器中登录该网站期间可用。仅适配器：已规划，需先完成服务商集成。",
+      "support": {
+        "working": "可用",
+        "session": "已登录网站",
+        "adapter-ready": "仅适配器"
+      },
+      "group": {
+        "mail": "邮件",
+        "ai": "AI 助手",
+        "social": "社交",
+        "messages": "消息",
+        "video": "视频",
+        "desktop": "桌面",
+        "apps": "应用"
+      }
+    },
+    "triage": {
+      "cardTitle": "Laya 分拣",
+      "title": "哪些可以打扰你",
+      "intro": "规则、你的列表以及你打开或忽略的内容会先在本设备上免费做出判断。Laya 已在运行时会提供帮助。",
+      "interrupt": "提醒范围",
+      "interruptHint": "其余内容都在信息流中等待。",
+      "p0p1": "紧急 + 重要",
+      "learn": "从我打开或忽略的内容中学习",
+      "learnHint": "将发件人上调或下调一级；本身绝不会把任何内容设为紧急。",
+      "packageApps": "来自 Tomny 应用的通知",
+      "packageAppsHint": "声明了 notifications.show 的已安装应用可以发送通知；它们无法将自己标记为紧急。",
+      "retention": "通知保留天数",
+      "muted": "已静音的来源",
+      "mutedNone": "没有已静音的来源。"
+    },
+    "llm": {
+      "title": "就不明确的项目询问模型",
+      "enable": "对不明确的项目使用模型",
+      "intro": "默认关闭。仅发送规则无法归类的项目，以小批量发送，并移除代码、数字、链接和地址。绝不会超出每日上限。",
+      "model": "模型",
+      "modelPlaceholder": "一个小型、低成本的模型 ID",
+      "dailyLimit": "每日最多项目数",
+      "includeSnippet": "同时发送已脱敏的预览",
+      "includeSnippetHint": "关闭：仅发送来源、发件人域名和已脱敏的主题。",
+      "usage": "今日已用：{{used}} / {{limit}}",
+      "inactive": "未启用",
+      "lastRun": "上次批次 {{time}}",
+      "error": {
+        "budget": "已达今日上限",
+        "no-model": "没有服务商能提供此模型",
+        "unparsed": "无法读取模型的回答"
+      },
+      "errorGeneric": "上次错误：{{error}}"
+    },
+    "flash": {
+      "title": "快速通知",
+      "empty": "目前没有需要处理的内容。",
+      "viewAll": "查看全部",
+      "viewAllMore": "查看全部（另有 {{count}} 条）"
+    },
+    "page": {
+      "subtitle": "你收到的所有通知、来源和 Laya 设置。",
+      "tabs": {
+        "feed": "通知",
+        "triage": "Laya 与预算"
+      }
+    }
+  }
 }

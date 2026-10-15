@@ -583,11 +583,7 @@ const clipReadContent = (content: string, maxReadBytes?: number): string => {
 
 const isGeneratedWikiExport = (relPath: string): boolean => {
   const normalized = relPath.replace(/\\/g, '/').replace(/^\.\//, '').toLowerCase();
-  return (
-    normalized.startsWith('.tomni/wiki/') ||
-    normalized.startsWith('.omni/wiki/') ||
-    normalized.startsWith('.tomny/wiki/')
-  );
+  return normalized.startsWith('.tomni/wiki/');
 };
 
 /**

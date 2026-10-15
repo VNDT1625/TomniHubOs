@@ -5,37 +5,37 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { ToolRouterStage } from '@/process/services/chatPipeline/stages/toolRouterStage';
+import { ToolSchemaStage } from '@/process/services/chatPipeline/stages/toolSchemaStage';
 import { ModelRoutingStage } from '@/process/services/chatPipeline/stages/modelRoutingStage';
 import type { LayaPredictor } from '@/process/services/security';
 
 describe('Laya Dual-Path Flow (Zero-Model Tool Execution vs Reasoning Model Gate)', () => {
   describe('Path 1: Deterministic Tool Execution (Zero Model Required)', () => {
     it('routes direct browser command without needing any model', async () => {
-      const stage = new ToolRouterStage();
+      const stage = new ToolSchemaStage();
       const result = await stage.execute({
         schemaVersion: 1,
         runId: 'run-tool-1',
-        stageId: 'builtin:tool-router',
+        stageId: 'builtin:tool-schema',
         query: 'mở browser và kiểm tra trang web',
       });
 
       expect(result.decision).toBe('continue');
-      expect(result.grounding?.toolRouter?.requiresBrowser).toBe(true);
-      expect(result.grounding?.toolRouter?.selectedTools).toContain('browser_action');
+      expect(result.grounding?.toolSchema?.capabilityIds).toContain('surface.browser');
+      expect(result.grounding?.toolSchema?.method).toBe('pattern_fallback');
     });
 
     it('routes code/terminal intent directly via pattern matching', async () => {
-      const stage = new ToolRouterStage();
+      const stage = new ToolSchemaStage();
       const result = await stage.execute({
         schemaVersion: 1,
         runId: 'run-tool-2',
-        stageId: 'builtin:tool-router',
+        stageId: 'builtin:tool-schema',
         query: 'viết code kiểm tra git status',
       });
 
       expect(result.decision).toBe('continue');
-      expect(result.grounding?.toolRouter?.selectedTools).toContain('code_executor');
+      expect(result.grounding?.toolSchema?.capabilityIds).toContain('surface.ide');
     });
   });
 

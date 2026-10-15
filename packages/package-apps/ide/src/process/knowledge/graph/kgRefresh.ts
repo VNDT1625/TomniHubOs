@@ -495,7 +495,7 @@ export const onDiskKgRefreshDeps: KgRefreshDeps = {
   },
   captureStaleMarkers: (rootPath) =>
     captureStaleMarkerSnapshots(
-      ['.tomni', '.omni', '.tomny'].map((dir) => path.join(rootPath, dir, 'understand', 'stale.json'))
+      [path.join(rootPath, '.tomni', 'understand', 'stale.json')]
     ),
   saveGraph: (graph, options) =>
     persistKnowledgeGraphArtifacts(
@@ -503,9 +503,7 @@ export const onDiskKgRefreshDeps: KgRefreshDeps = {
       {
         graphPath: path.join(resolveStorageDir(), graphFileName(graph.rootPath)),
         summaryPath: path.join(graph.rootPath, '.tomni', 'understand', 'summary.json'),
-        staleMarkerPaths: ['.tomni', '.omni', '.tomny'].map((dir) =>
-          path.join(graph.rootPath, dir, 'understand', 'stale.json')
-        ),
+        staleMarkerPaths: [path.join(graph.rootPath, '.tomni', 'understand', 'stale.json')],
       },
       undefined,
       options

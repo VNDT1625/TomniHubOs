@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "generatedBy": "user",
+  "connections": [
+    {
+      "kind": "skill",
+      "path": "adapter/skills/coach-tactics"
+    }
+  ]
+}

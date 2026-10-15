@@ -11,9 +11,11 @@ import {
   Computer,
   Dashboard,
   Earth,
+  Equalizer,
   Info,
   Lightning,
   Lock,
+  PersonalPrivacy,
   Puzzle,
   Remind,
   SettingConfig,
@@ -37,6 +39,13 @@ type NavItem = { label: string; icon: React.ReactElement; path: string; id: stri
 
 type TranslateFn = (key: string, options?: { defaultValue?: string }) => string;
 
+const GROUP_HEADER_BEFORE: Record<string, string> = {
+  profile: 'settings.groupAccount',
+  model: 'settings.groupAiCore',
+  display: 'settings.groupGeneral',
+  about: 'settings.groupOther',
+};
+
 export function getBuiltinSettingsNavItems(isDesktop: boolean, t: TranslateFn): NavItem[] {
   const builtinMap: Record<string, NavItem> = {
     profile: {
@@ -54,7 +63,7 @@ export function getBuiltinSettingsNavItems(isDesktop: boolean, t: TranslateFn): 
     personal: {
       id: 'personal',
       label: t('settings.tabPersonal', { defaultValue: 'Personal' }),
-      icon: <Lock theme='outline' size='16' />,
+      icon: <PersonalPrivacy theme='outline' size='16' />,
       path: 'personal',
     },
 
@@ -79,7 +88,7 @@ export function getBuiltinSettingsNavItems(isDesktop: boolean, t: TranslateFn): 
     aiconfig: {
       id: 'aiconfig',
       label: t('settings.tabAiConfig', { defaultValue: 'AI Configuration' }),
-      icon: <SettingConfig theme='outline' size='16' />,
+      icon: <Equalizer theme='outline' size='16' />,
       path: 'aiconfig',
     },
 
@@ -201,6 +210,17 @@ const SettingsPageWrapper: React.FC<SettingsPageWrapperProps> = ({ children, cla
     return result;
   }, [isDesktop, t, extensionTabs, resolveExtTabName]);
 
+  const groupHeaderAt = React.useMemo(() => {
+    const headers = new Map<number, string>();
+    for (const [itemId, headerKey] of Object.entries(GROUP_HEADER_BEFORE)) {
+      const itemIndex = menuItems.findIndex((item) => item.id === itemId);
+      if (itemIndex >= 0) headers.set(itemIndex, headerKey);
+    }
+    return headers;
+  }, [menuItems]);
+
+  const currentItem = menuItems.find((item) => pathname.includes(`/settings/${item.path}`)) ?? menuItems[0];
+
   const containerClass = classNames(
     'settings-page-wrapper w-full min-h-full box-border overflow-y-auto',
     isMobile ? 'px-16px py-14px' : 'px-12px md:px-40px py-32px',
@@ -212,29 +232,52 @@ const SettingsPageWrapper: React.FC<SettingsPageWrapperProps> = ({ children, cla
   return (
     <SettingsViewModeProvider value='page'>
       <div className={containerClass}>
-        {isMobile && (
-          <div className='settings-mobile-top-nav'>
-            {menuItems.map((item) => {
+        <header className='settings-page-header'>
+          <div>
+            <p className='settings-page-header__eyebrow'>{t('common.settings', { defaultValue: 'Settings' })}</p>
+            <h1 className='settings-page-header__title'>{currentItem?.label}</h1>
+          </div>
+          <label className='settings-page-picker'>
+            <span className='sr-only'>{t('common.settings', { defaultValue: 'Settings' })}</span>
+            <select
+              value={currentItem?.path ?? ''}
+              onChange={(event) => void navigate(`/settings/${event.target.value}`, { replace: true })}
+            >
+              {menuItems.map((item) => (
+                <option key={item.path} value={item.path}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </header>
+        <div className='settings-page-layout'>
+          <nav className='settings-page-nav' aria-label={t('common.settings', { defaultValue: 'Settings' })}>
+            {menuItems.map((item, index) => {
               const active = pathname.includes(`/settings/${item.path}`);
+              const groupHeaderKey = groupHeaderAt.get(index);
               return (
-                <button
-                  key={item.path}
-                  type='button'
-                  className={classNames('settings-mobile-top-nav__item', {
-                    'settings-mobile-top-nav__item--active': active,
-                  })}
-                  onClick={() => {
-                    void navigate(`/settings/${item.path}`, { replace: true });
-                  }}
-                >
-                  <span className='settings-mobile-top-nav__icon'>{item.icon}</span>
-                  <span className='settings-mobile-top-nav__label'>{item.label}</span>
-                </button>
+                <React.Fragment key={item.path}>
+                  {groupHeaderKey ? (
+                    <div className='settings-page-nav__group'>
+                      {t(groupHeaderKey, { defaultValue: groupHeaderKey })}
+                    </div>
+                  ) : null}
+                  <button
+                    type='button'
+                    className={classNames('settings-page-nav__item', { 'settings-page-nav__item--active': active })}
+                    aria-current={active ? 'page' : undefined}
+                    onClick={() => void navigate(`/settings/${item.path}`, { replace: true })}
+                  >
+                    <span className='settings-page-nav__icon'>{item.icon}</span>
+                    <span className='settings-page-nav__label'>{item.label}</span>
+                  </button>
+                </React.Fragment>
               );
             })}
-          </div>
-        )}
-        <div className={contentClass}>{children}</div>
+          </nav>
+          <div className={contentClass}>{children}</div>
+        </div>
       </div>
     </SettingsViewModeProvider>
   );

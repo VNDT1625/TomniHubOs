@@ -22,14 +22,14 @@ describe('thinkTagFilter', () => {
   });
 
   describe('stripThinkTags', () => {
-    it('removes complete think blocks and collapses newlines', () => {
-      const input = '<think>internal reflection</think>\n\nFinal answer';
-      expect(stripThinkTags(input)).toBe('Final answer');
+    it('removes complete think blocks and preserves markdown-leading blank lines', () => {
+      const input = '<think>internal reflection</think>\n\n\n\nFinal answer';
+      expect(stripThinkTags(input)).toBe('\n\nFinal answer');
     });
 
     it('removes MiniMax-style prefix before orphaned </think>', () => {
       const input = 'pre-think\n</think>\nReal answer';
-      expect(stripThinkTags(input)).toBe('Real answer');
+      expect(stripThinkTags(input)).toBe('\nReal answer');
     });
   });
 

@@ -12,7 +12,8 @@ import { configService } from '@/common/config/configService';
 import { getAgentModes, getFullAutoMode } from '@/renderer/utils/model/agentModes';
 import GoogleModelSelector from '@/renderer/pages/conversation/platforms/gemini/GoogleModelSelector';
 import type { GoogleModelSelection } from '@/renderer/pages/conversation/platforms/gemini/useGoogleModelSelection';
-import { Button, Dropdown, Empty, Input, Menu, Message, Spin, Tooltip } from '@arco-design/web-react';
+import { Button, Dropdown, Empty, Input, Menu, Message, Select, Spin, Switch, Tooltip } from '@arco-design/web-react';
+import { useConfig } from '@/renderer/hooks/config/useConfig';
 import { CheckOne, CloseOne, Copy, Delete, Down, Refresh } from '@icon-park/react';
 import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -51,6 +52,8 @@ const SectionHeader: React.FC<{ title: string; action?: React.ReactNode }> = ({ 
 interface TelegramConfigFormProps {
   pluginStatus: IChannelPluginStatus | null;
   modelSelection: GoogleModelSelection;
+  /** The speech-to-text model for voice messages. Left unset, the bot says that voice is not set up. */
+  voiceModelSelection?: GoogleModelSelection;
   onStatusChange: (status: IChannelPluginStatus | null) => void;
   onTokenChange?: (token: string) => void;
 }
@@ -58,10 +61,12 @@ interface TelegramConfigFormProps {
 const TelegramConfigForm: React.FC<TelegramConfigFormProps> = ({
   pluginStatus,
   modelSelection,
+  voiceModelSelection,
   onStatusChange,
   onTokenChange,
 }) => {
   const { t } = useTranslation();
+  const [localVoice, setLocalVoice] = useConfig('assistant.telegram.sttLocal');
 
   const [telegramToken, setTelegramToken] = useState('');
   const [testLoading, setTestLoading] = useState(false);
@@ -600,6 +605,70 @@ const TelegramConfigForm: React.FC<TelegramConfigFormProps> = ({
         />
       </PreferenceRow>
 
+      {/* Voice messages: a speech-to-text model; without one the bot replies that voice is not set up */}
+      {voiceModelSelection && (
+        <PreferenceRow
+          label={t('settings.assistant.voiceModel', 'Voice model')}
+          description={t(
+            'settings.assistant.voiceModelDesc',
+            'Speech-to-text model (for example Whisper on an OpenAI-compatible provider). The audio is sent to that provider, and the text is shown in Telegram with a confirm button before anything runs.'
+          )}
+        >
+          <GoogleModelSelector selection={voiceModelSelection} variant='settings' />
+        </PreferenceRow>
+      )}
+      {/* Voice messages on this computer: Whisper INT8, no audio leaves the machine */}
+      <PreferenceRow
+        label={t('settings.assistant.voiceLocal', 'Local Whisper (INT8)')}
+        description={t(
+          'settings.assistant.voiceLocalDesc',
+          'Recognise voice messages on this computer, so the audio never leaves it. Needs a one-time setup: run python scripts/setup-local-whisper.py (about 145 MB for base). When this is on it is used instead of the voice model above.'
+        )}
+      >
+        <div className='flex items-center gap-8px'>
+          <Select
+            size='small'
+            style={{ width: 110 }}
+            disabled={!localVoice?.enabled}
+            value={localVoice?.size ?? 'base'}
+            onChange={(size: 'tiny' | 'base' | 'small' | 'medium') =>
+              void setLocalVoice({ ...localVoice, enabled: localVoice?.enabled ?? false, size })
+            }
+          >
+            <Select.Option value='tiny'>tiny · ~75 MB</Select.Option>
+            <Select.Option value='base'>base · ~145 MB</Select.Option>
+            <Select.Option value='small'>small · ~480 MB</Select.Option>
+            <Select.Option value='medium'>medium · ~1.5 GB</Select.Option>
+          </Select>
+          <Switch
+            checked={localVoice?.enabled === true}
+            onChange={(enabled) => void setLocalVoice({ ...localVoice, enabled, size: localVoice?.size ?? 'base' })}
+          />
+        </div>
+      </PreferenceRow>
+      <PreferenceRow
+        label={t('settings.assistant.voiceLocalPrompt', 'Words to expect')}
+        description={t(
+          'settings.assistant.voiceLocalPromptDesc',
+          'Optional. Names Whisper often gets wrong, for example application names or technical terms, separated by commas.'
+        )}
+      >
+        <Input
+          size='small'
+          style={{ width: 260 }}
+          disabled={!localVoice?.enabled}
+          placeholder='Chrome, VS Code, Telegram'
+          defaultValue={localVoice?.prompt ?? ''}
+          onBlur={(event) =>
+            void setLocalVoice({
+              ...localVoice,
+              enabled: localVoice?.enabled ?? false,
+              size: localVoice?.size ?? 'base',
+              prompt: event.target.value.trim() || undefined,
+            })
+          }
+        />
+      </PreferenceRow>
       {/* Next Steps Guide - show when bot is enabled and no authorized users yet */}
       {pluginStatus?.enabled && pluginStatus?.connected && authorizedUsers.length === 0 && (
         <div className='bg-blue-50 dark:bg-blue-900/20 rd-12px p-16px border border-blue-200 dark:border-blue-800'>

@@ -32,7 +32,7 @@ import {
 import type { DbAgentService } from '@package-apps/ide/process/mcp/ideServer';
 import { OmniGatewayAddressInUseError } from './omniGatewayHost';
 import { createOmniGatewayRuntime } from './omniGatewayRuntime';
-import { stopOmniTunnel } from './omniGatewayTunnel';
+import { nextGatewayKeychainRetryDelay } from './omniGatewayStartupRetry';
 import { createOmniSecurityStore, type IOmniSecurityStore } from './auth/omniGatewaySecurityStore';
 import { createOmniOAuthStore, type OmniOAuthStore } from './auth/omniGatewayOAuthStore';
 import {
@@ -145,6 +145,28 @@ export type OmniGatewayStatus = {
 };
 
 let lastError: string | undefined;
+
+/** Windows safeStorage can become available shortly after main-process startup.
+ * Retry only that transient condition, without ever starting unauthenticated. */
+let credentialRetryTimer: ReturnType<typeof setTimeout> | undefined;
+let credentialRetryAttempt = 0;
+const isEncryptionUnavailable = (error: unknown): boolean =>
+  nextGatewayKeychainRetryDelay(error, 0) !== null;
+const cancelCredentialRetry = (): void => {
+  if (credentialRetryTimer) clearTimeout(credentialRetryTimer);
+  credentialRetryTimer = undefined;
+};
+const scheduleCredentialRetry = (error: unknown): void => {
+  if (credentialRetryTimer) return;
+  const delay = nextGatewayKeychainRetryDelay(error, credentialRetryAttempt);
+  if (delay === null) return;
+  credentialRetryAttempt += 1;
+  credentialRetryTimer = setTimeout(() => {
+    credentialRetryTimer = undefined;
+    void ensureOmniGatewayStarted();
+  }, delay);
+  credentialRetryTimer.unref?.();
+};
 let credentialStore: ICredentialStore | undefined;
 let securityStore: IOmniSecurityStore | undefined;
 let oauthStore: OmniOAuthStore | undefined;
@@ -278,6 +300,8 @@ const parseRemoteConfig = (raw: unknown): OmniGatewayConfig['remote'] => {
   return { mode, stableMcpBaseUrl, stableWebuiBaseUrl };
 };
 
+const defaultWorkspacePath = (): string => process.env.TOMNI_WORKSPACE || process.cwd();
+
 const readConfig = async (): Promise<OmniGatewayConfig> => {
   // ProcessConfig is loosely typed for unregistered keys; coerce defensively.
   const raw = (await ProcessConfig.get(OMNI_GATEWAY_CONFIG_KEY as never)) as unknown;
@@ -285,7 +309,7 @@ const readConfig = async (): Promise<OmniGatewayConfig> => {
   return {
     enabled: cfg.enabled === true,
     port: typeof cfg.port === 'number' && cfg.port >= 1024 && cfg.port <= 65535 ? cfg.port : OMNI_GATEWAY_DEFAULT_PORT,
-    rootPath: typeof cfg.rootPath === 'string' && cfg.rootPath.length > 0 ? cfg.rootPath : undefined,
+    rootPath: typeof cfg.rootPath === 'string' && cfg.rootPath.length > 0 ? cfg.rootPath : defaultWorkspacePath(),
     allowDangerous: cfg.allowDangerous === true,
     tokenCreatedAt: typeof cfg.tokenCreatedAt === 'number' ? cfg.tokenCreatedAt : undefined,
     tokenLastRotatedAt: typeof cfg.tokenLastRotatedAt === 'number' ? cfg.tokenLastRotatedAt : undefined,
@@ -313,8 +337,6 @@ const disableExternalAccessRuntime = (): void => {
   gatewayRuntime.disableExternalAccess();
 };
 
-const startExternalAccessRuntime = async () => gatewayRuntime.startExternalAccess();
-
 const startHost = async (cfg: OmniGatewayConfig, token: string): Promise<void> => {
   await gatewayRuntime.start(cfg, token);
   lastError = gatewayRuntime.snapshot().lastError;
@@ -326,10 +348,15 @@ const startHost = async (cfg: OmniGatewayConfig, token: string): Promise<void> =
  */
 export const ensureOmniGatewayStarted = async (): Promise<boolean> => {
   try {
-    const cfg = await readConfig();
+        const cfg = await readConfig();
+    cancelCredentialRetry();
     await stopHost();
 
-    if (!cfg.enabled) return true;
+    if (!cfg.enabled) {
+      credentialRetryAttempt = 0;
+      lastError = undefined;
+      return true;
+    }
 
     // Auto-mint a token the first time the user enables the gateway, so the
     // Settings panel can show one immediately rather than asking the user to
@@ -342,7 +369,9 @@ export const ensureOmniGatewayStarted = async (): Promise<boolean> => {
       await writeConfig(cfg);
     }
 
-    await startHost(cfg, token);
+        await startHost(cfg, token);
+    credentialRetryAttempt = 0;
+    lastError = undefined;
     return true;
   } catch (error) {
     if (error instanceof OmniGatewayAddressInUseError) {
@@ -352,6 +381,9 @@ export const ensureOmniGatewayStarted = async (): Promise<boolean> => {
     } else {
       lastError = String(error);
     }
+        // Never bypass OS encryption or rotate secrets automatically. Retry only while
+    // settings still require an enabled gateway; the next attempt reads config again.
+        scheduleCredentialRetry(error);
     console.warn('[OmniGateway] Could not start gateway:', lastError);
     return false;
   }
@@ -360,7 +392,15 @@ export const ensureOmniGatewayStarted = async (): Promise<boolean> => {
 /** Read the gateway's live status for the Settings UI. */
 export const getOmniGatewayStatus = async (): Promise<OmniGatewayStatus> => {
   const cfg = await readConfig();
-  const token = await readToken();
+    let token: string | undefined;
+  try {
+    token = await readToken();
+  } catch (error) {
+    // Settings should remain inspectable while the OS keychain is still unlocking.
+    // Other vault errors are not transient and must not be masked.
+    if (!isEncryptionUnavailable(error)) throw error;
+    lastError = error.message;
+  }
   const securityState = await security().load();
   const oauthClients = await oauth().listClients();
   const runtime = gatewayRuntime.snapshot();
@@ -390,7 +430,11 @@ export const getOmniGatewayStatus = async (): Promise<OmniGatewayStatus> => {
       sessionTtlMs: securityState.sessionTtlMs,
       toolPermissions: securityState.toolPermissions,
       oauthClients,
-      oauthMetadataUrl: liveExternal ? `${liveExternal.tunnelUrl}/.well-known/oauth-authorization-server` : undefined,
+      oauthMetadataUrl: liveExternal
+        ? `${liveExternal.tunnelUrl}/.well-known/oauth-authorization-server`
+        : cfg.remote?.stableMcpBaseUrl
+          ? `${cfg.remote.stableMcpBaseUrl}/.well-known/oauth-authorization-server`
+          : undefined,
     },
     remote: {
       mode: cfg.remote?.mode ?? 'quick',
@@ -537,6 +581,9 @@ export const setOmniGatewayRemoteAccess = async (patch: {
 
   cfg.remote = next;
   await writeConfig(cfg);
+  if (cfg.enabled) {
+    await ensureOmniGatewayStarted();
+  }
   return getOmniGatewayStatus();
 };
 

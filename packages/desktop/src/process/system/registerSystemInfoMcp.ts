@@ -87,7 +87,7 @@ export const ensureSystemInfoMcpRegistered = async (): Promise<boolean> => {
         {
           name: BUILTIN_SYSTEM_NAME,
           description: SYSTEM_MCP_DESCRIPTION,
-          enabled: false,
+          enabled: true,
           builtin: true,
           transport,
           original_json,

@@ -46,9 +46,10 @@ export function stripThinkTags(content: string): string {
       .replace(/<\s*\/\s*think(?:ing)?\s*>/gi, '')
       // Step 5: Remove any remaining orphaned opening tags
       .replace(/<\s*think(?:ing)?\s*>/gi, '')
-      // Step 6: Collapse multiple newlines
+      // Step 6: Collapse multiple newlines. Do not trim: leading/trailing whitespace is
+      // markdown-significant (list-leading blank lines, streamed chunk boundaries).
+      // Callers that want trimmed text (e.g. extractThinkingAndContent) trim themselves.
       .replace(/\n{3,}/g, '\n\n')
-      .trim()
   );
 }
 

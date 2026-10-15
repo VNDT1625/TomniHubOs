@@ -12,6 +12,9 @@ const ManagementPage = React.lazy(() => import('@renderer/pages/hub/ManagementPa
 const StorePage = React.lazy(() => import('@renderer/pages/hub/StorePage'));
 const PackageAppPage = React.lazy(() => import('@renderer/pages/hub/PackageAppPage'));
 const HistoryPage = React.lazy(() => import('@renderer/pages/hub/HistoryPage'));
+const NotificationsPage = React.lazy(() => import('@renderer/pages/notifications/NotificationsPage'));
+const CompanyRoute = React.lazy(() => import('@renderer/pages/guid/shell/CompanyRoute'));
+const ArtifactsPage = React.lazy(() => import('@renderer/pages/guid/shell/ArtifactsPage'));
 const AgentSettings = React.lazy(() => import('@renderer/pages/settings/AgentSettings'));
 const PersonalSettings = React.lazy(() => import('@renderer/pages/settings/PersonalSettings'));
 const AccountPage = React.lazy(() => import('@renderer/pages/account/AccountPage'));
@@ -37,9 +40,13 @@ const LoginPage = React.lazy(() => import('@renderer/pages/login'));
 const ComponentsShowcase = React.lazy(() => import('@renderer/pages/TestShowcase'));
 const ScheduledTasksPage = React.lazy(() => import('@renderer/pages/cron/ScheduledTasksPage'));
 const TaskDetailPage = React.lazy(() => import('@renderer/pages/cron/ScheduledTasksPage/TaskDetailPage'));
-const Browser = React.lazy(() => import('@package-apps/browser/renderer/browser/BrowserPage'));
-const Ide = React.lazy(() => import('@package-apps/ide/renderer/IdeWorkspace'));
+const DefaultPackageRoute = React.lazy(() => import('@renderer/pages/guid/shell/DefaultPackageRoute'));
 const TeamIndex = React.lazy(() => import('@renderer/pages/team'));
+const SocialHubPage = React.lazy(() => import('@renderer/pages/social'));
+const RealtimePage = React.lazy(() => import('@renderer/pages/realtime'));
+
+const FileViewerPage = React.lazy(() => import('@renderer/pages/integrations/fileViewer'));
+const LibraryPage = React.lazy(() => import('@renderer/pages/integrations/library'));
 
 const withRouteFallback = (Component: React.LazyExoticComponent<React.ComponentType>) => (
   <RouteErrorBoundary>
@@ -84,18 +91,25 @@ const PanelRoute: React.FC<{ layout: React.ReactElement }> = ({ layout }) => {
           <Route path='/studio' element={<LegacyStudioRoute />} />
           <Route path='/manager' element={withRouteFallback(ManagementPage)} />
           <Route path='/manager/workspace' element={withRouteFallback(Manager)} />
-          <Route path='/apps/com.tomni.ide/ide' element={<Navigate to='/ide' replace />} />
+
           <Route path='/apps/:packageId/:moduleId' element={withRouteFallback(PackageAppPage)} />
           <Route path='/store/app/:packageId/:moduleId' element={withRouteFallback(StorePage)} />
           <Route path='/store/package/:packageId' element={withRouteFallback(StorePage)} />
           <Route path='/store/*' element={withRouteFallback(StorePage)} />
           <Route path='/products' element={<Navigate to='/store' replace />} />
           <Route path='/history' element={withRouteFallback(HistoryPage)} />
+          <Route path='/notifications' element={withRouteFallback(NotificationsPage)} />
           <Route path='/conversation/:id' element={withRouteFallback(Conversation)} />
-          {/* Default surfaces are part of the base runtime; optional app URLs open the Store. */}
-          <Route path='/ide' element={withRouteFallback(Ide)} />
-          <Route path='/browser' element={withRouteFallback(Browser)} />
-          <Route path='/company' element={<Navigate to='/store/package/com.tomni.company' replace />} />
+          {/* Optional default apps: the base owns only this signed-package install gate. */}
+          <Route path='/ide' element={<Suspense fallback={<AppLoader />}><DefaultPackageRoute app='ide' /></Suspense>} />
+          <Route path='/browser' element={<Suspense fallback={<AppLoader />}><DefaultPackageRoute app='browser' /></Suspense>} />
+          <Route path='/company' element={withRouteFallback(CompanyRoute)} />
+          {/* Artifacts render natively in the shell centre; no Store redirect. */}
+          <Route path='/artifacts' element={withRouteFallback(ArtifactsPage)} />
+          <Route path='/social' element={withRouteFallback(SocialHubPage)} />
+
+          <Route path='/library' element={withRouteFallback(LibraryPage)} />
+          <Route path='/file-viewer' element={withRouteFallback(FileViewerPage)} />
 
           <Route path='/monitor' element={<Navigate to='/store/package/com.tomni.monitor' replace />} />
 
@@ -141,7 +155,7 @@ const PanelRoute: React.FC<{ layout: React.ReactElement }> = ({ layout }) => {
           <Route path='/settings/about' element={withRouteFallback(SystemSettings)} />
           <Route path='/settings/ext/:tabId' element={withRouteFallback(ExtensionSettingsPage)} />
           <Route path='/settings/realtime' element={<Navigate to='/guid' replace />} />
-          <Route path='/realtime' element={<Navigate to='/scheduled' replace />} />
+          <Route path='/realtime' element={withRouteFallback(RealtimePage)} />
           <Route path='/settings' element={<Navigate to='/settings/model' replace />} />
           <Route path='/test/components' element={withRouteFallback(ComponentsShowcase)} />
           <Route path='/scheduled' element={withRouteFallback(ScheduledTasksPage)} />

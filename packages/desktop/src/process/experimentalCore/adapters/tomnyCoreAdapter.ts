@@ -28,6 +28,7 @@ import {
   type CoreMcpServer,
   type CoreRunInput,
   type CoreToolCatalogPolicy,
+  type CoreToolHookVerdict,
   type DetectedCoreTarget,
 } from './coreAdapter';
 import type {
@@ -39,6 +40,8 @@ import type { IProvider } from '@/common/config/storage';
 import { getReadyProviderStore } from '@process/services/tomnyProviderBridge';
 import type { IProviderStore } from '@process/services/tomnyProviderStore';
 import { withPersistentAgentRetry } from '@process/agentRuntime/retryPolicy';
+import { runWithDeadline, ToolCallDeadlineError } from '@process/resources/skillDocument/toolCallDeadline';
+import { renderSurfaceToolGuide, toolNameAllowed } from '@process/toolselect/builtinToolCatalog';
 
 import { promptWithAttachmentToolNotice } from './attachmentPayload';
 
@@ -59,7 +62,9 @@ type PendingTurn = {
   msgId: string;
   emit: (event: CoreAdapterEvent) => void;
   permissionMode: ExperimentalPermissionMode;
-  requestPermission: (request: { tool: string; detail?: string }) => Promise<boolean>;
+  requestPermission: (request: { tool: string; detail?: string; forceFresh?: boolean }) => Promise<boolean>;
+  /** PreToolUse hook gate (design 11.3). Absent when hooks are not attached to this turn. */
+  preToolUse?: CoreRunInput['preToolUse'];
   lastActivityAt: number;
   resolve: () => void;
   reject: (error: Error) => void;
@@ -432,6 +437,7 @@ const tomnyMcpRuntimeFingerprint = (server: CoreMcpServer): string => {
           server.name.trim().toLowerCase(),
           'stdio',
           server.command,
+          server.cwd ?? '',
           server.args ?? [],
           (server.env ?? []).map(({ name, value }) => `${name}\u0000${value}`).toSorted(),
           server.deferred ?? true,
@@ -549,6 +555,23 @@ const isTomnyInternalInfo = (message: string): boolean =>
     message.trim()
   );
 
+const CONFIG_NOTICE = /^(?:config|mode|model) updated:/iu;
+/** The CLI joins several updates into one line with no separator ("…→ Amode updated: default"). */
+const CONFIG_UPDATE_BOUNDARY = /(\S)((?:config|mode|model) updated:)/giu;
+const NO_OP_MODEL_CHANGE = /model:\s*(\S+)\s*(?:→|->)\s*(\S+)\s*$/iu;
+
+/** One line per update, without the model changes that changed nothing (A → A). Empty when nothing is worth showing. */
+export const tomnyConfigNoticeLines = (message: string): string[] =>
+  message
+    .replace(CONFIG_UPDATE_BOUNDARY, '$1\n$2')
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter((line) => {
+      if (!line) return false;
+      const change = NO_OP_MODEL_CHANGE.exec(line);
+      return !(change && change[1] === change[2]);
+    });
+
 /** Preserve the worklog fields actually emitted by the provider; never synthesize hidden reasoning. */
 const richEventText = (event: TomnyStreamEvent, primaryKeys: readonly string[]): string => {
   const blocks: string[] = [];
@@ -633,6 +656,10 @@ export const normalizeTomnyStreamEvent = (event: TomnyStreamEvent): CoreAdapterE
   if (event.type === 'info') {
     const rawMessage = textField(event, 'message') || textField(event, 'text') || textField(event, 'summary');
     if (isTomnyInternalInfo(rawMessage)) return null;
+    if (CONFIG_NOTICE.test(rawMessage.trim())) {
+      const lines = tomnyConfigNoticeLines(rawMessage);
+      return lines.length > 0 ? { type: 'notice', text: lines.join('\n') } : null;
+    }
     const text = richEventText(event, ['message', 'text', 'summary']);
     if (!text) return null;
     const call = /^Tool call:\s*(.+)$/u.exec(rawMessage.trim());
@@ -954,6 +981,7 @@ const READ_ONLY_TOOLS = new Set([
   'tool-search',
   'tool search',
   'tomny_session_actions',
+  'tools_guide',
   'tomny_glob',
   'tomny_read',
   'tomny_search',
@@ -963,18 +991,22 @@ const READ_ONLY_TOOLS = new Set([
   'tomny_analyze_image',
   'tomny_visual_analyze',
   'tomny_compact',
+  'tomny_wiki',
+  'tomny_library_search',
+  'tomny_compass',
+  'tomny_diff',
   'tomny_team_status',
   'agent_targets',
   'agent_track',
   'agent_result',
   'agent_sessions',
-  'test_list',
-  'test_report',
   'browser_read_text',
   'browser_screenshot',
   'browser_summarize_video',
   'browser_list_tabs',
+  'browser_extension_list',
   'extract_content',
+  'quick_test_discover',
   'quick_test_observe',
   'quick_test_status',
   'quick_test_audit',
@@ -1142,6 +1174,59 @@ export const sanitizeTomnyToolDetail = (toolName: string, input: unknown): strin
 export const sanitizeTomnyToolInput = (toolName: string, input: unknown): unknown =>
   sanitizeToolValue(input, SENSITIVE_TYPING_TOOL.test(toolName));
 
+/**
+ * PreToolUse hook gate for one native tool request (repotopackage design 11.3 and 11.6). Returns true when the
+ * normal flow (skill preflight, session actions, translation, permission mode) may continue.
+ *
+ * - `deny`: the sidecar gets `tool_deny` with the sanitized hook reason, which the model sees in this turn.
+ * - `ask`: the person is asked afresh, even when a grant or the mode would allow it. A hook can never turn an
+ *   approval into a grant; a "no opinion" verdict changes nothing.
+ * - an error inside the hook layer fails open and leaves the decision to the normal flow.
+ */
+const gateNativeToolRequest = async (
+  runtime: TomnyProcess,
+  pending: PendingTurn,
+  callId: string,
+  request: { name: string; input?: unknown; detail?: string }
+): Promise<boolean> => {
+  const gate = pending.preToolUse;
+  if (!gate) return true;
+  let verdict: CoreToolHookVerdict;
+  try {
+    // Bounded: a PreToolUse hook that never answers must not hold the tool call open. The call is refused below.
+    const call = { tool: request.name, callId, input: sanitizeTomnyToolInput(request.name, request.input ?? {}) };
+    verdict = await runWithDeadline(`PreToolUse hook for ${request.name}`, () => gate(call));
+  } catch (error) {
+    if (error instanceof ToolCallDeadlineError) {
+      if (runtime.pending === pending) {
+        writeCommand(runtime, {
+          type: 'tool_deny',
+          call_id: callId,
+          reason: 'PreToolUse hook did not answer in time; the tool was not run.',
+        });
+      }
+      return false;
+    }
+    return true;
+  }
+  if (runtime.pending !== pending) return false;
+  if (verdict.action === 'deny') {
+    writeCommand(runtime, { type: 'tool_deny', call_id: callId, reason: `Blocked by hook: ${verdict.reason}` });
+    return false;
+  }
+  if (verdict.action === 'ask') {
+    const approved = await pending
+      .requestPermission({ tool: request.name, detail: request.detail, forceFresh: true })
+      .catch(() => false);
+    if (runtime.pending !== pending) return false;
+    if (!approved) {
+      writeCommand(runtime, { type: 'tool_deny', call_id: callId, reason: 'Denied by user' });
+      return false;
+    }
+  }
+  return true;
+};
+
 const provideTranslatedToolResult = async (
   runtime: TomnyProcess,
   pending: PendingTurn,
@@ -1230,6 +1315,7 @@ export const tomnyMcpServerCommand = (server: CoreMcpServer): Record<string, unk
       name: compatible.name,
       transport: 'stdio',
       command: compatible.command,
+      ...(compatible.cwd ? { cwd: compatible.cwd } : {}),
       args: compatible.args ?? [],
       env: Object.fromEntries((compatible.env ?? []).map((entry) => [entry.name, entry.value])),
       deferred: compatible.deferred ?? true,
@@ -1263,24 +1349,43 @@ export const tomnySurfaceSystemPrompt = (
   toolCatalog: CoreToolCatalogPolicy = { mode: 'surface', patterns: [] }
 ): string => {
   const patterns = [...new Set(toolCatalog.patterns.map((pattern) => pattern.trim()).filter(Boolean))];
+    const toolGuide = renderSurfaceToolGuide(patterns);
+    const workflowReady = toolNameAllowed('workflow_run', patterns);
+  const workflowFindReadReady = workflowReady && toolNameAllowed('tomny_glob', patterns) && toolNameAllowed('tomny_read', patterns);
+  // The repository rules only help when the IDE tools can be loaded; a plain chat does not pay for them.
+  const ideRules = toolNameAllowed('ide_research', patterns)
+    ? [
+        'For flow/bug/logic/purpose, call ide_research once; use its fresh Wiki test profile; follow up only for explicit gaps.',
+        'Bug root-cause gate: exact file/symbol/condition plus expected/actual; broad hypotheses are insufficient.',
+        'Before edits, ide_test_script phase=reproduce must assert failure. After the smallest fix, rerun the identical script as post-fix, then a focused framework test/typecheck.',
+        'Use ide_quick_test only for hard/runtime-only network, console, exception, interaction, native, or screenshot evidence; failure reopens diagnosis.',
+        `Required: rootPath=${JSON.stringify(cwd)}; ide_research.intent; ide_test_script.script+phase; never call tools with {}.`,
+      ]
+    : [];
   return [
     '[TomnyExactSurfacePrompt]',
     `[TomnyToolCatalog] ${toolCatalog.mode}`,
     `[TomnyToolPatterns] ${patterns.join(',')}`,
     `You are Tomny Agentic in Tomny ${surface}; project: ${cwd}`,
-    'Use StartAction only for tool/external turns, never casual chat. Once open, do not nest it.',
-    'Use ToolSearch only for another exact schema; otherwise call loaded tools directly.',
-    'For flow/bug/logic/purpose, call ide_research once; use its fresh Wiki test profile; follow up only for explicit gaps.',
-    'Bug root-cause gate: exact file/symbol/condition plus expected/actual; broad hypotheses are insufficient.',
-    'Before edits, ide_test_script phase=reproduce must assert failure. After the smallest fix, rerun the identical script as post-fix, then a focused framework test/typecheck.',
-    'Use ide_quick_test only for hard/runtime-only network, console, exception, interaction, native, or screenshot evidence; failure reopens diagnosis.',
-    `Required: rootPath=${JSON.stringify(cwd)}; ide_research.intent; ide_test_script.script+phase; never call tools with {}.`,
+                'Casual chat: answer directly. Preloaded tools (including attached-file tomny_read/tomny_search): call directly, no ToolSearch. Missing schemas: load with ONE ToolSearch (exact names, space-separated, max 8); then call them.',
+        ...(workflowReady ? [
+      'workflow_run is already eagerly loaded for this surface: call it DIRECTLY without ToolSearch or tools_search. It orchestrates ANY authorized MCP tools, not just reading files. If a child tool output shape is unclear, call the preloaded workflow_adapter_get for that authorized tool only; do not use it to search for missing capabilities. For large intermediate outputs use delivery.mode smart or selected; the eagerly loaded workflow_result_get tool can retrieve additional JSON chunks using resultRef without replaying earlier model contexts. Prefer one workflow_run whenever two or more authorized tool calls are useful: parallel independent calls, conditional dependencies, or read-many attached files. One workflow returns aggregated results without a separate model turn between steps. If an independent branch failure needs early Agent intervention, pass checkpointOnError:true; the Agent can fix it while sibling tools continue, and read queued completion via workflow_mailbox_poll on the next existing turn. resumeWorkflowId appends repair steps in the same scoped Mailbox without re-running completed steps. Use the direct tool for one simple call. Never use workflow to discover or elevate permissions; missing child tools still require normal authorization and tool discovery.',
+    ] : []),
+    ...(workflowFindReadReady ? [
+      'When you know a file-name glob but not its path and need to read that file, call ONE workflow_run with two conditional steps: {steps:[{id:"find",tool:"tomny_glob",input:{pattern:"**/*target*.ts"}},{id:"read",tool:"tomny_read",input:{},dependsOn:["find"],when:[{stepId:"find",status:"succeeded",fileCount:1}],inputFrom:{filePath:{stepId:"find",select:"singleFile"}}}]}. Read executes only for one unambiguous file; zero/multiple matches return the candidate list or not-found result, without guessing. This is one WORKFLOW of ordinary tools, not a new standalone finder. For semantic concept/architecture discovery prefer MTUI Understand (ide_context/tomny_context) if available, then inspect candidates.',
+    ] : []),
+    ...(surface === 'chat' ? [
+      'Chat display supports Markdown, mermaid/chart fences, and tomni-ui JSON fences. Choose rich UI automatically when a visual structure genuinely improves an explanation, without waiting for /visual; never for basic answers. Prefer short diagrams and avoid crowded Mermaid. Use fenced html for small user-requested interactive lessons or web prototypes; HTML runs only in an offline isolated iframe. Syntax: fenced tomni-ui JSON {"version":1,"title":"...","fallbackText":"A complete plain-text alternative","blocks":[{"type":"flow","steps":[{"title":"Start"},{"title":"Finish"}]}]}. Other supported blocks: metrics {items:[{label,value,detail?,tone?}]}, cards {items:[{title,description,tag?,tone?}]}, table {columns:[...],rows:[[...]]}, gallery {images:[{src,alt,caption?,source?,sourceLabel?}]} (1–16 images, sourced public HTTPS URLs only, never fabricate URLs), lesson {slides:[{title,body,reveal?,question?,options?,correctIndex?,allowTextAnswer?},...]}. For MCQ set question + 2-4 options + zero-based correctIndex; for free text set question + allowTextAnswer:true + example answer in reveal (no automatic grading). Explanatory slides omit quiz fields. Use semantic tones only neutral/info/success/warning. For interactive teaching prefer a lesson block for steps and click-to-reveal; use sandboxed html only for user-requested custom interactive behavior. Always give a meaningful fallbackText, no executable HTML/JS/actions, and never fabricate values.',
+    ] : []),
+    ...(toolGuide ? ['Tool guide (exact names):', toolGuide] : []),
+    'If ToolSearch or tools_search finds nothing, call tools_guide for exact tool names; never guess queries.',
+    ...ideRules,
     toolCatalog.mode === 'super'
       ? 'Super is ON: the ToolMap is the unified catalog of every registered Surface capability, exposed through Tomny tool names. Use ToolSearch when you need an exact schema.'
       : 'ToolMap contains only active-surface tools; later turns retain a short capability summary.',
     'Skip skills for ordinary repo/bug work; use them when named or clearly specialized.',
     'tomny_session_actions reads the action journal, not messages. Save is sole historical conversation context.',
-    'Secret Context values stay hidden; use safe aliases through authorized tools.',
+    'Secret Context values stay hidden; use tomny_secret_* tools (load by exact name).',
     'In YOLO, continue without approval. Otherwise respect the active permission mode.',
   ].join('\n');
 };
@@ -1488,6 +1593,7 @@ export class TomnyCoreAdapter implements CoreAdapter {
         emit: input.emit,
         permissionMode: input.permissionMode,
         requestPermission: input.requestPermission,
+        ...(input.preToolUse ? { preToolUse: input.preToolUse } : {}),
         lastActivityAt: Date.now(),
         resolve,
         reject,
@@ -1636,20 +1742,13 @@ export class TomnyCoreAdapter implements CoreAdapter {
     });
 
     const lines = createInterface({ input: child.stdout });
-    lines.on('line', (line) => {
-      let event: TomnyStreamEvent;
-      try {
-        event = JSON.parse(line) as TomnyStreamEvent;
-      } catch {
-        return;
-      }
+    // `hookCleared` is true when a PreToolUse hook has already looked at this tool request.
+    const onEvent = (event: TomnyStreamEvent, hookCleared = false): void => {
       if (event.type === 'ready') {
-        const mcpSupported = Boolean(
-          event.capabilities &&
-          typeof event.capabilities === 'object' &&
-          (event.capabilities as Record<string, unknown>).mcp
-        );
-        if (!mcpSupported || !tomnyShouldInitializeMcpServers(event, mcpServers)) {
+        // The ready flag says whether MCP is already configured in the CLI, not whether servers can be added: the
+        // bundled CLI reports `mcp: false` and still accepts add_mcp_server. Gating on it left every surface
+        // without its tools (even tools_search), so the selected servers are always injected.
+        if (!tomnyShouldInitializeMcpServers(event, mcpServers)) {
           clearTimeout(readyTimer);
           resolveReady?.();
         } else {
@@ -1694,14 +1793,33 @@ export class TomnyCoreAdapter implements CoreAdapter {
         // model's structured JSON arguments are available.  Emit it before
         // any host-side preflight/translation so the conversation worklog can
         // retain the exact input even when execution fails early.
-        pending.emit({
-          type: 'tool-call',
-          tool: request.name,
-          callId,
-          text: `Calling ${request.name}`,
-          phase: 'requested',
-          ...(request.input !== undefined ? { input: sanitizeTomnyToolInput(request.name, request.input) } : {}),
-        });
+        if (!hookCleared) {
+          pending.emit({
+            type: 'tool-call',
+            tool: request.name,
+            callId,
+            text: `Calling ${request.name}`,
+            phase: 'requested',
+            ...(request.input !== undefined ? { input: sanitizeTomnyToolInput(request.name, request.input) } : {}),
+          });
+        }
+        // PreToolUse hooks run before every other branch below, so no tool (skill preflight, session actions,
+        // translated native tools, permission flow) is reachable without passing them.
+        if (pending.preToolUse && !hookCleared) {
+          void gateNativeToolRequest(runtime, pending, callId, request)
+            .then((proceed) => {
+              if (proceed && runtime.pending === pending) onEvent(event, true);
+            })
+            .catch(() => {
+              if (runtime.pending !== pending) return;
+              try {
+                writeCommand(runtime, { type: 'tool_deny', call_id: callId, reason: 'Hook check failed' });
+              } catch {
+                this.processes.invalidate(key, runtime);
+              }
+            });
+          return;
+        }
         const skillWorkflowPreflight = preflightSkillWorkflowTool(request.name, request.input);
         if (skillWorkflowPreflight) {
           writeCommand(
@@ -1797,6 +1915,15 @@ export class TomnyCoreAdapter implements CoreAdapter {
         runtime.pending = undefined;
         pending.resolve();
       }
+    };
+    lines.on('line', (line) => {
+      let event: TomnyStreamEvent;
+      try {
+        event = JSON.parse(line) as TomnyStreamEvent;
+      } catch {
+        return;
+      }
+      onEvent(event);
     });
 
     let exitHandled = false;

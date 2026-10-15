@@ -10,9 +10,12 @@ import {
   Computer,
   Dashboard,
   Earth,
+  Equalizer,
+  Home,
   Info,
   Lightning,
   Lock,
+  PersonalPrivacy,
   Puzzle,
   Remind,
   Robot,
@@ -118,7 +121,7 @@ const SettingsSider: React.FC<{ collapsed?: boolean; tooltipEnabled?: boolean }>
       personal: {
         id: 'personal',
         label: t('settings.tabPersonal', { defaultValue: 'Personal' }),
-        icon: <Lock theme='outline' size={16} />,
+        icon: <PersonalPrivacy theme='outline' size={16} />,
         path: 'personal',
       },
 
@@ -144,7 +147,7 @@ const SettingsSider: React.FC<{ collapsed?: boolean; tooltipEnabled?: boolean }>
       aiconfig: {
         id: 'aiconfig',
         label: t('settings.tabAiConfig', { defaultValue: 'AI Configuration' }),
-        icon: <SettingConfig theme='outline' size={16} />,
+        icon: <Equalizer theme='outline' size={16} />,
         path: 'aiconfig',
       },
 
@@ -268,6 +271,31 @@ const SettingsSider: React.FC<{ collapsed?: boolean; tooltipEnabled?: boolean }>
         'settings-sider--collapsed': collapsed,
       })}
     >
+      <Tooltip {...siderTooltipProps} content={t('common.home', { defaultValue: 'Trang chủ' })} position='right'>
+        <button
+          type='button'
+          className={classNames(
+            'settings-sider__item h-34px rd-8px flex items-center gap-8px relative overflow-hidden shrink-0 conversation-item [&.conversation-item+&.conversation-item]:mt-2px transition-colors',
+            {
+              'settings-sider__item--collapsed': collapsed,
+              'px-8px': collapsed,
+              'px-12px': !collapsed,
+            }
+          )}
+          onClick={() => {
+            void navigate('/guid');
+          }}
+        >
+          <span className='w-16px h-16px shrink-0 flex items-center justify-center text-t-secondary'>
+            <Home theme='outline' size={16} />
+          </span>
+          {!collapsed && (
+            <span className='text-13px overflow-hidden text-ellipsis whitespace-nowrap leading-20px text-t-primary'>
+              {t('common.home', { defaultValue: 'Trang chủ' })}
+            </span>
+          )}
+        </button>
+      </Tooltip>
       {menus.map((item, index) => {
         const isSelected = pathname.includes(item.path);
         const groupHeaderKey = groupHeaderAt.get(index);

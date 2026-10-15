@@ -106,7 +106,7 @@ export const ensureManagerMcpRegistered = async (): Promise<boolean> => {
           description: MANAGER_MCP_DESCRIPTION,
           // Available but not auto-attached: opt a chat in via the MCP picker
           // / "Super" surface. Default-off avoids surprising every new chat.
-          enabled: false,
+          enabled: true,
           builtin: true,
           transport,
           original_json,

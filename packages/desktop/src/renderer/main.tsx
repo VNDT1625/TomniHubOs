@@ -36,12 +36,13 @@ import { useTranslation } from 'react-i18next';
 // Styles
 import 'uno.css';
 import './styles/arco-override.css';
-import './styles/themes/index.css';
+import './styles/tomni-ui.css';
 
 // Config service — kick off initialization before i18n / theme modules load,
 // so their startup paths (which await configService.whenReady()) observe the
 // authoritative settings from the backend instead of the empty cache.
 import { configService } from '@/common/config/configService';
+import { ipcBridge } from '@/common';
 configService.initialize().catch((err) => {
   console.error('Failed to initialize config:', err);
 });
@@ -59,6 +60,7 @@ import Layout from './components/layout/Layout';
 import Router from './components/layout/Router';
 import Sider from './components/layout/Sider';
 import DevConsoleOverlay from './components/devtools/DevConsoleOverlay';
+import InstallApprovalHost from './pages/integrations/installApproval/InstallApprovalHost';
 import { useAuth } from './hooks/context/AuthContext';
 import { ConversationHistoryProvider } from './hooks/context/ConversationHistoryContext';
 import HOC from './utils/ui/HOC';
@@ -104,7 +106,13 @@ const AppProviders: React.FC<PropsWithChildren> = ({ children }) =>
       React.createElement(
         PreviewProvider,
         null,
-        React.createElement(FeedbackProvider, null, children, React.createElement(DevConsoleOverlay, null))
+        React.createElement(
+          FeedbackProvider,
+          null,
+          children,
+          React.createElement(DevConsoleOverlay, null),
+          React.createElement(InstallApprovalHost, null)
+        )
       )
     )
   );
@@ -158,6 +166,24 @@ const Main = () => {
     if (!ready || status !== 'authenticated') return;
     void repairAllCronJobTimeZonesOnce();
   }, [ready, status]);
+
+  // A package changed by the main process (for example by /repotopackage in chat, which connects it after the install) tells
+  // the open pages to read their lists again. Pages listen for the same window event the Hub already uses.
+  // A burst of package state events (install, enable, quarantine) becomes one refresh for the open pages.
+  useEffect(() => {
+    let timer: number | undefined;
+    const unsubscribe = ipcBridge.packagePlatform.stateChanged.on(() => {
+      if (timer !== undefined) return;
+      timer = window.setTimeout(() => {
+        timer = undefined;
+        window.dispatchEvent(new CustomEvent('tomni-packages-changed'));
+      }, 150);
+    });
+    return () => {
+      unsubscribe();
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, []);
 
   if (!ready || !configReady) {
     return null;

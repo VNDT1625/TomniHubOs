@@ -15,8 +15,9 @@ import {
   getFirstRunnablePackageModule,
   PackageAppHost,
 } from '@/renderer/pages/hub/PackageAppHost';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
+import { emitPackageSessionAction } from '@/renderer/pages/hub/packageSessionActions';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const packageMocks = vi.hoisted(() => ({
@@ -27,6 +28,8 @@ const packageMocks = vi.hoisted(() => ({
   activateCapability: vi.fn(),
   invokeCapability: vi.fn(),
   cancelCapability: vi.fn(),
+  invokeModel: vi.fn(),
+  cancelModel: vi.fn(),
 }));
 
 vi.mock('@/renderer/pages/hub/packageClient', () => ({
@@ -210,6 +213,19 @@ describe('downloaded package app sandbox', () => {
       receipt: { receiptId: 'receipt-1' },
     });
     packageMocks.cancelCapability.mockReset().mockResolvedValue(true);
+    packageMocks.invokeModel.mockReset().mockResolvedValue({
+      ok: true,
+      requestId: 'r1',
+      data: {
+        schemaVersion: 1,
+        contract: 'ai-challenge.turn.v1',
+        text: '{"action":"attack"}',
+        elapsedMs: 20,
+        model: 'qwen2.5:3b',
+      },
+      receipt: { receiptId: 'receipt-1' },
+    });
+    packageMocks.cancelModel.mockReset().mockResolvedValue(true);
     packageMocks.list.mockResolvedValue([createListing()]);
     packageMocks.readAsset.mockResolvedValue({
       content:
@@ -359,6 +375,12 @@ describe('downloaded package app sandbox', () => {
     };
     marketplace.installedManifest = structuredClone(marketplace.manifest);
     expect(getFirstRunnablePackageModule(marketplace)).toBeUndefined();
+  });
+
+    it('refuses a revoked or host-incompatible installed module even when it advertises a valid runtime', () => {
+    expect(getFirstRunnablePackageModule(createListing({ revoked: true }))).toBeUndefined();
+    expect(getFirstRunnablePackageModule(createListing({ compatible: false }))).toBeUndefined();
+    expect(getFirstRunnablePackageModule(createListing({ installedTrust: 'unsigned-revoked' }))).toBeUndefined();
   });
 
   it('refuses trusted React when an unprivileged Store key claims the Tomni publisher', () => {
@@ -534,6 +556,369 @@ describe('downloaded package app sandbox', () => {
     );
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(packageMocks.activateCapability).not.toHaveBeenCalled();
+  });
+
+  it('brokers sessions.report with its args from the mounted sandbox frame', async () => {
+    render(
+      <PackageAppHost packageId='com.tomni.calculator' moduleId='calculator' onBack={vi.fn()} allowSandboxedWeb />
+    );
+    const frame = (await screen.findByTestId('package-app-frame')) as HTMLIFrameElement;
+    const runtimeId = packageMocks.openRuntime.mock.calls[0]?.[1] as string;
+    const postMessage = vi.spyOn(frame.contentWindow!, 'postMessage');
+    const args = { sessions: [{ id: 'a', title: 'A', status: 'idle' }] };
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: frame.contentWindow,
+        data: { type: 'tomni.capability.invoke', requestId: 'r1', capability: 'sessions.report', args },
+      })
+    );
+
+    await waitFor(() => expect(packageMocks.cancelCapability).toHaveBeenCalled());
+    expect(packageMocks.activateCapability).toHaveBeenCalledWith({
+      version: 1,
+      packageId: 'com.tomni.calculator',
+      runtimeId,
+      capability: 'sessions.report',
+    });
+    expect(packageMocks.invokeCapability).toHaveBeenCalledWith({
+      version: 1,
+      leaseId: 'lease-1',
+      packageId: 'com.tomni.calculator',
+      runtimeId,
+      name: 'sessions.report',
+      args,
+    });
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'tomni.capability.result', requestId: 'r1' }),
+      '*'
+    );
+  });
+
+  it('ignores sessions.report from a window that is not the sandbox frame', async () => {
+    render(
+      <PackageAppHost packageId='com.tomni.calculator' moduleId='calculator' onBack={vi.fn()} allowSandboxedWeb />
+    );
+    await screen.findByTestId('package-app-frame');
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: window,
+        data: {
+          type: 'tomni.capability.invoke',
+          requestId: 'r1',
+          capability: 'sessions.report',
+          args: { sessions: [{ id: 'a', title: 'A', status: 'idle' }] },
+        },
+      })
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(packageMocks.activateCapability).not.toHaveBeenCalled();
+    expect(packageMocks.invokeCapability).not.toHaveBeenCalled();
+    expect(packageMocks.cancelCapability).not.toHaveBeenCalled();
+  });
+
+  it('ignores unknown capability names from the sandbox frame', async () => {
+    render(
+      <PackageAppHost packageId='com.tomni.calculator' moduleId='calculator' onBack={vi.fn()} allowSandboxedWeb />
+    );
+    const frame = (await screen.findByTestId('package-app-frame')) as HTMLIFrameElement;
+    const postMessage = vi.spyOn(frame.contentWindow!, 'postMessage');
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: frame.contentWindow,
+        data: { type: 'tomni.capability.invoke', requestId: 'r1', capability: 'sessions.delete' },
+      })
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(packageMocks.activateCapability).not.toHaveBeenCalled();
+    expect(packageMocks.invokeCapability).not.toHaveBeenCalled();
+    expect(postMessage).not.toHaveBeenCalled();
+  });
+
+  it('posts the session focus request to the sandbox frame only when focusSession is set', async () => {
+    const view = render(
+      <PackageAppHost packageId='com.tomni.calculator' moduleId='calculator' onBack={vi.fn()} allowSandboxedWeb />
+    );
+    const frame = (await screen.findByTestId('package-app-frame')) as HTMLIFrameElement;
+    const postMessage = vi.spyOn(frame.contentWindow!, 'postMessage');
+    const focusCalls = (): unknown[][] =>
+      postMessage.mock.calls.filter(([message]) => (message as { type?: string })?.type === 'tomni.sessions.focus');
+
+    view.rerender(
+      <PackageAppHost packageId='com.tomni.calculator' moduleId='calculator' onBack={vi.fn()} allowSandboxedWeb />
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(focusCalls()).toHaveLength(0);
+
+    view.rerender(
+      <PackageAppHost
+        packageId='com.tomni.calculator'
+        moduleId='calculator'
+        onBack={vi.fn()}
+        allowSandboxedWeb
+        focusSession='tab-9'
+      />
+    );
+    await waitFor(() => expect(focusCalls()).toHaveLength(1));
+    expect(postMessage).toHaveBeenCalledWith({ type: 'tomni.sessions.focus', sessionId: 'tab-9' }, '*');
+  });
+
+  it('posts the focus request again once the sandbox document has loaded, so a cold open is not lost', async () => {
+    render(
+      <PackageAppHost
+        packageId='com.tomni.calculator'
+        moduleId='calculator'
+        onBack={vi.fn()}
+        allowSandboxedWeb
+        focusSession='tab-9'
+      />
+    );
+    const frame = (await screen.findByTestId('package-app-frame')) as HTMLIFrameElement;
+    const postMessage = vi.spyOn(frame.contentWindow!, 'postMessage');
+
+    fireEvent.load(frame);
+
+    expect(postMessage).toHaveBeenCalledWith({ type: 'tomni.sessions.focus', sessionId: 'tab-9' }, '*');
+  });
+
+  it('posts the focus request again when the same session is asked for a second time', async () => {
+    const element = (nonce: string) => (
+      <PackageAppHost
+        packageId='com.tomni.calculator'
+        moduleId='calculator'
+        onBack={vi.fn()}
+        allowSandboxedWeb
+        focusSession='tab-9'
+        focusNonce={nonce}
+      />
+    );
+    const view = render(element('click-1'));
+    const frame = (await screen.findByTestId('package-app-frame')) as HTMLIFrameElement;
+    const postMessage = vi.spyOn(frame.contentWindow!, 'postMessage');
+    const focusCalls = (): unknown[][] =>
+      postMessage.mock.calls.filter(([message]) => (message as { type?: string })?.type === 'tomni.sessions.focus');
+    // jsdom fires the iframe load (which re-delivers the focus request) at an unpredictable moment, so settle first
+    // and count only what happens after this point.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    postMessage.mockClear();
+
+    view.rerender(element('click-1'));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(focusCalls()).toHaveLength(0);
+
+    view.rerender(element('click-2'));
+    await waitFor(() => expect(focusCalls()).toHaveLength(1));
+  });
+
+  it('does not throw when posting the session focus request fails', async () => {
+    const view = render(
+      <PackageAppHost packageId='com.tomni.calculator' moduleId='calculator' onBack={vi.fn()} allowSandboxedWeb />
+    );
+    const frame = (await screen.findByTestId('package-app-frame')) as HTMLIFrameElement;
+    const postMessage = vi.spyOn(frame.contentWindow!, 'postMessage').mockImplementation(() => {
+      throw new Error('postMessage blocked');
+    });
+
+    expect(() =>
+      view.rerender(
+        <PackageAppHost
+          packageId='com.tomni.calculator'
+          moduleId='calculator'
+          onBack={vi.fn()}
+          allowSandboxedWeb
+          focusSession='tab-9'
+        />
+      )
+    ).not.toThrow();
+    await waitFor(() => expect(postMessage).toHaveBeenCalled());
+    expect(screen.getByTestId('package-app-frame')).toBeInTheDocument();
+  });
+
+  it('brokers model.invoke with args from the mounted sandbox frame', async () => {
+    render(
+      <PackageAppHost packageId='com.tomni.calculator' moduleId='calculator' onBack={vi.fn()} allowSandboxedWeb />
+    );
+    const frame = (await screen.findByTestId('package-app-frame')) as HTMLIFrameElement;
+    const runtimeId = packageMocks.openRuntime.mock.calls[0]?.[1] as string;
+    const postMessage = vi.spyOn(frame.contentWindow!, 'postMessage');
+    const args = { contract: 'ai-challenge.turn.v1' as const, prompt: 'Distance: 3m' };
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: frame.contentWindow,
+        data: { type: 'tomni.capability.invoke', requestId: 'm1', capability: 'model.invoke', args },
+      })
+    );
+
+    await waitFor(() => expect(packageMocks.cancelCapability).toHaveBeenCalled());
+    expect(packageMocks.activateCapability).toHaveBeenCalledWith({
+      version: 1,
+      packageId: 'com.tomni.calculator',
+      runtimeId,
+      capability: 'model.invoke',
+    });
+    expect(packageMocks.invokeModel).toHaveBeenCalledWith({
+      version: 1,
+      leaseId: 'lease-1',
+      packageId: 'com.tomni.calculator',
+      runtimeId,
+      requestId: 'm1',
+      contract: 'ai-challenge.turn.v1',
+      prompt: 'Distance: 3m',
+      systemPrompt: undefined,
+      temperature: undefined,
+      maxTokens: undefined,
+    });
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'tomni.capability.result', requestId: 'm1' }),
+      '*'
+    );
+  });
+
+  it('forwards model cancellation from the sandbox frame to packageClient.cancelModel', async () => {
+    render(
+      <PackageAppHost packageId='com.tomni.calculator' moduleId='calculator' onBack={vi.fn()} allowSandboxedWeb />
+    );
+    const frame = (await screen.findByTestId('package-app-frame')) as HTMLIFrameElement;
+    const runtimeId = packageMocks.openRuntime.mock.calls[0]?.[1] as string;
+
+    let finishInvoke: () => void = () => undefined;
+    packageMocks.invokeModel.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishInvoke = () => resolve({ ok: false, code: 'PACKAGE_CAPABILITY_LEASE_REVOKED' });
+        })
+    );
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: frame.contentWindow,
+        data: {
+          type: 'tomni.capability.invoke',
+          requestId: 'm-cancel',
+          capability: 'model.invoke',
+          args: { contract: 'ai-challenge.turn.v1', prompt: 'test' },
+        },
+      })
+    );
+
+    await waitFor(() => expect(packageMocks.invokeModel).toHaveBeenCalled());
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: frame.contentWindow,
+        data: { type: 'tomni.capability.cancel', requestId: 'm-cancel' },
+      })
+    );
+
+    expect(packageMocks.cancelModel).toHaveBeenCalledWith({
+      packageId: 'com.tomni.calculator',
+      runtimeId,
+      requestId: 'm-cancel',
+    });
+
+    finishInvoke();
+  });
+
+  it('rejects concurrent model.invoke requests with PACKAGE_CAPABILITY_MODEL_BUSY', async () => {
+    render(
+      <PackageAppHost packageId='com.tomni.calculator' moduleId='calculator' onBack={vi.fn()} allowSandboxedWeb />
+    );
+    const frame = (await screen.findByTestId('package-app-frame')) as HTMLIFrameElement;
+    const postMessage = vi.spyOn(frame.contentWindow!, 'postMessage');
+
+    let finishInvoke: () => void = () => undefined;
+    packageMocks.invokeModel.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishInvoke = () => resolve({ ok: true, requestId: 'm-first', data: { text: 'action' } });
+        })
+    );
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: frame.contentWindow,
+        data: {
+          type: 'tomni.capability.invoke',
+          requestId: 'm-first',
+          capability: 'model.invoke',
+          args: { contract: 'ai-challenge.turn.v1', prompt: 'test' },
+        },
+      })
+    );
+
+    await waitFor(() => expect(packageMocks.invokeModel).toHaveBeenCalled());
+
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: frame.contentWindow,
+        data: {
+          type: 'tomni.capability.invoke',
+          requestId: 'm-second',
+          capability: 'model.invoke',
+          args: { contract: 'ai-challenge.turn.v1', prompt: 'test' },
+        },
+      })
+    );
+
+    expect(postMessage).toHaveBeenCalledWith(
+      {
+        type: 'tomni.capability.result',
+        requestId: 'm-second',
+        result: { ok: false, code: 'PACKAGE_CAPABILITY_MODEL_BUSY' },
+      },
+      '*'
+    );
+
+    finishInvoke();
+  });
+
+  describe('sidebar session actions', () => {
+    const renderHost = async () => {
+      const view = render(
+        <PackageAppHost packageId='com.tomni.calculator' moduleId='calculator' onBack={vi.fn()} allowSandboxedWeb />
+      );
+      const frame = (await screen.findByTestId('package-app-frame')) as HTMLIFrameElement;
+      const postMessage = vi.spyOn(frame.contentWindow!, 'postMessage');
+      // Let the passive effect that subscribes to the sidebar bus run.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      return { view, postMessage };
+    };
+
+    it('forwards a create request for this package to the sandbox frame', async () => {
+      const { postMessage } = await renderHost();
+      emitPackageSessionAction({ packageId: 'com.tomni.calculator', kind: 'create' });
+      expect(postMessage).toHaveBeenCalledWith({ type: 'tomni.sessions.create' }, '*');
+    });
+
+    it('forwards a close request with its session id', async () => {
+      const { postMessage } = await renderHost();
+      emitPackageSessionAction({ packageId: 'com.tomni.calculator', kind: 'close', sessionId: 'tab-3' });
+      expect(postMessage).toHaveBeenCalledWith({ type: 'tomni.sessions.close', sessionId: 'tab-3' }, '*');
+    });
+
+    it('ignores requests for another package', async () => {
+      const { postMessage } = await renderHost();
+      emitPackageSessionAction({ packageId: 'com.other.app', kind: 'create' });
+      emitPackageSessionAction({ packageId: 'com.other.app', kind: 'close', sessionId: 'tab-3' });
+      expect(postMessage).not.toHaveBeenCalled();
+    });
+
+    it('does not throw when posting the request fails', async () => {
+      const { postMessage } = await renderHost();
+      postMessage.mockImplementation(() => {
+        throw new Error('postMessage blocked');
+      });
+      expect(() => emitPackageSessionAction({ packageId: 'com.tomni.calculator', kind: 'create' })).not.toThrow();
+      expect(postMessage).toHaveBeenCalled();
+    });
+
+    it('stops forwarding after the host unmounts', async () => {
+      const { view, postMessage } = await renderHost();
+      view.unmount();
+      emitPackageSessionAction({ packageId: 'com.tomni.calculator', kind: 'create' });
+      expect(postMessage).not.toHaveBeenCalled();
+    });
   });
 
   it('removes a running trusted host after another tab uninstalls the package', async () => {

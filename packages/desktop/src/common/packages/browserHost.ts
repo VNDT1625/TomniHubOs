@@ -15,6 +15,7 @@ export const BROWSER_HOST_CHANNELS = {
   setVisible: 'browser.set-visible',
   hide: 'browser.hide',
   hideAll: 'browser.hide-all',
+  capture: 'browser.capture',
   listTabs: 'browser.list-tabs',
   destroyTab: 'browser.destroy-tab',
   getAgentMode: 'browser.get-agent-mode',

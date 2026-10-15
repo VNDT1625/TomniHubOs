@@ -6,8 +6,9 @@
 
 import { ipcBridge } from '@/common';
 import { getConversationOrNull } from '@/renderer/pages/conversation/utils/conversationCache';
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  beginReask,
   beginVerifying,
   createInitialRecoveryState,
   DEFAULT_RECOVERY_CONFIG,
@@ -24,7 +25,14 @@ import {
 
 export type TurnRecoveryPayload = { input: string; files: string[] };
 
-type RecoveryNotice = { retry: number; maxRetries: number; delayMs: number };
+/**
+ * What the UI should show while recovery is pending. `null` means nothing to show.
+ * - countdown: an automatic retry fires at `deadlineAt` unless the user cancels.
+ * - exhausted: the automatic retries were used up; the user is asked again at `deadlineAt`.
+ */
+export type TurnRecoveryView =
+  | { kind: 'countdown'; asking: boolean; attempt: number; maxAttempts: number; deadlineAt: number }
+  | { kind: 'exhausted'; maxAttempts: number; deadlineAt: number };
 
 type UseTomnyAgenticTurnRecoveryOptions = {
   conversation_id: string;
@@ -44,95 +52,125 @@ type UseTomnyAgenticTurnRecoveryOptions = {
    * turn (e.g. nothing to continue).
    */
   getResumePayload: () => TurnRecoveryPayload | null;
-  /** Notify the UI that a retry has been scheduled after an interruption. */
-  onRetryScheduled?: (notice: RecoveryNotice) => void;
-  /** Notify the UI that a retry is being sent now. */
-  onRetrying?: (notice: RecoveryNotice) => void;
-  /** All retries exhausted — surface the interruption to the user. */
-  onExhausted: () => void;
   config?: RecoveryConfig;
 };
 
-const TICK_INTERVAL_MS = 5_000;
+const TICK_INTERVAL_MS = 1_000;
+
+const toView = (state: RecoveryState, config: RecoveryConfig): TurnRecoveryView | null => {
+  if (state.phase === 'cooldown') {
+    return {
+      kind: 'countdown',
+      asking: state.asking,
+      attempt: Math.min(state.consecutiveRejections + 1, config.maxConsecutiveRejections),
+      maxAttempts: config.maxConsecutiveRejections,
+      deadlineAt: state.deadlineAt,
+    };
+  }
+  if (state.phase === 'exhausted') {
+    return { kind: 'exhausted', maxAttempts: config.maxConsecutiveRejections, deadlineAt: state.deadlineAt };
+  }
+  return null;
+};
+
+const isSameView = (a: TurnRecoveryView | null, b: TurnRecoveryView | null): boolean => {
+  if (a === b) return true;
+  if (!a || !b || a.kind !== b.kind || a.deadlineAt !== b.deadlineAt) return false;
+  if (a.kind === 'countdown' && b.kind === 'countdown') {
+    return a.asking === b.asking && a.attempt === b.attempt;
+  }
+  return true;
+};
 
 /**
  * Renderer-driven recovery loop for tomnyagentic turns. Watches the live stream for a
- * running turn; if activity stops without a normal completion AND the stop was
- * not user-initiated (confirmed by polling the backend), it silently re-sends a
- * continue turn with an escalating back-off, giving up only after the configured
- * cap is reached.
+ * running turn. When the turn is interrupted unintentionally (not a user stop, not a
+ * clean completion), it shows a cancellable countdown and then silently re-sends a
+ * continue turn. Up to `maxConsecutiveRejections` automatic retries per cycle; then it
+ * waits `reaskDelayMs` and asks the user again.
  *
- * Crucially, recovery decisions never depend on the send/stop button or on what
- * the user is typing — only on observed stream activity and the backend's own
- * reported liveness. This keeps the button free to reflect the real running
- * state while recovery runs independently underneath.
+ * All state lives in memory. A freshly started app never auto-resumes: the first
+ * hydration of a conversation only adopts its status, it does not arm recovery.
  */
 export const useTomnyAgenticTurnRecovery = (options: UseTomnyAgenticTurnRecoveryOptions) => {
   const { conversation_id, running, isHydrated, config = DEFAULT_RECOVERY_CONFIG } = options;
 
   const stateRef = useRef<RecoveryState>(createInitialRecoveryState());
-  // Set the moment the user clicks stop, so an in-flight stall check can never
-  // mistake a deliberate cancel for an unintentional interruption.
+  const [view, setView] = useState<TurnRecoveryView | null>(null);
+  // Set the moment the user clicks stop or cancels recovery, so an in-flight check
+  // can never mistake a deliberate cancel for an unintentional interruption.
   const userStoppedRef = useRef(false);
   // Guards the async liveness-check / resume so the ticker doesn't fire twice.
   const busyRef = useRef(false);
   const runningRef = useRef(running);
+  const hydratedRef = useRef(false);
 
   const latest = useRef({
     resume: options.resume,
     getResumePayload: options.getResumePayload,
-    onRetryScheduled: options.onRetryScheduled,
-    onRetrying: options.onRetrying,
-    onExhausted: options.onExhausted,
     config,
   });
   useEffect(() => {
     latest.current = {
       resume: options.resume,
       getResumePayload: options.getResumePayload,
-      onRetryScheduled: options.onRetryScheduled,
-      onRetrying: options.onRetrying,
-      onExhausted: options.onExhausted,
       config,
     };
-  }, [
-    options.resume,
-    options.getResumePayload,
-    options.onRetryScheduled,
-    options.onRetrying,
-    options.onExhausted,
-    config,
-  ]);
+  }, [options.resume, options.getResumePayload, config]);
 
-  const createNotice = useCallback((): RecoveryNotice => {
-    const retry = Math.min(stateRef.current.consecutiveRejections + 1, latest.current.config.maxConsecutiveRejections);
-    return {
-      retry,
-      maxRetries: latest.current.config.maxConsecutiveRejections,
-      delayMs: stateRef.current.cooldownDelayMs,
-    };
+  /** Single write path for recovery state: keeps the ref and the rendered view in sync. */
+  const commit = useCallback((next: RecoveryState) => {
+    stateRef.current = next;
+    const nextView = toView(next, latest.current.config);
+    setView((prev) => (isSameView(prev, nextView) ? prev : nextView));
   }, []);
 
-  /** Called by the SendBox stop handler so recovery never fights a user cancel. */
-  const notifyUserStop = useCallback(() => {
-    userStoppedRef.current = true;
-    stateRef.current = stopWatching();
-  }, []);
+  /** An unintentional interruption: start the countdown (or the exhausted wait). */
+  const interrupt = useCallback(() => {
+    if (userStoppedRef.current) return;
+    if (!['watching', 'verifying'].includes(stateRef.current.phase)) return;
+    commit(enterCooldown(stateRef.current, Date.now(), latest.current.config));
+  }, [commit]);
 
-  const fireResume = useCallback((payload: TurnRecoveryPayload) => {
+  /** Send the continue turn now. A failed send counts as an interruption again. */
+  const runResume = useCallback((): void => {
+    if (busyRef.current) return;
+    const payload = latest.current.getResumePayload();
+    if (!payload) {
+      commit(stopWatching());
+      return;
+    }
     busyRef.current = true;
-    stateRef.current = markResumeAttempt(stateRef.current, Date.now());
+    commit(markResumeAttempt(stateRef.current, Date.now()));
     void (async () => {
       try {
         await latest.current.resume(payload);
       } catch {
-        // Best-effort: a failed resume is just another rejection; the next tick
-        // will re-evaluate and escalate the back-off.
+        interrupt();
       } finally {
         busyRef.current = false;
       }
     })();
-  }, []);
+  }, [commit, interrupt]);
+
+  /** Called by the SendBox stop handler so recovery never fights a user cancel. */
+  const notifyUserStop = useCallback(() => {
+    userStoppedRef.current = true;
+    commit(stopWatching());
+  }, [commit]);
+
+  /** User dismissed the countdown or exhausted prompt: stop until the next turn. */
+  const cancelRecovery = useCallback(() => {
+    userStoppedRef.current = true;
+    commit(stopWatching());
+  }, [commit]);
+
+  /** User asked to retry now: starts a fresh cycle immediately. */
+  const retryRecoveryNow = useCallback(() => {
+    userStoppedRef.current = false;
+    stateRef.current = { ...stateRef.current, consecutiveRejections: 0 };
+    runResume();
+  }, [runResume]);
 
   // Single stream subscription: heartbeat + interruption detection.
   useEffect(() => {
@@ -142,22 +180,12 @@ export const useTomnyAgenticTurnRecovery = (options: UseTomnyAgenticTurnRecovery
       // Any stream event is a heartbeat: the backend is alive and working.
       stateRef.current = recordActivity(stateRef.current, Date.now());
 
-      if (message.type === 'error') {
-        // The backend reported an error for this turn (e.g. provider/API-key
-        // failure, network drop). If the user did not initiate a stop, treat it
-        // as an unintentional interruption and queue a silent resume.
-        if (!userStoppedRef.current && stateRef.current.phase === 'watching') {
-          stateRef.current = enterCooldown(stateRef.current, Date.now(), latest.current.config);
-          latest.current.onRetryScheduled?.(createNotice());
-        }
-      } else if (message.type === 'finish') {
-        // A finish may be intermediate (tools still pending). The ticker's
-        // liveness check is the source of truth for "really done", so we only
-        // refresh the heartbeat here and let the watcher confirm via polling.
-      }
+      // The backend reported an error for this turn (provider/API-key failure,
+      // network drop). A finish may be intermediate, so we leave it to the watcher.
+      if (message.type === 'error') interrupt();
     });
     return unsubscribe;
-  }, [conversation_id]);
+  }, [conversation_id, interrupt]);
 
   // Turn-completion subscription: authoritative stop cause from the backend.
   useEffect(() => {
@@ -166,57 +194,50 @@ export const useTomnyAgenticTurnRecovery = (options: UseTomnyAgenticTurnRecovery
 
       if (event.state === 'stopped') {
         // Deliberate stop (user or backend cancel) — never resume.
-        stateRef.current = stopWatching();
+        commit(stopWatching());
         return;
       }
       if (event.state === 'ai_waiting_input') {
-        // Normal completion — clear the rejection counter so the next genuine
-        // interruption starts its back-off from zero.
-        stateRef.current = markRecovered();
+        // Normal completion — the next genuine interruption starts a fresh cycle.
+        commit(markRecovered());
         return;
       }
-      if (
-        event.state === 'error' &&
-        !userStoppedRef.current &&
-        ['watching', 'verifying'].includes(stateRef.current.phase)
-      ) {
-        stateRef.current = enterCooldown(stateRef.current, Date.now(), latest.current.config);
-        latest.current.onRetryScheduled?.(createNotice());
-      }
+      if (event.state === 'error') interrupt();
     });
     return unsubscribe;
-  }, [conversation_id]);
+  }, [conversation_id, commit, interrupt]);
 
   // Arm/disarm watching as the running state flips.
   useEffect(() => {
     const wasRunning = runningRef.current;
     runningRef.current = running;
+    const wasHydrated = hydratedRef.current;
+    hydratedRef.current = isHydrated;
     if (!isHydrated) return;
+    // First hydration of this conversation (including after an app restart, where
+    // the backend may still report a stale 'running' status): adopt the state, never arm.
+    if (!wasHydrated) return;
 
     if (running && !wasRunning) {
-      // A new turn started. If the user had stopped, this is a fresh user-driven
-      // turn, so clear the stop flag and (re)start watching.
+      // A new turn started by the user. Clear the stop flag and start watching.
       userStoppedRef.current = false;
-      stateRef.current = startWatching(stateRef.current, Date.now());
+      commit(startWatching(stateRef.current, Date.now()));
     } else if (!running && wasRunning) {
-      // The UI says the turn ended, but this is NOT enough to prove the work
-      // completed cleanly. In real provider/API-key/network interruptions the
-      // stream can end and `running` can drop before any `error`/`turnCompleted`
-      // signal arrives. The old behavior marked this as recovered immediately,
-      // which is why the app stopped but never resumed. Instead, enter a short
-      // verification grace period; a late clean `turnCompleted` will call
-      // markRecovered(), otherwise the ticker polls the backend and resumes.
+      // The UI says the turn ended, but that alone does not prove a clean finish.
+      // Verify briefly; a late clean turnCompleted resets the cycle, otherwise the
+      // ticker polls the backend and treats it as an interruption.
       if (stateRef.current.phase === 'watching') {
-        stateRef.current = beginVerifying(stateRef.current, Date.now());
+        commit(beginVerifying(stateRef.current, Date.now()));
       }
     }
-  }, [running, isHydrated]);
+  }, [running, isHydrated, commit]);
 
-  // Recovery ticker: confirm liveness on stall, then resume with back-off.
+  // Recovery ticker: confirm liveness on stall, count down, then resume or re-ask.
   useEffect(() => {
     const timer = setInterval(() => {
       if (busyRef.current) return;
-      const action = evaluateRecovery(stateRef.current, Date.now(), latest.current.config);
+      const current = stateRef.current;
+      const action = evaluateRecovery(current, Date.now(), latest.current.config);
       if (action.type === 'none') return;
 
       if (action.type === 'check-liveness') {
@@ -229,19 +250,10 @@ export const useTomnyAgenticTurnRecovery = (options: UseTomnyAgenticTurnRecovery
               stateRef.current = recordActivity(stateRef.current, Date.now());
               return;
             }
-            // Backend is no longer running this turn and the user did not stop it
-            // → unintentional interruption. Queue a silent resume.
-            if (!userStoppedRef.current && ['watching', 'verifying'].includes(stateRef.current.phase)) {
-              stateRef.current = enterCooldown(stateRef.current, Date.now(), latest.current.config);
-              latest.current.onRetryScheduled?.(createNotice());
-            }
+            interrupt();
           } catch {
-            // The liveness poll itself failed (backend unreachable). Treat as an
-            // interruption unless the user deliberately stopped.
-            if (!userStoppedRef.current && ['watching', 'verifying'].includes(stateRef.current.phase)) {
-              stateRef.current = enterCooldown(stateRef.current, Date.now(), latest.current.config);
-              latest.current.onRetryScheduled?.(createNotice());
-            }
+            // The liveness poll itself failed (backend unreachable): treat as an interruption.
+            interrupt();
           } finally {
             busyRef.current = false;
           }
@@ -250,33 +262,27 @@ export const useTomnyAgenticTurnRecovery = (options: UseTomnyAgenticTurnRecovery
       }
 
       if (action.type === 'resume') {
-        const payload = latest.current.getResumePayload();
-        if (!payload) {
-          stateRef.current = stopWatching();
-          return;
-        }
-        latest.current.onRetrying?.(createNotice());
-        fireResume(payload);
+        runResume();
         return;
       }
 
-      if (action.type === 'giveup') {
-        stateRef.current = stopWatching();
-        latest.current.onExhausted();
+      if (action.type === 'reask') {
+        commit(beginReask(current, Date.now(), latest.current.config));
       }
     }, TICK_INTERVAL_MS);
     return () => clearInterval(timer);
-  }, [conversation_id, fireResume]);
+  }, [conversation_id, commit, interrupt, runResume]);
 
   // Reset all recovery state when the conversation changes.
   useEffect(() => {
     stateRef.current = createInitialRecoveryState();
     userStoppedRef.current = false;
     busyRef.current = false;
+    setView(null);
     return () => {
       stateRef.current = createInitialRecoveryState();
     };
   }, [conversation_id]);
 
-  return { notifyUserStop };
+  return { notifyUserStop, recovery: view, cancelRecovery, retryRecoveryNow };
 };

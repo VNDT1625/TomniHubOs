@@ -86,6 +86,7 @@ vi.mock('@arco-design/web-react', () => {
     Message: {
       error: vi.fn(),
     },
+    Steps: Object.assign(() => null, { Step: () => null }),
     Tag: ({ children }: { children?: React.ReactNode }) => <span>{children}</span>,
     Tooltip: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
   };

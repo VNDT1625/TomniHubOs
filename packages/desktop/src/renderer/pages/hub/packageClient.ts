@@ -29,9 +29,13 @@ import type {
   MicrosoftStoreNativeExecutionReceipt,
   MicrosoftStoreNativeOpenPageReceipt,
   MicrosoftStoreNativeResult,
+  PackageModelInvokeNativeCancelRequest,
+  PackageModelInvokeNativeRequest,
+  PackageModelInvokeNativeResult,
   PackageRuntimeSurfaceIdentity,
 } from '@/common/types/platform/electron';
 import { isElectronDesktop } from '@renderer/utils/platform';
+import { syncCompletedPackageMutation } from './cloudPackageLibrary';
 
 type ApiEnvelope<T> = {
   data?: T;
@@ -130,6 +134,27 @@ const mutatePackageOverHttp = async (
   });
 };
 
+const mutatePackageAndSync = async (
+  action: PackageMutationAction,
+  id: string,
+  permissionConsentId?: string
+): Promise<PackageListing> => {
+  // The native or HTTP package manager must complete a verified disk transaction first.
+  const listing = isElectronDesktop()
+    ? await mutatePackageOverDesktop(action, id, permissionConsentId)
+    : await mutatePackageOverHttp(action, id, permissionConsentId);
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('tomni-packages-changed'));
+  if (action === 'install' || action === 'uninstall') {
+    try {
+      await syncCompletedPackageMutation(action, listing);
+    } catch {
+      if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('tomni-package-cloud-sync-failed'));
+      // Remote account sync must not invalidate a completed local disk mutation.
+    }
+  }
+  return listing;
+};
+
 const preparePermissionUpdateOverHttp = (id: string): Promise<PackageUpdatePermissionConsentPreparation> =>
   request(`/api/packages/${encodeURIComponent(id)}/permission-consent`, { method: 'POST', body: '{}' });
 
@@ -203,18 +228,12 @@ export const packageClient = {
     if (!api) throw new Error('PACKAGE_MUTATION_TRUSTED_CHANNEL_UNAVAILABLE');
     return api.approvePermissionConsent({ challengeId, confirmed: true });
   },
-  install: (id: string, permissionConsentId?: string): Promise<PackageListing> =>
-    isElectronDesktop()
-      ? mutatePackageOverDesktop('install', id, permissionConsentId)
-      : mutatePackageOverHttp('install', id, permissionConsentId),
-  uninstall: (id: string): Promise<PackageListing> =>
-    isElectronDesktop() ? mutatePackageOverDesktop('uninstall', id) : mutatePackageOverHttp('uninstall', id),
-  enable: (id: string): Promise<PackageListing> =>
-    isElectronDesktop() ? mutatePackageOverDesktop('enable', id) : mutatePackageOverHttp('enable', id),
-  disable: (id: string): Promise<PackageListing> =>
-    isElectronDesktop() ? mutatePackageOverDesktop('disable', id) : mutatePackageOverHttp('disable', id),
-  rollback: (id: string): Promise<PackageListing> =>
-    isElectronDesktop() ? mutatePackageOverDesktop('rollback', id) : mutatePackageOverHttp('rollback', id),
+    install: (id: string, permissionConsentId?: string): Promise<PackageListing> =>
+    mutatePackageAndSync('install', id, permissionConsentId),
+  uninstall: (id: string): Promise<PackageListing> => mutatePackageAndSync('uninstall', id),
+  enable: (id: string): Promise<PackageListing> => mutatePackageAndSync('enable', id),
+  disable: (id: string): Promise<PackageListing> => mutatePackageAndSync('disable', id),
+  rollback: (id: string): Promise<PackageListing> => mutatePackageAndSync('rollback', id),
   openRuntime: async (packageId: string, runtimeId: string, surface: PackageRuntimeSurfaceIdentity): Promise<void> => {
     if (!isElectronDesktop()) {
       await request(`/api/packages/${encodeURIComponent(packageId)}/runtime/open`, {
@@ -256,6 +275,18 @@ export const packageClient = {
   ): Promise<boolean> => {
     if (!isElectronDesktop()) throw new Error('PACKAGE_CAPABILITY_DESKTOP_REQUIRED');
     const api = window.electronAPI?.packageCapability;
+    if (!api) throw new Error('PACKAGE_CAPABILITY_TRUSTED_CHANNEL_UNAVAILABLE');
+    return api.cancel(payload);
+  },
+  invokeModel: async (payload: PackageModelInvokeNativeRequest): Promise<PackageModelInvokeNativeResult> => {
+    if (!isElectronDesktop()) throw new Error('PACKAGE_CAPABILITY_DESKTOP_REQUIRED');
+    const api = window.electronAPI?.packageModelInvoke;
+    if (!api) throw new Error('PACKAGE_CAPABILITY_TRUSTED_CHANNEL_UNAVAILABLE');
+    return api.invoke(payload);
+  },
+  cancelModel: async (payload: PackageModelInvokeNativeCancelRequest): Promise<boolean> => {
+    if (!isElectronDesktop()) throw new Error('PACKAGE_CAPABILITY_DESKTOP_REQUIRED');
+    const api = window.electronAPI?.packageModelInvoke;
     if (!api) throw new Error('PACKAGE_CAPABILITY_TRUSTED_CHANNEL_UNAVAILABLE');
     return api.cancel(payload);
   },

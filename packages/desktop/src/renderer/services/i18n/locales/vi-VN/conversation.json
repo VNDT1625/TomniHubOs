@@ -1,4 +1,113 @@
 {
+  "pipeline": {
+    "title": "Dây chuyền chat",
+    "button": "Dây chuyền",
+    "buttonTooltip": "Dây chuyền chat: {{count}} chặng đang bật",
+    "stagesTitle": "Các chặng, theo thứ tự",
+    "stageCount": "{{count}} chặng",
+    "addStage": "Thêm chặng",
+    "addStagePlaceholder": "Chọn chặng để thêm",
+    "emptyStages": "Chưa có chặng nào. Tin nhắn đi thẳng tới model.",
+    "moveUp": "Chuyển lên",
+    "moveDown": "Chuyển xuống",
+    "duplicate": "Thêm một bản nữa",
+    "remove": "Gỡ bỏ",
+    "enable": "Bật hoặc tắt",
+    "phase": {
+      "pre_query": "Trước câu hỏi",
+      "retrieve": "Lấy dữ liệu",
+      "pre_model": "Trước model",
+      "post_model": "Sau model"
+    },
+    "role": {
+      "guard": "Chặng bảo mật",
+      "authorized": "Đã cấp phép",
+      "unverified": "Chưa cấp phép"
+    },
+    "inspector": {
+      "empty": "Chọn một chặng để xem cách nó hoạt động.",
+      "model": "Model quyết định",
+      "modelName": "Laya",
+      "noModel": "Chặng này không dùng model.",
+      "tasks": "Câu hỏi gửi cho model",
+      "sharedCall": "Bảo mật, hiểu ý định và chọn schema tool dùng chung một lần chạy model khi cùng một văn bản.",
+      "settings": "Thiết lập",
+      "mode": "Khi phát hiện bí mật",
+      "modeRewrite": "Che đi và tiếp tục",
+      "modeBlock": "Chặn tin nhắn",
+      "apply": "Áp dụng lựa chọn",
+      "applyHint": "Tắt: chỉ hiển thị lựa chọn, mọi nhóm tool vẫn được nạp.",
+      "source": "Hiển thị",
+      "lastRun": "Tin nhắn gần nhất",
+      "dryRun": "Chạy thử",
+      "noRun": "Chưa có gì để hiển thị. Hãy gửi tin nhắn hoặc chờ chạy thử.",
+      "input": "Đầu vào của model",
+      "output": "Đầu ra của model",
+      "latency": "{{ms}} ms",
+      "sharedWith": "Dùng chung kết quả từ lần gọi của {{stage}}",
+      "decision": "Quyết định",
+      "error": "Lỗi",
+      "errorCode": {
+        "starting": "Laya đang khởi động; các kiểm tra tích hợp nhanh đã trả lời thay.",
+        "timeout": "Laya trả lời quá lâu; các kiểm tra tích hợp nhanh đã trả lời thay.",
+        "cancelled": "Yêu cầu bị hủy trước khi Laya trả lời.",
+        "unavailable": "Chưa có model quyết định nào được kết nối; đang dùng các kiểm tra tích hợp nhanh.",
+        "failed": "Laya không trả lời được; các kiểm tra tích hợp nhanh đã trả lời thay."
+      },
+      "masked": "Bí mật được che trước khi hiển thị ở đây.",
+      "questions": "{{count}} câu hỏi trong một lần chạy"
+    },
+    "task": {
+      "security": "Rủi ro bảo mật",
+      "understand": "Người dùng muốn gì",
+      "toolSchema": "Nhóm tool cần dùng"
+    },
+    "decision": {
+      "continue": "Tiếp tục",
+      "rewrite": "Đã viết lại",
+      "block": "Đã chặn",
+      "skip": "Đã bỏ qua",
+      "direct_action": "Hành động trực tiếp"
+    },
+    "health": {
+      "checking": "Đang kiểm tra dây chuyền…",
+      "ok": "Dây chuyền hoạt động tốt",
+      "failed": "Dây chuyền có sự cố"
+    },
+    "warnings": {
+      "title": "Lưu ý",
+      "unguardedRetrieve": "“{{stage}}” bổ sung ngữ cảnh nhưng không có chặng bảo mật nào chạy sau nó.",
+      "noGuard": "Chưa bật chặng bảo mật nào được cấp phép. Trước khi gửi lên model đám mây, quét mặc định vẫn chạy."
+    },
+    "actions": {
+      "save": "Lưu",
+      "cancel": "Hủy",
+      "reset": "Khôi phục mặc định"
+    },
+    "messages": {
+      "loadFailed": "Không thể tải cấu hình dây chuyền chat.",
+      "saveFailed": "Không thể lưu dây chuyền chat.",
+      "saved": "Đã lưu dây chuyền chat.",
+      "resetDone": "Đã khôi phục mặc định. Bấm Lưu để áp dụng.",
+      "added": "Đã thêm {{name}}."
+    },
+    "stageName": {
+      "security": "Chặng bảo mật",
+      "understand": "Hiểu ý định",
+      "directAction": "Hành động trực tiếp",
+      "toolSchema": "Chọn schema tool",
+      "rtk": "Tri thức thời gian thực",
+      "modelRouter": "Chọn model"
+    },
+    "stageDesc": {
+      "security": "Tìm bí mật và chỉ dẫn độc hại trong tin nhắn và văn bản lấy về, rồi che hoặc chặn chúng.",
+      "understand": "Xác định người dùng đang yêu cầu gì, một lần, rồi chia sẻ cho các chặng sau.",
+      "directAction": "Chạy các lệnh đơn giản như mở liên kết hoặc đóng gói repo mà không gọi model.",
+      "toolSchema": "Chọn nhóm tool cần nạp cho tin nhắn này. Tìm kiếm tool luôn sẵn sàng làm dự phòng.",
+      "rtk": "Bổ sung thông tin mới khi tin nhắn hỏi về điều gần đây.",
+      "modelRouter": "Gợi ý model phù hợp với tác vụ."
+    }
+  },
   "welcome": {
     "title": "Xin chào, hôm nay bạn có kế hoạch gì?",
     "placeholder": "Gửi tin nhắn, tải tệp lên, mở thư mục, hoặc tạo tác vụ theo lịch...",
@@ -182,9 +291,12 @@
     "verifyFailed": "Kiểm chứng độc lập thất bại — agent phải sửa và thử lại."
   },
   "interruptionRecovery": {
-    "interrupted": "Cuộc trò chuyện đã bị ngắt và không thể tự động tiếp tục. Vui lòng gửi lại tin nhắn của bạn.",
-    "retryScheduled": "Kết nối bị ngắt — sẽ thử tiếp tục sau {{seconds}} giây (retry {{retry}}/{{max}}).",
-    "retrying": "Đang thử tiếp tục… (retry {{retry}}/{{max}})."
+    "countdownTitle": "Kết nối bị gián đoạn. Sẽ tiếp tục sau {{seconds}} giây (lần thử {{attempt}}/{{max}}).",
+    "askTitle": "Công việc chưa tiếp tục được. Sẽ thử lại sau {{seconds}} giây — bạn có thể hủy.",
+    "exhaustedTitle": "Đã thử {{max}} lần nhưng chưa thành công. Sẽ hỏi lại sau {{time}}.",
+    "retryNow": "Thử ngay",
+    "cancel": "Hủy",
+    "dismiss": "Đóng"
   },
   "sideQuestion": {
     "title": "Câu hỏi phụ",
@@ -229,6 +341,31 @@
   "skills": {
     "loaded": "Kỹ năng đã tải"
   },
+  "attachMenu": {
+
+    "hookLabel": "Hook",
+    "hookCount": "{{count}} hook",
+    "hookNote": "Hook chạy theo sự kiện, bật/tắt trong Cài đặt",
+    "hookEmpty": "Chưa có hook nào đang bật",
+    "autoSelectOffHint": "Bật để Laya tự chọn plugin, skill, hook phù hợp",
+    "mcpCount": "{{count}} MCP",
+    "skillCount": "{{count}} kỹ năng",
+    "viewSkill": "Xem",
+    "back": "Quay lại",
+    "skillSourcePackage": "Gói: {{name}}",
+    "skillSourceStandalone": "Do bạn thêm hoặc có sẵn",
+    "skillDocNotFound": "Không còn tệp kỹ năng này.",
+    "skillDocTooLarge": "SKILL.md này quá lớn để hiển thị.",
+    "skillDocFailed": "Không thể đọc kỹ năng.",
+    "otherGroup": "Khác",
+    "selectAllInPackage": "Chọn tất cả trong gói",
+    "pluginLabel": "Plugin",
+    "pluginCount": "{{count}} plugin",
+    "mcpTag": "MCP",
+    "autoSelect": "Tự chọn (Auto)",
+    "autoSelectHint": "Laya sẽ chọn plugin, skill, hook phù hợp"
+  },
+
   "mcp": {
     "loaded": "MCP đã tải",
     "openSettings": "Mở cài đặt Công cụ",

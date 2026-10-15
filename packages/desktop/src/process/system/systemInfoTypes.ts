@@ -169,6 +169,28 @@ export type PowerMetrics = {
   onBattery: boolean;
 };
 
+/** Process collected from an OS-wide, bounded Windows CIM sampler. CPU is a percent of a single core. */
+export type OsProcessMetric = {
+  pid: number;
+  name: string;
+  cpuPercent: number | null;
+  memoryMB: number | null;
+};
+
+/** Optional slow Windows-only measurements. Null = not supported / inaccessible, NOT zero. */
+export type HostTelemetry = {
+  source: 'windows-cim';
+  sampledAt: number;
+  processes: OsProcessMetric[] | null;
+  processLimitReached: boolean;
+  /** PhysicalDisk '_Total', instantaneous formatted performance counters. */
+  disk: { readBytesPerSec: number; writeBytesPerSec: number } | null;
+  /** Sum of reported network-interface throughput (including potentially virtual adapters). */
+  network: { receiveBytesPerSec: number; sendBytesPerSec: number } | null;
+  /** Greatest observed GPU engine utilisation, a proxy, not GPU aggregate utilisation. */
+  gpuEnginePeakPercent: number | null;
+};
+
 /**
  * Fast-changing measurements sampled on a short interval and pushed to the
  * renderer. Every field is "right now" — no history (see {@link MetricSample}).
@@ -185,6 +207,23 @@ export type LiveSystemMetrics = {
   /** Top per-process metrics, sorted by CPU descending (capped). */
   processes: ProcessMetric[];
   power: PowerMetrics;
+  /** Optional, slower user-facing OS-wide monitor data; never persisted in agent snapshots. */
+  hostTelemetry?: HostTelemetry | null;
+};
+
+/**
+ * Privacy-safe aggregate of {@link HostTelemetry} persisted for the Agent plane:
+ * throughput and peak counters only — never OS-wide process names. Null members
+ * mean the counter was unavailable, never zero.
+ */
+export type MonitorTelemetrySummary = {
+  sampledAt: number;
+  disk: HostTelemetry["disk"];
+  network: HostTelemetry["network"];
+  gpuEnginePeakPercent: number | null;
+  /** Number of OS processes seen by the probe (names are not exported). */
+  osProcessCount: number | null;
+  processLimitReached: boolean;
 };
 
 /**
@@ -210,6 +249,12 @@ export type SystemSnapshot = {
   live: LiveSystemMetrics;
   /** Oldest-to-newest rolling history for sparklines. */
   history: MetricSample[];
+  /**
+   * Monitor-tab data for the Agent-plane `system_monitor` tool. `viewerActive`
+   * is true while a System Monitor viewer is streaming (fast cadence, Windows
+   * telemetry probing); `telemetry` is null when no fresh probe exists.
+   */
+  monitor?: { viewerActive: boolean; telemetry: MonitorTelemetrySummary | null };
 };
 
 /**

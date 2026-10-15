@@ -5,7 +5,7 @@
  */
 
 import { ipcBridge } from '@/common';
-import { addRecentWorkspace, getRecentWorkspaces } from '@/renderer/components/workspace';
+import { addRecentWorkspace, getRecentWorkspaces, rememberApprovedWorkspace } from '@/renderer/components/workspace';
 import { Tooltip } from '@arco-design/web-react';
 import { Close, Down } from '@icon-park/react';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -68,6 +68,7 @@ const GuidWorkspaceFootnote: React.FC<GuidWorkspaceFootnoteProps> = ({
       .then((dirs) => {
         if (dirs && dirs[0]) {
           addRecentWorkspace(dirs[0]);
+          rememberApprovedWorkspace(dirs[0]);
           onSelectWorkspace(dirs[0]);
         }
       })
@@ -79,6 +80,7 @@ const GuidWorkspaceFootnote: React.FC<GuidWorkspaceFootnoteProps> = ({
   const handleSelectPath = useCallback(
     (path: string) => {
       addRecentWorkspace(path);
+      rememberApprovedWorkspace(path);
       onSelectWorkspace(path);
       setOpen(false);
       setSearchQuery('');

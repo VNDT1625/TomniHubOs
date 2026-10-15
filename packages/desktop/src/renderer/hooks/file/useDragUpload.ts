@@ -4,31 +4,44 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useCallback, useRef, useState } from 'react';
-import { useTranslation } from 'react-i18next';
+import {
+  parseExplorerReferenceEntriesPayload,
+  parseExplorerReferencePayload,
+  type WorkspaceReferenceRequest,
+} from '@/common/chat/workspaceReference';
 import { Message } from '@arco-design/web-react';
 import type { FileMetadata } from '@renderer/services/FileService';
-import { isSupportedFile, FileService } from '@renderer/services/FileService';
+import { FileService, isSupportedFile } from '@renderer/services/FileService';
+import { useCallback, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+
+const EXPLORER_ENTRIES_MIME = 'application/x-tomni-explorer-entries';
+const EXPLORER_PATHS_MIME = 'application/x-tomni-explorer-paths';
+const EXPLORER_WORKSPACE_ROOT_MIME = 'application/x-tomni-explorer-workspace-root';
 
 export interface UseDragUploadOptions {
   supportedExts?: string[];
   onFilesAdded?: (files: FileMetadata[]) => void;
+  /** Receives bounded, normalized Explorer-relative file/folder references. */
+    onExplorerReferencesAdded?: (references: WorkspaceReferenceRequest[], workspaceRoot?: string) => void;
   /** Conversation ID for WebUI file uploads */
   conversation_id?: string;
 }
 
-export const useDragUpload = ({ supportedExts = [], onFilesAdded, conversation_id }: UseDragUploadOptions) => {
+export const useDragUpload = ({
+  supportedExts = [],
+  onFilesAdded,
+  onExplorerReferencesAdded,
+  conversation_id,
+}: UseDragUploadOptions) => {
   const { t } = useTranslation();
   const [isFileDragging, setIsFileDragging] = useState(false);
-
-  // 拖拽计数器，防止状态闪烁
   const dragCounter = useRef(0);
 
   const handleDragOver = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
       e.stopPropagation();
-
       if (!isFileDragging) {
         setIsFileDragging(true);
         dragCounter.current += 1;
@@ -40,7 +53,6 @@ export const useDragUpload = ({ supportedExts = [], onFilesAdded, conversation_i
   const handleDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-
     dragCounter.current += 1;
     setIsFileDragging(true);
   }, []);
@@ -48,9 +60,7 @@ export const useDragUpload = ({ supportedExts = [], onFilesAdded, conversation_i
   const handleDragLeave = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-
     dragCounter.current -= 1;
-
     if (dragCounter.current <= 0) {
       dragCounter.current = 0;
       setIsFileDragging(false);
@@ -61,57 +71,55 @@ export const useDragUpload = ({ supportedExts = [], onFilesAdded, conversation_i
     async (e: React.DragEvent) => {
       e.preventDefault();
       e.stopPropagation();
-
-      // 重置状态
       dragCounter.current = 0;
       setIsFileDragging(false);
 
-      if (!onFilesAdded) return;
+      const dataTransfer = e.nativeEvent.dataTransfer;
+      const typedReferences = parseExplorerReferenceEntriesPayload(dataTransfer?.getData(EXPLORER_ENTRIES_MIME) ?? '');
+      const explorerReferences =
+        typedReferences.length > 0
+          ? typedReferences
+          : parseExplorerReferencePayload(dataTransfer?.getData(EXPLORER_PATHS_MIME) ?? '').map((relativePath) => ({
+              relativePath,
+              kind: 'file' as const,
+            }));
+            if (explorerReferences.length > 0 && onExplorerReferencesAdded) {
+        const root = dataTransfer?.getData(EXPLORER_WORKSPACE_ROOT_MIME) ?? '';
+        // UI hint only: Main still resolves and bounds every reference within the selected workspace.
+        const workspaceRoot =
+          root.length <= 2048 && (/^[A-Za-z]:[\\/]/.test(root) || root.startsWith('\\\\') || root.startsWith('/'))
+            ? root
+            : undefined;
+        if (workspaceRoot) onExplorerReferencesAdded(explorerReferences, workspaceRoot);
+        else onExplorerReferencesAdded(explorerReferences);
+        return;
+      }
+      if (!onFilesAdded || !dataTransfer) return;
 
       try {
-        const droppedFiles = e.nativeEvent.dataTransfer!.files;
-
-        // 第一步：先校验文件类型，筛选出支持的文件
         const validFiles: File[] = [];
-
-        for (let i = 0; i < droppedFiles.length; i++) {
-          const file = droppedFiles[i];
-          if (supportedExts.length === 0 || isSupportedFile(file.name, supportedExts)) {
-            validFiles.push(file);
-          }
-          // 注意：不支持的文件会被静默过滤，与原逻辑保持一致
+        for (let i = 0; i < dataTransfer.files.length; i++) {
+          const file = dataTransfer.files[i];
+          if (supportedExts.length === 0 || isSupportedFile(file.name, supportedExts)) validFiles.push(file);
         }
-
-        // 第二步：只处理校验通过的文件
         if (validFiles.length > 0) {
-          // 创建 FileList 对象给 processDroppedFiles
           const validFileList = Object.assign(validFiles, {
             length: validFiles.length,
             item: (index: number) => validFiles[index] || null,
           }) as unknown as FileList;
           const processedFiles = await FileService.processDroppedFiles(validFileList, conversation_id);
-
-          if (processedFiles.length > 0) {
-            onFilesAdded(processedFiles);
-          }
+          if (processedFiles.length > 0) onFilesAdded(processedFiles);
         }
       } catch (err) {
         console.error('Failed to process dropped files:', err);
         Message.error(t('conversation.workspace.dragFailed', 'Failed to process dropped files'));
       }
     },
-    [conversation_id, onFilesAdded, supportedExts, t]
+    [conversation_id, onExplorerReferencesAdded, onFilesAdded, supportedExts, t]
   );
-
-  const dragHandlers = {
-    onDragOver: handleDragOver,
-    onDragEnter: handleDragEnter,
-    onDragLeave: handleDragLeave,
-    onDrop: handleDrop,
-  };
 
   return {
     isFileDragging,
-    dragHandlers,
+    dragHandlers: { onDragOver: handleDragOver, onDragEnter: handleDragEnter, onDragLeave: handleDragLeave, onDrop: handleDrop },
   };
 };

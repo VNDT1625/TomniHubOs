@@ -139,7 +139,7 @@ describe('account-bound Personal Context', () => {
       personalId: profile.id,
       surface: 'chat',
     });
-    expect(before.personal).not.toContain('account-A-editor');
+    expect(before.personal ?? '').not.toContain('account-A-editor');
 
     await learning.confirm(proposal.id);
     const after = await composer.inspectContext!({

@@ -39,6 +39,7 @@ import { createHumanLikeInput } from './humanLikeInput';
 import { createPagePerception, getBrowserSecretRedactionRegistry, type IPagePerception } from './pagePerception';
 import type { IMediaPipeline, MediaSource } from './mediaPipeline';
 import type { BrowserControlDeps } from './browserControlServer';
+import { createDefaultBrowserExtensionControl } from '@process/integrations/browserExtensions/wiring/agentControl';
 import { startBrowserControlMcpHost, type BrowserControlMcpHost } from './browserControlMcpHost';
 import { getEditorFrameStore } from '@process/editor/editorFrameStore';
 import {
@@ -265,6 +266,8 @@ export const getBrowserControlDeps = (getWindow: () => BrowserWindow | null | un
     fillSecret: (request) => fillBrowserSecret(viewManager, request),
     fillPersonalSecret: (request) => fillBrowserPersonalSecret(viewManager, request),
     quickTest: getQuickTestLifecycle(getWindow),
+    // Browser extensions the agent may list (browser_extension_list) and open popups of (browser_extension_action).
+    extensions: createDefaultBrowserExtensionControl(),
     // Editor capability (Super's Studio-editor plane): share ONE frame store
     // with the renderer bridge so a file the agent opens shows up as a frame.
     editorFrames: getEditorFrameStore(),

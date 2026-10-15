@@ -2,37 +2,59 @@
  * @vitest-environment jsdom
  */
 
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('@/renderer/pages/hub/HubWorkspacePage', async () => {
-  const ReactModule = await import('react');
-  return {
-    default: ({ kind, packageId, moduleId }: { kind: string; packageId?: string; moduleId?: string }) =>
-      ReactModule.createElement(
-        'output',
-        { 'data-testid': 'package-app-workspace' },
-        `${kind}:${packageId}:${moduleId}`
-      ),
-  };
-});
+vi.mock('@/renderer/pages/hub/PackageAppHost', () => ({
+  PackageAppHost: ({
+    packageId,
+    moduleId,
+    onBack,
+    allowSandboxedWeb,
+  }: {
+    packageId: string;
+    moduleId: string;
+    onBack: () => void;
+    allowSandboxedWeb: boolean;
+  }) => (
+    <section data-testid='package-app-host'>
+      {`${packageId}:${moduleId}:${String(allowSandboxedWeb)}`}
+      <button type='button' onClick={onBack}>
+        Back
+      </button>
+    </section>
+  ),
+}));
 
 import PackageAppPage from '@/renderer/pages/hub/PackageAppPage';
 
-describe('PackageAppPage', () => {
-  it('opens an installed package in the Hub package workspace', () => {
-    render(
-      <MemoryRouter initialEntries={['/apps/com.tomni.calculator/calculator']}>
-        <Routes>
-          <Route path='/apps/:packageId/:moduleId' element={<PackageAppPage />} />
-        </Routes>
-      </MemoryRouter>
-    );
+const LocationProbe: React.FC = () => <output data-testid='location'>{useLocation().pathname}</output>;
 
-    expect(screen.getByTestId('package-app-workspace')).toHaveTextContent(
-      'package-app:com.tomni.calculator:calculator'
-    );
+const renderAt = (entry: string) =>
+  render(
+    <MemoryRouter initialEntries={[entry]}>
+      <Routes>
+        <Route path='/apps/:packageId/:moduleId' element={<PackageAppPage />} />
+        <Route path='*' element={<LocationProbe />} />
+      </Routes>
+    </MemoryRouter>
+  );
+
+describe('PackageAppPage', () => {
+  it('hosts an installed package directly in the shell centre', () => {
+    renderAt('/apps/com.tomni.calculator/calculator');
+
+    expect(screen.getByTestId('package-app-host')).toHaveTextContent('com.tomni.calculator:calculator:true');
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(screen.getByTestId('location')).toHaveTextContent('/guid');
+  });
+
+  it('sends oversized route parameters back to the Store', () => {
+    renderAt(`/apps/${'a'.repeat(257)}/calculator`);
+
+    expect(screen.queryByTestId('package-app-host')).toBeNull();
+    expect(screen.getByTestId('location')).toHaveTextContent('/store');
   });
 });

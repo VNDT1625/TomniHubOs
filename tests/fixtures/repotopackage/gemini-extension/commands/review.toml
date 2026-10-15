@@ -1,0 +1,2 @@
+description = "Review the current diff"
+prompt = "Review the staged changes."

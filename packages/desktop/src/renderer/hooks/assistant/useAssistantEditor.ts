@@ -9,6 +9,7 @@ import type {
 } from '@/renderer/pages/settings/AssistantSettings/types';
 import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { normalizePrompts } from '@/common/types/agent/assistant/assistantPrompts';
 
 type UseAssistantEditorParams = {
   localeKey: string;
@@ -42,6 +43,8 @@ export const useAssistantEditor = ({
   const [editName, setEditName] = useState('');
   const [editDescription, setEditDescription] = useState('');
   const [editContext, setEditContext] = useState('');
+  // Example prompts (English list), capped by the shared prompt rules before save.
+  const [editPrompts, setEditPrompts] = useState<string[]>([]);
   const [editAvatar, setEditAvatar] = useState('');
   // editAgent holds a backend ID (e.g. "claude", "goose") or an extension adapter ID (e.g. "ext-buddy")
   const [editAgent, setEditAgent] = useState<string>('claude');
@@ -54,6 +57,10 @@ export const useAssistantEditor = ({
   const [availableSkills, setAvailableSkills] = useState<SkillInfo[]>([]);
   const [customSkills, setCustomSkills] = useState<string[]>([]);
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
+  // Plugins (MCP servers) and hooks the assistant brings; saved with the assistant, applied per chat.
+  const [selectedPlugins, setSelectedPlugins] = useState<string[]>([]);
+  const [selectedHooks, setSelectedHooks] = useState<string[]>([]);
+  const [selectedTools, setSelectedTools] = useState<string[]>([]);
   const [pendingSkills, setPendingSkills] = useState<PendingSkill[]>([]);
   const [deletePendingSkillName, setDeletePendingSkillName] = useState<string | null>(null);
   const [deleteCustomSkillName, setDeleteCustomSkillName] = useState<string | null>(null);
@@ -96,6 +103,7 @@ export const useAssistantEditor = ({
     setEditName(assistant.name || '');
     setEditDescription(assistant.description || '');
     setEditAvatar(assistant.avatar || '');
+    setEditPrompts(assistant.prompts ?? []);
     setEditAgent(assistant.preset_agent_type || 'claude');
     setPendingSkills([]);
     setDeletePendingSkillName(null);
@@ -117,6 +125,9 @@ export const useAssistantEditor = ({
       setEditSkills('');
       setAvailableSkills([]);
       setSelectedSkills(assistant.enabled_skills ?? []);
+      setSelectedPlugins(assistant.enabled_plugins ?? []);
+      setSelectedHooks(assistant.enabled_hooks ?? []);
+      setSelectedTools(assistant.default_tools ?? []);
       setCustomSkills([]);
       setDisabledBuiltinSkills(assistant.disabled_builtin_skills ?? []);
       return;
@@ -137,6 +148,9 @@ export const useAssistantEditor = ({
       const skillsList = await ipcBridge.fs.listAvailableSkills.invoke();
       setAvailableSkills(skillsList);
       setSelectedSkills(assistant.enabled_skills ?? []);
+      setSelectedPlugins(assistant.enabled_plugins ?? []);
+      setSelectedHooks(assistant.enabled_hooks ?? []);
+      setSelectedTools(assistant.default_tools ?? []);
       setCustomSkills(isBuiltinAssistant(assistant) ? [] : (assistant.custom_skill_names ?? []));
       setDisabledBuiltinSkills(assistant.disabled_builtin_skills ?? []);
     } catch (error) {
@@ -145,6 +159,9 @@ export const useAssistantEditor = ({
       setEditSkills('');
       setAvailableSkills([]);
       setSelectedSkills([]);
+      setSelectedPlugins([]);
+      setSelectedHooks([]);
+      setSelectedTools([]);
     }
   };
 
@@ -157,8 +174,12 @@ export const useAssistantEditor = ({
     setEditContext('');
     setEditAvatar('\u{1F916}');
     setEditAgent('claude');
+    setEditPrompts([]);
     setEditSkills('');
     setSelectedSkills([]);
+    setSelectedPlugins([]);
+    setSelectedHooks([]);
+    setSelectedTools([]);
     setCustomSkills([]);
     setDisabledBuiltinSkills([]);
     setPromptViewMode('edit');
@@ -186,6 +207,7 @@ export const useAssistantEditor = ({
     setEditName(`${assistant.name_i18n?.[localeKey] || assistant.name} (Copy)`);
     setEditDescription(assistant.description_i18n?.[localeKey] || assistant.description || '');
     setEditAvatar(assistant.avatar || '\u{1F916}');
+    setEditPrompts(assistant.prompts ?? []);
     setEditAgent(assistant.preset_agent_type || 'claude');
     setPromptViewMode('edit');
     setEditVisible(true);
@@ -212,6 +234,9 @@ export const useAssistantEditor = ({
       setAvailableSkills(skillsList);
       setBuiltinAutoSkills(autoSkills);
       setSelectedSkills(assistant.enabled_skills ?? []);
+      setSelectedPlugins(assistant.enabled_plugins ?? []);
+      setSelectedHooks(assistant.enabled_hooks ?? []);
+      setSelectedTools(assistant.default_tools ?? []);
       setCustomSkills(assistant.custom_skill_names ?? []);
       setDisabledBuiltinSkills(assistant.disabled_builtin_skills ?? []);
     } catch (error) {
@@ -221,6 +246,9 @@ export const useAssistantEditor = ({
       setAvailableSkills([]);
       setBuiltinAutoSkills([]);
       setSelectedSkills([]);
+      setSelectedPlugins([]);
+      setSelectedHooks([]);
+      setSelectedTools([]);
       setCustomSkills([]);
       setDisabledBuiltinSkills([]);
     }
@@ -268,6 +296,10 @@ export const useAssistantEditor = ({
           avatar: editAvatar || undefined,
           preset_agent_type: editAgent,
           enabled_skills: selectedSkills,
+          enabled_plugins: selectedPlugins,
+          enabled_hooks: selectedHooks,
+          default_tools: selectedTools,
+          prompts: normalizePrompts(editPrompts),
           custom_skill_names: finalCustomSkills,
           disabled_builtin_skills: disabledBuiltinSkills.length > 0 ? disabledBuiltinSkills : undefined,
         };
@@ -301,6 +333,10 @@ export const useAssistantEditor = ({
               avatar: editAvatar || undefined,
               preset_agent_type: editAgent,
               enabled_skills: selectedSkills,
+              enabled_plugins: selectedPlugins,
+              enabled_hooks: selectedHooks,
+              default_tools: selectedTools,
+              prompts: normalizePrompts(editPrompts),
               custom_skill_names: finalCustomSkills,
               disabled_builtin_skills: disabledBuiltinSkills.length > 0 ? disabledBuiltinSkills : undefined,
             };
@@ -400,6 +436,8 @@ export const useAssistantEditor = ({
     setEditDescription,
     editContext,
     setEditContext,
+    editPrompts,
+    setEditPrompts,
     editAvatar,
     setEditAvatar,
     editAgent,
@@ -419,6 +457,12 @@ export const useAssistantEditor = ({
     setCustomSkills,
     selectedSkills,
     setSelectedSkills,
+    selectedPlugins,
+    setSelectedPlugins,
+    selectedHooks,
+    setSelectedHooks,
+    selectedTools,
+    setSelectedTools,
     pendingSkills,
     setPendingSkills,
     deletePendingSkillName,

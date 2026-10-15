@@ -5,9 +5,11 @@ import { createCoreContextComposer } from './contextComposer';
 import { createContextStore, type ContextStore } from './contextStore';
 import {
   createFileSecretRepository,
+  createScopedSecretVault,
   createSecretVault,
+  createSessionSecretVault,
+  type ScopedSecretVault,
   type SecretRecoveryReport,
-  type SecretVault,
   type SecretVaultCodec,
 } from './secretVault';
 import type { AgentContext, CoreContextComposer, PersonalContext } from './contextTypes';
@@ -125,7 +127,8 @@ const noLegacyRecovery = (): SecretRecoveryReport => ({
 
 export type ElectronContextServices = {
   composer: CoreContextComposer;
-  vault: SecretVault;
+  /** Permanent encrypted sets plus the RAM-only per-conversation sets. */
+  vault: ScopedSecretVault;
   store: ContextStore;
   /** Count-only startup result; never contains source identities or secret values. */
   recovery: Promise<SecretRecoveryReport>;
@@ -140,7 +143,7 @@ export const createElectronContextServices = (): ElectronContextServices => {
   const directory = path.join(app.getPath('userData'), 'tomny-core', 'context');
   const store = createContextStore(path.join(directory, 'profiles.json'));
   const repository = createFileSecretRepository(path.join(directory, 'secrets.json'));
-  const vault = createSecretVault(repository, safeStorageCodec);
+  const vault = createScopedSecretVault(createSecretVault(repository, safeStorageCodec), createSessionSecretVault());
   const recovery = ensureCoreAgentContext(store).then(noLegacyRecovery);
   void recovery.then((report) => {
     if (report.status === 'partial' || report.status === 'unavailable') {

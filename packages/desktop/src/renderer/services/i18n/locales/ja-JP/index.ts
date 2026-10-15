@@ -38,6 +38,7 @@ import git from './git.json';
 import music from './music.json';
 import realtimeKnowledge from './realtimeKnowledge.json';
 import system from './system.json';
+import storage from './storage.json';
 import smartTerminal from './smartTerminal.json';
 import externalMcp from './externalMcp.json';
 
@@ -81,6 +82,7 @@ export default {
   music,
   realtimeKnowledge,
   system,
+  storage,
   smartTerminal,
   externalMcp,
 };

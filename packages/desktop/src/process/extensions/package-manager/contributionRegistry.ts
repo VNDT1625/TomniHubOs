@@ -17,6 +17,7 @@ import {
   type PackageIdeSubtabContribution,
   type PackageManifest,
   type PackageOperationFailure,
+  type PackageMcpServerContribution,
   type PackageSettingContribution,
   type PackageContributionDiagnostic,
   type PackageContributionDiagnosticCode,
@@ -58,6 +59,7 @@ const initialSnapshot = (): PackageContributionSnapshot => ({
   subtabs: [],
   commands: [],
   settings: [],
+  mcpServers: [],
 });
 
 const contributionOrder = (value: { order?: number; id: string; packageId: string }): [number, string, string] => [
@@ -381,6 +383,7 @@ export class PackageContributionRegistry {
     const subtabs = new Map<string, RegisteredPackageContribution<PackageIdeSubtabContribution>>();
     const commands = new Map<string, RegisteredPackageContribution<PackageCommandContribution>>();
     const settings = new Map<string, RegisteredPackageContribution<PackageSettingContribution>>();
+    const mcpServers = new Map<string, RegisteredPackageContribution<PackageMcpServerContribution>>();
     for (const { manifest } of active.values()) {
       const contributions = manifest.contributions;
       for (const contribution of contributions?.apps ?? []) registerUnique(apps, contribution, manifest, 'App');
@@ -398,6 +401,9 @@ export class PackageContributionRegistry {
       }
       for (const contribution of contributions?.ide?.settings ?? []) {
         registerUnique(settings, contribution, manifest, 'Setting');
+      }
+      for (const contribution of contributions?.mcpServers ?? []) {
+        registerUnique(mcpServers, contribution, manifest, 'MCP server');
       }
     }
     for (const contribution of subtabs.values()) {
@@ -418,6 +424,7 @@ export class PackageContributionRegistry {
       subtabs: [...subtabs.values()].toSorted(compareContributions),
       commands: [...commands.values()].toSorted(compareContributions),
       settings: [...settings.values()].toSorted(compareContributions),
+      mcpServers: [...mcpServers.values()].toSorted(compareContributions),
     };
   }
 }

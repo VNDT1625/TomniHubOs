@@ -79,6 +79,7 @@ export function initUpdateBridge(): void {
       autoUpdaterService.quitAndInstall();
     } catch (error: unknown) {
       console.error('quitAndInstall failed:', error);
+      throw error;
     }
   });
 }

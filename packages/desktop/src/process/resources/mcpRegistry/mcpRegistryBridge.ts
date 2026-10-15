@@ -5,6 +5,7 @@ import { ProcessConfig } from '@process/utils/initStorage';
 import { ExtensionMcpContributionSource } from './extensionMcpSource';
 import { readLegacyMcpSources } from './legacyMcpImport';
 import { McpRegistry, type McpServerDraft, type McpServerImport } from './mcpRegistry';
+import { configureCapabilityRegistrySource } from '@process/toolselect/wiring';
 
 export const MCP_REGISTRY_CHANNELS = {
   list: 'mcp-registry.list',
@@ -64,4 +65,6 @@ export const registerMcpRegistryBridge = (
   mcpRegistryChannels.update.provider(async ({ id, data }) => (await whenReady(), service.update(id, data)));
   mcpRegistryChannels.remove.provider(async ({ id }) => (await whenReady(), service.remove(id)));
   mcpRegistryChannels.toggle.provider(async ({ id }) => (await whenReady(), service.toggle(id)));
+  // Auto select reads enabled servers from the same registry, so an enabled plugin is usable on its first turn.
+  configureCapabilityRegistrySource(async () => (await whenReady(), service.list()));
 };

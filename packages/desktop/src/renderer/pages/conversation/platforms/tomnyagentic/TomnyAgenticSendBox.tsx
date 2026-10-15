@@ -5,9 +5,11 @@
  */
 
 import { ipcBridge } from '@/common';
+import type { WorkspaceReferenceRequest } from '@/common/chat/workspaceReference';
 
 import { ROUTER9_REASONING_EFFORTS, TOMNI_GATEWAY_PROVIDER_ID } from '@/common/router9';
 import { parseError } from '@/common/utils';
+import { sendWithOptimisticBubble } from './optimisticSend';
 import type { IConversationMcpStatus } from '@/common/config/storage';
 import AgentModeSelector from '@/renderer/components/agent/AgentModeSelector';
 import ContextUsageIndicator from '@/renderer/components/agent/ContextUsageIndicator';
@@ -75,6 +77,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next';
 import { useTomnyAgenticMessage } from './useTomnyAgenticMessage';
 import { useTomnyAgenticTurnRecovery } from './useTomnyAgenticTurnRecovery';
+import InterruptionRecoveryBanner from './InterruptionRecoveryBanner';
 import type { TomnyAgenticModelSelection } from './useTomnyAgenticModelSelection';
 
 const useTomnyAgenticSendBoxDraft = getSendBoxDraftHook('tomnyagentic', {
@@ -252,12 +255,20 @@ const TomnyAgenticSendBox: React.FC<{
   });
 
   const executeCommand = useCallback(
-    async ({ input, files }: Pick<ConversationCommandQueueItem, 'input' | 'files'>) => {
-      if (teamPermission) await teamPermission.warmupSession();
-
+    async ({
+      input,
+      files,
+      workspace_references,
+    }: Pick<ConversationCommandQueueItem, 'input' | 'files'> & {
+      workspace_references?: WorkspaceReferenceRequest[];
+    }) => {
       // Allow execution without model - pipeline will handle tool routing or prompt for model connection
       // Model check will be performed by the chat pipeline stage (ToolRouterStage + ModelRoutingStage)
 
+      // The id the main process will persist the user message under (`loading_id`). The bubble is drawn with it
+      // before anything is awaited, so the pipeline, a model that is still starting and the team warm-up never
+      // delay the message, and the stream and history still line up with this row.
+      const userMessageId = crypto.randomUUID();
       let msg_id: string | null = null;
       try {
         const displayMessage = buildDisplayMessage(input, files, workspacePath);
@@ -290,32 +301,36 @@ const TomnyAgenticSendBox: React.FC<{
 
         setWaitingResponse(true);
         void checkAndUpdateTitle(conversation_id, input);
-        // Wait for the server-assigned msg_id before rendering the optimistic
-        // user bubble so the local row uses the same id as the DB row and
-        // subsequent WebSocket stream events — avoids duplicate bubbles when
-        // useMessageLstCache reloads.
-        const res = await ipcBridge.conversation.sendMessage.invoke({
-          input: displayMessage,
-          model_input: modelInput,
-          conversation_id,
-          files,
+        const res = await sendWithOptimisticBubble({
+          userMessageId,
+          // Compose mode lets composeMessageWithIndex de-dup by msg_id, so the row the history reload brings in for
+          // this same id replaces the bubble instead of doubling it.
+          showBubble: () =>
+            addOrUpdateMessage({
+              id: userMessageId,
+              msg_id: userMessageId,
+              type: 'text',
+              position: 'right',
+              conversation_id,
+              content: {
+                content: displayMessage,
+              },
+              created_at: Date.now(),
+            }),
+          removeBubble: removeMessageByMsgId,
+          beforeSend: teamPermission ? () => teamPermission.warmupSession() : undefined,
+          send: (loadingId) =>
+            ipcBridge.conversation.sendMessage.invoke({
+              input: displayMessage,
+              model_input: modelInput,
+              conversation_id,
+              files,
+              workspace_references,
+              loading_id: loadingId,
+            }),
         });
         msg_id = res.msg_id;
         setActiveMsgId(msg_id);
-        // Use add=false (compose mode) so composeMessageWithIndex can de-dup
-        // by msg_id — this prevents a duplicate bubble if useMessageLstCache
-        // already inserted the DB row for this same msg_id.
-        addOrUpdateMessage({
-          id: msg_id,
-          msg_id,
-          type: 'text',
-          position: 'right',
-          conversation_id,
-          content: {
-            content: displayMessage,
-          },
-          created_at: Date.now(),
-        });
         emitter.emit('chat.history.refresh');
         if (files.length > 0) {
           emitter.emit('tomnyagentic.workspace.refresh');
@@ -323,7 +338,7 @@ const TomnyAgenticSendBox: React.FC<{
       } catch (error) {
         setWaitingResponse(false);
         setContentRef.current(input);
-        if (msg_id) removeMessageByMsgId(msg_id);
+        if (msg_id && msg_id !== userMessageId) removeMessageByMsgId(msg_id);
         Message.error({ content: parseError(error) || t('common.unknownError'), duration: 6000 });
         throw error;
       }
@@ -331,6 +346,7 @@ const TomnyAgenticSendBox: React.FC<{
     [
       addOrUpdateMessage,
       checkAndUpdateTitle,
+      teamPermission,
       conversation_id,
       current_model?.use_model,
       setActiveMsgId,
@@ -377,8 +393,16 @@ const TomnyAgenticSendBox: React.FC<{
       sessionStorage.setItem(processedKey, '1');
 
       try {
-        const { input, files: initialFiles } = JSON.parse(storedMessage);
-        await executeCommand({ input, files: initialFiles || [] });
+        const {
+          input,
+          files: initialFiles,
+          workspace_references,
+        } = JSON.parse(storedMessage) as {
+          input: string;
+          files?: string[];
+          workspace_references?: WorkspaceReferenceRequest[];
+        };
+        await executeCommand({ input, files: initialFiles || [], workspace_references });
         sessionStorage.removeItem(storageKey);
       } catch (error) {
         console.error('[TomnyAgenticSendBox] Failed to send initial message:', error);
@@ -765,27 +789,12 @@ const TomnyAgenticSendBox: React.FC<{
   // Silent interruption recovery for ordinary turns. Disabled while Goal Mode is
   // active because useGoalRunner already drives its own stall watchdog and
   // compliance loop — running both would double-resume.
-  const { notifyUserStop } = useTomnyAgenticTurnRecovery({
+  const { notifyUserStop, recovery, cancelRecovery, retryRecoveryNow } = useTomnyAgenticTurnRecovery({
     conversation_id,
     running: isBusy,
     isHydrated: hasHydratedRunningState,
     resume: () => silentResume(),
     getResumePayload: () => (goalModeActive ? null : { input: '', files: [] }),
-    onRetryScheduled: ({ retry, maxRetries, delayMs }) => {
-      Message.info(
-        t('conversation.interruptionRecovery.retryScheduled', {
-          seconds: Math.ceil(delayMs / 1000),
-          retry,
-          max: maxRetries,
-        })
-      );
-    },
-    onRetrying: ({ retry, maxRetries }) => {
-      Message.info(t('conversation.interruptionRecovery.retrying', { retry, max: maxRetries }));
-    },
-    onExhausted: () => {
-      Message.warning(t('conversation.interruptionRecovery.interrupted'));
-    },
   });
   notifyUserStopRef.current = notifyUserStop;
 
@@ -805,6 +814,7 @@ const TomnyAgenticSendBox: React.FC<{
         onClear={clear}
       />
       <ThoughtDisplay thought={thought} running={running} onStop={handleStop} />
+      <InterruptionRecoveryBanner recovery={recovery} onCancel={cancelRecovery} onRetryNow={retryRecoveryNow} />
 
       {goalModeActive && (
         <div className='flex justify-center mb-8px'>

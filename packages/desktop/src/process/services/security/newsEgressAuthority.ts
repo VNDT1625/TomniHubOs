@@ -10,7 +10,9 @@ export const NEWS_EGRESS_DENIED = 'NEWS_EGRESS_DENIED';
 
 export type NewsEgressOperation =
   | 'feed-validation'
-  | 'github-trending'
+    | 'github-trending'
+  | 'huggingface-models'
+
   | 'market-data'
   | 'rss-refresh'
   | 'weather'

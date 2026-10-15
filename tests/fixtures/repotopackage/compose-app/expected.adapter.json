@@ -1,0 +1,19 @@
+{
+  "connections": [
+    {
+      "kind": "launcher",
+      "id": "compose",
+      "title": "Docker Compose",
+      "target": { "kind": "compose", "file": "source/docker-compose.yml" },
+      "origin": "compose"
+    },
+    {
+      "kind": "web-embed",
+      "id": "compose-web",
+      "title": "Docker Compose app",
+      "url": "http://127.0.0.1:8080/",
+      "origin": "compose"
+    }
+  ],
+  "openItems": [{ "kind": "unrecognized", "path": "source/docker-compose.yml" }]
+}

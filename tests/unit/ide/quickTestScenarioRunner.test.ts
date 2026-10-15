@@ -26,7 +26,7 @@ const scenario = (steps: ReplayScenario['steps']): ReplayScenario => ({
 const saveAssets = async (savedScenario: ReplayScenario): Promise<string> => {
   const rootPath = await mkdtemp(path.join(tmpdir(), 'quick-test-runner-'));
   roots.push(rootPath);
-  const directory = path.join(rootPath, '.omni', 'quick-test');
+  const directory = path.join(rootPath, '.tomni', 'quick-test');
   await mkdir(directory, { recursive: true });
   await writeFile(
     path.join(directory, 'assets.json'),

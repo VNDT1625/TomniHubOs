@@ -12,9 +12,8 @@ import AppLoader from '@/renderer/components/layout/AppLoader';
 import PwaPullToRefresh from '@/renderer/components/layout/PwaPullToRefresh';
 import { scheduleNavigationAfterPaint } from '@/renderer/components/layout/routeTransition';
 import Titlebar from '@/renderer/components/layout/Titlebar';
-import tomniIcon from '@/renderer/assets/tomni-icon.svg';
+import SpotlightOverlay from '@/renderer/components/Spotlight/SpotlightOverlay';
 import { Layout as ArcoLayout } from '@arco-design/web-react';
-import classNames from 'classnames';
 import React, { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import type { NavigateOptions, To } from 'react-router-dom';
@@ -24,70 +23,16 @@ import { useDeepLink } from '@renderer/hooks/system/useDeepLink';
 import { useNotificationClick } from '@renderer/hooks/system/useNotificationClick';
 import { useDirectorySelection } from '@renderer/hooks/file/useDirectorySelection';
 import { processCustomCss } from '@renderer/utils/theme/customCssProcessor';
+import { applyWallpaper } from '@renderer/utils/theme/wallpaper';
+import { applyMarkdownTextColors } from '@renderer/utils/theme/markdownTextColors';
 import { cleanupSiderTooltips } from '@renderer/utils/ui/siderTooltip';
+import HubShell from '@/renderer/pages/guid/shell/HubShell';
 import { useConversationShortcuts } from '@renderer/hooks/ui/useConversationShortcuts';
 import { isElectronDesktop } from '@renderer/utils/platform';
 import { computeCssSyncDecision, resolveCssByActiveTheme } from '@renderer/utils/theme/themeCssSync';
 import '@renderer/styles/layout.css';
 
-const SidebarIcon: React.FC<{ size?: number; strokeWidth?: number }> = ({ size = 18, strokeWidth = 4 }) => (
-  <svg
-    width={size}
-    height={size}
-    viewBox='0 0 48 48'
-    fill='none'
-    stroke='currentColor'
-    strokeWidth={strokeWidth}
-    strokeLinecap='round'
-    strokeLinejoin='round'
-    aria-hidden='true'
-    focusable='false'
-    style={{ display: 'inline-block', verticalAlign: 'middle' }}
-  >
-    <rect x='6' y='10' width='36' height='28' rx='5' />
-    <line x1='18' y1='10' x2='18' y2='38' />
-  </svg>
-);
-
-const useDebug = () => {
-  const [count, setCount] = useState(0);
-  const timer = useRef<any>(null);
-  const onClick = () => {
-    const open = () => {
-      ipcBridge.application.openDevTools.invoke().catch((error) => {
-        console.error('Failed to open dev tools:', error);
-      });
-      setCount(0);
-    };
-    if (count >= 3) {
-      return open();
-    }
-    setCount((prev) => {
-      if (prev >= 2) {
-        open();
-        return 0;
-      }
-      return prev + 1;
-    });
-    clearTimeout(timer.current);
-    timer.current = setTimeout(() => {
-      clearTimeout(timer.current);
-      setCount(0);
-    }, 1000);
-  };
-
-  return { onClick };
-};
-
 const UpdateModal = React.lazy(() => import('@/renderer/components/settings/UpdateModal'));
-
-const DEFAULT_SIDER_WIDTH = 260;
-const DESKTOP_COLLAPSED_WIDTH = 0;
-const SIDER_DRAG_SNAP_THRESHOLD = Math.round((DEFAULT_SIDER_WIDTH + DESKTOP_COLLAPSED_WIDTH) / 2);
-const SIDER_DRAG_HYSTERESIS = 6;
-const MOBILE_SIDER_WIDTH_RATIO = 0.67;
-const MOBILE_SIDER_MIN_WIDTH = 260;
-const MOBILE_SIDER_MAX_WIDTH = 420;
 
 const detectMobileViewportOrTouch = (): boolean => {
   if (typeof window === 'undefined') return false;
@@ -105,18 +50,14 @@ const detectMobileViewportOrTouch = (): boolean => {
 };
 
 const Layout: React.FC<{
-  sider: React.ReactNode;
+  /** Legacy sider slot; the Hub shell sidebar replaced it on every route. */
+  sider?: React.ReactNode;
   onSessionClick?: () => void;
-}> = ({ sider, onSessionClick: _onSessionClick }) => {
+}> = () => {
   const [collapsed, setCollapsed] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
-  const [viewportWidth, setViewportWidth] = useState<number>(() =>
-    typeof window === 'undefined' ? 390 : window.innerWidth
-  );
   const [customCss, setCustomCss] = useState<string>('');
-  const [shouldMountUpdateModal, setShouldMountUpdateModal] = useState(false);
   const [routeTransitioning, setRouteTransitioning] = useState(false);
-  const { onClick } = useDebug();
   const { contextHolder: directorySelectionContextHolder } = useDirectorySelection();
   useDeepLink();
   useNotificationClick();
@@ -124,20 +65,23 @@ const Layout: React.FC<{
   useConversationShortcuts({ navigate });
   const location = useLocation();
 
-  const isHubHomeRoute = ['/guid', '/manager', '/store', '/apps', '/products', '/history', '/company'].some(
-    (route) => location.pathname === route || location.pathname.startsWith(`${route}/`)
-  );
+  useEffect(() => {
+    applyWallpaper(configService.get('ui.wallpaper'));
+    return configService.subscribe('ui.wallpaper', applyWallpaper);
+  }, []);
+
+  useEffect(() => {
+    applyMarkdownTextColors(configService.get('ui.markdownTextColors'));
+    return configService.subscribe('ui.markdownTextColors', applyMarkdownTextColors);
+  }, []);
+
   const workspaceAvailable =
     location.pathname.startsWith('/conversation/') || (TEAM_MODE_ENABLED && location.pathname.startsWith('/team/'));
   const collapsedRef = useRef(collapsed);
+  collapsedRef.current = collapsed;
   const cancelPendingNavigationRef = useRef<(() => void) | null>(null);
   const lastCssRef = useRef('');
   const lastUiCssUpdateAtRef = useRef(0);
-  const dragStateRef = useRef<{ active: boolean; startX: number; startWidth: number }>({
-    active: false,
-    startX: 0,
-    startWidth: DEFAULT_SIDER_WIDTH,
-  });
 
   const navigateWithFeedback = useCallback(
     (to: To, options?: NavigateOptions): void => {
@@ -305,7 +249,6 @@ const Layout: React.FC<{
     const checkMobile = () => {
       const mobile = detectMobileViewportOrTouch();
       setIsMobile(mobile);
-      setViewportWidth(window.innerWidth);
     };
 
     // 初始检测
@@ -402,93 +345,10 @@ const Layout: React.FC<{
     };
   }, [navigate]);
 
-  const siderWidth = isMobile
-    ? Math.max(
-        MOBILE_SIDER_MIN_WIDTH,
-        Math.min(MOBILE_SIDER_MAX_WIDTH, Math.round(viewportWidth * MOBILE_SIDER_WIDTH_RATIO))
-      )
-    : DEFAULT_SIDER_WIDTH;
+  // Every route renders inside the Hub shell, which owns its own sidebar width variable.
   useEffect(() => {
-    collapsedRef.current = collapsed;
-    // A native WebContentsView floats outside the DOM. Collapsing the app
-    // sidebar can move its host without changing that host's own dimensions,
-    // so ResizeObserver alone does not run and the native view keeps stale
-    // coordinates. Signal the existing native-surface resize listeners after
-    // layout commit and once more when the sider transition settles.
-    const notifyNativeSurfaces = (): void => {
-      window.dispatchEvent(new Event('resize'));
-    };
-    const frame = window.requestAnimationFrame(notifyNativeSurfaces);
-    const siderElement = document.querySelector('.layout-sider');
-    siderElement?.addEventListener('transitionend', notifyNativeSurfaces);
-    return () => {
-      window.cancelAnimationFrame(frame);
-      siderElement?.removeEventListener('transitionend', notifyNativeSurfaces);
-    };
-  }, [collapsed]);
-
-  const beginSiderResizeDrag = useCallback(
-    (event: React.MouseEvent<HTMLDivElement>) => {
-      if (isMobile) return;
-      event.preventDefault();
-      dragStateRef.current = {
-        active: true,
-        startX: event.clientX,
-        startWidth: collapsedRef.current ? DESKTOP_COLLAPSED_WIDTH : DEFAULT_SIDER_WIDTH,
-      };
-      document.body.style.cursor = 'col-resize';
-      document.body.style.userSelect = 'none';
-    },
-    [isMobile]
-  );
-
-  useEffect(() => {
-    const handleMouseMove = (event: MouseEvent) => {
-      const dragState = dragStateRef.current;
-      if (!dragState.active) return;
-
-      const draggedWidth = dragState.startWidth + (event.clientX - dragState.startX);
-      // Add a small hysteresis zone to avoid rapid toggling near the snap threshold.
-      const shouldCollapse = collapsedRef.current
-        ? draggedWidth < SIDER_DRAG_SNAP_THRESHOLD + SIDER_DRAG_HYSTERESIS
-        : draggedWidth <= SIDER_DRAG_SNAP_THRESHOLD - SIDER_DRAG_HYSTERESIS;
-      if (shouldCollapse !== collapsedRef.current) {
-        setCollapsed(shouldCollapse);
-      }
-    };
-
-    const endDrag = () => {
-      if (!dragStateRef.current.active) return;
-      dragStateRef.current.active = false;
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    };
-
-    const handleBlur = () => endDrag();
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', endDrag);
-    window.addEventListener('blur', handleBlur);
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', endDrag);
-      window.removeEventListener('blur', handleBlur);
-      endDrag();
-    };
+    document.documentElement.style.setProperty('--page-sider-w', '0px');
   }, []);
-
-  const siderStyle = isMobile
-    ? {
-        position: 'fixed' as const,
-        left: 0,
-        zIndex: 100,
-        transform: collapsed ? 'translateX(-100%)' : 'translateX(0)',
-        transition: 'none',
-        pointerEvents: collapsed ? ('none' as const) : ('auto' as const),
-      }
-    : {
-        position: 'relative' as const,
-        overflow: 'visible' as const,
-      };
 
   return (
     <LayoutContext.Provider
@@ -500,103 +360,16 @@ const Layout: React.FC<{
       }}
     >
       <NavigationHistoryProvider>
-        <div className='app-shell flex flex-col size-full min-h-0'>
+        <div className='app-shell app-shell--glass flex flex-col size-full min-h-0'>
           <Titlebar workspaceAvailable={workspaceAvailable} />
-          {/* 移动端左侧边栏蒙板 / Mobile left sider backdrop */}
-          {!isHubHomeRoute && isMobile && !collapsed && (
-            <div className='fixed inset-0 bg-black/30 z-90' onClick={() => setCollapsed(true)} aria-hidden='true' />
-          )}
-
+          <SpotlightOverlay />
+          {/* Every authenticated route renders in the centre of the one Hub shell. */}
           <ArcoLayout className={'size-full layout flex-1 min-h-0'}>
-            <ArcoLayout.Sider
-              collapsedWidth={isMobile ? 0 : 0}
-              collapsed={collapsed}
-              width={siderWidth}
-              className={classNames('!bg-2 layout-sider', {
-                collapsed: collapsed,
-              })}
-              style={isHubHomeRoute ? { display: 'none' } : siderStyle}
-            >
-              <ArcoLayout.Header
-                className={classNames(
-                  'flex items-center justify-start pt-8px pb-8px pl-18px pr-16px gap-12px layout-sider-header',
-                  isMobile && 'layout-sider-header--mobile',
-                  {
-                    'cursor-pointer group ': collapsed,
-                  }
-                )}
-              >
-                <button
-                  type='button'
-                  className={classNames(
-                    'shrink-0 size-32px relative rd-0.5rem border-0 bg-transparent p-0 cursor-pointer',
-                    {
-                      '!size-24px': collapsed,
-                    }
-                  )}
-                  onClick={onClick}
-                  aria-label='Tomny'
-                >
-                  <img
-                    src={tomniIcon}
-                    alt=''
-                    className={classNames('w-full h-full object-contain', {
-                      'scale-105': !collapsed,
-                    })}
-                  />
-                </button>
-                <div className='text-16px text-t-primary collapsed-hidden font-semibold'>Tomny</div>
-                {isMobile && !collapsed && (
-                  <button
-                    type='button'
-                    className='app-titlebar__button app-titlebar__button--mobile'
-                    onClick={() => setCollapsed(true)}
-                    title='Collapse sidebar'
-                    aria-label='Collapse sidebar'
-                  >
-                    <SidebarIcon size={18} strokeWidth={2.5} />
-                  </button>
-                )}
-                {/* 侧栏折叠改由标题栏统一控制 / Sidebar folding handled by Titlebar toggle */}
-              </ArcoLayout.Header>
-              <ArcoLayout.Content className='pt-0 px-8px pb-0 layout-sider-content'>
-                {React.isValidElement(sider)
-                  ? React.cloneElement(sider, {
-                      onSessionClick: () => {
-                        cleanupSiderTooltips();
-                        if (isMobile) setCollapsed(true);
-                      },
-                      collapsed,
-                    } as any)
-                  : sider}
-              </ArcoLayout.Content>
-              {!isMobile && (
-                <div
-                  className='absolute top-0 h-full w-8px z-20 cursor-col-resize group'
-                  style={{ right: '-4px' }}
-                  onMouseDown={beginSiderResizeDrag}
-                  aria-hidden='true'
-                >
-                  <div className='absolute top-0 left-1/2 h-full w-1px -translate-x-1/2 bg-transparent group-hover:bg-[var(--color-border-2)] transition-colors duration-150' />
-                </div>
-              )}
-            </ArcoLayout.Sider>
-
-            <ArcoLayout.Content
-              className={'relative bg-1 layout-content flex flex-col min-h-0'}
-              onClick={() => {
-                if (isMobile && !collapsed) setCollapsed(true);
-              }}
-              style={
-                isMobile
-                  ? {
-                      width: '100%',
-                    }
-                  : undefined
-              }
-            >
+            <ArcoLayout.Content className='relative layout-content layout-content--glass flex flex-col min-h-0'>
               {routeTransitioning && <AppLoader overlay />}
-              <Outlet />
+              <HubShell>
+                <Outlet />
+              </HubShell>
               {directorySelectionContextHolder}
               <PwaPullToRefresh />
               <Suspense fallback={null}>

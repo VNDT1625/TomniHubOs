@@ -19,7 +19,7 @@ const packageMocks = vi.hoisted(() => ({
 }));
 
 vi.mock('@/renderer/components/layout/Sider', () => ({ default: () => null }));
-vi.mock('@/renderer/pages/company/CompanyPage', () => ({ default: () => null }));
+vi.mock('@package-apps/company/renderer/company/CompanyPage', () => ({ default: () => null }));
 vi.mock('@/renderer/pages/conversation/GroupedHistory/ConversationSearchPopover', () => ({ default: () => null }));
 vi.mock('@/renderer/pages/guid/HubHome/catalog', () => ({ HUB_APPS: [], parseRecentHubApps: () => [] }));
 vi.mock('@/renderer/pages/hub/PackageAppHost', () => ({
@@ -97,6 +97,18 @@ describe('Hub Store publisher submission', () => {
   afterEach(() => {
     window.electronAPI = undefined;
     vi.restoreAllMocks();
+  });
+
+  it('shows only the title, refresh and a plus publish button in the header (no search or subtitle)', async () => {
+    renderStore();
+    expect(screen.getByRole('heading', { name: 'Store' })).toBeInTheDocument();
+    expect(screen.queryByText('Discover apps and packages')).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('Search in Tomny')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Submit package' })).toBe(screen.getByTestId('store-publisher-submit'));
+    expect(screen.queryByText('Submit package')).not.toBeInTheDocument();
+    await waitFor(() => expect(packageMocks.list).toHaveBeenCalled());
+    expect(packageMocks.search).not.toHaveBeenCalled();
+    expect(packageMocks.federatedSearch).not.toHaveBeenCalled();
   });
 
   it('submits through the narrow Main-owned picker only and disables while pending', async () => {
@@ -189,52 +201,6 @@ describe('Hub Store publisher submission', () => {
       );
     });
     expect(pickAndSubmit).toHaveBeenCalledTimes(1);
-    expect(packageMocks.install).not.toHaveBeenCalled();
-    expect(packageMocks.uninstall).not.toHaveBeenCalled();
-  });
-
-  it('plans task Surfaces through the narrow Main bridge without mutating a package', async () => {
-    const set = vi.fn().mockResolvedValue({ ok: true, selection: { targetId: 'local', modelKey: 'qwen' } });
-    const plan = vi.fn().mockResolvedValue({
-      ok: true,
-      plan: {
-        schemaVersion: 1,
-        requestId: 'plan-1',
-        goalDigest: `sha256-${'a'.repeat(64)}`,
-        requirementCount: 1,
-        steps: [
-          {
-            kind: 'propose-install',
-            query: { queryId: 'query-1', capability: 'workspace.write' },
-            proposal: {
-              candidate: { package: { packageId: 'com.tomni.ide' } },
-              requiresPurchase: false,
-            },
-          },
-        ],
-      },
-    });
-    window.electronAPI = {
-      hubModelSelection: {
-        get: vi.fn().mockResolvedValue({ ok: true, selection: { targetId: 'local', modelKey: 'qwen' } }),
-        list: vi.fn().mockResolvedValue({ ok: true, targets: [{ targetId: 'local', modelKeys: ['qwen'] }] }),
-        set,
-      },
-      hubGoalSurfacePlanning: { plan },
-    } as never;
-
-    renderStore();
-    const planner = await screen.findByTestId('store-goal-surface-planner');
-    const goalField = planner.querySelector('textarea');
-    if (goalField === null) throw new Error('Goal text input was not rendered.');
-    fireEvent.change(goalField, { target: { value: 'Create a local-first notes application.' } });
-    const planButton = screen.getByTestId('store-goal-surface-plan');
-    await waitFor(() => expect(planButton).not.toBeDisabled());
-    fireEvent.click(planButton);
-
-    await waitFor(() => expect(set).toHaveBeenCalledWith({ targetId: 'local', modelKey: 'qwen' }));
-    await waitFor(() => expect(plan).toHaveBeenCalledWith({ goal: 'Create a local-first notes application.' }));
-    expect(await screen.findByTestId('store-goal-surface-plan-result')).toHaveTextContent('workspace.write');
     expect(packageMocks.install).not.toHaveBeenCalled();
     expect(packageMocks.uninstall).not.toHaveBeenCalled();
   });

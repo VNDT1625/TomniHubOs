@@ -19,7 +19,7 @@
       "@package-apps/design/*": ["./packages/package-apps/design/src/*"],
       "@package-apps/document-studio/*": ["./packages/package-apps/document-studio/src/*"],
       "@package-apps/browser/*": ["./packages/package-apps/browser/src/*"],
-
+      "@package-apps/company/*": ["./packages/package-apps/company/src/*"],
       "@package-apps/shared/*": ["./packages/package-apps/shared/*"],
       "@/*": ["./packages/desktop/src/*"],
       "@process/*": ["./packages/desktop/src/process/*"],

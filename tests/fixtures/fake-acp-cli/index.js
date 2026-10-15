@@ -72,12 +72,24 @@ function handleRequest(message) {
         agentInfo: { name: 'fake-acp-cli', version: '1.0.0' },
       });
       break;
-    case 'session/new': {
+        case 'session/new': {
+      if (scenario === 'auth-required') {
+        sendError(id, -32000, 'Gemini API key is missing or not configured');
+        break;
+      }
       sessionCounter += 1;
       sendResponse(id, {
         sessionId: `fake-session-${sessionCounter}`,
         modes: null,
-        configOptions: [],
+                configOptions: [],
+                ...(scenario === 'degraded' || scenario === 'idle-commands'
+          ? {}
+          : {
+              availableCommands: [
+                { name: 'compact', description: 'Compact provider context' },
+                { name: 'project:review', description: 'Review the current project' },
+              ],
+            }),
         models:
           scenario === 'degraded'
             ? null
@@ -85,7 +97,21 @@ function handleRequest(message) {
                 currentModelId: 'fake-model-1',
                 availableModels: [{ modelId: 'fake-model-1', name: 'Fake Model' }],
               },
-      });
+            });
+      if (scenario === 'idle-commands') {
+                const providerIndex = sessionCounter;
+        const providerSession = `fake-session-${providerIndex}`;
+        setTimeout(() => sendNotification('session/update', {
+          sessionId: providerSession,
+          update: { sessionUpdate: 'available_commands_update', availableCommands: [
+                        { name: `idle-${providerIndex}`, description: 'Discovered without a prompt' },
+          ] },
+        }), 30);
+        setTimeout(() => sendNotification('session/update', {
+          sessionId: providerSession,
+          update: { sessionUpdate: 'available_commands_update', availableCommands: [] },
+        }), 90);
+      }
       break;
     }
     case 'session/prompt': {
@@ -100,6 +126,12 @@ function handleRequest(message) {
         pendingPrompts.set(sessionId, id);
         break;
       }
+            if (scenario === 'live-commands') sendNotification('session/update', {
+        sessionId,
+        update: { sessionUpdate: 'available_commands_update', availableCommands: [
+          { name: 'live-command', description: 'Advertised during a running turn' },
+        ] },
+      });
       const history = [...(promptsBySession.get(sessionId) || []), promptText];
       promptsBySession.set(sessionId, history);
       completePrompt(id, sessionId, scenario === 'history' ? `${sessionId}: ${history.join(' | ')}` : promptText);

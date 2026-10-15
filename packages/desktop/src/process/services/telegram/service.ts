@@ -10,10 +10,38 @@ import type {
 import type { TProviderWithModel } from '@/common/config/storage';
 import type { NativeConversationService } from '@process/services/database/nativeConversation';
 import type { SecretVault } from '@process/agentRuntime/secretVault';
+import {
+  MAX_VOICE_BYTES,
+  checkVoice,
+  cleanTranscript,
+  filenameFor,
+  parseVoiceCallback,
+  voiceCallbackData,
+  VoiceSetupError,
+  type TelegramVoiceInfo,
+  type VoiceTranscriber,
+} from './voice';
+import {
+  MAX_ATTACHMENT_BYTES,
+  TELEGRAM_UPLOAD_DIRECTORY,
+  pickAttachment,
+  splitTelegramText,
+  storedAttachmentName,
+  type TelegramAttachment,
+  type TelegramAttachmentMessage,
+} from './attachments';
 
 type TelegramUser = { id: number; username?: string; first_name?: string; last_name?: string };
-type TelegramMessage = { chat: { id: number }; from?: TelegramUser; text?: string };
-type TelegramUpdate = { update_id: number; message?: TelegramMessage };
+type TelegramMessage = TelegramAttachmentMessage & {
+  chat: { id: number };
+  from?: TelegramUser;
+  text?: string;
+  caption?: string;
+  voice?: TelegramVoiceInfo;
+  audio?: TelegramVoiceInfo;
+};
+type TelegramCallbackQuery = { id: string; from: TelegramUser; data?: string; message?: { chat: { id: number } } };
+type TelegramUpdate = { update_id: number; message?: TelegramMessage; callback_query?: TelegramCallbackQuery };
 type TelegramBot = { id: number; username?: string };
 type TelegramResult<T> = { ok: boolean; result?: T; description?: string };
 
@@ -44,6 +72,14 @@ export type TelegramChannelDeps = {
     model?: TProviderWithModel;
     agent?: { agent_type: string; backend?: string; id?: string; custom_agent_id?: string; name?: string };
   }>;
+  /**
+   * Turns a voice message into text. Without it the bot says that voice is not set up. The audio goes to
+   * whatever service this function calls, so it is Main's to provide and is only used under the same governed
+   * egress admission as every other Telegram call.
+   */
+  transcribeVoice?: VoiceTranscriber;
+  /** Looks up the configured transcriber each time, so a change in settings applies without a restart. */
+  resolveVoiceTranscriber?: () => Promise<VoiceTranscriber | undefined>;
   /** Main-only online-account gate. */
   requireAuthenticatedAccount?: () => void;
   /**
@@ -88,6 +124,11 @@ export class TelegramChannelService {
   private ready: Promise<void>;
   private pollAbort?: AbortController;
   private pollPromise?: Promise<void>;
+  /** Transcripts waiting for the speaker to confirm them; kept in memory only and dropped after five minutes. */
+  private readonly pendingVoice = new Map<
+    string,
+    { chatId: number; platformUserId: string; text: string; expiresAt: number }
+  >();
   private readonly fetchImpl: typeof fetch;
 
   public constructor(private readonly deps: TelegramChannelDeps) {
@@ -262,7 +303,7 @@ export class TelegramChannelService {
     if (!session?.chatId) return;
     const history = await this.deps.conversations.history(conversationId, 1, 1, 'desc');
     const text = messageText((history.items[0] as { content?: unknown } | undefined)?.content);
-    if (text) await this.sendTelegram(Number(session.chatId), text.slice(0, 4096));
+    for (const part of text ? splitTelegramText(text) : []) await this.sendTelegram(Number(session.chatId), part);
   }
 
   private async load(): Promise<void> {
@@ -351,7 +392,7 @@ export class TelegramChannelService {
         const updates = await this.call<TelegramUpdate[]>(
           await this.token(),
           'getUpdates',
-          { offset: this.state.offset, timeout: 25, allowed_updates: ['message'] },
+          { offset: this.state.offset, timeout: 25, allowed_updates: ['message', 'callback_query'] },
           signal
         );
         failures = 0;
@@ -368,11 +409,148 @@ export class TelegramChannelService {
     }
   }
 
+  /**
+   * A voice message: fetch the audio, turn it into text, and ask before doing anything with it. Speech
+   * recognition can mishear, and the text may start real work on this computer, so a button press is always
+   * needed to run it.
+   */
+  private async handleVoice(chatId: number, platformUserId: string, voice: TelegramVoiceInfo): Promise<void> {
+    const transcribe = this.deps.transcribeVoice ?? (await this.deps.resolveVoiceTranscriber?.());
+    if (!transcribe) {
+      await this.sendTelegram(
+        chatId,
+        '🎙️ Nhận diện giọng nói chưa được bật trong Tomny. Hãy gửi tin nhắn văn bản, hoặc bật dịch vụ nhận diện giọng nói trong cài đặt.'
+      );
+      return;
+    }
+    const verdict = checkVoice(voice);
+    if (verdict.ok === false) {
+      await this.sendTelegram(chatId, `🎙️ ${verdict.reason}`);
+      return;
+    }
+    let transcript = '';
+    try {
+      const { bytes, filePath } = await this.downloadFile(voice.file_id, MAX_VOICE_BYTES);
+      const mimeType = voice.mime_type ?? 'audio/ogg';
+      transcript = cleanTranscript(await transcribe({ bytes, mimeType, filename: filenameFor(filePath, mimeType) }));
+    } catch (error) {
+      await this.sendTelegram(
+        chatId,
+        error instanceof VoiceSetupError
+          ? `🎙️ ${error.userMessage}`
+          : '🎙️ Không xử lý được tin nhắn thoại. Hãy thử lại hoặc gửi tin nhắn văn bản.'
+      );
+      return;
+    }
+    if (!transcript) {
+      await this.sendTelegram(chatId, '🎙️ Không nghe rõ nội dung. Hãy nói lại rõ hơn.');
+      return;
+    }
+    const now = Date.now();
+    for (const [key, entry] of this.pendingVoice) if (entry.expiresAt <= now) this.pendingVoice.delete(key);
+    while (this.pendingVoice.size >= 20) {
+      const oldest = this.pendingVoice.keys().next().value;
+      if (oldest === undefined) break;
+      this.pendingVoice.delete(oldest);
+    }
+    const id = randomUUID().slice(0, 12);
+    this.pendingVoice.set(id, { chatId, platformUserId, text: transcript, expiresAt: now + 5 * 60_000 });
+    await this.call(await this.token(), 'sendMessage', {
+      chat_id: chatId,
+      text: `🎙️ Đã nghe:\n«${transcript}»\n\nThực hiện lệnh này?`,
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: '✅ Thực hiện', callback_data: voiceCallbackData('ok', id) },
+            { text: '❌ Hủy', callback_data: voiceCallbackData('no', id) },
+          ],
+        ],
+      },
+    });
+  }
+
+  /** Downloads a file the user sent through the Bot API, refusing anything over `maxBytes`. */
+  private async downloadFile(fileId: string, maxBytes: number): Promise<{ bytes: Uint8Array; filePath: string }> {
+    const token = await this.token();
+    const file = await this.call<{ file_path?: string; file_size?: number }>(token, 'getFile', { file_id: fileId });
+    if (!file.file_path) throw new Error('TELEGRAM_FILE_PATH_MISSING');
+    if (file.file_size !== undefined && file.file_size > maxBytes) throw new Error('TELEGRAM_FILE_TOO_LARGE');
+    this.requireExternalAuthority();
+    const response = await this.fetchImpl(`https://api.telegram.org/file/bot${token}/${file.file_path}`);
+    if (!response.ok) throw new Error(`TELEGRAM_FILE_HTTP_${response.status}`);
+    const declared = Number(response.headers.get('content-length') ?? 0);
+    if (declared > maxBytes) throw new Error('TELEGRAM_FILE_TOO_LARGE');
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    if (bytes.length === 0 || bytes.length > maxBytes) throw new Error('TELEGRAM_FILE_SIZE');
+    return { bytes, filePath: file.file_path };
+  }
+
+  /**
+   * A photo or document: saved in the chat workspace's `telegram-uploads` folder and handed to the agent as an
+   * attachment, with the caption as the request. The file is only stored, never opened or run by Tomny.
+   */
+  private async handleAttachment(
+    chatId: number,
+    authorized: IChannelUser,
+    platformUserId: string,
+    attachment: TelegramAttachment,
+    caption: string
+  ): Promise<void> {
+    const session = await this.sessionFor(chatId, authorized, platformUserId);
+    if (!session) return;
+    let stored: string;
+    try {
+      const { bytes } = await this.downloadFile(attachment.fileId, MAX_ATTACHMENT_BYTES);
+      const directory = path.join(session.workspace, TELEGRAM_UPLOAD_DIRECTORY);
+      await mkdir(directory, { recursive: true });
+      stored = path.join(directory, storedAttachmentName(attachment.name, new Date(), randomUUID().slice(0, 6)));
+      await writeFile(stored, bytes, { flag: 'wx' });
+    } catch {
+      await this.sendTelegram(chatId, '📎 Không nhận được tệp. Hãy thử lại hoặc gửi tệp nhỏ hơn.');
+      return;
+    }
+    session.lastActivity = Date.now();
+    await this.deps.conversations.send({
+      conversation_id: session.conversation_id,
+      input: caption || `📎 ${path.basename(stored)}`,
+      files: [stored],
+    });
+  }
+
+  /** A press on the confirm or cancel button under a transcript. Only the person who spoke can press it. */
+  private async handleCallback(query: TelegramCallbackQuery): Promise<void> {
+    const parsed = parseVoiceCallback(query.data);
+    const token = await this.token();
+    const answer = (text: string): Promise<unknown> =>
+      this.call(token, 'answerCallbackQuery', { callback_query_id: query.id, text }).catch((): undefined => undefined);
+    if (!parsed) return;
+    const platformUserId = String(query.from.id);
+    const authorized = this.state.users.find((item) => item.platformUserId === platformUserId);
+    const pending = this.pendingVoice.get(parsed.id);
+    if (!authorized || !pending || pending.platformUserId !== platformUserId || pending.expiresAt <= Date.now()) {
+      await answer('Lệnh đã hết hạn hoặc không thuộc về bạn.');
+      return;
+    }
+    this.pendingVoice.delete(parsed.id);
+    if (parsed.action === 'no') {
+      await answer('Đã hủy.');
+      return;
+    }
+    await answer('Đang thực hiện…');
+    await this.deliverToAgent(pending.chatId, authorized, platformUserId, pending.text);
+  }
+
   private async handleUpdate(update: TelegramUpdate): Promise<void> {
+    if (update.callback_query) {
+      await this.handleCallback(update.callback_query);
+      return;
+    }
     const message = update.message;
     const user = message?.from;
     const text = message?.text?.trim();
-    if (!message || !user || !text) return;
+    const voice = message?.voice ?? message?.audio;
+    const pick = message ? pickAttachment(message) : ({ kind: 'none' } as const);
+    if (!message || !user || (!text && !voice && pick.kind === 'none')) return;
     const platformUserId = String(user.id);
     const authorized = this.state.users.find((item) => item.platformUserId === platformUserId);
     if (!authorized) {
@@ -395,6 +573,21 @@ export class TelegramChannelService {
       await this.sendTelegram(message.chat.id, `Pairing code: ${pairing.code}. Approve it in Tomny settings.`);
       return;
     }
+
+    if (pick.kind === 'rejected') {
+      await this.sendTelegram(message.chat.id, `📎 ${pick.reason}`);
+      return;
+    }
+    if (pick.kind === 'file') {
+      const caption = message.caption?.trim() ?? '';
+      await this.handleAttachment(message.chat.id, authorized, platformUserId, pick.attachment, caption);
+      return;
+    }
+    if (!text && voice) {
+      await this.handleVoice(message.chat.id, platformUserId, voice);
+      return;
+    }
+    if (!text) return;
 
     const command = text.split(/\s+/)[0]?.toLowerCase();
 
@@ -486,26 +679,46 @@ export class TelegramChannelService {
       return;
     }
 
+    await this.deliverToAgent(message.chat.id, authorized, platformUserId, text);
+  }
+
+  /** Sends text to the agent of this chat, creating the conversation on first use. */
+  private async deliverToAgent(
+    chatId: number,
+    authorized: IChannelUser,
+    platformUserId: string,
+    text: string
+  ): Promise<void> {
+    const session = await this.sessionFor(chatId, authorized, platformUserId);
+    if (!session) return;
+    session.lastActivity = Date.now();
+    await this.deps.conversations.send({ conversation_id: session.conversation_id, input: text });
+  }
+
+  /** The conversation of this chat, created on first use. Tells the user and returns undefined when it cannot be. */
+  private async sessionFor(
+    chatId: number,
+    authorized: IChannelUser,
+    platformUserId: string
+  ): Promise<IChannelSession | undefined> {
     const currentSettings = await this.deps.readSettings();
     if (!currentSettings.model?.use_model) {
       await this.sendTelegram(
-        message.chat.id,
+        chatId,
         'Chua chon Default Model cho Telegram trong Tomny Hub Settings. Vui long chon Default Model.'
       );
-      return;
+      return undefined;
     }
 
-    let session = this.state.sessions.find(
-      (item) => item.user_id === authorized.id && item.chatId === String(message.chat.id)
-    );
+    let session = this.state.sessions.find((item) => item.user_id === authorized.id && item.chatId === String(chatId));
     if (!session?.conversation_id) {
       const recent = await this.deps.conversations.list(undefined, 200);
       const workspace = recent.items
         .map((item) => (typeof item.extra?.workspace === 'string' ? item.extra.workspace : ''))
         .find(Boolean);
       if (!workspace) {
-        await this.sendTelegram(message.chat.id, 'Open Tomny and select a workspace before starting a Telegram agent.');
-        return;
+        await this.sendTelegram(chatId, 'Open Tomny and select a workspace before starting a Telegram agent.');
+        return undefined;
       }
       const settings = await this.deps.readSettings();
       const model: TProviderWithModel = settings.model ?? {
@@ -539,14 +752,13 @@ export class TelegramChannelService {
         agent_type: type,
         conversation_id: conversation.id,
         workspace,
-        chatId: String(message.chat.id),
+        chatId: String(chatId),
         created_at: Date.now(),
         lastActivity: Date.now(),
       };
       this.state.sessions.push(session);
       await this.save();
     }
-    session.lastActivity = Date.now();
-    await this.deps.conversations.send({ conversation_id: session.conversation_id, input: text });
+    return session;
   }
 }

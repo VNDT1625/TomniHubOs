@@ -930,6 +930,35 @@ describe('package manager service', () => {
     expect(registry.isActive(packageId)).toBe(true);
   });
 
+    it('always reconciles fixed native hosts after successful install, disable, enable and uninstall', async () => {
+    const rootDir = await tempRoot();
+    const packageId = 'com.tomni.studio';
+    const operations: string[] = [];
+    let service: ReturnType<typeof createPackageManagerService>;
+    service = createPackageManagerService({
+      rootDir,
+      appVersion: '1.2.0',
+      catalog: bundledCatalog(),
+      quiescePackageRuntime: async (id) => {
+        operations.push('stop:' + id);
+      },
+      resumePackageRuntime: async (id) => {
+        const status = await service.status(id);
+        operations.push('resume:' + id + ':' + status.state + ':' + String(status.enabled));
+      },
+    });
+    await service.initialize();
+    await service.install(packageId);
+    await service.disable(packageId);
+    await service.enable(packageId);
+    await service.uninstall(packageId);
+    expect(operations).toEqual([
+      'stop:com.tomni.studio', 'resume:com.tomni.studio:installed:true',
+      'stop:com.tomni.studio', 'resume:com.tomni.studio:installed:false',
+      'stop:com.tomni.studio', 'resume:com.tomni.studio:available:false',
+    ]);
+  });
+
   it('finds the IDE through the Studio suite and installs/uninstalls it idempotently', async () => {
     const rootDir = await tempRoot();
     const service = createPackageManagerService({ rootDir, appVersion: '1.2.0', catalog: bundledCatalog() });
@@ -2192,6 +2221,28 @@ describe('package manager service', () => {
     expect(await service.list()).toHaveLength(0);
   });
 
+  it('keeps status and repeated uninstall answerable after removing a delisted package', async () => {
+    const rootDir = await tempRoot();
+    const entry = bundledCatalog()[0]!;
+    let remoteCatalog: PackageCatalogEntry[] = [entry];
+    const service = createPackageManagerService({
+      rootDir,
+      appVersion: '1.2.0',
+      catalog: [],
+      catalogLoader: async () => remoteCatalog,
+    });
+    await service.initialize();
+    await service.install(entry.manifest.id);
+    remoteCatalog = [];
+    await service.refreshCatalog();
+
+    await expect(service.uninstall(entry.manifest.id)).resolves.toMatchObject({ state: 'available' });
+    // The service no longer knows the package, but the completed removal must not turn into an error.
+    await expect(service.status(entry.manifest.id)).resolves.toMatchObject({ state: 'available', enabled: false });
+    await expect(service.uninstall(entry.manifest.id)).resolves.toMatchObject({ state: 'available' });
+    await expect(service.status('org.example.never-existed')).rejects.toThrow(/unknown package/i);
+  });
+
   it('refuses to downgrade an installed package when a stale catalog is loaded', async () => {
     const rootDir = await tempRoot();
     const versionOne = bundledCatalog()[0]!;
@@ -2840,12 +2891,20 @@ describe('package manager service', () => {
     await expect(access(path.join(rootDir, 'packages', manifest.id))).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
-  it('installs the first-party Calculator runtime and preserves an unowned prior version on removal', async () => {
+    it('installs the first-party Calculator runtime and preserves an unowned prior version on removal', async () => {
     const rootDir = await tempRoot();
     const artifactBytes = await readFile(
       path.resolve('store-artifacts', 'com.tomni.calculator-1.0.0.tomni-package.json')
     );
+        let calculatorDownloads = 0;
+    let failNextDownload = false;
     const server = createServer((_request, response) => {
+      calculatorDownloads += 1;
+      if (failNextDownload) {
+        failNextDownload = false;
+        response.writeHead(503).end();
+        return;
+      }
       response.writeHead(200, {
         'content-length': String(artifactBytes.byteLength),
         'content-type': 'application/vnd.tomni.package+json',
@@ -2869,7 +2928,9 @@ describe('package manager service', () => {
       reservePackageSandboxMutation: () => ({ release: () => undefined }),
     });
     await service.initialize();
-    await service.install('com.tomni.calculator');
+        await service.install('com.tomni.calculator');
+    await expect(readdir(path.join(rootDir, '.downloads'))).resolves.toEqual([]);
+    await expect(access(path.join(rootDir, 'packages', 'com.tomni.calculator', '1.0.0'))).resolves.toBeUndefined();
 
     const runtime = await service.readAsset('com.tomni.calculator', 'index.html');
     expect(runtime.content).toContain('<title>Calculator</title>');
@@ -2877,8 +2938,30 @@ describe('package manager service', () => {
     const previousVersion = path.join(rootDir, 'packages', 'com.tomni.calculator', '0.9.0');
     await mkdir(previousVersion, { recursive: true });
     await writeFile(path.join(previousVersion, 'legacy.txt'), 'old package version');
-    await service.uninstall('com.tomni.calculator');
+            await service.uninstall('com.tomni.calculator');
+    expect(calculatorDownloads).toBe(1);
     await expect(service.readAsset('com.tomni.calculator', 'index.html')).rejects.toThrow(/not installed/i);
+    await expect(access(path.join(rootDir, 'packages', 'com.tomni.calculator', '1.0.0'))).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(readdir(path.join(rootDir, '.downloads'))).resolves.toEqual([]);
+    await expect(readdir(path.join(rootDir, '.trash'))).resolves.toEqual([]);
+        await expect(readFile(path.join(previousVersion, 'legacy.txt'), 'utf8')).resolves.toBe('old package version');
+
+        // A failed re-download must never make a deleted package runnable or leave a partial artifact.
+    failNextDownload = true;
+    await expect(service.install('com.tomni.calculator')).rejects.toBeInstanceOf(Error);
+    await expect(service.readAsset('com.tomni.calculator', 'index.html')).rejects.toThrow(/not installed/i);
+    await expect(access(path.join(rootDir, 'packages', 'com.tomni.calculator', '1.0.0'))).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(readdir(path.join(rootDir, '.downloads'))).resolves.toEqual([]);
+    expect(calculatorDownloads).toBe(2);
+    // The user can retry after network recovery: download again, verify and install.
+    await expect(service.install('com.tomni.calculator')).resolves.toMatchObject({ state: 'installed', enabled: true });
+    expect(calculatorDownloads).toBe(3);
+    await expect(service.readAsset('com.tomni.calculator', 'index.html')).resolves.toMatchObject({
+      content: expect.stringContaining('<title>Calculator</title>'),
+    });
+    await expect(readdir(path.join(rootDir, '.downloads'))).resolves.toEqual([]);
+    await expect(service.uninstall('com.tomni.calculator')).resolves.toMatchObject({ state: 'available' });
+    await expect(access(path.join(rootDir, 'packages', 'com.tomni.calculator', '1.0.0'))).rejects.toMatchObject({ code: 'ENOENT' });
     await expect(readFile(path.join(previousVersion, 'legacy.txt'), 'utf8')).resolves.toBe('old package version');
   });
 

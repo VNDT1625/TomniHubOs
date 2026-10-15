@@ -1,6 +1,6 @@
 # Kiến trúc Settings Mới & Bảng Đối chiếu Chi tiết Chức năng
 
-**Trạng thái:** TARGET  
+**Trạng thái:** PARTIAL (cập nhật 2026-10-05) — 4 cụm và các tab đã có trong `SettingsSider.tsx` và router. Thông báo, Pipeline Chat, Model/Agent, Customize, Giao diện, Resource, WebUI, Hệ thống chạy thật; Profile chỉ có tài khoản và đăng xuất; Billing, Cấu hình AI, Privacy & Security hiện “chưa hoạt động”. Chi tiết từng trang: `docs/FEATURE_STATUS.md` §9.  
 **Mục tiêu:** Tái cấu trúc toàn diện phân hệ Cài đặt (Settings) của TomniHubOS thành 4 Cụm lớn (L1) chuẩn mực cho AI Agent OS. Đảm bảo kế thừa 100% các tính năng cũ đang chạy, không làm mất bất kỳ mã nguồn nào, đồng thời tích hợp mượt mà các module mới (Pipeline Chat, Dual-Identity, Privacy & Security, Notification, MCP Connectors, Skills).
 
 ---

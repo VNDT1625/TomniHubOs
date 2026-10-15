@@ -17,16 +17,18 @@ import {
   parseStoreSignedPublisherKeyRevocation,
   storePublisherKeyCertificateSignaturePayload,
   storePublisherKeyRevocationSignaturePayload,
-  type PackageCatalogEntry,
-  type PackageCatalogRevocation,
-  type PackagePublicationReview,
-  type PackageManifest,
-  type PackageIdentity,
-  type PackageSigningKeyPolicy,
-  type PackageTrust,
-  type StoreSignedPublisherKeyCertificate,
-  type StoreSignedPublisherKeyRevocation,
-} from '../../../common/packages';
+} from '../../../common/packages/manifest';
+import type {
+  PackageCatalogEntry,
+  PackageCatalogRevocation,
+  PackagePublicationReview,
+  PackageManifest,
+  PackageIdentity,
+  PackageSigningKeyPolicy,
+  PackageTrust,
+  StoreSignedPublisherKeyCertificate,
+  StoreSignedPublisherKeyRevocation,
+} from '../../../common/packages/types';
 import { packageArtifactManifestsMatch, verifyArtifactSignature } from './artifactSecurity';
 import {
   canonicalizeCatalogValue,
@@ -1082,6 +1084,9 @@ export const parseRemotePackageCatalog = (
 };
 
 const PACKAGE_TRUST_RANK: Readonly<Record<PackageTrust, number>> = {
+  // Never present in a catalog; ranked lowest so it can never outrank a catalog entry.
+  'local-built': 0,
+  'unsigned-revoked': 0,
   'signed-store': 1,
   'signed-first-party': 2,
   'trusted-first-party': 3,

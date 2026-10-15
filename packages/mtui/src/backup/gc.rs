@@ -30,6 +30,114 @@ pub struct GcResult {
     pub deleted_dirs: usize,
     pub remaining_files: usize,
     pub retained_days: u32,
+    /// Operation diffs older than the retention window that were (or would be) removed.
+    pub diff_files_removed: usize,
+    /// Verification logs older than the retention window that were (or would be) removed.
+    pub verify_logs_removed: usize,
+    /// Bytes freed by diff and verification-log pruning, in addition to `freed_bytes`.
+    pub aux_freed_bytes: u64,
+}
+
+/// Remove files named `<prefix>YYYYMMDD_...` whose date is older than the retention window.
+/// Files that do not follow the naming scheme are never touched.
+fn prune_dated_files(
+    dir: &Path,
+    prefix: &str,
+    retention_days: u32,
+    today: NaiveDate,
+    dry_run: bool,
+) -> (usize, u64) {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return (0, 0);
+    };
+    let mut removed = 0usize;
+    let mut bytes = 0u64;
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        let Some(date_text) = name.strip_prefix(prefix).and_then(|rest| rest.get(..8)) else {
+            continue;
+        };
+        let Ok(date) = NaiveDate::parse_from_str(date_text, "%Y%m%d") else {
+            continue;
+        };
+        if (today - date).num_days() <= retention_days as i64 {
+            continue;
+        }
+        let Ok(metadata) = entry.metadata() else {
+            continue;
+        };
+        if !metadata.is_file() {
+            continue;
+        }
+        if dry_run || fs::remove_file(entry.path()).is_ok() {
+            removed += 1;
+            bytes += metadata.len();
+        }
+    }
+    (removed, bytes)
+}
+
+/// Enforce retention on backups, operation diffs, and verification logs.
+pub fn run_gc(project_root: &Path, options: &GcOptions) -> anyhow::Result<GcResult> {
+    let mut result = run_backup_gc(project_root, options)?;
+    let config = crate::config::load_config(project_root).unwrap_or_default();
+    let retention_days = if options.force {
+        0
+    } else {
+        options.days.unwrap_or(config.backup.retention_days)
+    };
+    let today = Local::now().date_naive();
+    let mtui_dir = crate::config::config_dir(project_root);
+    let (diffs, diff_bytes) = prune_dated_files(
+        &mtui_dir.join("diffs"),
+        "op_",
+        retention_days,
+        today,
+        options.dry_run,
+    );
+    let (logs, log_bytes) = prune_dated_files(
+        &mtui_dir.join("verify"),
+        "verify_",
+        retention_days,
+        today,
+        options.dry_run,
+    );
+    result.diff_files_removed = diffs;
+    result.verify_logs_removed = logs;
+    result.aux_freed_bytes = diff_bytes + log_bytes;
+    Ok(result)
+}
+
+/// Run retention at most once a day when `backup.auto_gc_on_run` is enabled, so MTUI state
+/// cannot grow without bound. Failures are ignored: housekeeping must never break a command.
+pub fn auto_gc_if_due(project_root: &Path, config: &crate::config::MtuiConfig) {
+    if !config.backup.enabled || !config.backup.auto_gc_on_run {
+        return;
+    }
+    let marker = crate::config::config_dir(project_root).join("last-gc");
+    let due = fs::metadata(&marker)
+        .and_then(|meta| meta.modified())
+        .ok()
+        .and_then(|modified| modified.elapsed().ok())
+        .is_none_or(|age| age > std::time::Duration::from_secs(24 * 60 * 60));
+    if !due {
+        return;
+    }
+    // Touch first so concurrent invocations do not all start a collection. The marker gets new content each time:
+    // rewriting an empty file with empty bytes does not move its modification time on every file system, which made
+    // the marker look a day old forever and ran the collection on every single command.
+    if fs::write(&marker, chrono::Utc::now().to_rfc3339()).is_err() {
+        return;
+    }
+    let _ = run_gc(
+        project_root,
+        &GcOptions {
+            dry_run: false,
+            days: None,
+            force: false,
+            max_mb: None,
+        },
+    );
 }
 
 pub fn calculate_backup_stats(backup_dir: &Path) -> BackupStats {
@@ -67,7 +175,7 @@ pub fn calculate_backup_stats(backup_dir: &Path) -> BackupStats {
     }
 }
 
-pub fn run_gc(project_root: &Path, options: &GcOptions) -> anyhow::Result<GcResult> {
+fn run_backup_gc(project_root: &Path, options: &GcOptions) -> anyhow::Result<GcResult> {
     let backup_dir = crate::backup::backup_dir(project_root);
     let stats_before = calculate_backup_stats(&backup_dir);
 
@@ -82,6 +190,9 @@ pub fn run_gc(project_root: &Path, options: &GcOptions) -> anyhow::Result<GcResu
             deleted_dirs: 0,
             remaining_files: 0,
             retained_days: options.days.unwrap_or(7),
+            diff_files_removed: 0,
+            verify_logs_removed: 0,
+            aux_freed_bytes: 0,
         });
     }
 
@@ -181,5 +292,8 @@ pub fn run_gc(project_root: &Path, options: &GcOptions) -> anyhow::Result<GcResu
         deleted_dirs: deleted_dirs_count,
         remaining_files,
         retained_days: retention_days,
+        diff_files_removed: 0,
+        verify_logs_removed: 0,
+        aux_freed_bytes: 0,
     })
 }

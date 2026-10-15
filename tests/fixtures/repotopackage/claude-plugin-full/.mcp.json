@@ -1,0 +1,33 @@
+{
+  "mcpServers": {
+    "local-tool": {
+      "command": "node",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/dist/index.js"
+      ],
+      "env": {
+        "API_TOKEN": "${API_TOKEN}",
+        "LOG_LEVEL": "info"
+      }
+    },
+    "docs": {
+      "type": "http",
+      "url": "https://docs.example.com/mcp",
+      "headers": {
+        "X-Api-Key": "fixture-secret-do-not-leak-7f3a9c"
+      }
+    },
+    "search": {
+      "command": "uvx",
+      "args": [
+        "demo-search-mcp"
+      ]
+    },
+    "custom": {
+      "command": "/usr/local/bin/custom-server",
+      "args": [
+        "--serve"
+      ]
+    }
+  }
+}

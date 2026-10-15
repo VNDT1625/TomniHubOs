@@ -16,7 +16,7 @@
 
 import type { ConversationEvent } from '@/process/company/companyConversation';
 import type { CompanyStructure } from '@/process/company/companyOrchestrator';
-import type { PipelineStore } from '@/renderer/pages/company/pipeline/pipelineStore';
+import type { PipelineStore } from '@package-apps/company/renderer/company/pipeline/pipelineStore';
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -26,7 +26,7 @@ const pipelineMock = vi.hoisted(() => ({
   stop: vi.fn(),
   resolveApproval: vi.fn(),
 }));
-vi.mock('@/renderer/pages/company/pipeline/companyPipeline', () => ({
+vi.mock('@package-apps/company/renderer/company/pipeline/companyPipeline', () => ({
   runCompany: (input: { store: PipelineStore }) => {
     pipelineMock.store = input.store;
     return {
@@ -45,7 +45,7 @@ const clientMocks = vi.hoisted(() => ({
   cancelConversation: vi.fn(),
   listeners: [] as Array<(envelope: { event: ConversationEvent }) => void>,
 }));
-vi.mock('@/renderer/pages/company/companyBridgeClient', () => ({
+vi.mock('@package-apps/company/renderer/company/companyBridgeClient', () => ({
   companyClient: {
     runConversation: { invoke: clientMocks.runConversation },
     resolvePermission: { invoke: clientMocks.resolvePermission },
@@ -59,11 +59,14 @@ vi.mock('@/renderer/pages/company/companyBridgeClient', () => ({
   },
 }));
 
-import { resetCompanyPipelineSessions, useCompanyPipeline } from '@/renderer/pages/company/useCompanyPipeline';
+import {
+  resetCompanyPipelineSessions,
+  useCompanyPipeline,
+} from '@package-apps/company/renderer/company/useCompanyPipeline';
 import {
   resetCompanyConversationSessions,
   useCompanyConversation,
-} from '@/renderer/pages/company/useCompanyConversation';
+} from '@package-apps/company/renderer/company/useCompanyConversation';
 
 const STRUCTURE: CompanyStructure = {
   companyId: 'co',
@@ -147,7 +150,7 @@ describe('Company pipeline run survives tab switch (unmount/remount)', () => {
     // Simulate a renderer reload: a fresh module instance (empty in-memory
     // sessions) but the same `sessionStorage` snapshot survives.
     vi.resetModules();
-    const fresh = await import('@/renderer/pages/company/useCompanyPipeline');
+    const fresh = await import('@package-apps/company/renderer/company/useCompanyPipeline');
     const reopened = renderHook(() => fresh.useCompanyPipeline('co'));
     // Interrupted (was running) → restored as stopped, transcript intact.
     expect(reopened.result.current.snapshot.phase).toBe('stopped');
@@ -179,13 +182,13 @@ describe('Company pipeline run survives tab switch (unmount/remount)', () => {
       // applies doMock only to imports that happen after the call) and capture
       // the resumed input.
       let resumed: { goal?: string; store?: PipelineStore } | null = null;
-      vi.doMock('@/renderer/pages/company/pipeline/companyPipeline', () => ({
+      vi.doMock('@package-apps/company/renderer/company/pipeline/companyPipeline', () => ({
         runCompany: (input: { goal: string; store: PipelineStore }) => {
           resumed = { goal: input.goal, store: input.store };
           return { runId: 'r2', resolveApproval: vi.fn(), stop: vi.fn(), done: Promise.resolve() };
         },
       }));
-      const fresh = await import('@/renderer/pages/company/useCompanyPipeline');
+      const fresh = await import('@package-apps/company/renderer/company/useCompanyPipeline');
 
       renderHook(() => fresh.useCompanyPipeline('co'));
       // The auto-resume runs on a deferred tick.
@@ -198,7 +201,7 @@ describe('Company pipeline run survives tab switch (unmount/remount)', () => {
       expect((resumed as { goal?: string }).goal).toBe('do the thing');
     } finally {
       vi.useRealTimers();
-      vi.doUnmock('@/renderer/pages/company/pipeline/companyPipeline');
+      vi.doUnmock('@package-apps/company/renderer/company/pipeline/companyPipeline');
     }
   });
 
@@ -226,13 +229,13 @@ describe('Company pipeline run survives tab switch (unmount/remount)', () => {
       // Re-mock BEFORE importing the fresh module graph (vitest v4 applies
       // doMock only to subsequent imports).
       let resumed: { goal?: string } | null = null;
-      vi.doMock('@/renderer/pages/company/pipeline/companyPipeline', () => ({
+      vi.doMock('@package-apps/company/renderer/company/pipeline/companyPipeline', () => ({
         runCompany: (input: { goal: string; store: PipelineStore }) => {
           resumed = { goal: input.goal };
           return { runId: 'r2', resolveApproval: vi.fn(), stop: vi.fn(), done: Promise.resolve() };
         },
       }));
-      const fresh = await import('@/renderer/pages/company/useCompanyPipeline');
+      const fresh = await import('@package-apps/company/renderer/company/useCompanyPipeline');
 
       // The app boot scan runs — note: NO renderHook / no Company page mount.
       act(() => {
@@ -247,7 +250,7 @@ describe('Company pipeline run survives tab switch (unmount/remount)', () => {
       expect((resumed as { goal?: string }).goal).toBe('background goal');
     } finally {
       vi.useRealTimers();
-      vi.doUnmock('@/renderer/pages/company/pipeline/companyPipeline');
+      vi.doUnmock('@package-apps/company/renderer/company/pipeline/companyPipeline');
     }
   });
 });

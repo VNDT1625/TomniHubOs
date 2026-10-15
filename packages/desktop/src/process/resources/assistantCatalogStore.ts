@@ -8,6 +8,8 @@ import type {
   SetAssistantStateRequest,
   UpdateAssistantRequest,
 } from '@/common/types/agent/assistantTypes';
+import { uniqueList } from '@/common/types/agent/assistant/assistantSchema';
+import { sanitizeDefaultToolIds } from '@/common/types/agent/assistant/assistantDefaultTools';
 
 export type AssistantCatalogStore = {
   list(): Promise<Assistant[]>;
@@ -17,8 +19,22 @@ export type AssistantCatalogStore = {
   setState(input: SetAssistantStateRequest): Promise<Assistant>;
   importMany(inputs: CreateAssistantRequest[]): Promise<ImportAssistantsResult>;
   importExisting(inputs: Assistant[]): Promise<ImportAssistantsResult>;
+  upsertPackageAssistant(input: Assistant): Promise<Assistant>;
+  removePackageAssistant(packageId: string, connectionKey: string): Promise<void>;
+  reconcilePackageAssistants(keep: ReadonlySet<string>): Promise<void>;
 };
 const clone = <T>(value: T): T => structuredClone(value);
+/** Records saved before plugins and hooks existed load with empty lists; nothing is enabled by migration. */
+const withSessionFields = (row: Assistant): Assistant => ({
+  ...row,
+  enabled_plugins: Array.isArray(row.enabled_plugins)
+    ? uniqueList(row.enabled_plugins.filter((item): item is string => typeof item === 'string'))
+    : [],
+  default_tools: sanitizeDefaultToolIds(row.default_tools),
+  enabled_hooks: Array.isArray(row.enabled_hooks)
+    ? uniqueList(row.enabled_hooks.filter((item): item is string => typeof item === 'string'))
+    : [],
+});
 const normalize = (input: CreateAssistantRequest, id = input.id?.trim() || randomUUID()): Assistant => ({
   id,
   source: 'user',
@@ -26,6 +42,7 @@ const normalize = (input: CreateAssistantRequest, id = input.id?.trim() || rando
   name_i18n: input.name_i18n ?? {},
   description: input.description,
   description_i18n: input.description_i18n ?? {},
+  context: input.context,
   avatar: input.avatar,
   enabled: true,
   sort_order: 0,
@@ -33,6 +50,9 @@ const normalize = (input: CreateAssistantRequest, id = input.id?.trim() || rando
   enabled_skills: input.enabled_skills ?? [],
   custom_skill_names: input.custom_skill_names ?? [],
   disabled_builtin_skills: input.disabled_builtin_skills ?? [],
+  enabled_plugins: uniqueList(input.enabled_plugins),
+  enabled_hooks: uniqueList(input.enabled_hooks),
+  default_tools: sanitizeDefaultToolIds(input.default_tools),
   context_i18n: {},
   prompts: input.prompts ?? [],
   prompts_i18n: input.prompts_i18n ?? {},
@@ -47,7 +67,9 @@ export const createAssistantCatalogStore = (filePath: string): AssistantCatalogS
     try {
       const value: unknown = JSON.parse(await readFile(filePath, 'utf8'));
       rows = Array.isArray(value)
-        ? value.filter((row): row is Assistant => Boolean(row && typeof row === 'object' && typeof row.id === 'string'))
+        ? value
+            .filter((row): row is Assistant => Boolean(row && typeof row === 'object' && typeof row.id === 'string'))
+            .map(withSessionFields)
         : [];
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
@@ -86,6 +108,7 @@ export const createAssistantCatalogStore = (filePath: string): AssistantCatalogS
     async update(input) {
       await ensureLoaded();
       const current = find(input.id);
+      if (current.source === 'package') throw new Error('Package assistants are read-only. Duplicate to edit.');
       const next = { ...current, ...input, id: current.id };
       if (!next.name.trim()) throw new Error('Assistant name is required.');
       Object.assign(current, next);
@@ -94,12 +117,15 @@ export const createAssistantCatalogStore = (filePath: string): AssistantCatalogS
     },
     async remove(id) {
       await ensureLoaded();
+      if (rows.some((item) => item.id === id && item.source === 'package'))
+        throw new Error('Package assistants are read-only. Disable their package connection.');
       rows = rows.filter((item) => item.id !== id);
       await persist();
     },
     async setState(input) {
       await ensureLoaded();
       const current = find(input.id);
+      if (current.source === 'package') throw new Error('Package assistants are read-only.');
       if (input.enabled !== undefined) current.enabled = input.enabled;
       if (input.sort_order !== undefined) current.sort_order = input.sort_order;
       if (input.last_used_at !== undefined) current.last_used_at = input.last_used_at;
@@ -128,6 +154,44 @@ export const createAssistantCatalogStore = (filePath: string): AssistantCatalogS
       if (result.imported > 0) await persist();
       return result;
     },
+    async upsertPackageAssistant(input) {
+      await ensureLoaded();
+      if (input.source !== 'package' || !input.packageId || !input.packageConnectionKey)
+        throw new Error('Package assistant provenance is required.');
+      const existing = rows.find((row) => row.id === input.id);
+      if (
+        existing &&
+        (existing.source !== 'package' ||
+          existing.packageId !== input.packageId ||
+          existing.packageConnectionKey !== input.packageConnectionKey)
+      )
+        throw new Error('Assistant id is already owned by another source.');
+      const next = withSessionFields(clone(input));
+      if (existing) Object.assign(existing, next);
+      else rows.push(next);
+      await persist();
+      return clone(next);
+    },
+    async removePackageAssistant(packageId, connectionKey) {
+      await ensureLoaded();
+      const before = rows.length;
+      rows = rows.filter(
+        (row) => row.source !== 'package' || row.packageId !== packageId || row.packageConnectionKey !== connectionKey
+      );
+      if (rows.length !== before) await persist();
+    },
+    async reconcilePackageAssistants(keep) {
+      await ensureLoaded();
+      const before = rows.length;
+      rows = rows.filter(
+        (row) =>
+          row.source !== 'package' ||
+          (row.packageId !== undefined &&
+            row.packageConnectionKey !== undefined &&
+            keep.has(`${row.packageId}\u0000${row.packageConnectionKey}`))
+      );
+      if (rows.length !== before) await persist();
+    },
     async importExisting(inputs) {
       await ensureLoaded();
       const result: ImportAssistantsResult = { imported: 0, skipped: 0, failed: 0, errors: [] };
@@ -140,7 +204,7 @@ export const createAssistantCatalogStore = (filePath: string): AssistantCatalogS
         try {
           if (!id) throw new Error('Assistant id is required.');
           if (!input.name.trim()) throw new Error('Assistant name is required.');
-          rows.push(clone({ ...input, id }));
+          rows.push(withSessionFields(clone({ ...input, id })));
           result.imported += 1;
         } catch (error) {
           result.failed += 1;

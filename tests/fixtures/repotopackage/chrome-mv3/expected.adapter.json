@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "generatedBy": "classifier",
+  "connections": [
+    {
+      "kind": "extension",
+      "id": "tab-notes",
+      "title": "Tab Notes",
+      "format": "chrome-mv3",
+      "root": "source",
+      "version": "1.2.0",
+      "permissions": [
+        "storage",
+        "tabs",
+        "contextMenus",
+        "history"
+      ],
+      "hostPermissions": [
+        "<all_urls>"
+      ],
+      "matches": [
+        "https://*.example.com/*"
+      ],
+      "unsupported": [
+        "history"
+      ],
+      "origin": "chrome-extension"
+    }
+  ],
+  "openItems": [
+    {
+      "kind": "needs-consent",
+      "note": "Extension \"Tab Notes\" xin quyền trên mọi trang (<all_urls> hoặc *://*/*); cần người dùng đồng ý riêng, mặc định chỉ chạy khi bấm.",
+      "connection": "tab-notes",
+      "path": "source/manifest.json"
+    },
+    {
+      "kind": "needs-runtime",
+      "note": "Extension \"Tab Notes\" cần API Hub chưa có ở v1, nên chỉ dùng được một phần: history (Browser chưa có lịch sử).",
+      "connection": "tab-notes",
+      "path": "source/manifest.json"
+    }
+  ],
+  "detectors": [
+    "browser-ext@1"
+  ]
+}

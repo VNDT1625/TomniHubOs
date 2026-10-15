@@ -18,3 +18,4 @@ pub mod suggest;
 pub mod tasks;
 pub mod understand;
 pub mod undo;
+pub mod workspace_metadata;

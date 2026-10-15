@@ -1,4 +1,52 @@
 {
+  "assistantAgentMd": "agent.md",
+  "assistantPluginTitle": "プラグイン",
+  "assistantPluginHint": "このアシスタントがチャットで使う MCP サーバーとパッケージのツールです。",
+  "assistantPluginOther": "その他",
+  "assistantPluginEmpty": "プラグインはインストールされていません。",
+  "assistantItemOff": "オフ",
+  "assistantHookTitle": "フック",
+  "assistantHookHint": "フックは承認して有効にしたものだけ実行されます。選択しても承認はされません。",
+  "assistantHookInactive": "未有効",
+  "assistantHookNeedsApproval": "承認が必要",
+  "assistantHookEmpty": "フックは設定されていません。",
+  "assistantBundleExport": "書き出し",
+  "assistantBundleImport": "読み込み",
+  "assistantBundleExportFailed": "書き出しに失敗しました（{{code}}）。",
+  "assistantBundleImportFailed": "読み込みに失敗しました（{{code}}）。",
+  "assistantBundleImported": "アシスタントを読み込みました。確認して保存してください。",
+  
+"assistantPromptsTitle": "例のプロンプト",
+  "assistantPromptPlaceholder": "例のプロンプト",
+  "assistantPromptAdd": "プロンプトを追加",
+  "assistantPromptRemove": "プロンプトを削除",
+  "assistantPromptsLimit": "例のプロンプトは最大{{count}}件です。",
+  
+"backgroundSleep": {
+    "title": "バックグラウンド休止とサービス",
+    "refresh": "更新",
+    "explainer": "トレイに閉じるとメディアを一時停止します。実行中のジョブは続行し、独立サービスは各設定で管理します。",
+    "agents": "Agent ジョブ",
+    "agentsDesc": "バックグラウンドで完了し、アイドル時に自動休止します。",
+    "automatic": "自動",
+    "mcp": "MCP ツールゲートウェイ",
+    "mcpDesc": "トレイにある間は継続します。リモートアクセスは別途設定してください。",
+    "webui": "WebUI",
+    "webuiDesc": "明示的に有効化した場合のみ動作します。認証情報は WebUI 設定で管理します。",
+    "notifications": "デスクトップ通知",
+    "notificationsDesc": "非表示でもジョブの完了を通知します。",
+    "scheduler": "スケジュール済みタスク",
+    "schedulerDesc": "トレイにある間、デスクトッププロセス内で動作します。",
+    "unknown": "不明",
+    "running": "稼働中 · 設定",
+    "configure": "設定",
+    "metricsTitle": "Electron リソース測定",
+        "cpuChange": "休止前後の CPU",
+    "ramChange":  "休止後のワーキングセット変化",
+    "currentRam": "現在のワーキングセット合計",
+    "notMeasured": "休止測定待ち",
+    "metricsDisclaimer": "Electron プロセスのワーキングセット合計であり、実際の専有 RAM ではありません。独立 sidecar は含みません。"
+  },
   "personalSecrets": {
     "allowedHostnamesLabel": "許可するブラウザーホスト名",
     "allowedHostnamesPlaceholder": "example.com",
@@ -6,6 +54,13 @@
     "allowedHostnamesInvalid": "スキーム、パス、ポート、ワイルドカードを含まない一意の正確なホスト名を1～20件入力してください。",
     "allowedHostnamesTagLabel": "許可ホスト",
     "legacyTargetsMissing": "許可ホスト未設定 — 編集するまでブロック",
+    "destinationsLabel": "入力を許可する場所",
+    "destinationsDescription": "アプリがこのセットを入力してよい場所を選択します。ホスト名はWebフォームを選んだ場合のみ必要です。",
+    "destinationBrowser": "Webフォーム",
+    "destinationTerminal": "ターミナル",
+    "destinationProcess": "プロセス / デプロイ",
+    "destinationsRequired": "このセットを使用できる場所を1つ以上選択してください。",
+    "destinationsTagLabel": "使用先",
     "nameRequired": "シークレットセット名を入力してください。",
     "variablesInvalid": "各変数には、有効で重複しない名前と値が必要です。",
     "createdSuccess": "シークレットセットを作成しました。",
@@ -367,7 +422,7 @@
     "accessKeyId": "Access Key ID",
     "secretAccessKey": "Secret Access Key",
     "profile": "AWS Profile",
-    "profileHint": "Profile name from ~/.aws/config (e.g., \u0027default\u0027)",
+    "profileHint": "Profile name from ~/.aws/config (e.g., 'default')",
     "testConnection": "Test Connection",
     "connectionSuccess": "Connection successful! AWS credentials are valid.",
     "connectionFailed": "Connection failed. Please check your credentials.",
@@ -381,6 +436,26 @@
   "fontSize": "ズーム",
   "fontSizeDescription": "アプリ全体のズーム（Zoom）倍率を調整し、最適な表示サイズに合わせます。",
   "fontSizeReset": "ズームをリセット",
+  "markdownColors": {
+    "label": "文字の色",
+    "description": "チャットメッセージの見出し、太字、リンク、ファイルパス、インラインコード、引用の色です。変更はすぐに反映され、この端末にのみ保存されます。",
+    "resetAll": "すべてリセット",
+    "resetToken": "リセット",
+    "previewLabel": "プレビュー",
+    "previewBody": "本文に",
+    "tokens": {
+      "h1": "見出し 1",
+      "h2": "見出し 2",
+      "h3": "見出し 3",
+      "text": "本文",
+      "bold": "太字",
+      "link": "リンク",
+      "path": "ファイルパス",
+      "codeFg": "インラインコードの文字",
+      "codeBg": "インラインコードの背景",
+      "quote": "引用"
+    }
+  },
   "lightMode": "ライト",
   "darkMode": "ダーク",
   "devConsole": {
@@ -403,7 +478,222 @@
   "agent": "エージェント",
   "tools": "ツール",
   "capabilities": "能力拡張",
+  "hooks": {
+    "title": "フック",
+    "description": "フックは、会話中に何かが起きたときに実行される小さなプログラムです。ブロックまたはメモの追加しかできず、権限を与えることはありません。それぞれ承認が必要で、正確な内容に固定されます。",
+    "unavailable": "このウィンドウではフックを利用できません。",
+    "dismiss": "通知を閉じる",
+    "loading": "フックを読み込み中…",
+    "refresh": "更新",
+    "runAll": "フックを実行",
+    "allOffNote": "すべてのフックがオフです。承認済みでも、以下は何も実行されません。",
+    "sourceSwitch": "このソースのフックを実行",
+    "source": {
+      "package": "パッケージから",
+      "user": "自分で作成",
+      "workspace": "ワークスペースから"
+    },
+    "sourceHint": {
+      "package": "インストール済みパッケージにはフックが含まれることがあります。シェルを介さず、プログラムと引数として実行されます。",
+      "user": "自分で追加したフックです。承認するまでオフのままです。",
+      "workspace": "プロジェクトの .claude/settings.json にあるフックです。そのワークスペースを許可し、各フックを承認するまでオフのままです。"
+    },
+    "sourceEmpty": "ここにフックはありません。",
+    "status": {
+      "ready": "オン",
+      "needs-approval": "承認が必要",
+      "needs-consent": "ワークスペース未許可",
+      "stale": "変更あり・オフ",
+      "disabled": "オフ",
+      "unsupported": "非対応",
+      "forbidden": "許可されていません"
+    },
+    "statusHint": {
+      "needs-approval": "実行内容を読んでから承認してください。",
+      "needs-consent": "先にこのワークスペースのフックを許可してください。",
+      "stale": "承認後にコマンドまたはスクリプトが変更されたため、オフになりました。もう一度確認してください。",
+      "disabled": "承認済みですが、オフにしています。",
+      "unsupported": "このイベントはまだ対応しておらず、実行されません。",
+      "forbidden": "パッケージのフックは、シェル行ではなく引数付きのプログラムである必要があります。"
+    },
+    "inactiveBySwitch": "上のスイッチがオフのため、これは実行されません。",
+    "row": {
+      "event": "イベント",
+      "matcher": "マッチャー",
+      "matchAll": "すべて",
+      "timeout": "制限時間",
+      "seconds": "{{count}} 秒",
+      "command": "正確なコマンド",
+      "runsExec": "プログラム「{{program}}」を引数 {{count}} 個で直接実行します。シェルは使いません。",
+      "runsShell": "この行をシェル経由で実行します。シェルは何でも実行できるため、よく読んでください。",
+      "form": {
+        "exec": "プログラム",
+        "shell": "シェル行"
+      },
+      "approvedAt": "{{time}} に承認"
+    },
+    "action": {
+      "review": "確認して承認",
+      "reapprove": "再確認",
+      "enable": "オンにする",
+      "disable": "オフにする",
+      "remove": "削除"
+    },
+    "dialog": {
+      "title": "このフックを承認しますか？",
+      "intro": "承認すると、イベントが発生するたびにこのコンピューターで実行されます。ブロックまたはメモの追加しかできず、権限を与えることはありません。",
+      "hashNote": "承認はこの正確な内容に固定されます。コマンドやスクリプトが変わるとオフになり、再承認するまで有効になりません。",
+      "approve": "承認",
+      "cancel": "キャンセル",
+      "loading": "実行内容を読み取り中…"
+    },
+    "line": {
+      "source": "ソース",
+      "plugin": "パッケージ",
+      "event": "イベント",
+      "matcher": "マッチャー",
+      "form": "種類",
+      "command": "コマンド",
+      "args": "引数",
+      "timeout": "制限時間（秒）",
+      "file": "承認の対象になるスクリプトファイル",
+      "unpinned": "承認の対象外",
+      "network": "ネットワーク"
+    },
+    "networkUnrestricted": "このバージョンでは制限されません。スクリプトはネットワークを使用できます。",
+    "confirmTitle": "フックを承認",
+    "confirmApprove": "このフックは、イベントが発生したときにこのコンピューターで実行されます。承認しますか？",
+    "coverage": {
+      "title": "ツールフックが止められるもの",
+      "summary": "ツールフックがすべてのツールをブロックできるのは Tomny エージェントだけです。ACP 経由のエージェントは、許可を求めてきたとき（確認モード）にのみ対象になります。Codex は Tomny に許可を求めないため、ツールフックでブロックできません。",
+      "ownHooks": "一部のエージェントは独自の設定にあるフックも実行します。Tomny はそれらを制御できません。",
+      "agent": {
+        "tomny": "Tomny エージェント",
+        "acpAsk": "ACP エージェント（確認モード）",
+        "acpAuto": "ACP エージェント（その他のモード）",
+        "codex": "Codex",
+        "remote": "リモートエージェント"
+      },
+      "preLabel": "ツール実行前",
+      "postLabel": "ツール実行後",
+      "pre": {
+        "all-tools": "すべてのツールをブロック可能",
+        "permission-requests-only": "許可を求めるツールのみブロック可能",
+        "none": "ツールをブロックできない"
+      },
+      "post": {
+        "result-text": "ツールの結果を参照できる",
+        "metadata-only": "ツールが実行されたことだけ参照できる",
+        "none": "実行されない"
+      }
+    },
+    "audit": {
+      "title": "最近の実行",
+      "empty": "まだ実行されたフックはありません。",
+      "note": "長さとコードのみを保存します。入力と出力は保存されません。",
+      "col": {
+        "time": "時刻",
+        "event": "イベント",
+        "source": "ソース",
+        "hook": "フック",
+        "decision": "判定",
+        "exit": "終了コード",
+        "duration": "所要時間",
+        "result": "結果"
+      },
+      "decision": {
+        "deny": "ツールを拒否",
+        "ask": "確認を求めた",
+        "block": "ブロック",
+        "stop": "ターンを停止",
+        "none": "判定なし"
+      },
+      "timedOut": "タイムアウト",
+      "stale": "承認後に変更され、オフになった",
+      "ok": "完了"
+    },
+    "create": {
+      "title": "自分のフックを追加",
+      "event": "イベント",
+      "matcher": "マッチャー（任意）",
+      "matcherHint": "ツールイベント用のツール名パターン。空欄はすべてのツール。",
+      "command": "プログラムまたはコマンドライン",
+      "args": "引数（1 行に 1 つ）",
+      "argsHint": "空欄にすると、プログラムとしてではなくシェル経由で実行します。",
+      "timeout": "制限時間（秒）",
+      "submit": "フックを追加",
+      "note": "新しいフックは、確認して承認するまでオフのままです。"
+    },
+    "done": {
+      "approved": "フックを承認してオンにしました。",
+      "created": "フックを追加しました。確認して承認してください。",
+      "removed": "フックを削除しました。"
+    },
+    "error": {
+      "DENIED": "このウィンドウにはフックを変更する権限がありません。",
+      "INVALID_REQUEST": "そのフックの定義は無効です。",
+      "NOT_FOUND": "そのフックはもう存在しません。一覧を更新しました。",
+      "CANCELLED": "承認をキャンセルしました。何も変わっていません。",
+      "UNAVAILABLE": "現在フックを利用できません。",
+      "UNSUPPORTED": "このイベントはまだ対応していません。",
+      "FORBIDDEN": "このフックはオンにも削除もできません。",
+      "NEEDS_CONSENT": "先にこのワークスペースのフックを許可してください。",
+      "HASH_MISMATCH": "読んだ後にフックが変更されました。もう一度確認してください。",
+      "APPROVAL_REQUIRED": "先にこのフックを再承認する必要があります。",
+      "IO_ERROR": "変更を保存できませんでした。もう一度お試しください。"
+    }
+  },
   "capabilitiesTab": {
+
+    "assistants": "アシスタント",
+    "hooks": "フック",
+    "plugins": "プラグイン",
+    "pluginsDescription": "Tomnyに追加ツールを与える MCP サーバーとインストール済みパッケージです。",
+    "packagesTitle": "インストール済みパッケージ",
+    "packagesEmpty": "インストール済みのパッケージはありません。",
+    "externalTitle": "外部アプリから Tomny を使う",
+    "externalDescription": "Claude Desktop や Cursor などのアプリが MCP 経由で Tomny を呼び出せるようにします。",
+    "removePlugin": "プラグインを削除",
+    "removeConfirmTitle": "この項目を削除しますか?",
+    "removeConfirmContent": "\"{{name}}\" を削除します。元に戻せません。",
+    "pluginBadge": "プラグイン",
+    "explainer": "プラグイン = MCP・スキル・フック・ルールを含みうる一式のパッケージ。MCP = 単一のツールサーバー。ツールスキーマ = モデルに送られる各ツールの説明。",
+    "tipPlugin": "プラグイン = MCP・スキル・フック・ルールを含みうる一式のパッケージ。",
+    "tipMcp": "MCP = 単一のツールサーバー。",
+    "tipToolSchema": "ツールスキーマ = モデルに送られる各ツールの説明。",
+    "typeMcp": "MCP",
+    "builtinTitle": "Tomny に組み込み",
+    "builtinHint": "Tomny に同梱されたツールサーバーです。ここで切り替えられるものだけスイッチを表示します。",
+    "builtinToolsCount": "ツール {{count}} 件",
+    "builtinImageGenHint": "オン/オフは下の画像生成の項目で切り替えます。",
+    "builtinEmpty": "組み込みのツールサーバーはありません。",
+    "builtinGroupOn": "有効",
+    "builtinGroupAvailable": "利用可能・無効",
+    "builtinGroupEmptyOn": "有効な組み込みサーバーはありません。",
+    "builtinGroupEmptyAvailable": "すべての組み込みサーバーが有効です。",
+    "builtinToggleAria": "{{name}} を切り替え",
+
+    "hubTabAvailable": "利用可能",
+    "hubTabInstalled": "インストール済み",
+    "hubTabCustom": "カスタム",
+    "hubSearchPlaceholder": "名前または説明で検索",
+    "hubFilterAll": "すべて",
+    "hubNoMatch": "検索または絞り込みに一致する項目がありません。",
+    "hubEmptyCustom": "カスタム MCP サーバーはまだありません。下から追加できます。",
+    "hubCustomHint": "自分で追加した MCP サーバーです。プラグインのサーバーは「インストール済み」に表示されます。",
+    "hubAutoStartCaption": "Tomny の起動時に、承認がまだ有効であれば再びオンになります。",
+    "hubDetails": "詳細",
+    "hubCollapse": "閉じる",
+    "hubEnableAria": "{{name}} のオン／オフ",
+    "statusOn": "オン",
+    "statusOff": "オフ",
+    "userMcpTitle": "あなたの MCP サーバー",
+    "installedPluginsTitle": "インストール済みプラグイン",
+    "fromPluginSkills": "プラグイン: {{name}} · スキル {{count}} 件",
+    "fromPluginHooks": "プラグイン: {{name}} · フック {{count}} 件",
+    "manageInPlugin": "プラグインで管理",
+    "pluginGroupNote": "プラグインと一緒にオン/オフされます。この項目に個別のスイッチはありません。",
+    "viewSkill": "表示",
     "skills": "スキル",
     "tools": "ツール"
   },
@@ -927,7 +1217,7 @@
     "pluginEnabled": "Lark bot enabled",
     "pluginDisabled": "Lark bot disabled",
     "enableFailed": "Failed to enable Lark plugin",
-    "testAndConnect": "Test \u0026 Connect",
+    "testAndConnect": "Test & Connect",
     "credentialsSaved": "Credentials already configured. Enter new values to update.",
     "defaultModelDesc": "Lark の会話に使用するモデル",
     "connectionStatus": "Connection Status",
@@ -1261,5 +1551,33 @@
       "confirmed": "設定を確認しました。"
     }
   },
-  "personal": "パーソナル"
+  "personal": "パーソナル",
+  "notificationSettings": {
+    "sourcesHint": "通知を送るメール、フィード、Web サイトは通知センターで管理します。",
+    "openCenter": "通知センターを開く",
+    "quietFrom": "開始",
+    "quietTo": "終了"
+  },
+  "pipelineSettings": {
+    "defaultChainTitle": "既定のチャットパイプライン",
+    "defaultChainDesc": "モデルが応答する前後に、すべてのメッセージが通る手順です。",
+    "editDefault": "既定を編集",
+    "stageOn": "オン",
+    "stageOff": "オフ",
+    "chainOff": "パイプラインはオフです。メッセージはそのままモデルに送られます。",
+    "loadFailed": "パイプラインを読み込めませんでした。",
+    "perConversationHint": "各会話はチャット欄のパイプラインボタンで個別に変更でき、再起動後も保持されます。",
+    "plannedNotice": "以下のコードガードレールは計画中で、まだチャットに接続されていないためオンにできません。"
+  },
+  "notActive": {
+    "title": "まだ有効ではありません",
+    "aiConfig": "これらのパラメーターはまだモデルに送られないため、変更しても効果はありません。",
+    "privacy": "ここのスイッチはまだ何も制御していません。秘密情報のマスクと外部送信データの検査は常にオンで、オフにできません。YOLO モードは会話ごとに選びます。",
+    "profile": "ここで実際に動くのはサインアウトだけです。同期、学習へのオプトアウト、エクスポート、履歴の削除はまだ接続されていないため無効です。",
+    "billing": "Tomny はまだトークンや費用を集計しないため、プラン、使用量、支出上限は表示されません。モデル提供元が直接請求します。"
+  },
+  "profileSettings": {
+    "noAccount": "未サインイン"
+  },
+  "mcpInAppNotice": "This list shows only MCP servers you connected or created from a repository. Tools built into TomniHubOS (tomny_*) are chosen by surface and are not MCP connectors."
 }

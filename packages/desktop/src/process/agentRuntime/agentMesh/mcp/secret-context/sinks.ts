@@ -49,6 +49,26 @@ export type DeploymentSecretTarget = Readonly<{
 type NormalizedManagedTarget = ManagedProcessSecretTarget & { allowed: ReadonlySet<string> };
 type NormalizedDeploymentTarget = DeploymentSecretTarget & { allowed: ReadonlySet<string> };
 
+/**
+ * Main-owned bridge to the Terminal service. `confirm` is the person's native approval for typing saved
+ * secrets into that terminal; `write` goes straight to the pty and nothing is echoed back to the agent.
+ */
+export type TerminalSecretPort = Readonly<{
+  exists: (terminalId: string) => boolean;
+  confirm: (terminalId: string) => Promise<boolean>;
+  write: (terminalId: string, data: string) => void;
+}>;
+
+let terminalPort: TerminalSecretPort | undefined;
+
+/** Install or remove the terminal port. Without one, `terminal.input` fails closed. */
+export const configureTerminalSecretPort = (port: TerminalSecretPort | undefined): void => {
+  terminalPort = port;
+};
+
+const TERMINAL_SURFACE = 'terminal';
+const TERMINAL_PURPOSE = 'terminal-input';
+
 const managedTargets = new Map<string, NormalizedManagedTarget>();
 const deploymentTargets = new Map<string, NormalizedDeploymentTarget>();
 
@@ -125,12 +145,17 @@ export const registerDeploymentSecretTarget = (target: DeploymentSecretTarget, r
   };
 };
 
-const resolveOne = async (vault: SecretVault, request: SecretContextUseRequest): Promise<string> => {
+const resolveOne = async (
+  vault: SecretVault,
+  request: SecretContextUseRequest,
+  route: { surface: string; purpose: string } = { surface: SECRET_FIREWALL_SURFACE, purpose: SECRET_FIREWALL_PURPOSE }
+): Promise<string> => {
   const payload = await vault.resolve({
     handle: request.handle,
     fields: [request.field],
-    surface: SECRET_FIREWALL_SURFACE,
-    purpose: SECRET_FIREWALL_PURPOSE,
+    surface: route.surface,
+    purpose: route.purpose,
+    ...(request.caller ? { caller: request.caller } : {}),
   });
   const value = payload[request.field];
   if (!value) throw new Error('Secret destination resolution failed.');
@@ -140,7 +165,20 @@ const resolveOne = async (vault: SecretVault, request: SecretContextUseRequest):
 /** Build sinks whose only authority comes from trusted registrations above. */
 export const createSecretDestinationSinks = (
   vault: SecretVault
-): Readonly<Record<'process.env.inject' | 'deployment.secret.put', SecretContextSink>> => ({
+): Readonly<Record<'process.env.inject' | 'deployment.secret.put' | 'terminal.input', SecretContextSink>> => ({
+  'terminal.input': async (request) => {
+    if (request.surface !== TERMINAL_SURFACE || request.purpose !== TERMINAL_PURPOSE) {
+      throw new Error('Unsupported secret destination route.');
+    }
+    const terminalId = requiredTargetId(request.locator.terminalId ?? '', 'Terminal id');
+    const port = terminalPort;
+    // Approval comes before the value is read, so a refusal never touches the vault.
+    if (!port || !port.exists(terminalId) || !(await port.confirm(terminalId))) {
+      throw new Error('Secret destination policy denied the request.');
+    }
+    const value = await resolveOne(vault, request, { surface: TERMINAL_SURFACE, purpose: TERMINAL_PURPOSE });
+    port.write(terminalId, request.locator.submit === 'false' ? value : `${value}\r`);
+  },
   'process.env.inject': async (request) => {
     if (request.surface !== SECRET_FIREWALL_SURFACE || request.purpose !== SECRET_FIREWALL_PURPOSE) {
       throw new Error('Unsupported secret destination route.');

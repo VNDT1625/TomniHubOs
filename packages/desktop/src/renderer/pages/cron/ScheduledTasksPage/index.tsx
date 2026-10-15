@@ -18,6 +18,9 @@ import { useConversationAgents } from '@renderer/pages/conversation/hooks/useCon
 import CronStatusTag from './CronStatusTag';
 import CreateTaskDialog from './CreateTaskDialog';
 import { getJobAgentMeta } from './jobAgentMeta';
+import { takePendingScheduleDraft } from '@renderer/pages/cron/scheduleDraft';
+import type { ScheduleDraft } from '@/common/chat/slash/scheduleCommand';
+import { useAddEventListener } from '@/renderer/utils/emitter';
 
 const ScheduledTasksPage: React.FC = () => {
   const layout = useLayoutContext();
@@ -27,7 +30,18 @@ const ScheduledTasksPage: React.FC = () => {
   const { jobs, loading, pauseJob, resumeJob } = useAllCronJobs();
   const { cliAgents } = useConversationAgents();
   const [createDialogVisible, setCreateDialogVisible] = useState(false);
+  const [draft, setDraft] = useState<ScheduleDraft | null>(null);
   const [keepAwake, setKeepAwake] = useState(false);
+
+  // `/schedule ...` typed in a chat box opens the new-task form already filled in.
+  const openPendingDraft = useCallback(() => {
+    const pending = takePendingScheduleDraft();
+    if (!pending) return;
+    setDraft(pending);
+    setCreateDialogVisible(true);
+  }, []);
+  useEffect(openPendingDraft, [openPendingDraft]);
+  useAddEventListener('cron.schedule-draft', openPendingDraft, [openPendingDraft]);
 
   useEffect(() => {
     setKeepAwake(configService.get('system.keepAwake') ?? false);
@@ -222,7 +236,14 @@ const ScheduledTasksPage: React.FC = () => {
           </div>
         )}
 
-        <CreateTaskDialog visible={createDialogVisible} onClose={() => setCreateDialogVisible(false)} />
+        <CreateTaskDialog
+          visible={createDialogVisible}
+          draft={draft}
+          onClose={() => {
+            setCreateDialogVisible(false);
+            setDraft(null);
+          }}
+        />
       </div>
     </div>
   );

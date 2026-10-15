@@ -1,7 +1,9 @@
-﻿import { copyFile, mkdir, mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { copyFile, lstat, mkdir, mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
+import sharp from 'sharp';
 import os from 'node:os';
 import path from 'node:path';
 import type { IDirOrFile, IFileMetadata, IWorkspaceFlatFile } from '@/common/adapter/ipcBridge';
+import type { AttachmentQuickView } from '@/common/chat/attachmentQuickView';
 import { readDirectoryRecursive } from '@process/utils/utils';
 
 const MIME_BY_EXTENSION: Record<string, string> = {
@@ -22,6 +24,36 @@ const mimeFor = (filePath: string): string =>
 
 const REMOTE_IMAGE_FETCH_DENIED = 'Remote image fetch denied.';
 const REMOTE_IMAGE_FETCH_FAILED = 'Remote image fetch failed.';
+const QUICK_VIEW_TEXT_EXTENSIONS = new Set([
+  '.c',
+  '.cpp',
+  '.css',
+  '.csv',
+  '.go',
+  '.h',
+  '.java',
+  '.js',
+  '.json',
+  '.jsx',
+  '.log',
+  '.md',
+  '.markdown',
+  '.py',
+  '.rs',
+  '.text',
+  '.toml',
+  '.ts',
+  '.tsx',
+  '.txt',
+  '.xml',
+  '.yaml',
+  '.yml',
+]);
+const QUICK_VIEW_IMAGE_EXTENSIONS = new Set(['.bmp', '.gif', '.jpeg', '.jpg', '.png', '.webp']);
+const QUICK_VIEW_MAX_BYTES = 256 * 1024;
+const QUICK_VIEW_MAX_IMAGE_BYTES = 2 * 1024 * 1024;
+const QUICK_VIEW_MAX_CHARS = 16_000;
+const UNKNOWN_ATTACHMENT_QUICK_VIEW_CAPABILITY = 'Unknown attachment quick-view capability.';
 
 /**
  * Main-owned admission for a remote image destination. The gateway deliberately
@@ -81,6 +113,18 @@ const isCurrentRemoteImageAdmission = (
 export class NativeFileGateway {
   constructor(private readonly imageFetchAuthority?: RemoteImageFetchAuthority) {}
 
+  private readonly attachmentQuickViewPaths = new Map<string, string>();
+
+  /**
+   * Register an attachment selected through a Main-owned admission path. The
+   * opaque capability is the only identifier accepted by attachmentQuickView.
+   */
+  registerAttachmentQuickView(filePath: string): Readonly<{ id: string }> {
+    const id = crypto.randomUUID();
+    this.attachmentQuickViewPaths.set(id, path.resolve(filePath));
+    return Object.freeze({ id });
+  }
+
   async getFilesByDir(input: { dir: string; root: string }): Promise<IDirOrFile[]> {
     const tree = await readDirectoryRecursive(path.resolve(input.dir), {
       root: path.resolve(input.root),
@@ -115,6 +159,61 @@ export class NativeFileGateway {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
       throw error;
     }
+  }
+  /** Bounded, non-executing attachment excerpt for hover quick views. */
+  async attachmentQuickView(attachmentId: string): Promise<AttachmentQuickView> {
+    const target = this.attachmentQuickViewPaths.get(attachmentId);
+    if (!target) throw new Error(UNKNOWN_ATTACHMENT_QUICK_VIEW_CAPABILITY);
+    let details;
+    try {
+      details = await lstat(target);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return { kind: 'metadata', name: path.basename(target), size: 0, reason: 'unavailable' };
+      }
+      throw error;
+    }
+    if (details.isDirectory()) {
+      return { kind: 'metadata', name: path.basename(target), size: details.size, reason: 'directory' };
+    }
+    if (details.isSymbolicLink()) {
+      return { kind: 'metadata', name: path.basename(target), size: details.size, reason: 'unsupported' };
+    }
+    const extension = path.extname(target).toLowerCase();
+    if (!details.isFile()) {
+      return { kind: 'metadata', name: path.basename(target), size: details.size, reason: 'unsupported' };
+    }
+    if (QUICK_VIEW_IMAGE_EXTENSIONS.has(extension)) {
+      if (details.size > QUICK_VIEW_MAX_IMAGE_BYTES) {
+        return { kind: 'metadata', name: path.basename(target), size: details.size, reason: 'too-large' };
+      }
+      const data = await readFile(target);
+      const metadata = await sharp(data, { animated: false }).metadata().catch((): undefined => undefined);
+      if (!metadata?.width || !metadata.height) {
+        return { kind: 'metadata', name: path.basename(target), size: details.size, reason: 'unsupported' };
+      }
+      return {
+        kind: 'image',
+        dataUrl: `data:${mimeFor(target)};base64,${data.toString('base64')}`,
+        width: metadata.width,
+        height: metadata.height,
+      };
+    }
+    if (!QUICK_VIEW_TEXT_EXTENSIONS.has(extension)) {
+      return { kind: 'metadata', name: path.basename(target), size: details.size, reason: 'unsupported' };
+    }
+    if (details.size > QUICK_VIEW_MAX_BYTES) {
+      return { kind: 'metadata', name: path.basename(target), size: details.size, reason: 'too-large' };
+    }
+    const content = await readFile(target, 'utf8');
+    if (content.includes('\0')) {
+      return { kind: 'metadata', name: path.basename(target), size: details.size, reason: 'unsupported' };
+    }
+    return {
+      kind: 'text',
+      content: content.slice(0, QUICK_VIEW_MAX_CHARS),
+      truncated: content.length > QUICK_VIEW_MAX_CHARS,
+    };
   }
   async readBase64(filePath: string): Promise<string | null> {
     try {

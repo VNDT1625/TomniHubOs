@@ -9,7 +9,7 @@ vi.mock('@/common/packages/studioCompatibility', () => ({
   createStudioCompatibilityLegacyFallbackDestination: () => '/',
   isStudioPackageGateNavigationState: () => false,
 }));
-vi.mock('@/renderer/pages/company/CompanyPage', () => ({ default: () => null }));
+vi.mock('@package-apps/company/renderer/company/CompanyPage', () => ({ default: () => null }));
 vi.mock('@/renderer/pages/hub/PackageAppHost', () => ({
   getFirstRunnablePackageModule: () => undefined,
   PackageAppHost: () => null,

@@ -1,4 +1,113 @@
 {
+  "pipeline": {
+    "title": "チャットパイプライン",
+    "button": "パイプライン",
+    "buttonTooltip": "チャットパイプライン：{{count}} 個のステージが有効",
+    "stagesTitle": "ステージ（実行順）",
+    "stageCount": "{{count}} ステージ",
+    "addStage": "ステージを追加",
+    "addStagePlaceholder": "追加するステージを選択",
+    "emptyStages": "ステージがありません。メッセージはそのままモデルへ送られます。",
+    "moveUp": "上へ",
+    "moveDown": "下へ",
+    "duplicate": "もう一つ追加",
+    "remove": "削除",
+    "enable": "オン/オフ",
+    "phase": {
+      "pre_query": "クエリ前",
+      "retrieve": "取得",
+      "pre_model": "モデル前",
+      "post_model": "モデル後"
+    },
+    "role": {
+      "guard": "セキュリティガード",
+      "authorized": "承認済み",
+      "unverified": "未承認"
+    },
+    "inspector": {
+      "empty": "ステージを選ぶと動作が表示されます。",
+      "model": "判断モデル",
+      "modelName": "Laya",
+      "noModel": "このステージはモデルを使いません。",
+      "tasks": "モデルに尋ねる内容",
+      "sharedCall": "セキュリティ・理解・ツールスキーマは、同じテキストなら1回のモデル実行を共有します。",
+      "settings": "設定",
+      "mode": "機密が見つかったとき",
+      "modeRewrite": "隠して続行",
+      "modeBlock": "メッセージを止める",
+      "apply": "選択を適用",
+      "applyHint": "オフ：選択結果は表示のみで、すべてのツールグループは読み込まれたままです。",
+      "source": "表示",
+      "lastRun": "直近のメッセージ",
+      "dryRun": "ドライラン",
+      "noRun": "表示する内容がありません。メッセージを送るかドライランをお待ちください。",
+      "input": "モデルへの入力",
+      "output": "モデルの回答",
+      "latency": "{{ms}} ミリ秒",
+      "sharedWith": "{{stage}} の呼び出し結果を共有",
+      "decision": "判定",
+      "error": "エラー",
+      "errorCode": {
+        "starting": "Laya は起動中です。代わりに組み込みの高速チェックが応答しました。",
+        "timeout": "Laya の応答が遅すぎたため、組み込みの高速チェックが応答しました。",
+        "cancelled": "Laya が応答する前にリクエストが取り消されました。",
+        "unavailable": "判断モデルが接続されていないため、組み込みの高速チェックを使用しています。",
+        "failed": "Laya が応答できなかったため、組み込みの高速チェックが応答しました。"
+      },
+      "masked": "機密情報はここに表示される前にマスクされます。",
+      "questions": "1回の実行で {{count}} 件の質問"
+    },
+    "task": {
+      "security": "セキュリティリスク",
+      "understand": "ユーザーの意図",
+      "toolSchema": "必要なツールグループ"
+    },
+    "decision": {
+      "continue": "続行",
+      "rewrite": "書き換え",
+      "block": "ブロック",
+      "skip": "スキップ",
+      "direct_action": "ダイレクトアクション"
+    },
+    "health": {
+      "checking": "パイプラインを確認中…",
+      "ok": "パイプラインは正常です",
+      "failed": "パイプラインに問題があります"
+    },
+    "warnings": {
+      "title": "ご注意",
+      "unguardedRetrieve": "「{{stage}}」はコンテキストを追加しますが、その後にセキュリティステージがありません。",
+      "noGuard": "承認済みのセキュリティステージが有効ではありません。クラウドモデルへ送る前に既定のスキャンは必ず実行されます。"
+    },
+    "actions": {
+      "save": "保存",
+      "cancel": "キャンセル",
+      "reset": "既定に戻す"
+    },
+    "messages": {
+      "loadFailed": "チャットパイプラインを読み込めませんでした。",
+      "saveFailed": "チャットパイプラインを保存できませんでした。",
+      "saved": "チャットパイプラインを保存しました。",
+      "resetDone": "既定に戻しました。保存すると適用されます。",
+      "added": "{{name}} を追加しました。"
+    },
+    "stageName": {
+      "security": "セキュリティガード",
+      "understand": "意図の理解",
+      "directAction": "ダイレクトアクション",
+      "toolSchema": "ツールスキーマ選択",
+      "rtk": "リアルタイム知識",
+      "modelRouter": "モデルルーター"
+    },
+    "stageDesc": {
+      "security": "メッセージと取得したテキストから機密情報とプロンプトインジェクションを見つけ、隠すか止めます。",
+      "understand": "ユーザーの要求を一度だけ判断し、後続のステージと共有します。",
+      "directAction": "モデルを呼ばずに、リンクを開く・リポジトリをパッケージ化するなどの簡単な操作を実行します。",
+      "toolSchema": "このメッセージで読み込むツールグループを選びます。ツール検索はフォールバックとして常に利用できます。",
+      "rtk": "最近の話題を尋ねられたときに最新情報を追加します。",
+      "modelRouter": "タスクに合うモデルを提案します。"
+    }
+  },
   "welcome": {
     "title": "Hi、今日の予定は何ですか？",
     "placeholder": "メッセージの送信、ファイルの追加、フォルダーの追加、またはスケジュールタスクの作成...",
@@ -491,6 +600,31 @@
   "skills": {
     "loaded": "ロード済みスキル"
   },
+  "attachMenu": {
+
+    "hookLabel": "フック",
+    "hookCount": "{{count}} 件のフック",
+    "hookNote": "フックはイベントで実行されます。オン/オフは設定で変更します。",
+    "hookEmpty": "有効なフックはありません",
+    "autoSelectOffHint": "オンにすると Laya がプラグイン・スキル・フックを選びます",
+    "mcpCount": "{{count}} MCP",
+    "skillCount": "{{count}} スキル",
+    "viewSkill": "表示",
+    "back": "戻る",
+    "skillSourcePackage": "パッケージ: {{name}}",
+    "skillSourceStandalone": "ユーザー追加または内蔵",
+    "skillDocNotFound": "このスキルファイルは利用できません。",
+    "skillDocTooLarge": "この SKILL.md は大きすぎて表示できません。",
+    "skillDocFailed": "スキルを読み取れませんでした。",
+    "otherGroup": "その他",
+    "selectAllInPackage": "このパッケージをすべて選択",
+    "pluginLabel": "プラグイン",
+    "pluginCount": "{{count}} 件のプラグイン",
+    "mcpTag": "MCP",
+    "autoSelect": "自動選択",
+    "autoSelectHint": "Laya が適切なプラグイン、スキル、フックを選択します"
+  },
+
   "mcp": {
     "loaded": "ロード済み MCP",
     "managementHint": "MCP が異常に見える場合、通常は MCP JSON 設定が原因です。ツール設定で確認し、手動で検査してください。",

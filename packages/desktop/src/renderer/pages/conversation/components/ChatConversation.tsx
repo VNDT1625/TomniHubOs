@@ -39,7 +39,7 @@ import TomnyAgenticModelSelector from '../platforms/tomnyagentic/TomnyAgenticMod
 import { useTomnyAgenticModelSelection } from '../platforms/tomnyagentic/useTomnyAgenticModelSelection';
 import { usePreviewContext } from '../Preview';
 import StarOfficeMonitorCard from '../platforms/openclaw/StarOfficeMonitorCard.tsx';
-import { ChatPipelineButton, ChatPipelineDrawer } from './pipeline';
+import { ChatPipelineButton, ChatPipelineModal } from './pipeline';
 // import SkillRuleGenerator from './components/SkillRuleGenerator'; // Temporarily hidden
 
 /** Check whether a specific skill is mounted on the conversation. */
@@ -225,7 +225,7 @@ const TomnyAgenticConversationPanel: React.FC<{
         agent_name={presetAssistantInfo?.name}
         beforeSendBox={<ConversationWatchOverlay conversationId={conversation.id} />}
       />
-      <ChatPipelineDrawer
+      <ChatPipelineModal
         visible={pipelineDrawerOpen}
         onClose={() => setPipelineDrawerOpen(false)}
         conversationId={conversation.id}
@@ -483,7 +483,7 @@ const ChatConversation: React.FC<{
       conversation_id={conversation?.id}
     >
       {conversationNode}
-      <ChatPipelineDrawer
+      <ChatPipelineModal
         visible={pipelineDrawerOpen}
         onClose={() => setPipelineDrawerOpen(false)}
         conversationId={conversation?.id}

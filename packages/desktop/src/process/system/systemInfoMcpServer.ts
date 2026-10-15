@@ -8,9 +8,10 @@
  * Built-in MCP server for System Insight (Agent plane).
  *
  * Runs as a standalone stdio process spawned by the MCP client, mirroring
- * `resourceServer.ts`. It exposes a single **read-only** tool so an agent can
- * see the whole machine — static profile + live CPU/RAM/per-process metrics —
- * in one call instead of running ad-hoc shell commands (`top`, `wmic`, ...).
+ * `resourceServer.ts`. It exposes **read-only** tools: `system_status` (static
+ * profile + live CPU/RAM/per-process metrics in one call) and `system_monitor`
+ * (what the System Monitor rail tab shows: per-core CPU, disk/network/GPU
+ * counters, trend, data age and alerts) — instead of ad-hoc shell commands.
  *
  * Because this server boots in a separate `node` process (not the Electron Main
  * process), it cannot reach the live System Insight service or Electron APIs.
@@ -25,11 +26,19 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { z } from 'zod';
 import {
+  BUILTIN_SYSTEM_MONITOR_TOOL_NAME,
   BUILTIN_SYSTEM_NAME,
   BUILTIN_SYSTEM_TOOL_NAME,
   SYSTEM_SNAPSHOT_DIR_ENV_KEY,
 } from '../resources/builtinMcp/constants';
+import {
+  buildMonitorReport,
+  describeMonitorReport,
+  MONITOR_PROCESS_MAX,
+  MONITOR_WINDOW_MAX,
+} from './monitorReport/systemMonitorReport';
 // Type-only import — erased at compile time, adds no runtime dependency.
 import type { SystemSnapshot } from './systemInfoTypes';
 
@@ -137,6 +146,62 @@ The data comes from a snapshot the app refreshes every few seconds, so it reflec
         content: [
           { type: 'text' as const, text: describe(summary) },
           { type: 'text' as const, text: JSON.stringify(summary, null, 2) },
+        ],
+      };
+    }
+  );
+
+  server.tool(
+    BUILTIN_SYSTEM_MONITOR_TOOL_NAME,
+    `READ-ONLY realtime monitor: returns what the user sees in Tomny's System Monitor tab, as one JSON report.
+
+Use it to observe the machine over time (call it repeatedly, e.g. every few seconds, to watch a build or a load spike) instead of shell commands (top, Get-Counter, typeperf, ...). Fields:
+- ageMs / stale / viewerActive — freshness of the data; if stale=true do NOT treat it as live
+- cpu.overallPercent, cpu.perCorePercent[], cpu.hottestCorePercent
+- memory (used/free/total MB, usedPercent), loadAvg, uptimeSec, onBattery, disks (free/total MB)
+- hostTelemetry — Windows disk read/write and network receive/send bytes per second, gpuEnginePeakPercent (peak GPU engine, not total GPU %), osProcessCount. Only sampled while the System Monitor tab is open; otherwise available=false with a reason (null means unavailable, never zero)
+- trend — min/avg/max/delta/direction of CPU and RAM over the last N samples (optionally the raw samples)
+- tomniProcesses — heaviest Tomny/Electron processes (OS-wide process names are never exposed)
+- alerts — plain-language warnings (high CPU/RAM, saturated core, low disk, stale data)
+
+Takes optional filters only and CANNOT change anything.`,
+    {
+      windowSamples: z
+        .number()
+        .int()
+        .min(1)
+        .max(MONITOR_WINDOW_MAX)
+        .optional()
+        .describe(
+          'History samples to summarise for the trend (default 30; one sample is about 2s while the monitor tab is open, 8s otherwise).'
+        ),
+      includePerCore: z.boolean().optional().describe('Include per-core CPU percentages (default true).'),
+      includeSamples: z.boolean().optional().describe('Include the raw cpu/mem samples of the window (default false).'),
+      topProcesses: z
+        .number()
+        .int()
+        .min(0)
+        .max(MONITOR_PROCESS_MAX)
+        .optional()
+        .describe('How many Tomny processes to list (default 8).'),
+    },
+    async (input) => {
+      const snapshot = readSnapshot();
+      if (!snapshot) {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: 'System monitor data is unavailable. The System Insight sampler has not persisted a snapshot yet, or the snapshot directory was not provided to this server.',
+            },
+          ],
+        };
+      }
+      const report = buildMonitorReport(snapshot, { now: Date.now(), ...input });
+      return {
+        content: [
+          { type: 'text' as const, text: describeMonitorReport(report) },
+          { type: 'text' as const, text: JSON.stringify(report, null, 2) },
         ],
       };
     }

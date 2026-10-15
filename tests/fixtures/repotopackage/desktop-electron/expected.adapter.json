@@ -1,0 +1,12 @@
+{
+  "connections": [
+    {
+      "kind": "launcher",
+      "id": "demo-hub",
+      "title": "Demo Hub",
+      "target": { "kind": "installed", "executable": "Demo Hub" },
+      "origin": "package-json"
+    }
+  ],
+  "openItems": []
+}

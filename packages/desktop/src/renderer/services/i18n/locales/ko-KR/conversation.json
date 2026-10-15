@@ -1,4 +1,113 @@
 {
+  "pipeline": {
+    "title": "채팅 파이프라인",
+    "button": "파이프라인",
+    "buttonTooltip": "채팅 파이프라인: 활성 단계 {{count}}개",
+    "stagesTitle": "단계(실행 순서)",
+    "stageCount": "{{count}}개 단계",
+    "addStage": "단계 추가",
+    "addStagePlaceholder": "추가할 단계 선택",
+    "emptyStages": "단계가 없습니다. 메시지는 모델로 바로 전달됩니다.",
+    "moveUp": "위로",
+    "moveDown": "아래로",
+    "duplicate": "사본 추가",
+    "remove": "제거",
+    "enable": "켜기/끄기",
+    "phase": {
+      "pre_query": "쿼리 전",
+      "retrieve": "검색",
+      "pre_model": "모델 전",
+      "post_model": "모델 후"
+    },
+    "role": {
+      "guard": "보안 가드",
+      "authorized": "승인됨",
+      "unverified": "미승인"
+    },
+    "inspector": {
+      "empty": "단계를 선택하면 동작 방식을 볼 수 있습니다.",
+      "model": "판단 모델",
+      "modelName": "Laya",
+      "noModel": "이 단계는 모델을 사용하지 않습니다.",
+      "tasks": "모델에 묻는 항목",
+      "sharedCall": "보안, 이해, 도구 스키마는 같은 텍스트에서 한 번의 모델 실행을 공유합니다.",
+      "settings": "설정",
+      "mode": "비밀이 발견되면",
+      "modeRewrite": "가리고 계속",
+      "modeBlock": "메시지 차단",
+      "apply": "선택 적용",
+      "applyHint": "끔: 선택 결과만 표시하고 모든 도구 그룹은 계속 로드됩니다.",
+      "source": "표시",
+      "lastRun": "최근 메시지",
+      "dryRun": "시험 실행",
+      "noRun": "표시할 내용이 없습니다. 메시지를 보내거나 시험 실행을 기다리세요.",
+      "input": "모델 입력",
+      "output": "모델 응답",
+      "latency": "{{ms}}ms",
+      "sharedWith": "{{stage}}의 호출 결과를 공유",
+      "decision": "결정",
+      "error": "오류",
+      "errorCode": {
+        "starting": "Laya가 시작 중입니다. 대신 내장 빠른 검사가 응답했습니다.",
+        "timeout": "Laya의 응답이 너무 늦어 내장 빠른 검사가 응답했습니다.",
+        "cancelled": "Laya가 응답하기 전에 요청이 취소되었습니다.",
+        "unavailable": "연결된 판단 모델이 없어 내장 빠른 검사를 사용합니다.",
+        "failed": "Laya가 응답하지 못해 내장 빠른 검사가 응답했습니다."
+      },
+      "masked": "비밀 정보는 여기에 표시되기 전에 가려집니다.",
+      "questions": "한 번에 {{count}}개 질문"
+    },
+    "task": {
+      "security": "보안 위험",
+      "understand": "사용자의 의도",
+      "toolSchema": "필요한 도구 그룹"
+    },
+    "decision": {
+      "continue": "계속",
+      "rewrite": "다시 작성함",
+      "block": "차단됨",
+      "skip": "건너뜀",
+      "direct_action": "직접 실행"
+    },
+    "health": {
+      "checking": "파이프라인 확인 중…",
+      "ok": "파이프라인 정상",
+      "failed": "파이프라인 문제"
+    },
+    "warnings": {
+      "title": "알림",
+      "unguardedRetrieve": "“{{stage}}”이(가) 컨텍스트를 추가하지만 그 뒤에 실행되는 보안 단계가 없습니다.",
+      "noGuard": "승인된 보안 단계가 켜져 있지 않습니다. 클라우드 모델로 보내기 전에 기본 검사는 계속 실행됩니다."
+    },
+    "actions": {
+      "save": "저장",
+      "cancel": "취소",
+      "reset": "기본값 복원"
+    },
+    "messages": {
+      "loadFailed": "채팅 파이프라인을 불러올 수 없습니다.",
+      "saveFailed": "채팅 파이프라인을 저장할 수 없습니다.",
+      "saved": "채팅 파이프라인이 저장되었습니다.",
+      "resetDone": "기본값을 복원했습니다. 저장하면 적용됩니다.",
+      "added": "{{name}}을(를) 추가했습니다."
+    },
+    "stageName": {
+      "security": "보안 가드",
+      "understand": "의도 파악",
+      "directAction": "직접 실행",
+      "toolSchema": "도구 스키마 선택",
+      "rtk": "실시간 지식",
+      "modelRouter": "모델 라우터"
+    },
+    "stageDesc": {
+      "security": "메시지와 검색된 텍스트에서 비밀 정보와 프롬프트 인젝션을 찾아 가리거나 차단합니다.",
+      "understand": "사용자의 요청을 한 번 파악하여 다음 단계와 공유합니다.",
+      "directAction": "모델을 호출하지 않고 링크 열기, 저장소 패키징 같은 간단한 명령을 실행합니다.",
+      "toolSchema": "이 메시지에 로드할 도구 그룹을 선택합니다. 도구 검색은 대비책으로 항상 사용할 수 있습니다.",
+      "rtk": "메시지가 최신 내용을 물을 때 새로운 정보를 추가합니다.",
+      "modelRouter": "작업에 맞는 모델을 제안합니다."
+    }
+  },
   "welcome": {
     "title": "안녕하세요, 오늘의 계획은 무엇인가요?",
     "placeholder": "메시지 전송, 파일 업로드, 폴더 열기 또는 예약 작업 만들기...",
@@ -491,6 +600,31 @@
   "skills": {
     "loaded": "로드된 스킬"
   },
+  "attachMenu": {
+
+    "hookLabel": "훅",
+    "hookCount": "훅 {{count}}개",
+    "hookNote": "훅은 이벤트에 따라 실행됩니다. 켜기/끄기는 설정에서 하세요.",
+    "hookEmpty": "활성 훅이 없습니다",
+    "autoSelectOffHint": "켜면 Laya가 플러그인, 스킬, 훅을 고릅니다",
+    "mcpCount": "{{count}}개 MCP",
+    "skillCount": "{{count}}개 스킬",
+    "viewSkill": "보기",
+    "back": "뒤로",
+    "skillSourcePackage": "패키지: {{name}}",
+    "skillSourceStandalone": "사용자 추가 또는 기본 제공",
+    "skillDocNotFound": "이 스킬 파일은 더 이상 사용할 수 없습니다.",
+    "skillDocTooLarge": "이 SKILL.md는 너무 커서 표시할 수 없습니다.",
+    "skillDocFailed": "스킬을 읽을 수 없습니다.",
+    "otherGroup": "기타",
+    "selectAllInPackage": "이 패키지 전체 선택",
+    "pluginLabel": "플러그인",
+    "pluginCount": "플러그인 {{count}}개",
+    "mcpTag": "MCP",
+    "autoSelect": "자동 선택",
+    "autoSelectHint": "Laya가 적합한 플러그인, 스킬, 훅을 선택합니다"
+  },
+
   "mcp": {
     "loaded": "로드된 MCP",
     "managementHint": "MCP가 비정상적으로 보인다면 보통 MCP JSON 설정 문제입니다. 도구 설정으로 이동해 직접 테스트하세요.",

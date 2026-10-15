@@ -1,7 +1,8 @@
 import { isSlashCommandListEnabled } from '@/common/chat/slash/availability';
-import type { SlashCommandItem } from '@/common/chat/slash/types';
+import type { PackageCommandSummary, SlashCommandItem } from '@/common/chat/slash/types';
 import { ipcBridge } from '@/common';
-import { useEffect, useRef, useState } from 'react';
+import { packageSlashCommands } from '@/renderer/utils/chat/commandPalette';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 interface CacheEntry {
   commands: SlashCommandItem[];
@@ -40,6 +41,40 @@ interface UseSlashCommandsOptions {
   /** When provided, changes to this value trigger a re-fetch. Used by ACP to
    *  re-fetch commands after the agent becomes active. */
   agentStatus?: string | null;
+}
+
+/**
+ * Prompt commands of enabled packages, from Main (names, descriptions and hints only). Read again when the window
+ * regains focus, because the person turns commands on in another page. A failure shows no package commands.
+ */
+export function usePackageCommandSummaries(enabled = true): PackageCommandSummary[] {
+  const [summaries, setSummaries] = useState<PackageCommandSummary[]>([]);
+
+  useEffect(() => {
+    if (!enabled) {
+      setSummaries([]);
+      return;
+    }
+    let isCancelled = false;
+    const load = () => {
+      void ipcBridge.conversation.packageCommands
+        .invoke()
+        .then((result) => {
+          if (!isCancelled) setSummaries(Array.isArray(result) ? result : []);
+        })
+        .catch(() => {
+          if (!isCancelled) setSummaries([]);
+        });
+    };
+    load();
+    window.addEventListener('focus', load);
+    return () => {
+      isCancelled = true;
+      window.removeEventListener('focus', load);
+    };
+  }, [enabled]);
+
+  return summaries;
 }
 
 export function useSlashCommands(conversation_id: string, options: UseSlashCommandsOptions = {}) {
@@ -110,5 +145,11 @@ export function useSlashCommands(conversation_id: string, options: UseSlashComma
     };
   }, [conversation_id, canUseCachedCommands, codexStatus, conversation_type, agentStatus]);
 
-  return commands;
+  // Package commands do not wait for the agent: they are templates Main fills in, not something the agent offers.
+  const packageSummaries = usePackageCommandSummaries(canUseCachedCommands && Boolean(conversation_id));
+  return useMemo(() => {
+    if (packageSummaries.length === 0) return commands;
+    const taken = new Set(commands.map((command) => command.name));
+    return [...commands, ...packageSlashCommands(packageSummaries).filter((command) => !taken.has(command.name))];
+  }, [commands, packageSummaries]);
 }

@@ -89,6 +89,8 @@ const NATIVE_FILE_PROVIDER_EVENTS = new Set([
   'native-fs.image-base64',
   'native-fs.fetch-remote-image',
   'native-fs.read',
+  'native-fs.attachment-quick-view',
+  'native-fs.attachment-select',
   'native-fs.read-buffer',
   'native-fs.temp',
   'native-fs.write',
@@ -180,6 +182,7 @@ const CRON_PROVIDER_EVENTS = new Set([
   'cron.save-skill',
   'cron.has-skill',
   'cron.delete-skill',
+  'cron.list-run-conversations',
 ]);
 
 /**
@@ -227,6 +230,7 @@ const COMPANY_PROVIDER_EVENTS = new Set([
   'company.run-conversation',
   'company.resolve-permission',
   'company.cancel-conversation',
+  'company.route-group-message',
 ]);
 
 /**
@@ -274,7 +278,9 @@ const SYSTEM_INFO_PROVIDER_EVENTS = new Set([
   'system-info.get-snapshot',
   'system-info.set-process-priority',
   'system-info.start-stream',
-  'system-info.stop-stream',
+    'system-info.stop-stream',
+  'system-settings:get-background-sleep-metrics',
+
 ]);
 
 /**
@@ -283,6 +289,20 @@ const SYSTEM_INFO_PROVIDER_EVENTS = new Set([
  * before the gateway can retain Electron sender identity, so this surface is
  * strictly literal rather than prefix-based.
  */
+/**
+ * Storage inventory and cleanup planning expose filesystem-derived metadata.
+ * These routes cross the generic adapter before their providers can retain
+ * sender identity, so keep the surface literal and fail closed.
+ */
+const STORAGE_CENTER_PROVIDER_EVENTS = new Set([
+  'storage-center.get-summary',
+  'storage-center.get-policy',
+  'storage-center.update-policy',
+  'storage-center.run-cleanup',
+  'storage-center.preview-cleanup',
+]);
+
+
 const OMNI_GATEWAY_PROVIDER_EVENTS = new Set([
   'omni-gateway.get-status',
   'omni-gateway.apply-config',
@@ -343,6 +363,61 @@ const TOMNI_ASSISTANT_PROVIDER_EVENTS = new Set([
   'subscribe-tomni-assistant.import',
 ]);
 
+/**
+ * Home's live activity routes can stop running work and answer an agent's
+ * permission prompt, so they require the trusted desktop renderer.
+ */
+const HUB_ACTIVITY_PROVIDER_EVENTS = new Set([
+  'hub-activity.snapshot',
+  'hub-activity.stop',
+  'hub-activity.respond',
+  'hub-activity.dismiss',
+]);
+
+const UNTRUSTED_HUB_ACTIVITY_SENDER_ERROR = 'Untrusted Hub activity IPC sender';
+
+/** The sidebar's live-session list names open tabs and chats, so it requires the trusted desktop renderer. */
+const LIVE_SESSIONS_PROVIDER_EVENTS = new Set(['live-sessions.snapshot', 'live-sessions.report']);
+
+/** Verified live image output reads are bound to the trusted desktop renderer. */
+const LIVE_IMAGE_OUTPUT_PROVIDER_EVENTS = new Set(['conversation.native.live-image.read']);
+const UNTRUSTED_LIVE_IMAGE_OUTPUT_SENDER_ERROR = 'Untrusted live image output IPC sender';
+
+/** The list of installed package commands names what the person installed, so it requires the trusted desktop renderer. */
+const PACKAGE_COMMAND_PROVIDER_EVENTS = new Set(['conversation.native.package-commands']);
+const UNTRUSTED_PACKAGE_COMMAND_SENDER_ERROR = 'Untrusted package command IPC sender';
+
+const UNTRUSTED_LIVE_SESSIONS_SENDER_ERROR = 'Untrusted live sessions IPC sender';
+
+/**
+ * The notification hub holds mail and site notifications and accepts IMAP
+ * passwords, so every route requires the trusted desktop renderer.
+ */
+const NOTIFICATION_HUB_PROVIDER_EVENTS = new Set([
+  'notification-hub.snapshot',
+  'notification-hub.mark-read',
+  'notification-hub.mark-all-read',
+  'notification-hub.remove',
+  'notification-hub.clear',
+  'notification-hub.reclassify',
+  'notification-hub.feedback',
+  'notification-hub.summary',
+  'notification-hub.list-os-apps',
+  'notification-hub.save-connector',
+  'notification-hub.remove-connector',
+  'notification-hub.test-connector',
+  'notification-hub.sync-now',
+  'notification-hub.save-rules',
+]);
+
+const UNTRUSTED_NOTIFICATION_HUB_SENDER_ERROR = 'Untrusted notification hub IPC sender';
+
+const SUBSCRIBE_PREFIX = 'subscribe-';
+
+/** `subscribe-cron.list-jobs` → `cron.list-jobs`; other names are returned unchanged. */
+export const providerRouteName = (name: string): string =>
+  name.startsWith(SUBSCRIBE_PREFIX) ? name.slice(SUBSCRIBE_PREFIX.length) : name;
+
 const UNTRUSTED_AUTO_UPDATE_SENDER_ERROR = 'Untrusted auto-update IPC sender';
 const UNTRUSTED_PERSONAL_CONTEXT_SENDER_ERROR = 'Untrusted personal context IPC sender';
 const UNTRUSTED_SHELL_PROVIDER_SENDER_ERROR = 'Untrusted shell IPC sender';
@@ -364,6 +439,7 @@ const UNTRUSTED_PACKAGE_PLATFORM_SENDER_ERROR = 'Untrusted package platform IPC 
 const UNTRUSTED_RESOURCE_PROVIDER_SENDER_ERROR = 'Untrusted resource IPC sender';
 
 const UNTRUSTED_SYSTEM_INFO_PROVIDER_SENDER_ERROR = 'Untrusted system info IPC sender';
+const UNTRUSTED_STORAGE_CENTER_PROVIDER_SENDER_ERROR = 'Untrusted Storage Center IPC sender';
 
 const UNTRUSTED_OMNI_GATEWAY_SENDER_ERROR = 'Untrusted Omni Gateway IPC sender';
 
@@ -500,56 +576,78 @@ bridge.adapter({
 
     ipcMain.handle(ADAPTER_BRIDGE_EVENT_KEY, async (event, info) => {
       const { name, data } = parseBridgeEventData(info);
-      if (AUTO_UPDATE_PROVIDER_EVENTS.has(name) && !isTrustedDesktopRendererSender(event)) {
+      // Renderer invokes arrive as `subscribe-<route>`; every allowlist is matched on both spellings.
+      const routeName = providerRouteName(name);
+      const isGuarded = (events: ReadonlySet<string>): boolean => events.has(name) || events.has(routeName);
+      if (isGuarded(AUTO_UPDATE_PROVIDER_EVENTS) && !isTrustedDesktopRendererSender(event)) {
         throw new Error(UNTRUSTED_AUTO_UPDATE_SENDER_ERROR);
       }
-      if (PERSONAL_CONTEXT_PROVIDER_EVENTS.has(name) && !isTrustedDesktopRendererSender(event)) {
+      if (isGuarded(PERSONAL_CONTEXT_PROVIDER_EVENTS) && !isTrustedDesktopRendererSender(event)) {
         throw new Error(UNTRUSTED_PERSONAL_CONTEXT_SENDER_ERROR);
       }
-      if (SHELL_PROVIDER_EVENTS.has(name) && !isTrustedDesktopRendererSender(event)) {
+      if (isGuarded(SHELL_PROVIDER_EVENTS) && !isTrustedDesktopRendererSender(event)) {
         throw new Error(UNTRUSTED_SHELL_PROVIDER_SENDER_ERROR);
       }
-      if (NATIVE_FILE_PROVIDER_EVENTS.has(name) && !isTrustedDesktopRendererSender(event)) {
+      if (isGuarded(NATIVE_FILE_PROVIDER_EVENTS) && !isTrustedDesktopRendererSender(event)) {
         throw new Error(UNTRUSTED_NATIVE_FILE_SENDER_ERROR);
       }
-      if (NATIVE_CAPABILITY_PROVIDER_EVENTS.has(name) && !isTrustedDesktopRendererSender(event)) {
+      if (isGuarded(NATIVE_CAPABILITY_PROVIDER_EVENTS) && !isTrustedDesktopRendererSender(event)) {
         throw new Error(UNTRUSTED_NATIVE_CAPABILITY_SENDER_ERROR);
       }
-      if (ASSISTANT_RESOURCE_AND_SPEECH_PROVIDER_EVENTS.has(name) && !isTrustedDesktopRendererSender(event)) {
+      if (isGuarded(ASSISTANT_RESOURCE_AND_SPEECH_PROVIDER_EVENTS) && !isTrustedDesktopRendererSender(event)) {
         throw new Error(UNTRUSTED_ASSISTANT_RESOURCE_AND_SPEECH_SENDER_ERROR);
       }
 
-      if (WEBUI_PROVIDER_EVENTS.has(name) && !isTrustedDesktopRendererSender(event)) {
+      if (isGuarded(WEBUI_PROVIDER_EVENTS) && !isTrustedDesktopRendererSender(event)) {
         throw new Error(UNTRUSTED_WEBUI_SENDER_ERROR);
       }
-      if (CRON_PROVIDER_EVENTS.has(name) && !isTrustedDesktopRendererSender(event)) {
+      if (isGuarded(CRON_PROVIDER_EVENTS) && !isTrustedDesktopRendererSender(event)) {
         throw new Error(UNTRUSTED_CRON_SENDER_ERROR);
       }
-      if (TEAM_PROVIDER_EVENTS.has(name) && !isTrustedDesktopRendererSender(event)) {
+      if (isGuarded(TEAM_PROVIDER_EVENTS) && !isTrustedDesktopRendererSender(event)) {
         throw new Error(UNTRUSTED_TEAM_SENDER_ERROR);
       }
-      if (COMPANY_PROVIDER_EVENTS.has(name) && !isTrustedDesktopRendererSender(event)) {
+      if (isGuarded(COMPANY_PROVIDER_EVENTS) && !isTrustedDesktopRendererSender(event)) {
         throw new Error(UNTRUSTED_COMPANY_SENDER_ERROR);
       }
-      if (PACKAGE_PLATFORM_PROVIDER_EVENTS.has(name) && !isTrustedDesktopRendererSender(event)) {
+      if (isGuarded(PACKAGE_PLATFORM_PROVIDER_EVENTS) && !isTrustedDesktopRendererSender(event)) {
         throw new Error(UNTRUSTED_PACKAGE_PLATFORM_SENDER_ERROR);
       }
 
-      if (RESOURCE_PROVIDER_EVENTS.has(name) && !isTrustedDesktopRendererSender(event)) {
+      if (isGuarded(RESOURCE_PROVIDER_EVENTS) && !isTrustedDesktopRendererSender(event)) {
         throw new Error(UNTRUSTED_RESOURCE_PROVIDER_SENDER_ERROR);
       }
-      if (SYSTEM_INFO_PROVIDER_EVENTS.has(name) && !isTrustedDesktopRendererSender(event)) {
+      if (isGuarded(SYSTEM_INFO_PROVIDER_EVENTS) && !isTrustedDesktopRendererSender(event)) {
         throw new Error(UNTRUSTED_SYSTEM_INFO_PROVIDER_SENDER_ERROR);
       }
-      if (OMNI_GATEWAY_PROVIDER_EVENTS.has(name) && !isTrustedDesktopRendererSender(event)) {
+      if (isGuarded(STORAGE_CENTER_PROVIDER_EVENTS) && !isTrustedDesktopRendererSender(event)) {
+        throw new Error(UNTRUSTED_STORAGE_CENTER_PROVIDER_SENDER_ERROR);
+      }
+
+      if (isGuarded(OMNI_GATEWAY_PROVIDER_EVENTS) && !isTrustedDesktopRendererSender(event)) {
         throw new Error(UNTRUSTED_OMNI_GATEWAY_SENDER_ERROR);
       }
 
-      if (TOMNI_AGENT_PROVIDER_EVENTS.has(name) && !isTrustedDesktopRendererSender(event)) {
+      if (isGuarded(TOMNI_AGENT_PROVIDER_EVENTS) && !isTrustedDesktopRendererSender(event)) {
         throw new Error(UNTRUSTED_TOMNI_AGENT_SENDER_ERROR);
       }
-      if (TOMNI_ASSISTANT_PROVIDER_EVENTS.has(name) && !isTrustedDesktopRendererSender(event)) {
+      if (isGuarded(TOMNI_ASSISTANT_PROVIDER_EVENTS) && !isTrustedDesktopRendererSender(event)) {
         throw new Error(UNTRUSTED_TOMNI_ASSISTANT_SENDER_ERROR);
+      }
+      if (isGuarded(HUB_ACTIVITY_PROVIDER_EVENTS) && !isTrustedDesktopRendererSender(event)) {
+        throw new Error(UNTRUSTED_HUB_ACTIVITY_SENDER_ERROR);
+      }
+      if (isGuarded(LIVE_SESSIONS_PROVIDER_EVENTS) && !isTrustedDesktopRendererSender(event)) {
+        throw new Error(UNTRUSTED_LIVE_SESSIONS_SENDER_ERROR);
+      }
+      if (isGuarded(LIVE_IMAGE_OUTPUT_PROVIDER_EVENTS) && !isTrustedDesktopRendererSender(event)) {
+        throw new Error(UNTRUSTED_LIVE_IMAGE_OUTPUT_SENDER_ERROR);
+      }
+      if (isGuarded(PACKAGE_COMMAND_PROVIDER_EVENTS) && !isTrustedDesktopRendererSender(event)) {
+        throw new Error(UNTRUSTED_PACKAGE_COMMAND_SENDER_ERROR);
+      }
+      if (isGuarded(NOTIFICATION_HUB_PROVIDER_EVENTS) && !isTrustedDesktopRendererSender(event)) {
+        throw new Error(UNTRUSTED_NOTIFICATION_HUB_SENDER_ERROR);
       }
 
       return Promise.resolve(emitter.emit(name, data));

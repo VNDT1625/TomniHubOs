@@ -8,6 +8,9 @@ import './adapter/bridgeErrorWrapper';
 export * as ipcBridge from './adapter/ipcBridge';
 export { conversation } from './adapter/ipcBridge';
 export type {
+  SessionContextBranch,
+  SessionContextResult,
+  SessionContextSnapshot,
   TomnyAgenticContextBranch,
   TomnyAgenticContextResult,
   TomnyAgenticContextSnapshot,

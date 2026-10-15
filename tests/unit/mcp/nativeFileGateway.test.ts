@@ -36,6 +36,76 @@ describe('native file gateway', () => {
     await expect(gateway.readText(root)).rejects.toBeDefined();
   });
 
+  it('returns a bounded plain-text quick view without executing the file', async () => {
+    const root = await tempRoot();
+    const target = path.join(root, 'notes.txt');
+    await writeFile(target, 'a'.repeat(20_000));
+
+    const gateway = new NativeFileGateway();
+    const selection = gateway.registerAttachmentQuickView(target);
+
+    await expect(gateway.attachmentQuickView(selection.id)).resolves.toEqual({
+      kind: 'text',
+      content: 'a'.repeat(16_000),
+      truncated: true,
+    });
+  });
+
+  it('returns a bounded image data representation for supported image quick views', async () => {
+    const root = await tempRoot();
+    const target = path.join(root, 'pixel.png');
+    await writeFile(target, Buffer.from('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000a49444154789c6360000002000154a24f5d0000000049454e44ae426082', 'hex'));
+    const gateway = new NativeFileGateway();
+    const selection = gateway.registerAttachmentQuickView(target);
+
+    await expect(gateway.attachmentQuickView(selection.id)).resolves.toMatchObject({
+      kind: 'image',
+      dataUrl: expect.stringMatching(/^data:image\/png;base64,/),
+    });
+  });
+
+  it('returns metadata only for unsupported or binary quick-view files', async () => {
+    // The opaque capability must be registered by Main before any preview read.
+    const root = await tempRoot();
+    const target = path.join(root, 'data.db');
+    await writeFile(target, Buffer.from([0, 1, 2, 3]));
+
+    const gateway = new NativeFileGateway();
+    const selection = gateway.registerAttachmentQuickView(target);
+
+    await expect(gateway.attachmentQuickView(selection.id)).resolves.toMatchObject({
+      kind: 'metadata',
+      reason: 'unsupported',
+      name: 'data.db',
+    });
+  });
+
+  it('does not accept a raw renderer path as an attachment quick-view capability', async () => {
+    const root = await tempRoot();
+    const target = path.join(root, 'notes.txt');
+    await writeFile(target, 'private');
+
+    await expect(new NativeFileGateway().attachmentQuickView(target)).rejects.toThrow(
+      'Unknown attachment quick-view capability.'
+    );
+  });
+
+  it('does not accept a symlink as an attachment quick-view text file', async () => {
+    const root = await tempRoot();
+    const target = path.join(root, 'target.txt');
+    const link = path.join(root, 'link.txt');
+    await writeFile(target, 'private text');
+    await (await import('node:fs/promises')).symlink(target, link);
+    const gateway = new NativeFileGateway();
+    const selection = gateway.registerAttachmentQuickView(link);
+
+    await expect(gateway.attachmentQuickView(selection.id)).resolves.toMatchObject({
+      kind: 'metadata',
+      reason: 'unsupported',
+      name: 'link.txt',
+    });
+  });
+
   it('lists workspace files while excluding git, node_modules and symlink loops', async () => {
     const root = await tempRoot();
     const gateway = new NativeFileGateway();
@@ -105,13 +175,11 @@ describe('native file gateway', () => {
   it('redacts authority failures and does not fetch an untrusted destination', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
-    const gateway = new NativeFileGateway({
-      admitRemoteImageFetch: vi.fn().mockRejectedValue(new Error('token=super-secret')),
-    });
-
-    await expect(gateway.fetchRemoteImage('https://images.example/a.png?token=private')).rejects.toThrow(
-      'Remote image fetch denied.'
-    );
+    await expect(
+      new NativeFileGateway({
+        admitRemoteImageFetch: vi.fn().mockRejectedValue(new Error('token=super-secret')),
+      }).fetchRemoteImage('https://images.example/a.png?token=private')
+    ).rejects.toThrow('Remote image fetch denied.');
     expect(fetchMock).not.toHaveBeenCalled();
   });
 

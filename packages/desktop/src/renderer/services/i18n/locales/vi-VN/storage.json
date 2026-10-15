@@ -1,0 +1,35 @@
+{
+  "title": "Trung tâm lưu trữ",
+  "description": "Xem dung lượng được quản lý và kiểm soát sự tăng trưởng của cache có thể tái tạo.",
+  "refresh": "Làm mới",
+  "managedUsage": "Dung lượng lưu trữ được quản lý",
+  "autoCleanup": "Tự động dọn dẹp",
+  "previewTitle": "Xem trước dọn dẹp",
+  "previewDescription": "{{count}} tệp đủ điều kiện · có thể giải phóng tối đa {{bytes}}",
+  "reviewCleanup": "Xem lại",
+  "cleanupConfirmTitle": "Xóa tệp cache đã hết hạn?",
+  "cleanupConfirmDescription": "Xóa {{count}} tệp cache đã hết hạn để giải phóng tối đa {{bytes}}. Dữ liệu người dùng, worktree, model, adapter, gói tải xuống, tài nguyên đang hoạt động, chat, artifact và bí mật đều bị loại trừ.",
+  "cleanupAction": "Xóa tệp đã hết hạn",
+  "cleanupSuccess": "Đã xóa {{count}} tệp cache hết hạn và giải phóng {{bytes}}.",
+  "cleanupError": "Không thể hoàn tất kế hoạch dọn dẹp. Không có tệp chưa xem trước nào bị xóa.",
+  "protectionNotice": "Workspace, chat, artifact, bí mật, tài nguyên đang hoạt động, model, adapter, gói tải xuống và worktree không bao giờ bị tự động xóa.",
+  "errorLoad": "Không thể tải thông tin lưu trữ.",
+  "errorPolicy": "Không thể lưu chính sách lưu trữ.",
+  "category": {
+    "technicalCache": "Cache kỹ thuật",
+    "models": "Mô hình cục bộ",
+    "adapters": "Adapter mô hình",
+    "packageDownloads": "Gói đã tải",
+    "logs": "Nhật ký ứng dụng",
+    "worktrees": "Worktree",
+    "userData": "Dữ liệu người dùng được bảo vệ"
+  },
+  "state": {
+    "ready": "Sẵn sàng",
+    "scanning": "Đang quét",
+    "busy": "Đang sử dụng",
+    "unavailable": "Không khả dụng",
+    "protected": "Được bảo vệ",
+    "error": "Cần chú ý"
+  }
+}

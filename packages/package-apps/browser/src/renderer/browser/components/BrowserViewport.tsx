@@ -32,9 +32,11 @@ const BrowserViewport: React.FC<{
   hasActiveTab: boolean;
   subtitlesEnabled: boolean;
   subtitleCues: SubtitleCue[];
+  /** Frozen paint of the page, shown while a DOM popup hides the native view. */
+  snapshot?: string | null;
   onBoundsChange: (bounds: TabBounds) => void;
   onOpenTab: () => void;
-}> = ({ hasActiveTab, subtitlesEnabled, subtitleCues, onBoundsChange, onOpenTab }) => {
+}> = ({ hasActiveTab, subtitlesEnabled, subtitleCues, snapshot, onBoundsChange, onOpenTab }) => {
   const { t } = useTranslation();
   const regionRef = useRef<HTMLDivElement>(null);
 
@@ -77,8 +79,9 @@ const BrowserViewport: React.FC<{
   return (
     <div
       ref={regionRef}
-      className='relative flex-1 min-h-0 w-full rd-12px overflow-hidden bg-fill-1 b b-solid b-line-2'
+      className='relative flex-1 min-h-0 w-full overflow-hidden bg-fill-1'
     >
+      {snapshot && <img src={snapshot} alt='' draggable={false} className='absolute inset-0 size-full object-fill' />}
       {!hasActiveTab && (
         <div className='absolute inset-0 flex flex-col items-center justify-center gap-14px text-center px-24px'>
           <span className='size-56px flex-center rd-full bg-fill-2 text-t-tertiary'>

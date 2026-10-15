@@ -1,4 +1,93 @@
 {
+  "superSearch": {
+    "placeholder": {
+      "hub": "Search…",
+      "browser": "Search with {{engine}}…"
+    },
+    "ariaLabel": "Super Search",
+    "scopeLabel": "Search scope",
+    "scope": {
+      "all": "All"
+    },
+    "source": {
+      "local": "In app",
+      "apps": "Apps",
+      "web": "Web"
+    },
+    "state": {
+      "loading": "Searching…",
+      "empty": "No results",
+      "error": "This source failed; the others still work",
+      "timeout": "This source answered too slowly",
+      "unavailable": "Source not ready",
+      "noBridge": "Connected, but no search execution bridge is wired yet",
+      "disabled": "This source is off. Turn it on in source settings."
+    },
+    "hint": {
+      "empty": "Type to search. Use a prefix such as fb: abc to search one source.",
+      "scopeOnly": "Searching {{source}} — type what to look for."
+    },
+    "rank": "#{{rank}} · top {{percent}}%",
+    "rankTitle": "Rank {{rank}} of {{count}} in {{source}} — top {{percent}}%",
+    "resultCount": "{{count}} results",
+    "footer": "↑↓ select · Enter open · Esc close",
+    "close": "Close",
+    "clear": "Clear",
+    "engineLabel": "Search engine",
+    "config": {
+      "title": "Search sources",
+      "source": "Source",
+      "remove": "Remove",
+      "addCustom": "Add a site search",
+      "customHelp": "Paste the search link of any site and put {q} where the keyword goes, e.g. https://www.google.com/maps/search/{q}",
+      "customName": "Name",
+      "customUrl": "Search link with {q}",
+      "customInvalid": "Needs a name, a unique alias and an http(s) link containing {q}",
+      "add": "Add",
+      "open": "Source settings",
+      "enabled": "On",
+      "inAll": "In All",
+      "alias": "Alias",
+      "aliasInvalid": "Alias is invalid or already used",
+      "connectedNote": "Connected third-party sources stay off until you turn them on; queries are only sent to enabled sources.",
+      "reset": "Reset to defaults",
+      "done": "Done",
+      "none": "No connected search tools found"
+    },
+    "web": {
+      "searchWith": "Search {{engine}} for “{{query}}”",
+      "openSite": "Open {{site}}"
+    },
+    "local": {
+      "untitledConversation": "Untitled conversation",
+      "restartApp": "Restart app",
+      "actionSubtitle": "Action",
+      "pageSubtitle": "Page",
+      "settings": "Settings",
+      "page": {
+        "home": "Home",
+        "history": "History",
+        "scheduled": "Scheduled tasks",
+        "store": "Store",
+        "browser": "Browser",
+        "ide": "IDE",
+        "company": "Company",
+        "git": "Git",
+        "account": "Account",
+        "settings": "Settings"
+      }
+    },
+    "settings": {
+      "theme": "Theme & color scheme",
+      "cssTheme": "Custom CSS theme",
+      "wallpaper": "Wallpaper",
+      "interfaceLanguage": "Interface language",
+      "modelProviders": "Model providers & API keys",
+      "mcpServers": "MCP servers & connectors",
+      "skills": "Skills",
+      "webui": "Remote / WebUI access"
+    }
+  },
   "send": "Send",
   "cancel": "Cancel",
   "save": "Save",
@@ -11,6 +100,7 @@
   "skills": "Skills",
   "workspace": "Project",
   "settings": "Settings",
+  "home": "Home",
   "system": "System",
   "about": "About Us",
   "back": "Back to Chat",
@@ -23,6 +113,7 @@
   "loading": "Please wait...",
   "copy": "Copy",
   "reply": "Reply",
+  "copiedInline": "Copied",
   "copySuccess": "Copied",
   "copyFailed": "Copy failed",
   "download": "Download",
@@ -93,6 +184,17 @@
   "fileAttach.uploading": "Uploading...",
   "fileAttach.uploadSuccess": "Upload successful",
   "fileAttach.cancelUpload": "Cancel upload",
+  "attachmentQuickView": {
+    "showAttachments": "Show attachments ({{count}})",
+    "hideAttachments": "Hide attachments ({{count}})",
+    "remove": "Remove {{label}}",
+    "label": "Quick view for {{label}}",
+    "loading": "Loading preview…",
+    "unsupported": "This file type cannot be previewed here.",
+    "directory": "Folders cannot be previewed here.",
+    "too-large": "This file is too large for a quick view.",
+    "unavailable": "This file is no longer available."
+  },
   "expand": "Expand",
   "name": "Name",
   "added": "Added",
@@ -106,5 +208,267 @@
   "unit": {
     "minute_short": "m",
     "second_short": "s"
+  },
+  "notificationHub": {
+    "title": "Notifications",
+    "summary": "{{p0}} urgent · {{p1}} important · {{filtered}} filtered out",
+    "layaOn": "Laya is sorting new notifications.",
+    "layaOff": "Laya is not running; built-in rules are sorting notifications.",
+    "taskCreated": "Task created",
+    "taskFailed": "Could not create the task",
+    "tabs": {
+      "focus": "Focus",
+      "digest": "Digest",
+      "filtered": "Filtered",
+      "sources": "Sources"
+    },
+    "empty": {
+      "focus": "Nothing needs you right now.",
+      "digest": "No updates yet.",
+      "filtered": "Nothing was filtered out."
+    },
+    "level": {
+      "P0": "Urgent",
+      "P1": "Important",
+      "P2": "Digest",
+      "P3": "Filtered"
+    },
+    "by": {
+      "laya": "sorted by Laya",
+      "rules": "sorted by rules",
+      "user": "set by you",
+      "llm": "sorted by your model"
+    },
+    "actions": {
+      "open": "Open",
+      "createTask": "Make task",
+      "move": "Move",
+      "markRead": "Mark read",
+      "remove": "Remove",
+      "alwaysImportant": "Always urgent from this sender",
+      "alwaysMute": "Always filter this sender",
+      "syncAll": "Check sources now",
+      "markAllRead": "Mark all read",
+      "clearTab": "Clear this tab",
+      "boostSender": "Always urgent from this person",
+      "muteSender": "Always filter this person",
+      "muteSource": "Mute {{name}}",
+      "unmuteSource": "Unmute {{name}}",
+      "settings": "Notification settings"
+    },
+    "event": {
+      "needsInput": "{{name}} needs your answer",
+      "failed": "{{name}} failed",
+      "done": "{{name}} finished",
+      "scheduleFailed": "Scheduled task {{name}} failed",
+      "scheduleDone": "Scheduled task {{name}} finished",
+      "webUnread": "{{name}}: {{count}} unread (+{{added}})",
+      "ramHigh": "Memory is running low",
+      "ramHighBody": "RAM is {{percent}}% used ({{used}} of {{total}} GB). Close models or tabs you do not need."
+    },
+    "errors": {
+      "label": "Enter a name.",
+      "host": "The server address is not valid.",
+      "user": "Enter the account email or user name.",
+      "port": "The port must be between 1 and 65535.",
+      "password": "The password is too long.",
+      "url": "Use an http or https feed address.",
+      "origin": "Enter a site such as facebook.com.",
+      "kind": "Unknown source type.",
+      "missing": "This source no longer exists.",
+      "limit": "You have reached the limit of 30 sources.",
+      "busy": "This source is already syncing.",
+      "unknown": "Something went wrong. Try again.",
+      "channel": "Enter a YouTube channel link, @handle or channel id.",
+      "unsupported": "Not available on this system."
+    },
+    "sources": {
+      "title": "Connected sources",
+      "add": "Add source",
+      "intro": "Tomny only reads what you allow: mail headers without marking them read, public feeds, Windows notifications of the apps you pick, and for allowed sites the unread count in the tab title and the site's own notifications.",
+      "none": "No sources yet. Add a mail account, a feed or a site.",
+      "kind": {
+        "imap": "Mail",
+        "feed": "Feed",
+        "web": "Site",
+        "youtube": "YouTube",
+        "os": "Desktop apps"
+      },
+      "lastError": "Error: {{error}}",
+      "lastSync": "Checked {{time}}",
+      "webPassive": "Updates when you open the site in the built-in browser",
+      "neverSynced": "Not checked yet",
+      "noPassword": "no password saved",
+      "enabled": "Enabled",
+      "syncNow": "Check now",
+      "edit": "Edit",
+      "remove": "Remove",
+      "removeConfirm": "Remove this source and its saved password?",
+      "provider": "Provider",
+      "presets": {
+        "gmail": "Gmail",
+        "outlook": "Outlook / Microsoft 365",
+        "yahoo": "Yahoo Mail",
+        "icloud": "iCloud Mail",
+        "custom": "Other IMAP server"
+      },
+      "presetHint": {
+        "gmail": "Turn on 2-Step Verification, then create an app password at myaccount.google.com/apppasswords and paste it here. IMAP must be enabled in Gmail settings.",
+        "outlook": "Use an app password from your Microsoft account security page if two-step sign-in is on. Some work accounts block IMAP.",
+        "yahoo": "Create an app password in Yahoo Account Security and paste it here.",
+        "icloud": "Create an app-specific password at account.apple.com and paste it here.",
+        "custom": "Enter the IMAP server of your provider. Only TLS connections are used."
+      },
+      "user": "Email or user name",
+      "password": "App password",
+      "passwordKeep": "Leave empty to keep the saved password",
+      "host": "IMAP server",
+      "port": "Port",
+      "mailbox": "Folder",
+      "url": "Feed address (RSS or Atom)",
+      "webHint": "Pick a site you sign in to in the built-in browser. Tomny watches the unread count in its tab title and, if you allow it, the notifications the site raises; it never reads the page content.",
+      "origin": "Site",
+      "label": "Name",
+      "interval": "Check every (min)",
+      "cancel": "Cancel",
+      "save": "Save",
+      "saved": "Source saved",
+      "syncOk": "Checked: {{count}} new",
+      "syncFailed": "Check failed: {{error}}",
+      "cardTitle": "Sources and accounts",
+      "osApps": "Apps to include",
+      "osHint": "Reads notifications other Windows apps showed (Zalo, Telegram, Discord, Outlook, browsers). Pick apps, or leave all unselected to include every app except Tomny.",
+      "osNone": "No app notifications found yet, or this is not Windows.",
+      "osAllApps": "All apps",
+      "preview": "Keep a short preview",
+      "previewHint": "Off: only sender and subject are read.",
+      "youtubeHint": "Paste a channel link, @handle or channel id. New uploads come from YouTube's public feed; no sign-in or API key.",
+      "channel": "YouTube channel",
+      "capture": "Take the site's own notifications",
+      "captureHint": "When the page raises a notification (an AI answer is ready, a new message), it goes to the hub and only alerts if it is important."
+    },
+    "rules": {
+      "title": "Filtering rules",
+      "useLaya": "Let Laya sort notifications",
+      "layaRunning": "Laya is running on this device.",
+      "layaStopped": "Laya is not running; Tomny will not start it just for this.",
+      "systemAlerts": "System alert for urgent notifications",
+      "vip": "Always urgent senders",
+      "muted": "Always filtered senders",
+      "urgent": "Urgent keywords",
+      "vipPlaceholder": "One per line: boss@company.com or company.com",
+      "mutedPlaceholder": "One per line: news@shop.com or shop.com",
+      "urgentPlaceholder": "One per line, for example: deadline",
+      "save": "Save rules",
+      "saved": "Rules saved"
+    },
+    "delivery": {
+      "interrupt": "Alerted",
+      "digest": "In feed",
+      "silent": "Hidden"
+    },
+    "view": {
+      "toolbar": "Filter notifications",
+      "search": "Search notifications",
+      "groupBy": "Group by",
+      "group": {
+        "time": "Newest first",
+        "level": "By importance",
+        "source": "By source",
+        "account": "By account"
+      },
+      "source": "Source",
+      "allSources": "All sources",
+      "unreadOnly": "Unread only",
+      "noAccount": "Other"
+    },
+    "sourceKind": {
+      "agent": "Tomny agents",
+      "schedule": "Schedules",
+      "team": "Teams",
+      "system": "Tomny",
+      "email": "Mail",
+      "feed": "Feeds",
+      "web": "Sites",
+      "youtube": "YouTube",
+      "os": "Desktop apps",
+      "app": "Tomny apps"
+    },
+    "missed": {
+      "title": "What you missed",
+      "period": {
+        "today": "Today",
+        "24h": "24 h",
+        "7d": "7 days"
+      },
+      "none": "Nothing new in this period.",
+      "counts": "{{total}} notifications, {{unread}} unread · {{p0}} urgent · {{p1}} important · {{p2}} digest · {{p3}} filtered",
+      "askAgent": "Ask any Tomny agent \"what did I miss?\" for a written summary."
+    },
+    "catalog": {
+      "title": "What can be connected",
+      "intro": "Works: Tomny fetches it itself. Signed-in site: works while you are signed in to the site in the built-in browser. Adapter only: planned, needs a provider integration first.",
+      "support": {
+        "working": "works",
+        "session": "signed-in site",
+        "adapter-ready": "adapter only"
+      },
+      "group": {
+        "mail": "Mail",
+        "ai": "AI assistants",
+        "social": "Social",
+        "messages": "Messages",
+        "video": "Video",
+        "desktop": "Desktop",
+        "apps": "Apps"
+      }
+    },
+    "triage": {
+      "cardTitle": "Laya triage",
+      "title": "What may interrupt you",
+      "intro": "Rules, your lists and what you open or dismiss decide first, on this device and at no cost. Laya helps when it is already running.",
+      "interrupt": "Alert me for",
+      "interruptHint": "Everything else waits in the feed.",
+      "p0p1": "Urgent + important",
+      "learn": "Learn from what I open or dismiss",
+      "learnHint": "Moves a sender one level up or down; never makes anything urgent by itself.",
+      "packageApps": "Notifications from Tomny apps",
+      "packageAppsHint": "Installed apps that declare notifications.show can post; they cannot mark themselves urgent.",
+      "retention": "Keep notifications (days)",
+      "muted": "Muted sources",
+      "mutedNone": "No muted sources."
+    },
+    "llm": {
+      "title": "Ask a model about unclear items",
+      "enable": "Use a model for unclear items",
+      "intro": "Off by default. Only items the rules cannot place are sent, in small batches, with codes, numbers, links and addresses removed. The daily limit is never exceeded.",
+      "model": "Model",
+      "modelPlaceholder": "A small, cheap model id",
+      "dailyLimit": "Items per day at most",
+      "includeSnippet": "Also send the redacted preview",
+      "includeSnippetHint": "Off: only the source, sender domain and redacted subject are sent.",
+      "usage": "Used today: {{used}} of {{limit}}",
+      "inactive": "Not active",
+      "lastRun": "last batch {{time}}",
+      "error": {
+        "budget": "today's limit reached",
+        "no-model": "no provider can serve this model",
+        "unparsed": "the model's answer could not be read"
+      },
+      "errorGeneric": "last error: {{error}}"
+    },
+    "flash": {
+      "title": "Flash",
+      "empty": "Nothing needs you right now.",
+      "viewAll": "View all",
+      "viewAllMore": "View all (+{{count}} more)"
+    },
+    "page": {
+      "subtitle": "Everything that reached you, your sources and Laya settings.",
+      "tabs": {
+        "feed": "Notifications",
+        "triage": "Laya & budget"
+      }
+    }
   }
 }

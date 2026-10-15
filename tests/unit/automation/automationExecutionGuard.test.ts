@@ -1,8 +1,11 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { PackageListing, PackageStateChangedEvent } from '@/common/packages';
 import { FoundationTrustRuntime } from '@process/foundation/runKernel';
 import {
   createAutomationBackgroundController,
-  createAutomationExecutionController,
+    createAutomationExecutionController,
+  createAutomationStudioPackageLease,
+
   disposeAutomationBridge,
   registerAutomationBridge,
   startAutomationWebhookServer,
@@ -28,6 +31,67 @@ const createAutomationTrustRuntime = (): FoundationTrustRuntime =>
       policyVersion: 'automation-test-v1',
     },
   });
+
+describe('Automation package ownership and account execution lifecycle', () => {
+  it('keeps background stopped on a clean base, requires a signed first-party package and stops before uninstall', async () => {
+    const packageId = 'com.tomni.automation-studio';
+    let listing = { state: 'available', enabled: false } as PackageListing;
+    const listeners = new Set<(event: PackageStateChangedEvent) => void>();
+    const start = vi.fn(async () => undefined);
+    const stop = vi.fn(async () => undefined);
+    const lease = createAutomationStudioPackageLease({
+      packages: {
+        status: async () => listing,
+        onStateChanged: (listener) => {
+          listeners.add(listener);
+          return () => { listeners.delete(listener); };
+        },
+      },
+      background: { start, stop },
+    });
+    const change = (): void => {
+      for (const listener of listeners) listener({ id: packageId, state: listing.state });
+    };
+
+    await lease.start(); // authenticated, but Automation is absent
+    expect(start).not.toHaveBeenCalled();
+    listing = {
+      state: 'installed', enabled: true, compatible: true, revoked: false,
+      installedTrust: 'signed-store',
+      installedManifest: { id: packageId, publisherId: 'com.tomni' },
+    } as PackageListing;
+    change();
+    await vi.waitFor(() => expect(start).not.toHaveBeenCalled());
+    listing = { ...listing, installedTrust: 'signed-first-party' };
+    change();
+    await vi.waitFor(() => expect(start).toHaveBeenCalledTimes(1));
+
+    // The package manager's mandatory pre-uninstall quiesce closes active background work.
+    await lease.quiesce();
+    expect(stop).toHaveBeenCalledTimes(1);
+    listing = { ...listing, state: 'available', enabled: false, installedManifest: undefined };
+    change();
+    await lease.resume();
+    expect(start).toHaveBeenCalledTimes(1);
+
+    // Reinstall while online resumes a verified background. Logout blocks reactivation.
+    listing = { ...listing, state: 'installed', enabled: true,
+      installedManifest: { id: packageId, publisherId: 'com.tomni' } } as PackageListing;
+    change();
+    await vi.waitFor(() => expect(start).toHaveBeenCalledTimes(2));
+    await lease.stop();
+    expect(stop).toHaveBeenCalledTimes(2);
+    await lease.resume(); // even a package mutation cannot turn it back on after signout
+    expect(start).toHaveBeenCalledTimes(2);
+    await lease.start();
+    expect(start).toHaveBeenCalledTimes(3);
+
+    listing = { ...listing, compatible: false };
+    change();
+    await vi.waitFor(() => expect(stop).toHaveBeenCalledTimes(3));
+    await lease.dispose();
+  });
+});
 
 describe('Automation account execution guard', () => {
   it('fails closed for renderer, MCP, and webhook execution before its account lifecycle starts', async () => {

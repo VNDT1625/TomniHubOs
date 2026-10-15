@@ -39,7 +39,8 @@ export type TaskKind =
   | 'ocr'
   | 'transcription'
   | 'docConvert'
-  | 'semanticIndex';
+    | 'semanticIndex'
+  | 'workflowTool';
 
 /**
  * Coordinator operating mode (criterion 5.2).

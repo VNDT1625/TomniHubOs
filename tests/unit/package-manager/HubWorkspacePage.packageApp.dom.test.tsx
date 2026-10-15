@@ -17,7 +17,7 @@ vi.mock('@/common/packages/studioCompatibility', () => ({
   createStudioCompatibilityLegacyFallbackDestination: () => '/store',
   isStudioPackageGateNavigationState: () => false,
 }));
-vi.mock('@/renderer/pages/company/CompanyPage', () => ({ default: () => null }));
+vi.mock('@package-apps/company/renderer/company/CompanyPage', () => ({ default: () => null }));
 vi.mock('@/renderer/pages/hub/PackageAppHost', () => ({
   getFirstRunnablePackageModule: () => undefined,
   PackageAppHost: ({
@@ -42,17 +42,17 @@ vi.mock('react-i18next', () => ({
 import HubWorkspacePage from '@/renderer/pages/hub/HubWorkspacePage';
 
 describe('HubWorkspacePage package workspace', () => {
-  it('keeps Hub navigation and header while removing Store-only controls', () => {
+  it('renders only centre content so the shared Hub shell keeps its chrome', () => {
     render(
       <MemoryRouter>
         <HubWorkspacePage kind='package-app' packageId='com.tomni.calculator' moduleId='calculator' />
       </MemoryRouter>
     );
 
-    expect(screen.getByTestId('hub-package-app-page')).toBeInTheDocument();
-    expect(screen.getByTestId('hub-package-sidebar')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'guid.hubHome.status.notificationsTitle' })).toBeInTheDocument();
+    const page = screen.getByTestId('hub-package-app-page');
+    expect(page).toHaveClass('hub-page', 'hub-page--package');
     expect(screen.getByTestId('package-app-host')).toHaveTextContent('com.tomni.calculator:calculator:true');
+    expect(screen.queryByTestId('hub-package-sidebar')).not.toBeInTheDocument();
     expect(screen.queryByTestId('hub-status-rail')).not.toBeInTheDocument();
     expect(screen.queryByText('guid.hubHome.shell.store')).not.toBeInTheDocument();
   });

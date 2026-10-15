@@ -1,0 +1,128 @@
+/* Editorial Workspace (Minimalist)
+ * A calm, print-like look: warm paper, ink-coloured text, hairline borders and one deep teal accent.
+ * Only colour variables and a few typographic rules are set, so every screen keeps its layout.
+ */
+
+:root {
+  --color-primary: #0f6b6b;
+  --primary: #0f6b6b;
+  --color-primary-light-1: #2f8585;
+  --color-primary-light-2: #5aa0a0;
+  --color-primary-light-3: #8fbcbc;
+  --color-primary-dark-1: #0a5252;
+  --primary-rgb: 15, 107, 107;
+
+  --brand: #0f6b6b;
+  --brand-light: #e3efec;
+  --brand-hover: #8fbcbc;
+  --color-brand-fill: #0f6b6b;
+  --color-brand-bg: #e3efec;
+
+  --color-bg-1: #faf7f0;
+  --bg-1: #faf7f0;
+  --color-bg-2: #f3efe5;
+  --bg-2: #f3efe5;
+  --color-bg-3: #e8e2d4;
+  --bg-3: #e8e2d4;
+  --color-bg-4: #d6cebd;
+  --bg-4: #d6cebd;
+  --bg-base: #fffdf8;
+  --bg-hover: #f0ebdf;
+  --bg-active: #e8e2d4;
+
+  --fill: #f6f2e8;
+  --color-fill: #f6f2e8;
+  --fill-0: #fffdf8;
+  --dialog-fill-0: #fffdf8;
+
+  --color-text-1: #1c1a17;
+  --text-primary: #1c1a17;
+  --color-text-2: #4f493f;
+  --text-secondary: #3a352d;
+  --text-tertiary: #5c564c;
+  --color-text-3: #7a7365;
+  --text-0: #1c1a17;
+
+  --color-border: #ddd5c4;
+  --color-border-1: #ddd5c4;
+  --color-border-2: #ebe5d7;
+  --border-base: #ddd5c4;
+  --border-light: #ebe5d7;
+
+  --success: #2f7d4f;
+  --warning: #b8650a;
+  --danger: #b3382c;
+  --info: #0f6b6b;
+
+  --message-user-bg: #ece6d6;
+  --message-tips-bg: #eef3ef;
+  --workspace-btn-bg: #f0ebdf;
+}
+
+[data-theme='dark'] {
+  --color-primary: #5bb8b8;
+  --primary: #5bb8b8;
+  --color-primary-light-1: #7ccaca;
+  --color-primary-light-2: #9ad8d8;
+  --color-primary-light-3: #b8e4e4;
+  --color-primary-dark-1: #3f9494;
+  --primary-rgb: 91, 184, 184;
+
+  --brand: #5bb8b8;
+  --brand-light: #20302f;
+  --brand-hover: #3f9494;
+  --color-brand-fill: #5bb8b8;
+  --color-brand-bg: #20302f;
+
+  --color-bg-1: #1b1a17;
+  --bg-1: #1b1a17;
+  --color-bg-2: #24221e;
+  --bg-2: #24221e;
+  --color-bg-3: #302d27;
+  --bg-3: #302d27;
+  --color-bg-4: #3d3a32;
+  --bg-4: #3d3a32;
+  --bg-base: #12110f;
+  --bg-hover: #211f1b;
+  --bg-active: #2c2923;
+
+  --fill: #1b1a17;
+  --color-fill: #1b1a17;
+  --fill-0: rgba(255, 250, 235, 0.07);
+  --dialog-fill-0: #2c2923;
+
+  --color-text-1: #ece7dc;
+  --text-primary: #ece7dc;
+  --color-text-2: #b8b1a2;
+  --text-secondary: #cfc9bb;
+  --text-tertiary: #a39c8d;
+  --color-text-3: #8a8374;
+  --text-0: #ece7dc;
+
+  --color-border: #38352d;
+  --color-border-1: #38352d;
+  --color-border-2: #2a2822;
+  --border-base: #38352d;
+  --border-light: #2a2822;
+
+  --success: #5fbf86;
+  --warning: #e0983f;
+  --danger: #e06a5d;
+  --info: #5bb8b8;
+
+  --message-user-bg: #2a2822;
+  --message-tips-bg: #1f2927;
+  --workspace-btn-bg: #24221e;
+}
+
+/* Reading-first typography; code keeps its own monospace stack. */
+body {
+  font-family: 'Source Serif 4', 'Iowan Old Style', 'Palatino Linotype', Georgia, 'Segoe UI', serif;
+}
+
+.arco-btn,
+.arco-input-wrapper,
+.arco-textarea,
+.arco-select-view {
+  border-radius: 4px;
+}

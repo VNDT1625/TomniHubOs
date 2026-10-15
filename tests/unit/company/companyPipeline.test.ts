@@ -11,13 +11,20 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import type { CompanyStructure, RoleNode } from '@/process/company/companyOrchestrator';
-import { parsePlannerDecision } from '@/renderer/pages/company/pipeline/delegationPlanner';
-import { executeViaConversation, type RoleExecutorDeps } from '@/renderer/pages/company/pipeline/roleExecutor';
-import { createRoleRunner, type RoleRunnerDeps } from '@/renderer/pages/company/pipeline/roleRunner';
-import { createApprovalGate } from '@/renderer/pages/company/pipeline/approvalGate';
-import { runTestGate } from '@/renderer/pages/company/pipeline/testGate';
-import { createPipelineStore, reducePipeline, emptySnapshot } from '@/renderer/pages/company/pipeline/pipelineStore';
-import type { PipelineEvent } from '@/renderer/pages/company/pipeline/pipelineTypes';
+import { parsePlannerDecision } from '@package-apps/company/renderer/company/pipeline/delegationPlanner';
+import {
+  executeViaConversation,
+  type RoleExecutorDeps,
+} from '@package-apps/company/renderer/company/pipeline/roleExecutor';
+import { createRoleRunner, type RoleRunnerDeps } from '@package-apps/company/renderer/company/pipeline/roleRunner';
+import { createApprovalGate } from '@package-apps/company/renderer/company/pipeline/approvalGate';
+import { runTestGate } from '@package-apps/company/renderer/company/pipeline/testGate';
+import {
+  createPipelineStore,
+  reducePipeline,
+  emptySnapshot,
+} from '@package-apps/company/renderer/company/pipeline/pipelineStore';
+import type { PipelineEvent } from '@package-apps/company/renderer/company/pipeline/pipelineTypes';
 
 // --- Builders --------------------------------------------------------------
 

@@ -1,0 +1,19 @@
+{
+  "manifest_version": "0.2",
+  "name": "weather-bundle",
+  "display_name": "Weather Bundle",
+  "version": "1.0.0",
+  "description": "Weather forecasts as an MCPB bundle (hand-written fixture).",
+  "server": {
+    "type": "node",
+    "entry_point": "server/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/server/index.js"],
+      "env": { "WEATHER_API_KEY": "${user_config.api_key}", "UNITS": "metric" }
+    }
+  },
+  "user_config": {
+    "api_key": { "type": "string", "title": "Weather API key", "required": true, "sensitive": true }
+  }
+}

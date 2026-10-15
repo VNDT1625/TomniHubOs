@@ -1,4 +1,4 @@
-﻿# Trust and user understanding
+# Trust and user understanding
 
 **Status:** TARGET architecture built from PARTIAL security, context, and secret components.
 
@@ -47,6 +47,15 @@ eeds_reason\), and semantic-analysis (tool & skill routing). Orchestration uses 
 **PARTIAL:** generic IPC registrations are not uniformly proven to validate sender identity and payload schema. The 19 exact native-fs filesystem, image, archive, mutation, and watch providers, the 26 exact MCP-registry, native-MCP, and native-Skill capability providers, the seven exact assistant-resource rule/skill plus speech-transcription providers, the three exact WebUI status/lifecycle providers, the ten exact Cron schedule and skill-content providers, the 17 exact Team lifecycle, member, workspace-group, task, and session-mode providers, the 12 exact Company creation, structure, rules, assignment, draft, conversation, and permission providers, the nine exact package-platform catalog, lifecycle, contribution, and asset providers, the seven exact Resource state/budget/lifecycle providers, the six exact System Info snapshot, priority, and stream providers, and the fifteen exact Omni Gateway local/remote MCP lifecycle, bearer/debug token, OAuth-client, and durable access-policy providers now reject destroyed, subframe, wrong-origin, and wrong-file senders at the generic Main adapter before callback dispatch; their individual payload, path, permission, signature, and capability enforcement remains separately required. tests/unit/common-adapter/main.test.ts proves each guarded literal from a trusted main frame and the untrusted-sender matrix. The generic adapter remains PARTIAL until every registration has equivalent identity and schema proof.
 
 **PARTIAL:** the Hub/ExperimentalCore context bridge no longer imports IDE memory and rejects a learning proposal/correction without bounded context, origin, proposal, and a valid reason state before persistence. An ordinary conversation restart with the IDE package absent still needs end-to-end evidence.
+
+## Workspace Understanding metadata (PARTIAL)
+
+**CURRENT (Node/Desktop owner):** .tomni is the canonical workspace-metadata root. Before Desktop projects an Understanding-backed workspace reference, it invokes ensureCanonicalWorkspaceMetadata(rootPath) from @package-apps/shared/process/workspace/workspaceMetadataMigration. The coordinator maps specs, understand, wiki, inspect, quick-test, artifacts, and logs; unknown entries are retained under .tomni/legacy-root/<source>/. Existing canonical bytes win, then .omni precedes .tomny; differing losing bytes are retained under .tomni/migration/conflicts/<migration-id>/ with SHA-256 evidence in .tomni/migration/metadata-v1.json. It refuses symlinks and escaping/unsupported legacy entries, holds .tomni/migration/workspace-metadata-v1.lock, and never uses .omni or .tomny as a runtime fallback.
+
+.tomnyrules and .omni-sidecar are compatibility/state artifacts outside this root migration and are not renamed or deleted. Understanding consumers read only .tomni/understand/summary.json and .tomni/understand/stale.json; neither reference projection nor ordinary reads build a summary.
+
+**PARTIAL:** Node migration uses staged copies, digest verification, atomic target writes, manifest completion, and source retirement, with focused precedence/conflict/symlink coverage. Its manifest is completion-oriented rather than a per-entry durable journal, stale stage directories are not yet true resume checkpoints, and the Rust MTUI implementation/lock protocol has not yet been proven compatible with the Node coordinator under concurrent interruption. A migration conflict is conservatively treated as unavailable by the Desktop Understanding reader, which preserves safety but does not yet expose conflict detail to the UI.
+
 
 ## Threat model
 
@@ -330,6 +339,10 @@ Causal records are inspectable, correctable, forgettable, exportable, and deleta
 
 A projection is created per run step. It has a token or byte budget, purpose, destination class, and list of record identifiers. Selection prefers explicit, recent, scoped, high-confidence, non-contradicted records.
 
+**CURRENT (2026-10-08): the user profile in a prompt is small.** The stored profile can hold much more, but a prompt gets only the user's name and a few basics: personal information, profession, confirmed facts and preferences, preferred language, tone and verbosity, and writing guidance. Psychology, personality, interests, taste, past context and habits stay in the store and in Settings, and are never written into a prompt. A field that does not exist writes nothing: an empty profile adds no profile block, and the default decision policy is not restated. The agent profile is one identity line plus its own instructions. Evidence: `tests/unit/agentRuntime/contextEngine.test.ts`. The label in the Hub rail and in Vietnamese Settings is "Hồ sơ người dùng" (user profile).
+
+**CURRENT: what carries over from earlier turns.** Message history is not sent verbatim. After each turn a deterministic check, optionally scored by Laya, decides whether the turn is worth a short note (greetings and one-line replies are not). The next prompt then carries the pinned notes, the compacted summaries, the newest note and the notes that match the message just sent (`savedMemoryContextFor` in `nativeConversation/service.ts`). Laya judges what is worth saving; the choice of which notes to send is lexical. The newest note is only there if that turn was judged worth a note, so a short follow-up after a trivial turn carries nothing from it. Sending the last one or two raw messages as well is **TARGET** and needs a product decision.
+
 Before leaving the device, projection policy removes records not allowed for the chosen target. The receipt records which identifiers were projected, which were withheld, and why, without persisting sensitive plaintext twice.
 
 User intelligence can affect a plan, explanation, or presentation inside its consented scope. Learned target ranking is post-MVP and requires versioned evaluation evidence; it cannot alter deterministic MVP routing, create a grant, suppress approval, expand a filesystem root, change an egress destination, or select advertising from sensitive context.
@@ -347,6 +360,95 @@ The base UI provides:
 - pause learning without disabling ordinary runs.
 
 Deletion tests must prove the record no longer appears in projections, search, backups past the declared retention window, or package-accessible data.
+
+## Session notes, session memory and secret keys (2026-10-08)
+
+The Hub rail gives every agent conversation three human controls. They share one rule: the host does not resend the whole conversation, so what the agent is allowed to know next turn is explicit, bounded and inspectable.
+
+| Rail tab | Purpose | Owner |
+| -------- | ------- | ----- |
+| **Ghi chú phiên** (Session notes) | Typed notes (fact, decision, to do, snippet, note) the agent should not lose. Pinned notes are sent on every turn; the others are recalled when they match the request. This is also where a requirement that must repeat on every turn lives. | Save store (`sessionMemoryStore.ts`) behind `core.session-memory.*`, including per-note forget |
+| **Bộ nhớ phiên** (Session memory) | Read-only inspector of exactly what is sent on the next turn: one row per block (system prompt, agent profile, personal profile, session notes, custom context, context branches, control tools, loaded tools, working memory, surface capabilities) with its estimated tokens and a reader for the exact text. Message history is shown as archive-only and not sent. The custom context and branches stay editable behind an explicit button. | `getSessionContext` snapshot, `renderer/pages/guid/HubHome/memory/contextSections.ts` |
+| **Khóa bí mật** (Secret keys) | The secret sets this conversation can use: app sets (read-only here), this session's temporary sets, and requests an agent made for a value. Each set shows the places it may be typed into. | RAM session vault and the encrypted app vault behind `core.session-secrets.*` (see [Secret vault](#secret-vault-scopes-destinations-and-tools-2026-10-08)) |
+
+A separate "session reminders" tab was tried and removed: it duplicated session notes. Requirements that must repeat every turn are pinned notes.
+
+### Boundaries
+
+- All stores live in Main. The renderer addresses conversations by conversation id; Main maps them to private storage ids and to the workspace. IPC is strict-schema, bounded, and accepted only from the application main frame of the signed-in account.
+- Recalled notes are framed as background context that may be stale; the user's current request wins. A note cannot grant a capability, approve an effect or reveal a secret.
+- The inspector shows only blocks the host itself composes. For an agent that is not Tomny it states that the selected runtime may add private history, instructions, tools or memory that TomniHubOS cannot measure.
+- **Secret values stay in Main.** List and scope responses carry label, note, variable names, destinations, status and update time. Saving a permanent set fails closed without OS-protected storage; a session set needs none because it never reaches disk. Removing a set needs native approval.
+- **Reveal is a separate high-risk action.** It needs native approval, leaves a content-free receipt, returns the value once and the panel hides it again after 30 seconds, when the conversation changes or when the panel closes.
+- Tomny agents use sets by handle only, through the `tomny_secret_*` tools (below). The value is typed by a Main-owned sink and the model gets a receipt.
+
+### Non-Tomny agents (deliberate differences)
+
+Claude Code, Codex, OpenCode, Cursor, Hermes, OpenClaw and remote targets share the same send path but are not assumed to understand TomniHubOS features:
+
+- Session notes reach them only as plain text in the host prelude that every adapter already receives; nothing depends on a tool, protocol extension or file convention they may lack.
+- Secret values are never injected into a non-Tomny agent's prompt, environment or MCP configuration, and the `tomny_secret_*` tools are offered only to Tomny runs. The reference IDE applies saved variables to every local session; TomniHubOS withholds them because ACP and Codex processes are shared across workspaces and their output is not value-redacted. Per-target environment grants remain **TARGET** and need a product decision.
+- Incognito or suppressed-personal-context runs receive neither notes nor profile blocks.
+
+## Secret vault: scopes, destinations and tools (2026-10-08)
+
+Secrets are an **app** capability, not an IDE one. One encrypted Core vault (`agentRuntime/secretVault.ts`, Electron `safeStorage`) holds every secret set; the IDE package no longer owns a vault. The model never receives a value: it receives a handle, a label, a note and variable names, and asks the app to type the value somewhere.
+
+### Scopes
+
+| Scope | Lifetime | Usable by | Managed in |
+| ----- | -------- | --------- | ---------- |
+| `app` | Permanent | Every conversation, within the set's destinations | Settings, Cá nhân |
+| `session` | Only while the conversation exists; RAM only, encrypted with an ephemeral per-process key, never written to disk | That conversation only | Hub rail, tab Khóa bí mật |
+| `company` | Permanent | Runs of that company's group chat only | Company settings, Nâng cao |
+| `package` | Permanent, removed when the package is uninstalled | That Package App only: its own code, and a run whose active surface is that package | Store, package detail |
+
+A run sees the `app` sets, its own `session` sets, its company's sets and, when its active surface belongs to a Package App, that package's sets (`packageIdOfSurface`: a package surface, or the built-in `ide` surface for `com.tomni.ide`). Resolution fails closed on any scope mismatch, so a handle that leaks into another conversation, company or package resolves to nothing. Existing records have no scope and are `app`.
+
+### Destinations ("nơi dùng")
+
+A set declares where the app may type its values. Each destination is a binding of surface and purpose, enforced by the vault at resolution time, and by a trusted Main-owned sink registration.
+
+| Destination | Sink | Binding | Guard |
+| ----------- | ---- | ------- | ----- |
+| Web form | `browser.fill` | `browser` / `browser-fill` | Exact hostnames, as today |
+| Terminal input | `terminal.input` | `terminal` / `terminal-input` | Exact terminal id that exists; native approval the first time an agent types into that terminal, forgotten when the terminal closes; the value is written with a final Enter unless `submit:false` and never echoed back to the model |
+| Managed process variable | `process.env.inject` | `secret-firewall` / `opaque-use` | Pre-registered process and variable names |
+| Deployment secret | `deployment.secret.put` | `secret-firewall` / `opaque-use` | Pre-registered provider, project and environment |
+
+### Agent tools
+
+The tools are Tomny in-app tools named `tomny_secret_*` and belong to the `core` capability `core.secret-context`, so the Guide Map lists them and `ToolSearch` loads them by exact name. They are not user-facing MCP connectors.
+
+| Tool | What it does |
+| ---- | ------------ |
+| `tomny_secret_list` | Sets visible to this run: handle, label, note, variable names, destinations, scope. Never values. |
+| `tomny_secret_use` | Type one variable into a destination through a sink; returns a receipt only |
+| `tomny_secret_request` | Ask the user for a secret that does not exist yet; it appears as a request to fill in |
+| `tomny_secret_request_access` | Package runs only: ask the user to let the active Package App use one general app set. Asking grants nothing |
+| `tomny_secret_capture` | Capture a value from an exact browser field into the vault |
+| `tomny_secret_generate` | Generate a random key in Main and store it |
+
+Replaces `agent_secret_context_use`, `secret_context_capture`, `secret_context_generate`, `ide_secret_context_list` and `ide_secret_context_declare`; the IDE's own guarded-command tool still takes `secretAliases` and `secretComboIds`.
+
+### Package Apps and secrets
+
+A Package App gets a private secret space and nothing else by default.
+
+- **Own space.** Keys in scope `package` belong to that package only. The user manages them in the package's Store page, an agent can add one with `tomny_secret_capture` or `_generate` using `scope: "package"`, and package code in Main reaches them through its `PackageSecretPort` (`list`, `store`, `resolve`, `requestAccess`). Values leave Main only through a sink or into a child-process environment. When the app sees the package go from installed to gone, its keys and grants are removed; an uninstall made while the app was closed leaves them in place (nothing is ever deleted for a package the app has not seen installed). A set keeps its scope for life: re-saving it cannot turn it into an app key.
+- **General app keys need the user's permission.** The package can only ask (`requestAccess` or `tomny_secret_request_access`). The request names one app set and the package's reason, appears in the package's Store page, and becomes a grant only when the user approves behind a native dialog. A grant names exactly one set (not its contents), applies to sets a package can use as a process variable, can be revoked at any time and is removed on uninstall. Session and company sets can never be granted. Grants gate package code in Main; a Tomny run on the package's surface keeps the access every Tomny run already has to the general app keys, so a grant adds nothing for that run.
+- **Older keys.** A package that kept keys in its own storage can offer them for import (the IDE does): the Store page counts what is not yet in the app vault and, after a native approval, copies each record into the package scope once. The older store is left untouched.
+- **Identity** comes from Main (installed package id; the active surface's package for a run), never from tool arguments or the renderer.
+
+### Where tools are shown
+
+In-app tools are classified by surface and `tomny_*` names (see [Tool vocabulary](tool-vocabulary.md)). Settings, Năng lực, lists only **external** MCP connectors and MCP servers created from a repository by repotopackage; the built-in loopback servers behind in-app capabilities are not shown there and cannot be toggled as if they were connectors.
+
+**Status (local code/tests, no packaged-Electron run):**
+
+- **CURRENT:** scoped vault with the RAM session store (`secretVault.ts`, `tests/unit/agentRuntime/secretVaultScopes.test.ts`); `tomny_secret_*` tools, request store and terminal sink (`agentMesh/mcp/secret-context/`, `tests/unit/mcp/secretContext.test.ts`, `tests/unit/system/terminalSecretPort.test.ts`); session and company IPC bridges with native approval for remove and reveal (`tests/unit/system/sessionSecretsBridge.test.ts`); destinations in Settings, Cá nhân, the Hub tab and company settings (`tests/unit/system/secretDestinations.test.ts`, `tests/unit/settings/PersonalSettings.secrets.dom.test.tsx`, `tests/unit/renderer/chat/HubSessionSecrets.dom.test.tsx`); Settings, Năng lực filter (`tests/unit/renderer/settings/externalMcpServers.test.ts`). A conversation reset or delete wipes its session sets and pending requests.
+- **PARTIAL:** company-scope sets are stored and managed, but a company run has no tool path yet, so agents cannot consume them. The request list is shown only in the Hub tab. The IDE still keeps its older per-repository store and `ide.repo-secret-*` bridge (no sender validation) beside the package space; its guarded commands read both. A package-scope set applies to every workspace of that package (the imported records carry the repository name in their label). Package code outside Main (sandboxed web modules) has no secret API: only Main-side package code and Tomny runs on the package's surface do. Native dialogs, `safeStorage` and the terminal sink have not been exercised in a packaged Electron run.
+- **TARGET:** per-target environment grants; retiring the IDE's older store once users have imported it; a secret syscall for sandboxed package modules.
 
 ## Audit and privacy
 

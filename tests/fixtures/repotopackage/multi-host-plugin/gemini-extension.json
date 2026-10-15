@@ -1,0 +1,20 @@
+{
+  "name": "context7",
+  "version": "1.0.0",
+  "mcpServers": {
+    "context7": {
+      "httpUrl": "https://mcp.context7.com/mcp",
+      "headers": {
+        "Authorization": "Bearer $CONTEXT7_API_KEY"
+      }
+    }
+  },
+  "settings": [
+    {
+      "name": "Context7 API key",
+      "description": "Optional key for higher limits",
+      "envVar": "CONTEXT7_API_KEY",
+      "sensitive": true
+    }
+  ]
+}

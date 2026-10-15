@@ -76,6 +76,30 @@ describe('GuidActionRow CLI agent selector', () => {
     expect(agentButton.closest('[data-agent-switcher-tooltip-target]')).toBeInstanceOf(HTMLElement);
   });
 
+    it('shows the attachment inventory control beside Send and toggles it', () => {
+    const onToggleAttachments = vi.fn();
+    render(
+      <ConfigProvider>
+        <GuidActionRow
+          variant='hub' files={[]} onFilesUploaded={vi.fn()}
+          selectedAgent='tomnyagentic' selectedMode='default' onModeSelect={vi.fn()}
+          is_presetAgent={false} selectedAgentInfo={undefined} assistants={[]}
+          localeKey='en-US' onClosePresetTag={vi.fn()}
+          allSkills={[]} disabledBuiltinSkills={[]} enabledSkills={[]}
+          onToggleSkill={vi.fn()} mcpServers={[]} selectedMcpServerIds={[]}
+          attachmentCount={2} attachmentExpanded={false}
+          onToggleAttachments={onToggleAttachments}
+          loading={false} isButtonDisabled={false} onSend={vi.fn()}
+        />
+      </ConfigProvider>
+    );
+    const toggle = screen.getByRole('button', { name: 'common.attachmentQuickView.showAttachments' });
+    expect(toggle).toHaveAttribute('aria-controls', 'attachment-inventory-rail');
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(toggle);
+    expect(onToggleAttachments).toHaveBeenCalledOnce();
+  });
+
   it('does not render an empty selector when no CLI agent is available', () => {
     renderActionRow([]);
 

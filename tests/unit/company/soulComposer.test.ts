@@ -10,7 +10,11 @@
 
 import { describe, expect, it } from 'vitest';
 import type { CompanyStructure, RoleNode } from '@/process/company/companyOrchestrator';
-import { composeSoul, directReportsOf, findRoleNode } from '@/renderer/pages/company/pipeline/soulComposer';
+import {
+  composeSoul,
+  directReportsOf,
+  findRoleNode,
+} from '@package-apps/company/renderer/company/pipeline/soulComposer';
 import { defaultSoulForRole, ensureSoulHasWorkflow, soulHasWorkflow } from '@/process/company/soulTemplates';
 
 const president: RoleNode = {

@@ -138,6 +138,7 @@ class AutoUpdaterService extends EventEmitter {
   private _isInitialized = false;
   private _eventHandlersSetup = false;
   private _allowPrerelease = false;
+  private _downloadedUpdateReady = false;
   private _statusBroadcastCallback: StatusBroadcastCallback | null = null;
   /** Stores registered autoUpdater event handlers for cleanup and test access */
   private readonly _autoUpdaterHandlers = new Map<string, (...args: unknown[]) => void>();
@@ -218,6 +219,7 @@ class AutoUpdaterService extends EventEmitter {
     this._isInitialized = false;
     this._eventHandlersSetup = false;
     this._allowPrerelease = false;
+    this._downloadedUpdateReady = false;
     this._statusBroadcastCallback = null;
     // Remove listeners from this EventEmitter instance
     this.removeAllListeners();
@@ -280,6 +282,7 @@ class AutoUpdaterService extends EventEmitter {
     });
 
     register('update-available', (info: UpdateInfo) => {
+      this._downloadedUpdateReady = false;
       log.info(`Update available: ${info.version}`);
       this.broadcastStatus({
         status: 'available',
@@ -308,6 +311,7 @@ class AutoUpdaterService extends EventEmitter {
     });
 
     register('update-downloaded', (info: UpdateInfo) => {
+      this._downloadedUpdateReady = true;
       log.info('Update downloaded');
       this.broadcastStatus({
         status: 'downloaded',
@@ -391,24 +395,37 @@ class AutoUpdaterService extends EventEmitter {
     }
   }
 
+  /** Never terminate the running app unless electron-updater confirmed a cached installer. */
   quitAndInstall(): void {
+    if (!this._downloadedUpdateReady) {
+      throw new Error('Update installer is not downloaded yet.');
+    }
     log.info('Quitting and installing update...');
     recordAutoUpdateQuitAndInstall({
       currentAppVersion: app.getVersion(),
       userDataPath: app.getPath('userData'),
     });
-    // On macOS, autoUpdater.quitAndInstall() closes all windows but the
-    // 'window-all-closed' handler does NOT call app.quit() (standard macOS
-    // behavior + close-to-tray). This leaves the process alive and Squirrel
-    // cannot finish replacing the app bundle. Force-exit after a short delay
-    // to let Squirrel receive the install signal.
+    // The updater launches the verified installer only AFTER normal app cleanup.
+    // Do not force-exit Windows/Linux: it can interrupt the updater's quit/install
+    // lifecycle. macOS retains a fallback for a stuck window-all-closed path.
     requestAppActionAfterCleanup(() => {
       autoUpdater.quitAndInstall(true, true);
-      setTimeout(() => {
-        // Shared cleanup has completed before this updater-only hard-exit fallback.
-        app.exit(0);
-      }, 1000);
+      if (process.platform === 'darwin') {
+        setTimeout(() => {
+          app.exit(0);
+        }, 1000);
+      }
     });
+  }
+
+  /** Download a verified update in the background without launching any installer. */
+  async checkForUpdatesAndDownload(): Promise<void> {
+    const result = await this.checkForUpdates();
+    if (!result.success || !result.updateInfo) return;
+    const download = await this.downloadUpdate();
+    if (!download.success) {
+      log.error('Background update download failed:', download.error);
+    }
   }
 
   /**

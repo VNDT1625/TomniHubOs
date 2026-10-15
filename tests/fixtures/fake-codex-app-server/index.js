@@ -5,6 +5,7 @@ const readline = require('node:readline');
 let threadCounter = 0;
 let turnCounter = 0;
 let credentialFailureEmitted = false;
+let skillsChangedEmitted = false;
 const promptsByThread = new Map();
 
 function sendResponse(id, result) {
@@ -29,6 +30,17 @@ function handle(message) {
   }
   if (method === 'model/list') {
     sendResponse(id, { data: [] });
+    return;
+  }
+      if (method === 'skills/list') {
+    sendResponse(id, { data: [{ cwd: params.cwds?.[0], skills: [
+      { name: 'code-review', path: '/fake/skills/code-review/SKILL.md', description: 'Review code', enabled: true },
+      { name: 'disabled', path: '/fake/skills/disabled/SKILL.md', description: 'Disabled', enabled: false },
+        ] }] });
+    if (!skillsChangedEmitted) {
+      skillsChangedEmitted = true;
+      setTimeout(() => sendNotification('skills/changed', {}), 40);
+    }
     return;
   }
   if (method === 'thread/start') {
@@ -56,7 +68,9 @@ function handle(message) {
       });
       return;
     }
-    const history = [...(promptsByThread.get(threadId) || []), current];
+        const skillUsed = params.input?.some((item) => item.type === 'skill' && item.name === 'code-review' &&
+      item.path === '/fake/skills/code-review/SKILL.md');
+    const history = [...(promptsByThread.get(threadId) || []), current + (skillUsed ? ' [SKILL_ITEM_VALID]' : '')];
     promptsByThread.set(threadId, history);
     const turnId = `fake-turn-${turnCounter}`;
     sendResponse(id, { turn: { id: turnId } });

@@ -38,6 +38,7 @@ import { createSemanticEgressGuard, type SemanticEgressModel } from '@process/se
 import type { LocalInferenceBroker } from '@process/experimentalCore/adapters/sidecar/localInferenceBroker';
 import { createLocalSemanticEgressModel } from '@process/services/security/localSemanticEgressModel';
 import { configureProviderChatBroker } from '@process/services/agentChat';
+import { registerSocialBridge } from '@process/services/social/socialBridge';
 import { createAccountSessionService } from '@process/services/security/accountSession/accountSessionService';
 import { createAccountSessionVault } from '@process/services/security/accountSession/accountSessionVault';
 import { createAccountModelSelectionVault } from '@process/services/security/accountSession/accountModelSelectionVault';
@@ -62,8 +63,11 @@ import { registerResourceBridge } from '@process/resource/resourceBridge';
 import { getResourceCoordinator } from '@process/resource/resourceCoordinator';
 import { registerSystemInfoBridge } from '@process/system/systemInfoBridge';
 import { getSystemInfoService } from '@process/system/systemInfoService';
+import { registerStorageCenterBridge } from '@process/system/storageCenterBridge';
+import { registerNotificationHubBridge } from '@process/system/hubActivity/notifications/notificationHubBridge';
 import { registerCompanyBridge } from '@process/company/companyBridge';
 import { registerRealtimeKnowledgeBridge } from '@process/knowledge/realtimeKnowledgeBridge';
+import { registerRealtimeContentBridge } from '@process/services/realtime/realtimeContentBridge';
 import { createCompanyGenerator } from '@process/company/companyGenerator';
 import {
   activateProductionWindowsCreatorSandbox,
@@ -75,7 +79,7 @@ import type { WindowsCreatorSandboxProductionConfiguration } from '@process/exte
 import { registerManagerBridge } from '@process/manager/managerBridge';
 import { getManagerServices } from '@process/manager/managerWiring';
 
-import { createAutomationBackgroundController, registerAutomationBridge } from '@process/automation/automationBridge';
+import { createAutomationBackgroundController, createAutomationStudioPackageLease, registerAutomationBridge } from '@process/automation/automationBridge';
 import { registerAutomationChatBridge } from '@process/automation/automationChatBridge';
 import { registerCredentialBridge } from '@process/automation/credentialBridge';
 import { startTelegramRemoteTunnel, stopTelegramRemoteTunnel } from '@process/startup/telegramRemoteStartup';
@@ -91,6 +95,21 @@ import { getReadyProviderStore, registerProviderBridge } from '@process/services
 import { registerProviderDiscoveryBridge } from '@process/services/security/providerDiscovery/providerDiscoveryBridge';
 import { registerMcpRegistryBridge } from '@process/resources/mcpRegistry';
 import { registerFileGatewayBridge } from '@process/resources/nativeFileGatewayBridge';
+import { registerDesktopSessionMemory } from '@process/resources/sessionMemory/sessionMemoryBootstrap';
+import { registerDesktopSecretSets } from '@process/resources/sessionSecrets/sessionSecretsBootstrap';
+import { wirePackageSecretCleanup } from '@process/resources/sessionSecrets/packageSecretCleanup';
+import {
+  createFileGrantRepository,
+  createPackageSecretAccess,
+} from '@process/resources/packageSecrets/packageSecretAccess';
+import { configureSecretContextPackageAccess } from '@process/agentRuntime/agentMesh/mcp/secret-context/wiring';
+import { configurePackageSecretPorts } from '@process/resources/packageSecrets/packageSecretPort';
+import { createElectronContextServices } from '@process/agentRuntime/electronContext';
+import { getSecretRequestStore } from '@process/agentRuntime/agentMesh/mcp/secret-context/requests';
+import { registerDesktopTerminalSecretPort } from '@process/resources/sessionSecrets/terminalSecretBootstrap';
+import { registerDesktopExplorer } from '@process/resources/explorer/explorerBootstrap';
+import { initOmniGatewayBridge } from '@process/omni-gateway/omniGatewayIpc';
+import type { ExplorerBlockStore } from '@process/resources/explorer/explorerBlockStore';
 import { registerMtuiPolicyBridge } from '@process/resources/nativeFile/mtuiPolicyBridge';
 import { registerMtuiBridge } from '@process/resources/nativeFile/mtuiBridge';
 import {
@@ -107,6 +126,9 @@ import { registerAssistantResourceBridge } from '@process/resources/nativeAssist
 import { registerSpeechTranscriptionBridge } from '@process/services/contentExtract/speechTranscription';
 
 import { registerAgentCatalogBridge } from '@process/resources/agentCatalogBridge';
+import { registerSkillDocumentBridge } from '@process/resources/skillDocument/skillDocumentBridge';
+import { createNativeSkillCatalog } from '@process/resources/nativePlatform/capabilityBridge';
+
 
 import {
   registerNativeCapabilityBridge,
@@ -118,7 +140,16 @@ import {
 import { registerExperimentalCoreBridge } from '@process/experimentalCore/experimentalCoreBridge';
 import { registerAgentMeshBridge } from '@process/agentRuntime/agentMesh/ipc';
 import { getSharedAgentMeshService } from '@process/agentRuntime/agentMesh/mcp/meshService';
-import { registerPackageManagerBridge } from '@process/extensions/package-manager';
+import {
+  disposeConnectionRuntime,
+  getConnectionRegistry,
+  getConnectionRuntime,
+    registerPackageManagerBridge,
+  registerAutomationStudioBackgroundLifecycle,
+} from '@process/extensions/package-manager';
+import { registerPackageContextPorts } from '@process/integrations/packageContext/agentPorts';
+import { registerDesktopPackageConnections } from '@process/integrations/connections/ipc/connectionBootstrap';
+import { registerDesktopHookSettings } from '@process/integrations/hookRuntime/hookBootstrap';
 import {
   accountModelSelectionReceipt,
   createAccountSelectedLocalSurfaceAiTargetResolver,
@@ -139,14 +170,9 @@ import { JsonTeamStore, registerTeamBridge } from '@process/team';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { config as loadEnvironment } from 'dotenv';
-import { app, ipcMain, shell } from 'electron';
+import { app, ipcMain, shell, type IpcMainInvokeEvent } from 'electron';
 import { JsonlDurableEventStore } from '@process/services/agentChat/durability';
 import { getApplicationMainWindow } from './applicationBridge';
-import {
-  activate as startDefaultBrowserRuntime,
-  deactivate as stopDefaultBrowserRuntime,
-} from '@process/browser/browserHostRuntime';
-import { startIdeTerminalRuntime, stopIdeTerminalRuntime } from '@process/ideTerminal/ideTerminalRuntime';
 
 export type BridgeDependencies = {
   /** Omit until release signing and the live revocation authority are available. */
@@ -306,23 +332,26 @@ export function initAllBridges(deps: BridgeDependencies = {}): void {
 
     getMainWindow: getApplicationMainWindow,
   });
-  console.log('[Bridge] Package platform bridge registered.');
+    console.log('[Bridge] Package platform bridge registered.');
 
-  void startDefaultBrowserRuntime({ getMainWindow: getApplicationMainWindow }).catch((error) => {
-    console.error('[Bridge] Default Browser runtime failed to start:', error);
-  });
-  void startIdeTerminalRuntime().catch((error) => {
-    console.error('[Bridge] IDE terminal runtime failed to start:', error);
-  });
+  // Browser and IDE runtime activation follows verified package state in PackageManager.
   app.once('before-quit', () => {
-    void stopDefaultBrowserRuntime();
-    stopIdeTerminalRuntime();
+        void disposeConnectionRuntime();
   });
 
-  const automationBackground = createAutomationBackgroundController({
+    const automationBackground = createAutomationBackgroundController({
     requireAuthenticatedAccount: () => {
       accountSession.requireOnlineSession();
     },
+  });
+  const automationPackageLease = createAutomationStudioPackageLease({
+    packages: packageStore,
+    background: automationBackground,
+  });
+  const detachAutomationPackageLease = registerAutomationStudioBackgroundLifecycle(automationPackageLease);
+  app.once('before-quit', () => {
+    detachAutomationPackageLease();
+    void automationPackageLease.dispose();
   });
   const webuiBackground = createWebUIAccountExecutionLease({
     requireAuthenticatedAccount: () => {
@@ -337,9 +366,9 @@ export function initAllBridges(deps: BridgeDependencies = {}): void {
    */
   const accountBackgroundLeases: AccountExecutionLease[] = [
     {
-      name: 'automation-background',
-      start: () => automationBackground.start(),
-      stop: () => automationBackground.stop(),
+            name: 'automation-background',
+      start: () => automationPackageLease.start(),
+      stop: () => automationPackageLease.stop(),
     },
     {
       name: 'webui-desktop',
@@ -394,8 +423,14 @@ export function initAllBridges(deps: BridgeDependencies = {}): void {
     console.error('[Bridge] Failed to register MCP registry bridge:', error);
   }
 
+  let explorerBlockStore: ExplorerBlockStore | undefined;
   try {
     registerFileGatewayBridge();
+    const explorerHandle = registerDesktopExplorer({
+      getWindow: getApplicationMainWindow,
+      verifySender: (event) => foundationTrustedOrigin(event) !== undefined,
+    });
+    explorerBlockStore = explorerHandle.blockStore;
     registerMtuiPolicyBridge();
     registerMtuiBridge();
     console.log('[Bridge] Native file gateway registered.');
@@ -430,6 +465,12 @@ export function initAllBridges(deps: BridgeDependencies = {}): void {
     registerNativeSnapshotBridge();
     registerNativePreviewHistoryBridge();
     registerNativeCapabilityBridge();
+    registerSkillDocumentBridge({
+      ipcMain,
+      verifySender: (event) => foundationTrustedOrigin(event) !== undefined,
+      skills: createNativeSkillCatalog(),
+    });
+
     console.log('[Bridge] Native filesystem, snapshot, MCP and skill drivers registered.');
   } catch (error) {
     console.error('[Bridge] Failed to register native platform drivers:', error);
@@ -462,6 +503,22 @@ export function initAllBridges(deps: BridgeDependencies = {}): void {
   }
 
   try {
+    registerStorageCenterBridge();
+    console.log('[Bridge] Storage Center bridge registered.');
+  } catch (error) {
+    console.error('[Bridge] Failed to register Storage Center bridge:', error);
+  }
+
+  try {
+    // Notification hub: Tomny's own events plus the mail accounts, feeds and
+    // sites the user allowed, ranked P0-P3 by local rules and Laya.
+    registerNotificationHubBridge();
+    console.log('[Bridge] Notification hub registered.');
+  } catch (error) {
+    console.error('[Bridge] Failed to register notification hub:', error);
+  }
+
+  try {
     // Realtime Knowledge inspector plane. Exposes the time-sensitive fact store
     // (list / lookup / refresh / relate) to the Settings → Realtime Knowledge
     // page. The service is resolved lazily per call, so registering before a
@@ -470,6 +527,13 @@ export function initAllBridges(deps: BridgeDependencies = {}): void {
     console.log('[Bridge] Realtime Knowledge bridge registered.');
   } catch (error) {
     console.error('[Bridge] Failed to register Realtime Knowledge bridge:', error);
+  }
+
+    try {
+    registerRealtimeContentBridge({ ipcMain });
+    console.log('[Bridge] Realtime public content bridge registered.');
+  } catch (error) {
+    console.error('[Bridge] Realtime public content bridge failed:', error);
   }
 
   try {
@@ -717,6 +781,105 @@ export function initAllBridges(deps: BridgeDependencies = {}): void {
     }
 
     const coreRuntime = registerExperimentalCoreBridge(meshService, {
+      // Agent writes reject any target inside a tree the owner locked in the Explorer. The store
+      // is Main-owned; its absence (registration failure) leaves agent mutations unguarded.
+      isAgentTargetBlocked: explorerBlockStore
+        ? (workspace, relPath) => explorerBlockStore!.isBlockedAbsolute(path.resolve(workspace, relPath))
+        : undefined,
+      onConversationReady: (getConversation) => {
+        const verifyCoreSessionSender = (event: IpcMainInvokeEvent): boolean => {
+          try {
+            requireCurrentAccount();
+            return foundationTrustedOrigin(event) !== undefined;
+          } catch {
+            return false;
+          }
+        };
+        registerDesktopSessionMemory({
+          getWindow: getApplicationMainWindow,
+          verifySender: verifyCoreSessionSender,
+          getConversation,
+          accountId: resolveCurrentAccountId,
+        });
+        // The terminal is a secret destination too, after the person approves each terminal.
+        registerDesktopTerminalSecretPort({ getWindow: getApplicationMainWindow });
+        // Secret keys ("Khóa bí mật"): the app vault, managed per conversation and per company.
+        try {
+          const contextVault = createElectronContextServices().vault;
+          // A package may ask for the person's general secrets; only an approval in the app grants one.
+          const packageAccess = createPackageSecretAccess({
+            vault: contextVault,
+            repository: createFileGrantRepository(
+              path.join(app.getPath('userData'), 'tomny-core', 'context', 'package-secret-grants.json')
+            ),
+          });
+          configureSecretContextPackageAccess(packageAccess);
+          configurePackageSecretPorts({ vault: contextVault, access: packageAccess });
+          registerDesktopSecretSets({
+            packageAccess,
+            getWindow: getApplicationMainWindow,
+            verifySender: verifyCoreSessionSender,
+            getConversation,
+            accountId: resolveCurrentAccountId,
+            store: createElectronContextServices().vault,
+            requests: getSecretRequestStore(),
+            packageInstalled: async (packageId) => {
+              await packageStore.ensureReady();
+              return (await packageStore.list({ type: 'app', installedOnly: true })).some(
+                (listing) => listing.manifest.id === packageId
+              );
+            },
+            // The IDE keeps older keys in its own store; it is read only when the person asks to import them.
+            legacySources: {
+              'com.tomni.ide': async () => {
+                const { getRepoSecretStore } = require('@package-apps/ide/process/data/memory/repoSecretStore');
+                return getRepoSecretStore().listCoreRecoveryCandidates();
+              },
+            },
+          });
+          // An uninstalled package takes its secret sets with it.
+          wirePackageSecretCleanup({
+            vault: contextVault,
+            also: { forget: (packageId) => packageAccess.forgetPackage(packageId) },
+            onChanged: (listener) => packageStore.onContributionsChanged(listener),
+            installedPackageIds: async () => {
+              await packageStore.ensureReady();
+              return new Set(
+                (await packageStore.list({ type: 'app', installedOnly: true })).map((listing) => listing.manifest.id)
+              );
+            },
+          });
+        } catch (error) {
+          console.error('[Bridge] Failed to register secret sets bridge:', error);
+        }
+        // Connections an installed package offers: the person lists, reviews and turns them on here.
+        try {
+          registerDesktopPackageConnections({
+            getWindow: getApplicationMainWindow,
+            verifySender: verifyCoreSessionSender,
+            registry: getConnectionRegistry(),
+            runtime: getConnectionRuntime(),
+          });
+        } catch (error) {
+          console.error('[Bridge] Failed to register package connections bridge:', error);
+        }
+        // Rules a person attached to a workspace and the package knowledge search reach the agent through these.
+        try {
+          const runtime = getConnectionRuntime();
+          registerPackageContextPorts({ rules: runtime.rules, knowledge: runtime.knowledge });
+        } catch (error) {
+          console.error('[Bridge] Failed to register package context ports:', error);
+        }
+        // Settings > Hooks: the person lists, reviews, approves and switches hooks here.
+        try {
+          registerDesktopHookSettings({
+            getWindow: getApplicationMainWindow,
+            verifySender: verifyCoreSessionSender,
+          });
+        } catch (error) {
+          console.error('[Bridge] Failed to register hook settings bridge:', error);
+        }
+      },
       requireAuthenticatedAccount: requireCurrentAccount,
       accountId: resolveCurrentAccountId,
       isTelegramExternalAuthorityGranted: deps.isTelegramExternalAuthorityGranted,
@@ -969,6 +1132,26 @@ export function initAllBridges(deps: BridgeDependencies = {}): void {
     console.log('[Bridge] Session super-memory & repo secret bridge registered.');
   } catch (error) {
     console.error('[Bridge] Failed to register session memory bridge:', error);
+  }
+
+  try {
+    // Social Hub — multi-platform client-side aggregator (Feed, Reels, Messenger, Settings).
+    // Stores accounts, posts, reels, and conversations in SQLite with isolated session partitions.
+        registerSocialBridge({
+      dbPath: path.join(app.getPath('userData'), 'social.sqlite'),
+      getWindow: getApplicationMainWindow,
+    });
+    console.log('[Bridge] Social Hub bridge registered.');
+  } catch (error) {
+    console.error('[Bridge] Failed to register Social Hub bridge:', error);
+  }
+
+  try {
+    // External MCP Gateway — loopback MCP + OAuth gateway for web clients and CLI
+    initOmniGatewayBridge();
+    console.log('[Bridge] External MCP Gateway bridge registered.');
+  } catch (error) {
+    console.error('[Bridge] Failed to register External MCP Gateway bridge:', error);
   }
 }
 

@@ -1,0 +1,28 @@
+{
+  "connections": [
+    {
+      "kind": "cli",
+      "id": "demo-cli",
+      "title": "demo-cli",
+      "command": "npx",
+      "args": ["-y", "@demo/cli-node"],
+      "display": "terminal",
+      "source": "npm",
+      "package": "@demo/cli-node",
+      "origin": "package-json"
+    },
+    {
+      "kind": "cli",
+      "id": "local-tool",
+      "title": "local-tool",
+      "command": "node",
+      "args": ["scripts/run.mjs"],
+      "cwd": "source/tools/local",
+      "display": "terminal",
+      "source": "source",
+      "setup": [["npm", "install", "--ignore-scripts"]],
+      "origin": "package-json"
+    }
+  ],
+  "openItems": [{ "kind": "needs-runtime", "path": "source/tools/local/package.json" }]
+}

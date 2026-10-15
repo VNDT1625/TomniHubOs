@@ -4,6 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { SLASH_MODES, type SlashMode } from '@/common/chat/slash/modes';
+import type { PackageCommandSummary, SlashCommandItem } from '@/common/chat/slash/types';
+
 export type PaletteTrigger = '/' | '@' | '#' | '*';
 
 export interface PaletteItem {
@@ -13,7 +16,7 @@ export interface PaletteItem {
   description?: string;
   badge?: string;
   insertText?: string;
-  category?: 'mode' | 'snippet' | 'builtin' | 'entity' | 'knowledge' | 'pipeline';
+  category?: 'mode' | 'snippet' | 'builtin' | 'entity' | 'knowledge' | 'pipeline' | 'package';
 }
 
 export interface ActivePaletteQuery {
@@ -26,6 +29,7 @@ export interface ActivePaletteQuery {
 }
 
 const PALETTE_TRIGGERS = new Set<string>(['/', '@', '#', '*']);
+
 const BOUNDARY_RE = /[\s,;!?()[\]{}]/;
 
 function isBoundaryChar(char: string): boolean {
@@ -100,6 +104,20 @@ export function getActivePaletteQuery(value: string, caretPosition: number): Act
 /**
  * Built-in Slash Commands (/)
  */
+const modeItem = (mode: SlashMode): PaletteItem => ({
+  key: mode.name,
+  label: `/${mode.name}`,
+  prefix: '/',
+  description: mode.summary,
+  badge: 'Mode',
+  insertText: `/${mode.name} `,
+  category: 'mode',
+});
+
+/**
+ * Slash commands that do something. Modes come from the shared list in `common/chat/slash/modes.ts`, so the
+ * menu and the code that applies them cannot drift apart; the others are handled where the message is sent.
+ */
 export const BUILTIN_SLASH_ITEMS: PaletteItem[] = [
   {
     key: 'repotopackage',
@@ -110,7 +128,42 @@ export const BUILTIN_SLASH_ITEMS: PaletteItem[] = [
     insertText: '/repotopackage ',
     category: 'builtin',
   },
-  // Modes
+  {
+    key: 'guide',
+    label: '/guide',
+    prefix: '/',
+    description: 'Highlight a control in the app and explain it (try /guide settings)',
+    badge: 'Help',
+    insertText: '/guide ',
+    category: 'builtin',
+  },
+  {
+    key: 'schedule',
+    label: '/schedule',
+    prefix: '/',
+    description: 'Schedule a task: /schedule daily 9:00 summarise my inbox (opens the form to confirm)',
+    badge: 'Automation',
+    insertText: '/schedule ',
+    category: 'builtin',
+  },
+  {
+    key: 'remember',
+    label: '/remember',
+    prefix: '/',
+    description: 'Save something to your long-term personal memory: /remember I prefer short answers',
+    badge: 'Memory',
+    insertText: '/remember ',
+    category: 'builtin',
+  },
+  {
+    key: 'forget',
+    label: '/forget',
+    prefix: '/',
+    description: 'Remove matching items from your personal memory: /forget short answers',
+    badge: 'Memory',
+    insertText: '/forget ',
+    category: 'builtin',
+  },
   {
     key: 'goal',
     label: '/goal',
@@ -120,107 +173,50 @@ export const BUILTIN_SLASH_ITEMS: PaletteItem[] = [
     insertText: '/goal ',
     category: 'mode',
   },
-  {
-    key: 'boost',
-    label: '/boost',
-    prefix: '/',
-    description: 'Deep thinking & strategic planning with multi-perspective review',
-    badge: 'Mode',
-    insertText: '/boost ',
-    category: 'mode',
-  },
-  {
-    key: 'deep',
-    label: '/deep',
-    prefix: '/',
-    description: 'Extended reasoning budget for complex architectural tasks',
-    badge: 'Mode',
-    insertText: '/deep ',
-    category: 'mode',
-  },
-  {
-    key: 'diff',
-    label: '/diff',
-    prefix: '/',
-    description: 'Review code modifications and generate unified patch',
-    badge: 'Tool',
-    insertText: '/diff ',
-    category: 'builtin',
-  },
-  {
-    key: 'compact',
-    label: '/compact',
-    prefix: '/',
-    description: 'Summarize context and reduce conversation tokens',
-    badge: 'Tool',
-    insertText: '/compact ',
-    category: 'builtin',
-  },
-  {
-    key: 'browser',
-    label: '/browser',
-    prefix: '/',
-    description: 'Web research & browsing agent with visual snapshots',
-    badge: 'Mode',
-    insertText: '/browser ',
-    category: 'mode',
-  },
-  {
-    key: 'status',
-    label: '/status',
-    prefix: '/',
-    description: 'Show runtime health, active tasks, and resource telemetry',
-    badge: 'System',
-    insertText: '/status ',
-    category: 'builtin',
-  },
-  // Prompt Snippets
-  {
-    key: 'fix',
-    label: '/fix',
-    prefix: '/',
-    description: 'Fix bug and explain root cause',
-    badge: 'Snippet',
-    insertText: 'Fix the bug in the following code and explain the root cause:\n',
-    category: 'snippet',
-  },
-  {
-    key: 'review',
-    label: '/review',
-    prefix: '/',
-    description: 'Thorough code review (security, performance, edge cases)',
-    badge: 'Snippet',
-    insertText: 'Perform a thorough code review checking security, edge cases, and performance:\n',
-    category: 'snippet',
-  },
-  {
-    key: 'refactor',
-    label: '/refactor',
-    prefix: '/',
-    description: 'Refactor for modularity & readability without breaking changes',
-    badge: 'Snippet',
-    insertText: 'Refactor this code for readability, modularity, and maintainability without breaking changes:\n',
-    category: 'snippet',
-  },
-  {
-    key: 'test',
-    label: '/test',
-    prefix: '/',
-    description: 'Write comprehensive unit tests with edge cases',
-    badge: 'Snippet',
-    insertText: 'Write comprehensive unit tests with edge cases for this module:\n',
-    category: 'snippet',
-  },
-  {
-    key: 'explain',
-    label: '/explain',
-    prefix: '/',
-    description: 'Explain codebase or architecture with diagrams',
-    badge: 'Snippet',
-    insertText: 'Explain this codebase/concept step-by-step with architecture diagrams:\n',
-    category: 'snippet',
-  },
+  ...SLASH_MODES.map(modeItem),
 ];
+
+/** The shared slash catalog as slash-menu items, so the chat page offers the same commands as the home page. */
+export const paletteSlashCommands = (): SlashCommandItem[] =>
+  BUILTIN_SLASH_ITEMS.map((item) => ({
+    name: item.key,
+    description: item.description ?? item.label,
+    kind: 'template' as const,
+    source: 'builtin' as const,
+    selectionBehavior: 'insert' as const,
+    insertText: item.insertText ?? `${item.label} `,
+    ...(item.badge ? { hint: item.badge } : {}),
+  }));
+
+/** Argument hint after the description, so the menu shows how to call the command: `Fix an issue ([issue number])`. */
+const packageCommandDescription = (command: PackageCommandSummary): string =>
+  command.argumentHint ? `${command.description} (${command.argumentHint})` : command.description;
+
+/** Prompt commands of enabled packages as `/` palette items (home input). The badge names the package. */
+export const packageCommandPaletteItems = (commands: readonly PackageCommandSummary[]): PaletteItem[] =>
+  commands.map((command) => ({
+    key: command.name,
+    label: `/${command.name}`,
+    prefix: '/' as const,
+    description: packageCommandDescription(command),
+    badge: command.packageId,
+    insertText: `/${command.name} `,
+    category: 'package' as const,
+  }));
+
+/** The same commands as slash-menu items (chat input). They are inserted, never executed by the renderer. */
+export const packageSlashCommands = (commands: readonly PackageCommandSummary[]): SlashCommandItem[] =>
+  commands.map((command) => ({
+    name: command.name,
+    description: packageCommandDescription(command),
+    kind: 'template' as const,
+    source: 'package' as const,
+    selectionBehavior: 'insert' as const,
+    insertText: `/${command.name} `,
+    hint: command.packageId,
+    packageId: command.packageId,
+    ...(command.argumentHint === undefined ? {} : { argumentHint: command.argumentHint }),
+  }));
 
 /**
  * Built-in Knowledge & Memory Items (#)
@@ -314,7 +310,11 @@ export function filterPaletteItems(prefix: PaletteTrigger, query: string, extraI
 
   switch (prefix) {
     case '/':
-      pool = [...BUILTIN_SLASH_ITEMS, ...(extraItems || [])];
+      // A built-in keeps its word; Main already prefixes a package command that would collide, this is a backstop.
+      pool = [
+        ...BUILTIN_SLASH_ITEMS,
+        ...(extraItems || []).filter((extra) => !BUILTIN_SLASH_ITEMS.some((builtin) => builtin.key === extra.key)),
+      ];
       break;
     case '#':
       pool = [...BUILTIN_KNOWLEDGE_ITEMS, ...(extraItems || [])];

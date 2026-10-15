@@ -1,4 +1,93 @@
 {
+  "superSearch": {
+    "placeholder": {
+      "hub": "検索…",
+      "browser": "{{engine}} で検索…"
+    },
+    "ariaLabel": "スーパー検索",
+    "scopeLabel": "検索範囲",
+    "scope": {
+      "all": "すべて"
+    },
+    "source": {
+      "local": "アプリ内",
+      "apps": "アプリ",
+      "web": "Web"
+    },
+    "state": {
+      "loading": "検索中…",
+      "empty": "結果がありません",
+      "error": "このソースでエラーが発生しました。他のソースは動作しています",
+      "timeout": "このソースの応答が遅すぎます",
+      "unavailable": "ソースの準備ができていません",
+      "noBridge": "接続済みですが、検索の実行ブリッジがまだありません",
+      "disabled": "このソースはオフです。ソース設定でオンにしてください。"
+    },
+    "hint": {
+      "empty": "入力して検索。fb: abc のようなプレフィックスで 1 つのソースだけを検索できます。",
+      "scopeOnly": "{{source}} を検索中 — 検索語を入力してください。"
+    },
+    "rank": "#{{rank}} · 上位 {{percent}}%",
+    "rankTitle": "{{source}} 内 {{rank}}/{{count}} 位 — 上位 {{percent}}%",
+    "resultCount": "{{count}} 件の結果",
+    "footer": "↑↓ 選択 · Enter 開く · Esc 閉じる",
+    "close": "閉じる",
+    "clear": "クリア",
+    "engineLabel": "検索エンジン",
+    "config": {
+      "title": "検索ソース",
+      "source": "Source",
+      "remove": "Remove",
+      "addCustom": "Add a site search",
+      "customHelp": "Paste the search link of any site and put {q} where the keyword goes, e.g. https://www.google.com/maps/search/{q}",
+      "customName": "Name",
+      "customUrl": "Search link with {q}",
+      "customInvalid": "Needs a name, a unique alias and an http(s) link containing {q}",
+      "add": "Add",
+      "open": "ソース設定",
+      "enabled": "オン",
+      "inAll": "「すべて」に含める",
+      "alias": "エイリアス",
+      "aliasInvalid": "エイリアスが無効、または既に使用されています",
+      "connectedNote": "接続済みのサードパーティ製ソースはオンにするまでオフです。クエリは有効なソースにのみ送信されます。",
+      "reset": "既定に戻す",
+      "done": "完了",
+      "none": "接続済みの検索ツールがありません"
+    },
+    "web": {
+      "searchWith": "{{engine}} で「{{query}}」を検索",
+      "openSite": "{{site}} を開く"
+    },
+    "local": {
+      "untitledConversation": "無題の会話",
+      "restartApp": "アプリを再起動",
+      "actionSubtitle": "アクション",
+      "pageSubtitle": "ページ",
+      "settings": "設定",
+      "page": {
+        "home": "ホーム",
+        "history": "履歴",
+        "scheduled": "スケジュールタスク",
+        "store": "ストア",
+        "browser": "ブラウザ",
+        "ide": "IDE",
+        "company": "会社",
+        "git": "Git",
+        "account": "アカウント",
+        "settings": "設定"
+      }
+    },
+    "settings": {
+      "theme": "テーマとカラースキーム",
+      "cssTheme": "カスタム CSS テーマ",
+      "wallpaper": "壁紙",
+      "interfaceLanguage": "表示言語",
+      "modelProviders": "モデルプロバイダーと API キー",
+      "mcpServers": "MCP サーバーとコネクタ",
+      "skills": "スキル",
+      "webui": "リモート / WebUI アクセス"
+    }
+  },
   "send": "送信",
   "cancel": "キャンセル",
   "save": "保存",
@@ -11,6 +100,7 @@
   "skills": "スキル",
   "workspace": "プロジェクト",
   "settings": "設定",
+  "home": "ホーム",
   "system": "システム",
   "about": "私たちについて",
   "back": "チャットに戻る",
@@ -23,6 +113,7 @@
   "loading": "お待ちください...",
   "copy": "コピー",
   "reply": "引用",
+  "copiedInline": "コピーしました",
   "copySuccess": "コピーしました",
   "copyFailed": "コピーに失敗しました",
   "download": "ダウンロード",
@@ -89,6 +180,17 @@
   "fileAttach.uploading": "アップロード中...",
   "fileAttach.uploadSuccess": "アップロード成功",
   "fileAttach.cancelUpload": "アップロードをキャンセル",
+  "attachmentQuickView": {
+    "showAttachments": "添付を表示 ({{count}})",
+    "hideAttachments": "添付を隠す ({{count}})",
+    "remove": "{{label}} を削除",
+    "label": "{{label}} のクイックビュー",
+    "loading": "プレビューを読み込み中…",
+    "unsupported": "この種類のファイルはここでプレビューできません。",
+    "directory": "フォルダーはここでプレビューできません。",
+    "too-large": "このファイルはクイックビューには大きすぎます。",
+    "unavailable": "このファイルは利用できなくなりました。"
+  },
   "expand": "展開",
   "name": "名前",
   "added": "追加済み",
@@ -98,5 +200,267 @@
   "import": "インポート",
   "processing": "処理中...",
   "optional": "（任意）",
-  "clear": "クリア"
+  "clear": "クリア",
+  "notificationHub": {
+    "title": "通知",
+    "summary": "緊急 {{p0}} · 重要 {{p1}} · 除外 {{filtered}}",
+    "layaOn": "Laya が新しい通知を分類しています。",
+    "layaOff": "Laya は停止中のため、組み込みルールで分類しています。",
+    "taskCreated": "タスクを作成しました",
+    "taskFailed": "タスクを作成できませんでした",
+    "tabs": {
+      "focus": "フォーカス",
+      "digest": "まとめ",
+      "filtered": "除外",
+      "sources": "ソース"
+    },
+    "empty": {
+      "focus": "今対応が必要なものはありません。",
+      "digest": "更新はまだありません。",
+      "filtered": "除外されたものはありません。"
+    },
+    "level": {
+      "P0": "緊急",
+      "P1": "重要",
+      "P2": "まとめ",
+      "P3": "除外"
+    },
+    "by": {
+      "laya": "Laya が分類",
+      "rules": "ルールで分類",
+      "user": "あなたが設定",
+      "llm": "モデルで分類"
+    },
+    "actions": {
+      "open": "開く",
+      "createTask": "タスク化",
+      "move": "移動",
+      "markRead": "既読",
+      "remove": "削除",
+      "alwaysImportant": "この送信者は常に緊急",
+      "alwaysMute": "この送信者は常に除外",
+      "syncAll": "今すぐソースを確認",
+      "markAllRead": "すべて既読",
+      "clearTab": "このタブを消去",
+      "boostSender": "この人からは常に緊急",
+      "muteSender": "この人を常にフィルター",
+      "muteSource": "{{name}} をミュート",
+      "unmuteSource": "{{name}} のミュートを解除",
+      "settings": "通知設定"
+    },
+    "event": {
+      "needsInput": "{{name}} が回答を待っています",
+      "failed": "{{name}} が失敗しました",
+      "done": "{{name}} が完了しました",
+      "scheduleFailed": "スケジュール {{name}} が失敗しました",
+      "scheduleDone": "スケジュール {{name}} が完了しました",
+      "webUnread": "{{name}}: 未読 {{count}} 件 (+{{added}})",
+      "ramHigh": "メモリ不足が近づいています",
+      "ramHighBody": "RAM 使用率 {{percent}}%（{{used}} / {{total}} GB）。不要なモデルやタブを閉じてください。"
+    },
+    "errors": {
+      "label": "名前を入力してください。",
+      "host": "サーバーアドレスが無効です。",
+      "user": "メールアドレスまたはユーザー名を入力してください。",
+      "port": "ポートは 1〜65535 にしてください。",
+      "password": "パスワードが長すぎます。",
+      "url": "http または https のフィード URL を指定してください。",
+      "origin": "facebook.com のようにサイトを入力してください。",
+      "kind": "不明なソースの種類です。",
+      "missing": "このソースは存在しません。",
+      "limit": "ソースの上限 (30) に達しました。",
+      "busy": "このソースは同期中です。",
+      "unknown": "エラーが発生しました。もう一度お試しください。",
+      "channel": "YouTube チャンネルのリンク、@ハンドル、またはチャンネル ID を入力してください。",
+      "unsupported": "このシステムでは利用できません。"
+    },
+    "sources": {
+      "title": "接続済みソース",
+      "add": "ソースを追加",
+      "intro": "Tomny は許可されたものだけを読み取ります：既読にせずにメールのヘッダー、公開フィード、選んだアプリの Windows 通知、そして許可したサイトではタブタイトルの未読数とサイト自身の通知。",
+      "none": "ソースはまだありません。メール、フィード、サイトを追加してください。",
+      "kind": {
+        "imap": "メール",
+        "feed": "フィード",
+        "web": "サイト",
+        "youtube": "YouTube",
+        "os": "デスクトップアプリ"
+      },
+      "lastError": "エラー: {{error}}",
+      "lastSync": "{{time}} に確認",
+      "webPassive": "内蔵ブラウザーでサイトを開くと更新されます",
+      "neverSynced": "未確認",
+      "noPassword": "パスワード未保存",
+      "enabled": "有効",
+      "syncNow": "今すぐ確認",
+      "edit": "編集",
+      "remove": "削除",
+      "removeConfirm": "このソースと保存済みパスワードを削除しますか？",
+      "provider": "プロバイダー",
+      "presets": {
+        "gmail": "Gmail",
+        "outlook": "Outlook / Microsoft 365",
+        "yahoo": "Yahoo メール",
+        "icloud": "iCloud メール",
+        "custom": "その他の IMAP サーバー"
+      },
+      "presetHint": {
+        "gmail": "2 段階認証を有効にし、myaccount.google.com/apppasswords でアプリ パスワードを作成して貼り付けてください。Gmail の設定で IMAP を有効にする必要があります。",
+        "outlook": "2 段階認証が有効なら、Microsoft アカウントのセキュリティ ページで作成したアプリ パスワードを使ってください。職場アカウントでは IMAP が無効な場合があります。",
+        "yahoo": "Yahoo アカウントのセキュリティでアプリ パスワードを作成して貼り付けてください。",
+        "icloud": "account.apple.com で App 用パスワードを作成して貼り付けてください。",
+        "custom": "プロバイダーの IMAP サーバーを入力してください。TLS 接続のみを使います。"
+      },
+      "user": "メールアドレスまたはユーザー名",
+      "password": "アプリ パスワード",
+      "passwordKeep": "空欄なら保存済みのパスワードを使います",
+      "host": "IMAP サーバー",
+      "port": "ポート",
+      "mailbox": "フォルダー",
+      "url": "フィード URL (RSS または Atom)",
+      "webHint": "内蔵ブラウザーでサインインするサイトを選んでください。Tomny はタブタイトルの未読数と、許可した場合はサイトが出す通知を監視します。ページの内容は読み取りません。",
+      "origin": "サイト",
+      "label": "名前",
+      "interval": "確認間隔（分）",
+      "cancel": "キャンセル",
+      "save": "保存",
+      "saved": "ソースを保存しました",
+      "syncOk": "確認済み: 新着 {{count}} 件",
+      "syncFailed": "確認に失敗しました: {{error}}",
+      "cardTitle": "ソースとアカウント",
+      "osApps": "対象のアプリ",
+      "osHint": "他の Windows アプリが表示した通知を読み取ります（Zalo、Telegram、Discord、Outlook、ブラウザー）。アプリを選ぶか、何も選ばなければ Tomny 以外のすべてのアプリが対象になります。",
+      "osNone": "アプリの通知がまだ見つからないか、Windows ではありません。",
+      "osAllApps": "すべてのアプリ",
+      "preview": "短いプレビューを保持",
+      "previewHint": "オフ：送信者と件名のみ読み取ります。",
+      "youtubeHint": "チャンネルのリンク、@ハンドル、またはチャンネル ID を貼り付けてください。新着動画は YouTube の公開フィードから取得します。サインインや API キーは不要です。",
+      "channel": "YouTube チャンネル",
+      "capture": "サイト自身の通知を受け取る",
+      "captureHint": "ページが通知を出すと（AI の回答が完了、新着メッセージなど）ハブに送られ、重要な場合のみ通知します。"
+    },
+    "rules": {
+      "title": "フィルタールール",
+      "useLaya": "Laya に通知を分類させる",
+      "layaRunning": "Laya はこのデバイスで動作中です。",
+      "layaStopped": "Laya は停止中です。このためだけに起動することはありません。",
+      "systemAlerts": "緊急通知はシステム通知でも知らせる",
+      "vip": "常に緊急の送信者",
+      "muted": "常に除外する送信者",
+      "urgent": "緊急キーワード",
+      "vipPlaceholder": "1 行に 1 つ: boss@company.com または company.com",
+      "mutedPlaceholder": "1 行に 1 つ: news@shop.com または shop.com",
+      "urgentPlaceholder": "1 行に 1 つ（例: 締め切り）",
+      "save": "ルールを保存",
+      "saved": "ルールを保存しました"
+    },
+    "delivery": {
+      "interrupt": "通知済み",
+      "digest": "フィード内",
+      "silent": "非表示"
+    },
+    "view": {
+      "toolbar": "通知を絞り込む",
+      "search": "通知を検索",
+      "groupBy": "グループ化",
+      "group": {
+        "time": "新しい順",
+        "level": "重要度別",
+        "source": "ソース別",
+        "account": "アカウント別"
+      },
+      "source": "ソース",
+      "allSources": "すべてのソース",
+      "unreadOnly": "未読のみ",
+      "noAccount": "その他"
+    },
+    "sourceKind": {
+      "agent": "Tomny エージェント",
+      "schedule": "スケジュール",
+      "team": "チーム",
+      "system": "Tomny",
+      "email": "メール",
+      "feed": "フィード",
+      "web": "サイト",
+      "youtube": "YouTube",
+      "os": "デスクトップアプリ",
+      "app": "Tomny アプリ"
+    },
+    "missed": {
+      "title": "見逃した通知",
+      "period": {
+        "today": "今日",
+        "24h": "24 時間",
+        "7d": "7 日間"
+      },
+      "none": "この期間に新着はありません。",
+      "counts": "{{total}} 件の通知、未読 {{unread}} 件 · 緊急 {{p0}} · 重要 {{p1}} · ダイジェスト {{p2}} · フィルター済み {{p3}}",
+      "askAgent": "Tomny のエージェントに「何を見逃した？」と聞くと、要約を書いてくれます。"
+    },
+    "catalog": {
+      "title": "接続できるもの",
+      "intro": "対応済み：Tomny が自分で取得します。サインイン済みサイト：内蔵ブラウザーでサイトにサインインしている間だけ動作します。アダプターのみ：予定中で、先にプロバイダー連携が必要です。",
+      "support": {
+        "working": "対応済み",
+        "session": "サインイン済みサイト",
+        "adapter-ready": "アダプターのみ"
+      },
+      "group": {
+        "mail": "メール",
+        "ai": "AI アシスタント",
+        "social": "ソーシャル",
+        "messages": "メッセージ",
+        "video": "動画",
+        "desktop": "デスクトップ",
+        "apps": "アプリ"
+      }
+    },
+    "triage": {
+      "cardTitle": "Laya トリアージ",
+      "title": "通知してよいもの",
+      "intro": "ルール、あなたのリスト、開いたり閉じたりした内容が、このデバイス上で無料で先に判断します。Laya はすでに起動していれば手伝います。",
+      "interrupt": "通知する対象",
+      "interruptHint": "それ以外はすべてフィードで待機します。",
+      "p0p1": "緊急 + 重要",
+      "learn": "開いた・閉じた通知から学習",
+      "learnHint": "送信者を 1 段階上げ下げします。それだけで緊急にすることはありません。",
+      "packageApps": "Tomny アプリからの通知",
+      "packageAppsHint": "notifications.show を宣言したインストール済みアプリは通知を送れます。自分で緊急にすることはできません。",
+      "retention": "通知の保持期間（日）",
+      "muted": "ミュート中のソース",
+      "mutedNone": "ミュート中のソースはありません。"
+    },
+    "llm": {
+      "title": "不明な項目をモデルに尋ねる",
+      "enable": "不明な項目にモデルを使う",
+      "intro": "既定ではオフ。ルールで分類できない項目だけを、コード・数字・リンク・アドレスを除去して小さなバッチで送信します。1 日の上限を超えることはありません。",
+      "model": "モデル",
+      "modelPlaceholder": "小さく安価なモデル ID",
+      "dailyLimit": "1 日の最大項目数",
+      "includeSnippet": "伏せ字済みのプレビューも送信",
+      "includeSnippetHint": "オフ：ソース、送信者のドメイン、伏せ字済みの件名のみ送信します。",
+      "usage": "今日の使用量：{{used}} / {{limit}}",
+      "inactive": "無効",
+      "lastRun": "前回のバッチ {{time}}",
+      "error": {
+        "budget": "今日の上限に達しました",
+        "no-model": "このモデルを提供できるプロバイダーがありません",
+        "unparsed": "モデルの回答を読み取れませんでした"
+      },
+      "errorGeneric": "前回のエラー：{{error}}"
+    },
+    "flash": {
+      "title": "クイック通知",
+      "empty": "今すぐ確認が必要なものはありません。",
+      "viewAll": "すべて表示",
+      "viewAllMore": "すべて表示（ほか{{count}}件）"
+    },
+    "page": {
+      "subtitle": "届いたすべての通知、ソース、Layaの設定。",
+      "tabs": {
+        "feed": "通知",
+        "triage": "Laya と予算"
+      }
+    }
+  }
 }

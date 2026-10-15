@@ -87,6 +87,7 @@ export const useMcpConnection = (
               ...(tool._meta ? { _meta: tool._meta } : {}),
             })),
             last_connected: Date.now(),
+            last_test_error: undefined,
           });
           if (notify) {
             await globalMessageQueue.add(() => {
@@ -97,7 +98,10 @@ export const useMcpConnection = (
           // 连接测试成功，不执行额外操作
         } else {
           // Record the latest failed availability test in local UI state.
-          await updateServerStatus('error');
+          await updateServerStatus('error', {
+            last_test_error: result.error || undefined,
+            last_test_at: Date.now(),
+          });
           const errorMsg = truncateErrorMessage(result.error || t('settings.mcpError'));
           if (notify) {
             await globalMessageQueue.add(() => {
@@ -114,7 +118,10 @@ export const useMcpConnection = (
         }
       } catch (error) {
         // Record the latest failed availability test in local UI state.
-        await updateServerStatus('error');
+        await updateServerStatus('error', {
+          last_test_error: error instanceof Error ? error.message : undefined,
+          last_test_at: Date.now(),
+        });
         const errorMsg = truncateErrorMessage(error instanceof Error ? error.message : t('settings.mcpError'));
         if (notify) {
           await globalMessageQueue.add(() => {

@@ -46,6 +46,7 @@ export type BrowserControlMcpHost = {
 
 /** Module-level singleton so repeated bootstraps reuse one host. */
 let host: BrowserControlMcpHost | undefined;
+const scopedHosts = new Map<string, BrowserControlMcpHost>();
 
 /**
  * Start (once) the in-process Browser-Control MCP host bound to the shared
@@ -54,8 +55,15 @@ let host: BrowserControlMcpHost | undefined;
  * @param deps The browser services every connection's MCP server drives.
  * @returns The running host (url + port + close), reused on subsequent calls.
  */
-export const startBrowserControlMcpHost = async (deps: BrowserControlDeps): Promise<BrowserControlMcpHost> => {
-  if (host) return host;
+export const startBrowserControlMcpHost = async (
+  deps: BrowserControlDeps,
+  scopeKey?: string
+): Promise<BrowserControlMcpHost> => {
+  if (scopeKey !== undefined && !/^[A-Za-z0-9._:@-]{1,200}$/.test(scopeKey)) {
+    throw new Error('RUN_SCOPED_BROWSER_CONTROL_HOST_INVALID');
+  }
+  const existing = scopeKey === undefined ? host : scopedHosts.get(scopeKey);
+  if (existing) return existing;
 
   /** Active transports keyed by their session id, for routing POSTed messages. */
   const transports = new Map<string, SSEServerTransport>();
@@ -109,20 +117,29 @@ export const startBrowserControlMcpHost = async (deps: BrowserControlDeps): Prom
     });
   });
 
-  host = {
+  const created: BrowserControlMcpHost = {
     url: `http://127.0.0.1:${port}${SSE_PATH}`,
     port,
     close: () =>
       new Promise<void>((resolve) => {
         for (const transport of transports.values()) void transport.close();
         transports.clear();
-        server.close(() => resolve());
+        server.close(() => {
+          if (scopeKey === undefined) {
+            if (host === created) host = undefined;
+          } else if (scopedHosts.get(scopeKey) === created) {
+            scopedHosts.delete(scopeKey);
+          }
+          resolve();
+        });
       }),
   };
+  if (scopeKey === undefined) host = created;
+  else scopedHosts.set(scopeKey, created);
   console.log(
-    `[BrowserControlMCP] In-process MCP host listening on ${host.url} (server: ${BUILTIN_BROWSER_CONTROL_NAME}).`
+    `[BrowserControlMCP] In-process MCP host listening on ${created.url} (server: ${BUILTIN_BROWSER_CONTROL_NAME}).`
   );
-  return host;
+  return created;
 };
 
 /** Return the running host, if started. */
@@ -130,7 +147,11 @@ export const getBrowserControlMcpHost = (): BrowserControlMcpHost | undefined =>
 
 /** Stop the host (deterministic teardown). */
 export const stopBrowserControlMcpHost = async (): Promise<void> => {
-  if (!host) return;
-  await host.close();
-  host = undefined;
+  await Promise.all([...scopedHosts.values()].map((item) => item.close()));
+  if (host) await host.close();
+};
+
+/** Close the exact run-scoped browser host after its Foundation terminal receipt. */
+export const stopRunScopedBrowserControlMcpHost = async (scopeKey: string): Promise<void> => {
+  await scopedHosts.get(scopeKey)?.close();
 };

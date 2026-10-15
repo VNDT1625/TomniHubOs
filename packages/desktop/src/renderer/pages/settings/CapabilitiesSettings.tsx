@@ -8,39 +8,54 @@ import { Tabs } from '@arco-design/web-react';
 import React, { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import AssistantSettings from './AssistantSettings';
 import SkillsHubSettings from './SkillsHubSettings';
-import ToolsModalContent from '@/renderer/components/settings/SettingsModal/contents/ToolsModalContent';
-import ExternalMcpGatewaySettings from './ToolsSettings/ExternalMcpGatewaySettings';
+import HooksPage from '@/renderer/pages/integrations/hooks/HooksPage';
+import PluginsSettingsTab from './ToolsSettings/PluginsSettingsTab';
 import SettingsPageWrapper from './components/SettingsPageWrapper';
 
-type CapabilitiesTab = 'skills' | 'tools' | 'mcp-gateway';
+/** The four Customize tabs, in display order. */
+export type CapabilitiesTab = 'assistants' | 'skills' | 'hooks' | 'plugins';
 
-const isCapabilitiesTab = (value: string | null): value is CapabilitiesTab =>
-  value === 'skills' || value === 'tools' || value === 'mcp-gateway';
+const CAPABILITIES_TABS: readonly CapabilitiesTab[] = ['assistants', 'skills', 'hooks', 'plugins'];
+
+/**
+ * Old tab keys keep working. The former tools and MCP gateway tabs now live inside Plugin; the gateway section is
+ * opened from its legacy key.
+ */
+const LEGACY_TAB_REMAP: Readonly<Record<string, CapabilitiesTab>> = {
+  tools: 'plugins',
+  'mcp-gateway': 'plugins',
+};
+
+/** Resolves a ?tab= value to a current tab, or undefined when it names nothing known. */
+export const resolveCapabilitiesTab = (value: string | null): CapabilitiesTab | undefined => {
+  if (value === null) return undefined;
+  if ((CAPABILITIES_TABS as readonly string[]).includes(value)) return value as CapabilitiesTab;
+  return LEGACY_TAB_REMAP[value];
+};
 
 const CapabilitiesSettings: React.FC = () => {
   const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
+  const rawTab = searchParams.get('tab');
 
-  const [activeTab, setActiveTab] = useState<CapabilitiesTab>(() => {
-    const tabParam = searchParams.get('tab');
-    return isCapabilitiesTab(tabParam) ? tabParam : 'skills';
-  });
+  const [activeTab, setActiveTab] = useState<CapabilitiesTab>(() => resolveCapabilitiesTab(rawTab) ?? 'assistants');
 
   useEffect(() => {
-    const tabParam = searchParams.get('tab');
-    if (isCapabilitiesTab(tabParam) && tabParam !== activeTab) {
-      setActiveTab(tabParam);
+    const tab = resolveCapabilitiesTab(searchParams.get('tab'));
+    if (tab !== undefined && tab !== activeTab) {
+      setActiveTab(tab);
     }
   }, [searchParams, activeTab]);
 
   const handleTabChange = (key: string) => {
-    if (isCapabilitiesTab(key)) {
-      setActiveTab(key);
-      const next = new URLSearchParams(searchParams);
-      next.set('tab', key);
-      setSearchParams(next, { replace: true });
-    }
+    const tab = resolveCapabilitiesTab(key);
+    if (tab === undefined) return;
+    setActiveTab(tab);
+    const next = new URLSearchParams(searchParams);
+    next.set('tab', tab);
+    setSearchParams(next, { replace: true });
   };
 
   return (
@@ -51,14 +66,17 @@ const CapabilitiesSettings: React.FC = () => {
         type='line'
         className='flex flex-col flex-1 min-h-0 [&>.arco-tabs-content]:pt-0'
       >
-        <Tabs.TabPane key='skills' title={t('settings.capabilitiesTab.skills', { defaultValue: 'Kỹ năng (Skills)' })}>
+        <Tabs.TabPane key='assistants' title={t('settings.capabilitiesTab.assistants', { defaultValue: 'Assistants' })}>
+          <AssistantSettings withWrapper={false} />
+        </Tabs.TabPane>
+        <Tabs.TabPane key='skills' title={t('settings.capabilitiesTab.skills', { defaultValue: 'Skills' })}>
           <SkillsHubSettings withWrapper={false} />
         </Tabs.TabPane>
-        <Tabs.TabPane key='tools' title='Năng lực & Tools'>
-          <ToolsModalContent />
+        <Tabs.TabPane key='hooks' title={t('settings.capabilitiesTab.hooks', { defaultValue: 'Hooks' })}>
+          <HooksPage />
         </Tabs.TabPane>
-        <Tabs.TabPane key='mcp-gateway' title='MCP Connectors'>
-          <ExternalMcpGatewaySettings />
+        <Tabs.TabPane key='plugins' title={t('settings.capabilitiesTab.plugins', { defaultValue: 'Plugins' })}>
+          <PluginsSettingsTab openExternal={rawTab === 'mcp-gateway'} />
         </Tabs.TabPane>
       </Tabs>
     </SettingsPageWrapper>

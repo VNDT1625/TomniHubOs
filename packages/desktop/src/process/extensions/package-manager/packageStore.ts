@@ -98,11 +98,15 @@ const parseInstalledPackageRecord = (value: unknown): InstalledPackageRecord | u
     (!record.trust ||
       record.trust === 'trusted-first-party' ||
       record.trust === 'signed-first-party' ||
-      record.trust === 'signed-store') &&
+      record.trust === 'signed-store' ||
+      record.trust === 'local-built' ||
+      record.trust === 'unsigned-revoked') &&
     (!record.previousTrust ||
       record.previousTrust === 'trusted-first-party' ||
       record.previousTrust === 'signed-first-party' ||
-      record.previousTrust === 'signed-store') &&
+      record.previousTrust === 'signed-store' ||
+      record.previousTrust === 'local-built' ||
+      record.previousTrust === 'unsigned-revoked') &&
     (record.publicationReview === undefined || isValidPublicationReview(record.publicationReview)) &&
     (record.previousPublicationReview === undefined || isValidPublicationReview(record.previousPublicationReview)) &&
     hasValidProvenance(record.provenance, record.version, record.delivery) &&

@@ -16,6 +16,10 @@ export const ConfigStorage = storage.buildStorage<IConfigStorageRefer>('agent.co
 export const EnvStorage = storage.buildStorage<IEnvStorageRefer>('agent.env');
 
 export interface IConfigStorageRefer {
+  /** Configuration only; references never authorize or enable a media transport. */
+  'ai.mediaModelDefaults'?: Partial<
+    Record<'image' | 'video' | 'audioGeneration' | 'tts' | 'stt', { providerId: string; modelId: string }>
+  >;
   'google.config': {
     /** Proxy URL for Google OAuth endpoint reachability / Google OAuth 端点代理 */
     proxy?: string;
@@ -56,6 +60,10 @@ export interface IConfigStorageRefer {
   colorScheme: string;
   /** Persisted app-wide UI zoom factor for Display settings */
   'ui.zoomFactor'?: number;
+  /** User-selected local wallpaper, stored as a validated image data URL. */
+  'ui.wallpaper'?: string;
+  /** Per-token Markdown text color overrides (#rrggbb). Absent tokens use the theme defaults in tomni-ui.css. */
+  'ui.markdownTextColors'?: Partial<Record<string, string>>;
   /** Last-known main window size and position, restored on next launch */
   'window.bounds'?: { x?: number; y?: number; width: number; height: number };
   /** 桌面模式下是否自动启用 WebUI / Auto-enable WebUI in desktop mode */
@@ -71,7 +79,7 @@ export interface IConfigStorageRefer {
     /** Preferred session mode for new conversations / 新会话的默认模式 */
     preferredMode?: string;
   };
-  'tomnyagentic.defaultModel'?: { id: string; use_model: string };
+  'tomnyagentic.defaultModel'?: { id: string; use_model: string; reasoning_effort?: Router9ReasoningEffort };
   'tools.imageGenerationModel': TProviderWithModel & {
     /** @deprecated Image generation is now controlled via built-in MCP server toggle */
     switch?: boolean;
@@ -101,6 +109,18 @@ export interface IConfigStorageRefer {
   'assistant.telegram.defaultModel'?: {
     id: string;
     use_model: string;
+  };
+  // Telegram voice messages: the speech-to-text model (an OpenAI-compatible provider and its model name).
+  'assistant.telegram.sttModel'?: {
+    id: string;
+    use_model: string;
+  };
+  // Telegram voice messages: run Whisper (INT8) on this computer instead of sending the audio to a provider.
+  'assistant.telegram.sttLocal'?: {
+    enabled: boolean;
+    size: 'tiny' | 'base' | 'small' | 'medium';
+    // Words the model should expect (app names, technical terms); improves recognition of proper names.
+    prompt?: string;
   };
   // Telegram assistant agent selection / Telegram 助手所使用的 Agent
   'assistant.telegram.agent'?: {
@@ -210,6 +230,18 @@ export interface IEnvStorageRefer {
  */
 export type ConversationSource = 'tomny' | 'telegram' | 'lark' | 'dingtalk' | 'weixin' | 'wecom' | (string & {});
 
+/**
+ * How a conversation picks its skills, plugins (MCP servers) and hooks. `manual` keeps the lists the user chose.
+ * `auto` lets the backend choose the few entries that fit each request (see stages/capabilitySelect.ts).
+ */
+export type CapabilityMode = 'auto' | 'manual';
+
+/** Mode for conversations that do not store one. Change this single constant to make `auto` the default later. */
+export const DEFAULT_CAPABILITY_MODE: CapabilityMode = 'manual';
+
+/** Reads a stored mode. Unknown or missing values fall back to {@link DEFAULT_CAPABILITY_MODE}. */
+export const readCapabilityMode = (value: unknown): CapabilityMode =>
+  value === 'auto' || value === 'manual' ? value : DEFAULT_CAPABILITY_MODE;
 /** Runtime metadata shared by every conversation backend during the native Tomny cutover. */
 export type TomnyConversationRuntimeMetadata = {
   tomny_core_session_id?: string;
@@ -251,6 +283,8 @@ export type TomnyConversationRuntimeMetadata = {
   sandboxMode?: 'read-only' | 'workspace-write' | 'danger-full-access';
   /** Durable MCP snapshot; create requests use selected_session_mcp_servers. */
   session_mcp_servers?: ISessionMcpServer[];
+  /** Skill, plugin and hook choice for this conversation. Missing means manual (the user's lists). */
+  capabilityMode?: CapabilityMode;
 };
 
 interface IChatConversation<T, Extra> {
@@ -621,6 +655,8 @@ export type McpTransportType = 'stdio' | 'sse' | 'http';
 
 export interface IMcpServerTransportStdio {
   type: 'stdio';
+  /** Main-resolved workdir of a source package server; never supplied by renderer. */
+  cwd?: string;
   command: string;
   args?: string[];
   env?: Record<string, string>;

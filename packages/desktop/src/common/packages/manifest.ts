@@ -39,7 +39,13 @@ const MAX_PERMISSION_LENGTH = 160;
 const MAX_SEMVER_LENGTH = 128;
 const MAX_ARTIFACT_BYTES = 200 * 1024 * 1024;
 
+const ENV_KEY = /^[A-Z][A-Z0-9_]*$/;
+// A launch argument is one literal token: no whitespace, quotes, shell metacharacters or control characters.
+const MCP_LAUNCH_ARGUMENT = /^(?:-y|--yes|[A-Za-z0-9@][A-Za-z0-9@._/:=~+-]*)$/u;
+export const MCP_SERVER_PERMISSION = 'mcp.server.stdio';
+
 const nonBlank = z.string().trim().min(1);
+const mcpLaunchArgument = z.string().max(200).regex(MCP_LAUNCH_ARGUMENT);
 const packageId = z.string().max(MAX_PACKAGE_ID_LENGTH).regex(PACKAGE_ID);
 const semverVersion = z
   .string()
@@ -113,6 +119,22 @@ const packageContributionsSchema = z
       // One Package App exposes one user-facing Surface. Additional modules
       // remain internal contributions of that Surface, not extra applications.
       .max(1)
+      .optional(),
+
+    mcpServers: z
+      .array(
+        z
+          .object({
+            id: contributionId,
+            title: contributionTitle,
+            description: nonBlank.max(1000).optional(),
+            command: z.enum(['npx', 'uvx']),
+            args: z.array(mcpLaunchArgument).min(1).max(16),
+            envKeys: z.array(z.string().regex(ENV_KEY).max(64)).max(20).optional(),
+          })
+          .strict()
+      )
+      .max(10)
       .optional(),
 
     themes: z
@@ -412,6 +434,33 @@ export const packageManifestSchema = z
     validateUniqueIds(contributions.apps, 'apps');
 
     validateUniqueIds(contributions.themes, 'themes');
+    validateUniqueIds(contributions.mcpServers, 'mcpServers');
+    if ((contributions.mcpServers?.length ?? 0) > 0) {
+      if (manifest.type !== 'agent-capsule') {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['contributions', 'mcpServers'],
+          message: 'Only agent-capsule packages may contribute MCP servers',
+        });
+      }
+      if (!manifest.permissions.includes(MCP_SERVER_PERMISSION)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['permissions'],
+          message: 'MCP servers need the ' + MCP_SERVER_PERMISSION + ' permission',
+        });
+      }
+      for (const [index, server] of (contributions.mcpServers ?? []).entries()) {
+        const target = server.args.find((arg) => !arg.startsWith('-'));
+        if (target === undefined) {
+          context.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['contributions', 'mcpServers', index, 'args'],
+            message: 'An MCP launch recipe must name the package to run',
+          });
+        }
+      }
+    }
     validateUniqueIds(contributions.ide?.activityGroups, 'ide.activityGroups');
     validateUniqueIds(contributions.ide?.subtabs, 'ide.subtabs');
     validateUniqueIds(contributions.ide?.commands, 'ide.commands');

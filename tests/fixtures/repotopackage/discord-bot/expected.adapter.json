@@ -1,0 +1,26 @@
+{
+  "connections": [
+    {
+      "kind": "service",
+      "id": "discord-bot",
+      "title": "Discord bot",
+      "headless": true,
+      "process": {
+        "services": [
+          {
+            "id": "discord-bot",
+            "cwd": "source",
+            "setup": [["npm", "install"]],
+            "start": ["npm", "run", "start"],
+            "env": [{ "name": "DISCORD_TOKEN", "required": true, "hint": ".env.example" }]
+          }
+        ]
+      },
+      "origin": "framework"
+    }
+  ],
+  "openItems": [
+    { "kind": "env-value", "name": "DISCORD_TOKEN", "path": "source/package.json" },
+    { "kind": "needs-consent", "path": "source/package.json" }
+  ]
+}

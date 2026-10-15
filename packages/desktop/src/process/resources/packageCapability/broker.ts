@@ -15,6 +15,9 @@ import {
 const LEASE_DURATION_MS = 60_000;
 const CAPABILITY_PERMISSION: Readonly<Record<PackageNativeCapability, string>> = {
   'host.runtime.info': 'host.ipc',
+  'notifications.post': 'notifications.show',
+  'sessions.report': 'sidebar.sessions',
+  'model.invoke': 'model.invoke',
 };
 
 type LeaseRecord = PackageCapabilityLease & { revoked: boolean };
@@ -27,12 +30,34 @@ export type PackageCapabilityBroker = Readonly<{
   invoke: (request: PackageCapabilitySyscall) => PackageCapabilityResult;
   cancel: (leaseId: string, packageId: string, runtimeId: string) => boolean;
   revokePackage: (packageId: string) => void;
+  verifyLease: (
+    leaseId: string,
+    packageId: string,
+    runtimeId: string,
+    capability: PackageNativeCapability
+  ) => boolean;
+  authorizeLease: (
+    leaseId: string,
+    packageId: string,
+    runtimeId: string,
+    capability: PackageNativeCapability
+  ) => PackageCapabilityLease | undefined;
 }>;
 
 export type PackageCapabilityBrokerDeps = Readonly<{
   isPackageActive: (packageId: string) => boolean;
   now?: () => number;
   createId?: () => string;
+  /**
+   * Hands a package notification to the notification hub. It validates the untrusted
+   * arguments and returns false when it rejects them (malformed, rate-limited, disabled).
+   */
+  postNotification?: (packageId: string, args: unknown) => boolean;
+  /**
+   * Replaces the sessions a package shows under Active. The package id comes from the lease, never from
+   * the payload; returns false when the payload is rejected (malformed, over the limits).
+   */
+  reportSessions?: (packageId: string, args: unknown) => boolean;
 }>;
 
 export class PackageCapabilityBrokerError extends Error {
@@ -58,7 +83,7 @@ const requireLeaseRequest = (request: PackageCapabilityLeaseRequest): void => {
 };
 
 const requireSyscall = (request: PackageCapabilitySyscall): void => {
-  if (request.version !== PACKAGE_CAPABILITY_ABI_VERSION || request.name !== 'host.runtime.info') {
+  if (request.version !== PACKAGE_CAPABILITY_ABI_VERSION || !(request.name in CAPABILITY_PERMISSION)) {
     throw new PackageCapabilityBrokerError('PACKAGE_CAPABILITY_REQUEST_INVALID');
   }
   requireNonBlank(request.leaseId, 'PACKAGE_CAPABILITY_REQUEST_INVALID');
@@ -76,7 +101,7 @@ const receipt = (
   packageId: lease.packageId,
   runtimeId: lease.runtimeId,
   capability: lease.capability,
-  syscall: 'host.runtime.info',
+  syscall: lease.capability,
   status,
   recordedAt: new Date(now()).toISOString(),
 });
@@ -133,6 +158,24 @@ export const createPackageCapabilityBroker = (deps: PackageCapabilityBrokerDeps)
         const lease = getLease(request);
         if (lease.capability !== request.name)
           throw new PackageCapabilityBrokerError('PACKAGE_CAPABILITY_SYSCALL_DENIED');
+        if (request.name === 'notifications.post') {
+          if (!deps.postNotification) throw new PackageCapabilityBrokerError('PACKAGE_CAPABILITY_SYSCALL_DENIED');
+          const accepted = deps.postNotification(lease.packageId, request.args);
+          return {
+            ok: true,
+            data: { abiVersion: PACKAGE_CAPABILITY_ABI_VERSION, packageId: lease.packageId, accepted },
+            receipt: receipt(createId, now, lease, accepted ? 'completed' : 'denied'),
+          };
+        }
+        if (request.name === 'sessions.report') {
+          if (!deps.reportSessions) throw new PackageCapabilityBrokerError('PACKAGE_CAPABILITY_SYSCALL_DENIED');
+          const accepted = deps.reportSessions(lease.packageId, request.args);
+          return {
+            ok: true,
+            data: { abiVersion: PACKAGE_CAPABILITY_ABI_VERSION, packageId: lease.packageId, accepted },
+            receipt: receipt(createId, now, lease, accepted ? 'completed' : 'denied'),
+          };
+        }
         const completedReceipt = receipt(createId, now, lease, 'completed');
         return {
           ok: true,
@@ -154,6 +197,27 @@ export const createPackageCapabilityBroker = (deps: PackageCapabilityBrokerDeps)
       for (const lease of leases.values()) {
         if (lease.packageId === packageId) lease.revoked = true;
       }
+    },
+    verifyLease: (leaseId, packageId, runtimeId, capability) => {
+      const lease = leases.get(leaseId);
+      if (!lease || lease.packageId !== packageId || lease.runtimeId !== runtimeId || lease.capability !== capability) {
+        return false;
+      }
+      if (lease.revoked) return false;
+      if (Date.parse(lease.expiresAt) <= now()) return false;
+      if (!deps.isPackageActive(lease.packageId)) return false;
+      return true;
+    },
+    authorizeLease: (leaseId, packageId, runtimeId, capability) => {
+      const lease = leases.get(leaseId);
+      if (!lease || lease.packageId !== packageId || lease.runtimeId !== runtimeId || lease.capability !== capability) {
+        return undefined;
+      }
+      if (lease.revoked) return undefined;
+      if (Date.parse(lease.expiresAt) <= now()) return undefined;
+      if (!deps.isPackageActive(lease.packageId)) return undefined;
+      const { revoked: _revoked, ...publicLease } = lease;
+      return publicLease;
     },
   };
 };

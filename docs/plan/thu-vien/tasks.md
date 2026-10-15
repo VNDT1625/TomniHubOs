@@ -1,0 +1,159 @@
+# Thư viện — backlog triển khai
+
+Trạng thái: TARGET; mọi checkbox chưa hoàn tất, kể cả khi có UI nền tảng.
+Backlog phụ thuộc canonical và `docs/execution/mvp-plan.md`, không tạo lịch C0–C6 riêng.
+Phạm vi đợt hiện tại chỉ viết tài liệu; các kiểm thử dưới đây dành cho triển khai sau.
+CURRENT/PARTIAL có giới hạn nguồn tại `yeu-cau.md`; không suy từ checklist thành bằng chứng.
+
+- [ ] TV-T01 — Integrator chốt acceptance atom và ownership.
+  - [ ] TV-T01.01 — Ghi revision bắt đầu và danh sách dirty paths trước khi giao atom.
+  - [ ] TV-T01.02 — Giao exact allowlist cho Library UI, service và package worker.
+  - [ ] TV-T01.03 — Đánh dấu bootstrap, IPC registration, preload và shared schemas chỉ Integrator sửa.
+  - [ ] TV-T01.04 — Chỉ định một owner cho từng migration/table và production file.
+  - [ ] TV-T01.05 — Chốt receipt bàn giao gồm commands, exit codes, rollback và xung đột.
+- [ ] TV-T02 — Khóa nguồn thẩm quyền và khoảng trống hiện trạng.
+  - [ ] TV-T02.01 — Đối chiếu `docs/architecture/target.md` trước quyết định base/package.
+  - [ ] TV-T02.02 — Dùng LibraryPage đã xác định để lập danh sách hành vi UI có bằng chứng.
+  - [ ] TV-T02.03 — Khi triển khai, xác minh main list/add/repick trước gắn CURRENT cho persistence.
+  - [ ] TV-T02.04 — Ghi index/tags/ingest/delete là chưa xác minh cho đến khi có đường đi hoặc test.
+  - [ ] TV-T02.05 — Cập nhật canonical owner nếu phát hiện xung đột thực sự, không tạo README cạnh tranh.
+- [ ] TV-T03 — Chốt các phụ thuộc liên nhóm.
+  - [ ] TV-T03.01 — Xác nhận owner và sự tồn tại `docs/plan/pipeline-chat`.
+  - [ ] TV-T03.02 — Xác nhận owner và sự tồn tại `docs/plan/model-da-phuong-thuc`.
+  - [ ] TV-T03.03 — Xác nhận owner và sự tồn tại `docs/plan/chat-composer`.
+  - [ ] TV-T03.04 — Chốt attachment/provenance/token budget với pipeline và composer.
+  - [ ] TV-T03.05 — Đánh BLOCKED atom cần contract chưa được duyệt, giữ atom độc lập tiếp tục được.
+- [ ] TV-T04 — Thiết kế catalog identity và scope.
+  - [ ] TV-T04.01 — Chọn ID bền không dùng đường dẫn làm identity công khai.
+  - [ ] TV-T04.02 — Phân biệt sourceKind externalReference, managedContent và packageOutput.
+  - [ ] TV-T04.03 — Gắn ownerScope vào mọi lookup và liên kết dữ liệu.
+  - [ ] TV-T04.04 — Tách availability missing khỏi permission denied trong model/UI.
+  - [ ] TV-T04.05 — Nghiệm thu đổi tên file không làm mất identity của mục đã giữ.
+- [ ] TV-T05 — Integrator triển khai schema và migration.
+  - [ ] TV-T05.01 — Đối chiếu kho dữ liệu hiện hữu trước chọn nơi đặt catalog.
+  - [ ] TV-T05.02 — Tạo ràng buộc khóa ngoại và uniqueness trong scope cần thiết.
+  - [ ] TV-T05.03 — Tách contentVersion khỏi metadataVersion để tránh reparse vô ích.
+  - [ ] TV-T05.04 — Chốt backup, upgrade và chế độ đọc an toàn nếu downgrade không hỗ trợ.
+  - [ ] TV-T05.05 — Nghiệm thu restart giữ catalog, tags và các quan hệ hợp lệ.
+- [ ] TV-T06 — Integrator khóa IPC contract.
+  - [ ] TV-T06.01 — Lập schema payload bounded cho query, metadata, tag và ingest.
+  - [ ] TV-T06.02 — Kiểm tra sender/origin/session trước truy cập catalog.
+  - [ ] TV-T06.03 — Chốt result union với missing, denied, conflict và limit errors.
+  - [ ] TV-T06.04 — Tạo idempotency key cho mutation có thể retry từ renderer.
+  - [ ] TV-T06.05 — Viết contract test cho malformed payload và truy cập sai scope khi triển khai.
+- [ ] TV-T07 — Làm rõ quyền filesystem.
+  - [ ] TV-T07.01 — Picker trả handle hẹp thay vì cấp quyền toàn thư mục mặc định.
+  - [ ] TV-T07.02 — Broker xử lý traversal, symlink và thay file giữa check/read.
+  - [ ] TV-T07.03 — Recheck permission tại từng đọc/preview/ingest, không chỉ lúc thêm.
+  - [ ] TV-T07.04 — Thu hồi quyền vô hiệu hóa cache có permission epoch cũ.
+  - [ ] TV-T07.05 — Nghiệm thu mục bị revoke không lộ title/snippet trong query sai quyền.
+- [ ] TV-T08 — Xây metadata index bền.
+  - [ ] TV-T08.01 — Chọn engine tương thích database đã xác nhận, không đoán engine hiện có.
+  - [ ] TV-T08.02 — Commit metadata và outbox cập nhật index atomically.
+  - [ ] TV-T08.03 — Consumer bỏ update có version thấp hơn bản đã index.
+  - [ ] TV-T08.04 — Lưu indexedMetadataVersion để UI báo stale chính xác.
+  - [ ] TV-T08.05 — Nghiệm thu tìm metadata sau restart không cần ingest lại nội dung.
+- [ ] TV-T09 — Hoàn thiện query semantics.
+  - [ ] TV-T09.01 — Chốt Unicode/case/dấu tiếng Việt và giữ nguyên title hiển thị.
+  - [ ] TV-T09.02 — Thêm filter tag/type trong query có giới hạn số phần tử.
+  - [ ] TV-T09.03 — Cursor gắn sort key và ID để phân trang không lặp khi tên trùng.
+  - [ ] TV-T09.04 — Hủy request cũ hoặc loại response trễ bằng generation.
+  - [ ] TV-T09.05 — Nghiệm thu empty/no-match/denied khác nhau mà không rò tổng số mục kín.
+- [ ] TV-T10 — Quản lý tags.
+  - [ ] TV-T10.01 — Chuẩn hóa khóa tag trong scope và kiểm soát tên trùng.
+  - [ ] TV-T10.02 — Gắn/bỏ gắn tag idempotent với version conflict rõ.
+  - [ ] TV-T10.03 — Đổi tên hoặc hợp nhất tag giữ liên kết tài liệu.
+  - [ ] TV-T10.04 — Xóa tag chỉ xóa tag/liên kết, không xóa file hoặc entry.
+  - [ ] TV-T10.05 — Nghiệm thu hai tab sửa cùng tag không mất update âm thầm.
+- [ ] TV-T11 — Cải tiến LibraryPage trong allowlist.
+  - [ ] TV-T11.01 — Giữ loading/error/empty hiện hữu nhưng ánh xạ lỗi có nghĩa rõ hơn.
+  - [ ] TV-T11.02 — Hiển thị nguồn, loại, trạng thái availability và index freshness.
+  - [ ] TV-T11.03 — Chuyển truy vấn quy mô lớn sang service thay lọc toàn danh sách local.
+  - [ ] TV-T11.04 — Giữ hành vi repick cho missing và xác nhận đổi nguồn.
+  - [ ] TV-T11.05 — Nghiệm thu navigation mở đúng entry ID sau sort/filter/reload.
+- [ ] TV-T12 — Thêm reference và relink an toàn.
+  - [ ] TV-T12.01 — Kiểm tra phạm vi quyền và loại nguồn trước registerReference.
+  - [ ] TV-T12.02 — Chốt trùng đường dẫn và trùng digest là hai trường hợp khác nhau.
+  - [ ] TV-T12.03 — Không ghi đè entry cũ khi thêm lại nếu chưa được xác nhận.
+  - [ ] TV-T12.04 — Relink cập nhật phiên bản, provenance và vô hiệu preview cũ.
+  - [ ] TV-T12.05 — Nghiệm thu file bị di chuyển có đường phục hồi không làm mất tags.
+- [ ] TV-T13 — Xây vòng đời ingest.
+  - [ ] TV-T13.01 — Lưu queued/running/ready/failed/cancelled theo durable job record.
+  - [ ] TV-T13.02 — Mỗi attempt có deadline, giới hạn byte và receipt riêng.
+  - [ ] TV-T13.03 — Output đi qua staging, chỉ publish sau kiểm tra version/tombstone.
+  - [ ] TV-T13.04 — Retry liên kết attempt trước và không nhân đôi content reference.
+  - [ ] TV-T13.05 — Nghiệm thu hủy giữa ingest không xuất hiện kết quả ready muộn.
+- [ ] TV-T14 — Cô lập parser.
+  - [ ] TV-T14.01 — Sniff loại nội dung thay vì chỉ tin extension hoặc MIME ngoài.
+  - [ ] TV-T14.02 — Giới hạn archive nesting, expanded bytes và số entry.
+  - [ ] TV-T14.03 — Worker chỉ đọc handle được cấp và ghi staging đã chỉ định.
+  - [ ] TV-T14.04 — Dừng worker vượt timeout/memory mà không làm hỏng queue khác.
+  - [ ] TV-T14.05 — Nghiệm thu tài liệu có prompt injection không thành instruction hoặc capability.
+- [ ] TV-T15 — Đưa download/chuyển đổi về optional package.
+  - [ ] TV-T15.01 — Giao downloader/parser chuyên biệt cho owner package, không import vào base.
+  - [ ] TV-T15.02 — Dùng published capability contract để đăng ký kết quả vào Library.
+  - [ ] TV-T15.03 — Kiểm tra signature, compatibility và permission khi cài package.
+  - [ ] TV-T15.04 — Egress broker xử lý redirect, SSRF và giới hạn kích thước tải.
+  - [ ] TV-T15.05 — Nghiệm thu base vắng package vẫn đọc metadata và báo thiếu capability đúng.
+- [ ] TV-T16 — Preview chỉ đọc.
+  - [ ] TV-T16.01 — Chốt format allowlist và fallback khi thiếu viewer.
+  - [ ] TV-T16.02 — Sandbox/CSP chặn script, macro và fetch mạng ngầm.
+  - [ ] TV-T16.03 — Cache preview khóa theo contentVersion và permission epoch.
+  - [ ] TV-T16.04 — Đổi mục hoặc đóng view giải phóng handle/subscription đúng scope.
+  - [ ] TV-T16.05 — Nghiệm thu nội dung không hỗ trợ không bị tự upload cloud.
+- [ ] TV-T17 — Tích hợp context và composer.
+  - [ ] TV-T17.01 — Attachment dùng reference có entryId/contentVersion, không chèn path đặc quyền.
+  - [ ] TV-T17.02 — Pipeline chọn đoạn trích theo permission và input token/byte budget.
+  - [ ] TV-T17.03 — Giữ provenance parser/source/version cho từng đoạn model đọc.
+  - [ ] TV-T17.04 — Composer hiển thị ingest pending/error và phần nội dung bị cắt.
+  - [ ] TV-T17.05 — Nghiệm thu sửa file sau dispatch không làm sai snapshot của call đã gửi.
+- [ ] TV-T18 — Bỏ mục và xóa managed content.
+  - [ ] TV-T18.01 — RemoveEntry giữ file nguồn ngoài và tạo tombstone bền.
+  - [ ] TV-T18.02 — DeleteManagedContent là action riêng có mô tả phạm vi/xác nhận.
+  - [ ] TV-T18.03 — Kiểm tra reference count trước dọn blob được chia sẻ.
+  - [ ] TV-T18.04 — Vô hiệu search/preview/attachment truy cập mới sau xóa.
+  - [ ] TV-T18.05 — Nghiệm thu ingest hoàn tất trễ không làm sống lại entry đã bỏ.
+- [ ] TV-T19 — Clear semantics.
+  - [ ] TV-T19.01 — ClearIndex giữ metadata, tags và content rồi lên lịch rebuild.
+  - [ ] TV-T19.02 — ClearCatalog nêu rõ scope và mặc định giữ file nguồn ngoài.
+  - [ ] TV-T19.03 — Batch clear có checkpoint để retry sau crash không vượt phạm vi.
+  - [ ] TV-T19.04 — Tách clear cache preview khỏi clear full-text index trên UI.
+  - [ ] TV-T19.05 — Nghiệm thu xác nhận thao tác hiển thị đúng số mục/phạm vi được phép.
+- [ ] TV-T20 — Đồng bộ multi-tab và restart.
+  - [ ] TV-T20.01 — Event stream có sequence/cursor và đường replay khi mất kết nối.
+  - [ ] TV-T20.02 — UI bỏ event trùng và không áp dụng event của scope cũ.
+  - [ ] TV-T20.03 — Restart đối soát running job thành interrupted hoặc resume hợp lệ.
+  - [ ] TV-T20.04 — Dọn staging orphan theo ownership, không xóa dữ liệu chưa rõ chủ.
+  - [ ] TV-T20.05 — Nghiệm thu hai tab và restart giữa commit/outbox vẫn hội tụ catalog/index.
+- [ ] TV-T21 — Audit, secrets và retention.
+  - [ ] TV-T21.01 — Che đường dẫn nhạy cảm, token và nội dung khỏi lỗi/log.
+  - [ ] TV-T21.02 — Receipt ghi actor, action, outcome và version mà không copy tài liệu.
+  - [ ] TV-T21.03 — Chốt retention cho tombstone, staging, cache và audit tối thiểu.
+  - [ ] TV-T21.04 — Yêu cầu xóa lan tới projection/cache thay vì chỉ ẩn UI.
+  - [ ] TV-T21.05 — Nghiệm thu telemetry không gửi metadata riêng khi chưa có consent.
+- [ ] TV-T22 — Accessibility và i18n.
+  - [ ] TV-T22.01 — Bàn phím truy cập search, tags, preview và các xác nhận xóa.
+  - [ ] TV-T22.02 — Announce loading/error/progress bằng semantic status phù hợp.
+  - [ ] TV-T22.03 — Mọi chuỗi mới đi qua hệ i18n hiện hữu.
+  - [ ] TV-T22.04 — Chỉ sửa global stylesheet; nếu look đổi, đồng bộ design-system và mockup canonical.
+  - [ ] TV-T22.05 — Nghiệm thu focus quay lại mục hợp lý sau xóa hoặc đóng preview.
+- [ ] TV-T23 — Chuẩn bị bằng chứng kiểm thử triển khai.
+  - [ ] TV-T23.01 — Tìm scripts/test files thật trước ghi lệnh targeted vào handoff.
+  - [ ] TV-T23.02 — Nếu thiếu, tạo contract/integration tests quyền, IPC và delete/ingest race.
+  - [ ] TV-T23.03 — Bổ sung fixture restart, metadata search/tags và clear semantics.
+  - [ ] TV-T23.04 — Bổ sung clean-machine package absence/install/uninstall khi đổi extraction.
+  - [ ] TV-T23.05 — Gắn mỗi acceptance case với command thật, exit code và revision đã chạy.
+- [ ] TV-T24 — Gate, rollback và bàn giao.
+  - [ ] TV-T24.01 — Khi triển khai chạy `bun run lint` và `bun run format:check` theo gate repository.
+  - [ ] TV-T24.02 — Khi triển khai chạy `bunx tsc --noEmit` và `bun run test`; không ghi pass nếu chưa chạy.
+  - [ ] TV-T24.03 — Nếu đổi i18n chạy `bun run i18n:types` và `node scripts/check-i18n.js`.
+  - [ ] TV-T24.04 — Chứng minh kill switch ngừng ingest mới, rollback giữ nội dung và metadata.
+  - [ ] TV-T24.05 — Review `mtui --json diff --last`, git status và báo dirty paths ngoài scope; không commit khi chưa được yêu cầu.
+
+## Điều kiện đóng backlog
+- [ ] TV-T25 — Integrator quyết định mức bằng chứng theo canonical.
+  - [ ] TV-T25.01 — Chỉ chuyển CURRENT cho đường đi/test đã xác minh, không đánh hoàn tất toàn feature từ UI.
+  - [ ] TV-T25.02 — Ghi PARTIAL nếu quyền, restart hoặc package absence chưa có proof.
+  - [ ] TV-T25.03 — Ghi BLOCKED kèm owner/dependency cụ thể cho atom chưa thể chạy.
+  - [ ] TV-T25.04 — Phân biệt Core plus Store với Full managed-usage; không lấy docs làm release proof.
+  - [ ] TV-T25.05 — Bàn giao đường dẫn bằng chứng, hạn chế và rollback cho từng atom đã thực hiện.

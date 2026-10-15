@@ -624,13 +624,13 @@ describe('Agent orchestrator MCP', () => {
 
   it('binds trusted Core claims and forwards secret-tool approval through the live parent scope', async () => {
     const executed: AgentJob[] = [];
-    const requestPermission = vi.fn(async ({ tool }: { tool: string }) => tool === 'agent_secret_context_use');
+    const requestPermission = vi.fn(async ({ tool }: { tool: string }) => tool === 'tomny_secret_use');
     const releaseScope = registerAgentExecutionPermissionScope('core:trusted-parent', requestPermission);
     const orchestrator = createAgentJobOrchestrator({
       executor: async (job) => {
         executed.push(structuredClone(job));
         const approved = await requestAgentExecutionPermission(job.executionScopeId, {
-          tool: 'agent_secret_context_use',
+          tool: 'tomny_secret_use',
           detail: 'opaque browser fill',
         });
         return { summary: approved ? 'approved by parent' : 'denied' };
@@ -670,12 +670,12 @@ describe('Agent orchestrator MCP', () => {
       executionScopeId: 'core:trusted-parent',
     });
     expect(requestPermission).toHaveBeenCalledWith({
-      tool: 'agent_secret_context_use',
+      tool: 'tomny_secret_use',
       detail: 'opaque browser fill',
     });
     releaseScope();
     await expect(
-      requestAgentExecutionPermission('core:trusted-parent', { tool: 'agent_secret_context_use' })
+      requestAgentExecutionPermission('core:trusted-parent', { tool: 'tomny_secret_use' })
     ).resolves.toBe(false);
   });
 
@@ -706,12 +706,12 @@ describe('Agent orchestrator MCP', () => {
       const first = await startAgentOrchestratorMcpHost({
         scope: { ...scope, requestPermission: firstApproval },
       });
-      await expect(requestAgentExecutionPermission(scope.id, { tool: 'agent_secret_context_use' })).resolves.toBe(true);
+      await expect(requestAgentExecutionPermission(scope.id, { tool: 'tomny_secret_use' })).resolves.toBe(true);
 
       const inspected = await startAgentOrchestratorMcpHost({ scope });
       expect(inspected.url).toBe(first.url);
       expect(inspected.headers).toEqual(first.headers);
-      await expect(requestAgentExecutionPermission(scope.id, { tool: 'agent_secret_context_use' })).resolves.toBe(true);
+      await expect(requestAgentExecutionPermission(scope.id, { tool: 'tomny_secret_use' })).resolves.toBe(true);
       expect(firstApproval).toHaveBeenCalledTimes(2);
 
       await first.close();
@@ -720,7 +720,7 @@ describe('Agent orchestrator MCP', () => {
         scope: { ...scope, requestPermission: secondApproval },
       });
       expect(restarted.headers).not.toEqual(first.headers);
-      await expect(requestAgentExecutionPermission(scope.id, { tool: 'agent_secret_context_use' })).resolves.toBe(
+      await expect(requestAgentExecutionPermission(scope.id, { tool: 'tomny_secret_use' })).resolves.toBe(
         false
       );
       expect(secondApproval).toHaveBeenCalledOnce();

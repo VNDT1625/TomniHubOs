@@ -13,8 +13,8 @@
  */
 
 import type { CompanyStructure } from '@/process/company/companyOrchestrator';
-import type { PipelineEvent } from '@/renderer/pages/company/pipeline/pipelineTypes';
-import type { PipelineStore } from '@/renderer/pages/company/pipeline/pipelineStore';
+import type { PipelineEvent } from '@package-apps/company/renderer/company/pipeline/pipelineTypes';
+import type { PipelineStore } from '@package-apps/company/renderer/company/pipeline/pipelineStore';
 import { ConfigProvider } from '@arco-design/web-react';
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -33,15 +33,15 @@ vi.mock('@arco-design/web-react', async (importOriginal) => {
 // Capture the store + the resolveApproval mock from runCompany.
 const captured = vi.hoisted(() => ({ store: null as PipelineStore | null, resolveApproval: vi.fn(), stop: vi.fn() }));
 
-vi.mock('@/renderer/pages/company/pipeline/companyPipeline', () => ({
+vi.mock('@package-apps/company/renderer/company/pipeline/companyPipeline', () => ({
   runCompany: (input: { store: PipelineStore }) => {
     captured.store = input.store;
     return { runId: 'r1', resolveApproval: captured.resolveApproval, stop: captured.stop, done: Promise.resolve() };
   },
 }));
 
-import ManagerPopup from '@/renderer/pages/company/manager/ManagerPopup';
-import { resetCompanyPipelineSessions } from '@/renderer/pages/company/useCompanyPipeline';
+import ManagerPopup from '@package-apps/company/renderer/company/manager/ManagerPopup';
+import { resetCompanyPipelineSessions } from '@package-apps/company/renderer/company/useCompanyPipeline';
 
 /** Dispatch an event into the captured store inside act(). */
 const emit = (event: PipelineEvent): void => {

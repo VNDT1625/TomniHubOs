@@ -188,7 +188,7 @@ describe('renderElementBrief', () => {
 describe('pruneInspectEvidence', () => {
   it('removes expired managed evidence without touching recent or unrelated files', async () => {
     const root = await mkdtemp(join(tmpdir(), 'tomny-inspect-'));
-    const dir = join(root, '.omni', 'inspect');
+    const dir = join(root, '.tomni', 'inspect');
     const oldShot = join(dir, 'shot-viewport-100.png');
     const recentVideo = join(dir, 'recording-200.mp4');
     const unrelated = join(dir, 'notes.txt');
@@ -298,16 +298,16 @@ describe('renderMultiElementBrief visual evidence', () => {
       [],
       'check the mobile layout',
       [
-        { filePath: 'C:/repo/.omni/inspect/frame.png', mode: 'viewport' },
-        { filePath: 'C:/repo/.omni/inspect/full.png', mode: 'fullPage' },
+        { filePath: 'C:/repo/.tomni/inspect/frame.png', mode: 'viewport' },
+        { filePath: 'C:/repo/.tomni/inspect/full.png', mode: 'fullPage' },
       ],
-      [{ filePath: 'C:/repo/.omni/inspect/run.mp4', durationMs: 12_400 }]
+      [{ filePath: 'C:/repo/.tomni/inspect/run.mp4', durationMs: 12_400 }]
     );
 
     expect(brief).toContain('> check the mobile layout');
-    expect(brief).toContain('visible-frame: `C:/repo/.omni/inspect/frame.png`');
-    expect(brief).toContain('full-page: `C:/repo/.omni/inspect/full.png`');
-    expect(brief).toContain('12s: `C:/repo/.omni/inspect/run.mp4`');
+    expect(brief).toContain('visible-frame: `C:/repo/.tomni/inspect/frame.png`');
+    expect(brief).toContain('full-page: `C:/repo/.tomni/inspect/full.png`');
+    expect(brief).toContain('12s: `C:/repo/.tomni/inspect/run.mp4`');
   });
 
   it('returns an empty brief when there is no element or visual evidence', () => {
