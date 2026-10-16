@@ -5,7 +5,7 @@
  */
 
 import React from 'react';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ConfigProvider } from '@arco-design/web-react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -86,6 +86,40 @@ describe('AssistantEditDrawer example prompts', () => {
     cleanup();
   });
 
+  it('can attach an optional UCON avatar and customize its accessories', async () => {
+    const setEditAvatar = vi.fn();
+    const user = userEvent.setup();
+    renderDrawer({ editAvatar: '', setEditAvatar });
+    await user.selectOptions(screen.getByTestId('ucon-avatar-preset'), 'engineer');
+    expect(setEditAvatar).toHaveBeenCalledWith('ucon:engineer');
+    cleanup();
+    setEditAvatar.mockClear();
+    renderDrawer({ editAvatar: 'ucon:engineer', setEditAvatar });
+    expect(screen.getByTestId('ucon-slot-prop')).toHaveValue('tablet');
+    const avatarPreview = screen.getByTestId('ucon-avatar-preview');
+    expect(avatarPreview.querySelector('.ucon-bot--preview[data-state="idle"]')).not.toBeNull();
+    await user.selectOptions(screen.getByTestId('ucon-preview-state'), 'needs_input');
+    expect(avatarPreview.querySelector('.ucon-bot--preview[data-state="needs_input"]')).not.toBeNull();
+    await user.selectOptions(screen.getByTestId('ucon-preview-state'), 'working');
+    expect(avatarPreview.querySelector('.ucon-bot--preview[data-state="working"]')).not.toBeNull();
+    expect(setEditAvatar).not.toHaveBeenCalled();
+    await user.selectOptions(screen.getByTestId('ucon-slot-prop'), 'wrench');
+    expect(setEditAvatar).toHaveBeenCalledWith('ucon:engineer;prop=wrench');
+    expect(screen.getByTestId('ucon-slot-ears')).toHaveValue('fin');
+  });
+
+  it('offers CLI-based UCON skins including Grok without altering the Tomny avatar', async () => {
+    const setEditAvatar = vi.fn();
+    const user = userEvent.setup();
+    renderDrawer({ editAvatar: '', editAgent: 'gemini', setEditAvatar });
+    await user.selectOptions(screen.getByTestId('ucon-avatar-preset'), 'uconcli:grok');
+    expect(setEditAvatar).toHaveBeenCalledWith('uconcli:grok');
+    cleanup();
+    renderDrawer({ editAvatar: 'uconcli:grok', editAgent: 'gemini', setEditAvatar });
+    expect(screen.getByTestId('ucon-avatar-preset')).toHaveValue('uconcli:grok');
+    expect(screen.getByTestId('ucon-avatar-preview').querySelector('[data-cli-skin="grok"]')).not.toBeNull();
+  });
+
   it('renders the existing lines with a count and adds an empty line on Add', async () => {
     const setEditPrompts = vi.fn();
     renderDrawer({ editPrompts: ['Find the latest news'], setEditPrompts });
@@ -106,7 +140,7 @@ describe('AssistantEditDrawer example prompts', () => {
   it('edits a line and reports the new text', async () => {
     const setEditPrompts = vi.fn();
     renderDrawer({ editPrompts: ['a'], setEditPrompts });
-    await userEvent.setup().type(screen.getByTestId('assistant-prompt-input-0'), 'b');
+    fireEvent.change(screen.getByTestId('assistant-prompt-input-0'), { target: { value: 'ab' } });
     expect(setEditPrompts).toHaveBeenLastCalledWith(['ab']);
   });
 

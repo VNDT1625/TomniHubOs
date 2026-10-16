@@ -4,7 +4,15 @@ import { Message } from '@arco-design/web-react';
 
 import { AllApplication, Cycle, FolderOpen, People } from '@icon-park/react';
 import { ExternalLink } from 'lucide-react';
-import { UconBot, uconBotRoleFromActivity, uconBotStateFromActivity } from '@/renderer/components/agents/UconBot';
+import {
+  UconBot,
+  uconBotRoleFromActivity,
+  uconBotStateFromActivity,
+  uconBotTaskGlyphFromActivity,
+} from '@/renderer/components/agents/UconBot';
+import { archetypeForIdentity, resolveUconAppearance } from '@/renderer/components/agents/uconBotConfig';
+import { appearanceForCliSkin, resolveUconCliSkin } from '@/renderer/components/agents/uconCliSkins';
+import { useUconToolGlyph } from '@/renderer/components/agents/useUconToolGlyph';
 import { HubToolOverview } from './inspector/HubToolOverview';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -227,11 +235,12 @@ const TileContent: React.FC<TileProps> = ({
   onDragEnd,
 }) => {
   const { t } = useTranslation();
+  const toolGlyph = useUconToolGlyph(item, live);
   const [selectedMemberId, setSelectedMemberId] = useState('');
   const highlightedMember =
     item.steps.find((step) => step.id === selectedMemberId) ??
     item.steps.find((step) => step.state === 'error' || step.state === 'running') ??
-        item.steps[0];
+    item.steps[0];
 
   const responseExcerpt = density === 'solo' ? monitorResponseExcerpt(item.preview) : '';
   const done = item.steps.filter((step) => step.state === 'done').length;
@@ -239,12 +248,19 @@ const TileContent: React.FC<TileProps> = ({
   const showProgress = live && density !== 'compact' && item.status === 'running' && total > 0;
   const badge = !live ? '⏸' : follow ? `▶ ${t('guid.hubHome.live.follow')}` : '';
   const workspace = workspaceLabel(item.workspace);
+  const parentAppearance = useMemo(() => {
+    const cliSkin = resolveUconCliSkin(item.agentName);
+    return cliSkin ? appearanceForCliSkin(cliSkin) : resolveUconAppearance(archetypeForIdentity(item.id));
+  }, [item.id, item.agentName]);
   return (
     <>
-            <header className='hub-tile-head' draggable onDragStart={onDragStart} onDragEnd={onDragEnd}>
+      <header className='hub-tile-head' draggable onDragStart={onDragStart} onDragEnd={onDragEnd}>
         <UconBot
           state={uconBotStateFromActivity(item)}
           role={uconBotRoleFromActivity(item)}
+          identity={item.id}
+          cliAgentId={item.agentName}
+          taskGlyph={toolGlyph ?? uconBotTaskGlyphFromActivity(item)}
           size={density === 'solo' ? 'large' : density === 'compact' ? 'mini' : 'small'}
           label={item.title + ' — ' + t('guid.hubHome.live.status.' + item.status)}
         />
@@ -321,6 +337,24 @@ const TileContent: React.FC<TileProps> = ({
                   ))}
                 </select>
                 {highlightedMember && (
+                  <UconBot
+                    state={
+                      highlightedMember.state === 'error'
+                        ? 'error'
+                        : highlightedMember.state === 'running'
+                          ? 'working'
+                          : 'success'
+                    }
+                    role='team'
+                    size='mini'
+                    isSubagent
+                    parentAppearance={parentAppearance}
+                    cliAgentId={item.agentName}
+                    identity={item.id + ':' + highlightedMember.id}
+                    label={highlightedMember.label}
+                  />
+                )}
+                {highlightedMember && (
                   <span
                     className={`hub-log-line hub-log-line--${highlightedMember.state}`}
                     title={highlightedMember.label}
@@ -331,7 +365,7 @@ const TileContent: React.FC<TileProps> = ({
               </div>
             ) : item.kind === 'agent' ? (
               <>
-                                <HubToolOverview item={item} density={density} />
+                <HubToolOverview item={item} density={density} />
                 {density === 'solo' && responseExcerpt && (
                   <div className='hub-monitor-response' data-testid='hub-monitor-response'>
                     <strong>{t('guid.hubHome.monitor.response', { defaultValue: 'Phản hồi hiện tại' })}</strong>

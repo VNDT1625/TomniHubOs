@@ -1,5 +1,10 @@
 import type { HubActivityItem, HubActivityStatus } from '@/common/types/agent/hubActivity';
-import { UconBot, uconBotRoleFromActivity, uconBotStateFromActivity } from '@/renderer/components/agents/UconBot';
+import {
+  UconBot,
+  uconBotRoleFromActivity,
+  uconBotStateFromActivity,
+  uconBotTaskGlyphFromActivity,
+} from '@/renderer/components/agents/UconBot';
 import { cleanup, render, screen } from '@testing-library/react';
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -25,6 +30,15 @@ describe('UCON Bot Canvas visual language', () => {
   it('uses published activity status instead of text-based guesses', () => {
     const running = item('running');
     expect(uconBotStateFromActivity(running)).toBe('thinking');
+    expect(
+      uconBotTaskGlyphFromActivity({
+        ...running,
+        task: 'Write </> source code',
+        steps: [{ id: '1', state: 'running', label: 'Coding' }],
+      })
+    ).toBeUndefined();
+    expect(uconBotTaskGlyphFromActivity(item('running', 'app'))).toBe('app');
+    expect(uconBotTaskGlyphFromActivity(item('running', 'team'))).toBe('nodes');
     expect(uconBotStateFromActivity({ ...running, task: 'search files now' })).toBe('thinking');
     expect(
       uconBotStateFromActivity({
@@ -33,10 +47,10 @@ describe('UCON Bot Canvas visual language', () => {
       })
     ).toBe('working');
     expect(uconBotStateFromActivity(item('running', 'app'))).toBe('working');
-    expect(uconBotStateFromActivity(item('needs_input'))).toBe('waiting');
+    expect(uconBotStateFromActivity(item('needs_input'))).toBe('needs_input');
     expect(uconBotStateFromActivity(item('done'))).toBe('success');
     expect(uconBotStateFromActivity(item('error'))).toBe('error');
-    expect(uconBotStateFromActivity(item('stopped'))).toBe('offline');
+    expect(uconBotStateFromActivity(item('stopped'))).toBe('sleep');
   });
 
   it('shares the same visual system across agent, team, schedule and app', () => {
@@ -44,6 +58,18 @@ describe('UCON Bot Canvas visual language', () => {
     expect(uconBotRoleFromActivity(item('running', 'team'))).toBe('team');
     expect(uconBotRoleFromActivity(item('running', 'schedule'))).toBe('schedule');
     expect(uconBotRoleFromActivity(item('running', 'app'))).toBe('app');
+  });
+
+  it('binds brand identity to the CLI, not the active model, and preserves manual UCON overrides', () => {
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
+    const { rerender } = render(<UconBot state='working' label='Claude CLI' cliAgentId='claude' />);
+    expect(screen.getByRole('img').parentElement).toHaveAttribute('data-cli-skin', 'claude');
+    rerender(<UconBot state='working' label='Claude CLI' cliAgentId='claude' avatar='ucon:core' />);
+    expect(screen.getByRole('img').parentElement).not.toHaveAttribute('data-cli-skin');
+    rerender(<UconBot state='working' label='Grok' cliAgentId='grok' avatar='uconcli:grok' />);
+    expect(screen.getByRole('img').parentElement).toHaveAttribute('data-cli-skin', 'grok');
+    rerender(<UconBot state='working' label='Tomny' cliAgentId='tomny' />);
+    expect(screen.getByRole('img').parentElement).not.toHaveAttribute('data-cli-skin');
   });
 
   it('is an accessible canvas avatar and preserves its visual state and size', () => {

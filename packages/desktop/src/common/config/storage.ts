@@ -62,6 +62,8 @@ export interface IConfigStorageRefer {
   'ui.zoomFactor'?: number;
   /** User-selected local wallpaper, stored as a validated image data URL. */
   'ui.wallpaper'?: string;
+  /** Cosmetic-only UCON visibility and animation preferences. No agent capability changes. */
+  'ui.uconDisplay'?: Partial<Record<'enabled' | 'animate' | 'live' | 'assistants' | 'miniSubagents', boolean>>;
   /** Per-token Markdown text color overrides (#rrggbb). Absent tokens use the theme defaults in tomni-ui.css. */
   'ui.markdownTextColors'?: Partial<Record<string, string>>;
   /** Last-known main window size and position, restored on next launch */

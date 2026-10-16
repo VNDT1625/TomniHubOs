@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>TomniHubOS — Home v3 Wireframe (Agent Grid + Tabs Rail)</title>
         <!-- 2026-10-15 Right rail System Monitor: opened via the existing + tab chooser, alongside Console/Activity/Explorer; compact CPU/RAM charts, per-core CPU, hardware facts, active Tomni tasks, sortable/filterable Windows OS-wide and Tomni Electron processes. Windows CIM shows GPU engine peak proxy, disk read/write and network send/receive with unavailable states for missing counters. No OS task termination or fabricated counters. -->
+        <!-- 2026-10-17 UCON CLI visual reference: retain existing Tomny/Core mascot, add 11 CLI identity overlays (Claude/Codex/Gemini/DeepSeek/Cursor/OpenCode/Kiro/Antigravity/Hermes/OpenClaw/Grok). Neutral black-white shell, CLI accent on emblem and trim, runtime status color only for eyes/halo. `uconcli:<id>` is an opt-in avatar marker; automatic recognition uses CLI identity, not model. -->
+        <!-- 2026-10-17 Display UCON gallery reference: Settings > Display has persistent enable/animation/placement switches, Gallery (10 Core, 11 CLI + Grok, verified installed package skins), status and eye preview, and Studio Core/package accessory preview. Readonly model-independent identity; only display prefs are reset. -->
     <!-- 2026-10-15 Terminal workspace reference: footer Terminal switches Home centre Agent Overview/Chat composer to Human Terminal Overview/interactive xterm; Console is a selectable tab inside the existing right rail, not a Chat/Agent tile. Rail Console is interactive when Chat Mode is active, while Terminal Mode uses the full main PTY and the rail becomes a read-only mirror. Chat and Terminal are mutually exclusive in the centre. Runtime layout and styles live in the desktop global stylesheet. -->
     <!-- Rich assistant message cards and horizontal image galleries use v3 card/text tokens; temporary Preview document tabs live within the existing right rail without altering shell layout. Realtime route reuses this very same tabbed/resizable rail for user-customizable Weather/Market/GitHub/Hugging Face widgets; the center remains a full-width 1-3-1 news stream, and clicking a widget loads its focused center route. No second nested sidebar. -->
     <style>
@@ -1731,7 +1733,7 @@
       <!-- ============ CENTER ============ -->
       <main class="main">
         <div class="agents-wrap" id="agentsWrap">
-          <!-- UCON Bot (2026-10-16): live Home tiles render the identity/status avatar on Canvas 2D; no CSS/HTML recreation of the robot in this static layout wireframe. Its rear orbital apparatus converges when thinking and separates into visual panels while working. -->
+          <!-- UCON Bot: Canvas 2D session identity; 10 modular accessory archetypes, state colors only (sleep gray, idle/done green, busy blue, error red, needs-input amber); activity glyphs from running Main tool IDs. Subagent mini bot inherits Team costume/prop. Assistants can opt in from avatar editor; editor has a large local UCON preview with selectable visual status only. Rear panels crossfade instead of popping and are visual only; the static wireframe is not the character renderer. -->
           <div class="agent-grid" id="agentGrid"></div>
         </div>
 

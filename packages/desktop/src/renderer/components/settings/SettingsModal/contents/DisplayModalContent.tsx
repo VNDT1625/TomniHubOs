@@ -12,6 +12,7 @@ import { ThemeSwitcher } from '@/renderer/components/settings/ThemeSwitcher';
 import CssThemeSettings from '@renderer/pages/settings/DisplaySettings/CssThemeSettings';
 import WallpaperControl from '@renderer/pages/settings/DisplaySettings/WallpaperControl';
 import MarkdownTextColorSettings from '@renderer/pages/settings/DisplaySettings/MarkdownTextColorSettings';
+import UconDisplayPanel from '@renderer/pages/settings/DisplaySettings/UconDisplayPanel';
 import TomnyScrollArea from '@/renderer/components/base/TomnyScrollArea';
 import TomnyCollapse from '@/renderer/components/base/TomnyCollapse';
 import { Down, Up } from '@icon-park/react';
@@ -107,13 +108,17 @@ const DisplayModalContent: React.FC = () => {
             </div>
           </div>
 
+          {/* UCON character visibility, gallery and live Canvas Studio */}
+          <div className='px-16px md:px-24px lg:px-28px py-14px md:py-16px bg-2 rd-16px'>
+            <UconDisplayPanel />
+          </div>
+
           {/* 文字颜色 / Markdown text colors */}
           <div className='px-16px md:px-24px lg:px-28px py-14px md:py-16px bg-2 rd-16px space-y-10px md:space-y-12px'>
             <div className='text-14px text-t-primary leading-22px'>{t('settings.markdownColors.label')}</div>
             <div className='text-12px text-t-tertiary leading-18px'>{t('settings.markdownColors.description')}</div>
             <MarkdownTextColorSettings />
           </div>
-
 
           {/* CSS 主题设置 / CSS Theme Settings - Collapsible */}
           <TomnyCollapse

@@ -16,6 +16,22 @@ import {
 import type { AvailableBackend } from '@/renderer/hooks/assistant';
 import EmojiPicker from '@/renderer/components/chat/EmojiPicker';
 import MarkdownView from '@/renderer/components/Markdown';
+import { UconBot } from '@/renderer/components/agents/UconBot';
+import { UCON_CLI_SKINS, parseUconCliAvatar, encodeUconCliAvatar } from '@/renderer/components/agents/uconCliSkins';
+import {
+  encodePackageAvatar,
+  parsePackageAvatar,
+  resolvePackagedAvatar,
+  useUconPackageSkins,
+} from '@/renderer/components/agents/uconPackageSkins';
+import {
+  UCON_ARCHETYPES,
+  UCON_SLOT_OPTIONS,
+  encodeUconAvatar,
+  parseUconAvatar,
+  resolveUconAppearance,
+  type UconAppearance,
+} from '@/renderer/components/agents/uconBotConfig';
 import { Avatar, Button, Checkbox, Collapse, Drawer, Input, Select, Tag, Typography } from '@arco-design/web-react';
 import { Close, Delete, Info, Plus, Robot } from '@icon-park/react';
 import React, { useEffect, useRef, useState } from 'react';
@@ -129,10 +145,39 @@ const AssistantEditDrawer: React.FC<AssistantEditDrawerProps> = ({
   handleDuplicate,
 }) => {
   const { t } = useTranslation();
+  const uconChoice = parseUconAvatar(editAvatar);
+  const cliChoice = parseUconCliAvatar(editAvatar);
+  const packageChoice = parsePackageAvatar(editAvatar);
+  const packageSkins = useUconPackageSkins(editVisible);
+  const packaged = packageChoice ? resolvePackagedAvatar(packageChoice, packageSkins) : null;
+  const uconParts = uconChoice
+    ? resolveUconAppearance(uconChoice.archetype, uconChoice.overrides)
+    : (packaged?.appearance ?? null);
+  const selectUconPart = (slot: keyof UconAppearance, value: string) => {
+    if (packageChoice) {
+      setEditAvatar(
+        encodePackageAvatar({
+          ...packageChoice,
+          overrides: { ...packageChoice.overrides, [slot]: value },
+        })
+      );
+    } else if (uconChoice) {
+      setEditAvatar(
+        encodeUconAvatar({
+          archetype: uconChoice.archetype,
+          overrides: { ...uconChoice.overrides, [slot]: value },
+        })
+      );
+    }
+  };
   const navigate = useNavigate();
   const textareaWrapperRef = useRef<HTMLDivElement>(null);
   const [drawerWidth, setDrawerWidth] = useState(500);
   const [rulesExpanded, setRulesExpanded] = useState(false);
+  // Previewing a state is purely visual; it never changes the assistant or its saved avatar.
+  const [uconPreviewState, setUconPreviewState] = useState<'idle' | 'working' | 'needs_input' | 'error' | 'sleep'>(
+    'idle'
+  );
 
   // Auto focus textarea when drawer opens in edit mode
   useEffect(() => {
@@ -364,7 +409,9 @@ const AssistantEditDrawer: React.FC<AssistantEditDrawerProps> = ({
             <div className='mt-10px flex items-center gap-12px'>
               {activeAssistant?.source === 'builtin' ? (
                 <Avatar shape='square' size={40} className='bg-bg-1 rounded-4px'>
-                  {editAvatarImage ? (
+                                    {uconChoice || packageChoice || cliChoice ? (
+                    <UconBot placement='assistant' state='idle' avatar={editAvatar} size='mini' label={editName} />
+                  ) : editAvatarImage ? (
                     <img src={editAvatarImage} alt='' width={24} height={24} style={{ objectFit: 'contain' }} />
                   ) : editAvatar ? (
                     <span className='text-24px'>{editAvatar}</span>
@@ -376,7 +423,9 @@ const AssistantEditDrawer: React.FC<AssistantEditDrawerProps> = ({
                 <EmojiPicker value={editAvatar} onChange={(emoji) => setEditAvatar(emoji)} placement='br'>
                   <div className='cursor-pointer'>
                     <Avatar shape='square' size={40} className='bg-bg-1 rounded-4px hover:bg-fill-2 transition-colors'>
-                      {editAvatarImage ? (
+                                            {uconChoice || packageChoice || cliChoice ? (
+                        <UconBot placement='assistant' state='idle' avatar={editAvatar} size='mini' label={editName} />
+                      ) : editAvatarImage ? (
                         <img src={editAvatarImage} alt='' width={24} height={24} style={{ objectFit: 'contain' }} />
                       ) : editAvatar ? (
                         <span className='text-24px'>{editAvatar}</span>
@@ -396,6 +445,119 @@ const AssistantEditDrawer: React.FC<AssistantEditDrawerProps> = ({
                 className='flex-1 rounded-4px bg-bg-1'
               />
             </div>
+            {activeAssistant?.source !== 'builtin' && (
+              <div className='ucon-avatar-editor'>
+                <label htmlFor='ucon-avatar-preset'>
+                  {t('settings.uconAvatarPreset', { defaultValue: 'UCON Bot avatar (optional)' })}
+                </label>
+                <select
+                  id='ucon-avatar-preset'
+                  data-testid='ucon-avatar-preset'
+                  value={
+                    packageChoice
+                      ? encodePackageAvatar(packageChoice)
+                      : cliChoice
+                        ? encodeUconCliAvatar(cliChoice.id)
+                        : (uconChoice?.archetype ?? '')
+                  }
+                  onChange={(event) =>
+                    setEditAvatar(
+                      event.target.value
+                        ? event.target.value.startsWith('uconpkg:') || event.target.value.startsWith('uconcli:')
+                          ? event.target.value
+                          : encodeUconAvatar({
+                              archetype: event.target.value as (typeof UCON_ARCHETYPES)[number],
+                              overrides: {},
+                            })
+                        : '🤖'
+                    )
+                  }
+                >
+                  <option value=''>{t('settings.uconAvatarDefault', { defaultValue: 'Default / Emoji' })}</option>
+                  {UCON_ARCHETYPES.map((value) => (
+                    <option value={value} key={value}>
+                      {t('settings.uconPreset.' + value, { defaultValue: value })}
+                    </option>
+                  ))}
+                  {UCON_CLI_SKINS.map((skin) => (
+                    <option key={skin.id} value={encodeUconCliAvatar(skin.id)}>
+                      {t('settings.uconCliSkin', { defaultValue: 'CLI Agent' }) + ' · ' + skin.name}
+                    </option>
+                  ))}
+                  {packageSkins.map((skin) => (
+                    <option key={skin.packageId + ':' + skin.id} value={'uconpkg:' + skin.packageId + ':' + skin.id}>
+                      {skin.name + ' · ' + skin.packageId}
+                    </option>
+                  ))}
+                  {packageChoice && packaged?.fromPackage && Object.keys(packageChoice.overrides).length > 0 && (
+                    <option value={encodePackageAvatar(packageChoice)}>
+                      {t('settings.uconCustomizedPack', { defaultValue: 'Customized avatar package' })}
+                    </option>
+                  )}
+                  {packageChoice && !packaged?.fromPackage && (
+                    <option value={encodePackageAvatar(packageChoice)}>
+                      {t('settings.uconPackageMissing', { defaultValue: 'Package unavailable — UCON Core fallback' })}
+                    </option>
+                  )}
+                </select>
+                {(uconChoice || packageChoice || cliChoice) && (
+                  <div className='ucon-avatar-preview' data-testid='ucon-avatar-preview'>
+                    <UconBot
+                                            state={uconPreviewState}
+                      placement='assistant'
+                      avatar={editAvatar}
+                      cliAgentId={editAgent}
+                      identity={activeAssistant?.id ?? editName}
+                      size='preview'
+                      label={editName}
+                    />
+                    <label htmlFor='ucon-preview-state'>
+                      {t('settings.uconPreviewState', { defaultValue: 'Preview status' })}
+                      <select
+                        id='ucon-preview-state'
+                        data-testid='ucon-preview-state'
+                        value={uconPreviewState}
+                        onChange={(event) => setUconPreviewState(event.currentTarget.value as typeof uconPreviewState)}
+                      >
+                        {(
+                          [
+                            ['idle', 'done'],
+                            ['working', 'running'],
+                            ['needs_input', 'needs_input'],
+                            ['error', 'error'],
+                            ['sleep', 'stopped'],
+                          ] as const
+                        ).map(([state, activity]) => (
+                          <option key={state} value={state}>
+                            {t('guid.hubHome.live.status.' + activity, { defaultValue: state })}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                )}
+                {(uconChoice || packageChoice) && uconParts && (
+                  <div className='ucon-avatar-slots'>
+                    {(Object.keys(uconParts) as (keyof UconAppearance)[]).map((slot) => (
+                      <label key={slot}>
+                        <span>{t('settings.uconPart.' + slot, { defaultValue: slot })}</span>
+                        <select
+                          data-testid={'ucon-slot-' + slot}
+                          value={uconParts[slot]}
+                          onChange={(event) => selectUconPart(slot, event.target.value)}
+                        >
+                          {UCON_SLOT_OPTIONS[slot].map((option) => (
+                            <option value={option} key={option}>
+                              {t('settings.uconOption.' + option, { defaultValue: option })}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Description */}

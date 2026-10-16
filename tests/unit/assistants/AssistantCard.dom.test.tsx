@@ -64,6 +64,33 @@ describe('AssistantCard', () => {
     expect(chips).toHaveTextContent('Tool có sẵn 3');
   });
 
+  it('renders an opt-in UCON avatar, while keeping normal emoji assistants unchanged', () => {
+    const { container, rerender } = render(
+      <AssistantCard
+        assistant={{ ...assistant, avatar: 'ucon:engineer;beard=short' }}
+        localeKey='en-US'
+        testId='card'
+        countsTestId='counts'
+        onClick={vi.fn()}
+      />
+    );
+    const bot = container.querySelector('.ucon-bot');
+    expect(bot).not.toBeNull();
+    expect(container.querySelector('.ucon-bot canvas')).toHaveAttribute('aria-label', assistant.name);
+    rerender(
+      <AssistantCard
+        assistant={{ ...assistant, avatar: '🐱' }}
+        localeKey='en-US'
+        testId='card'
+        countsTestId='counts'
+        avatarEmoji='🐱'
+        onClick={vi.fn()}
+      />
+    );
+    expect(container.querySelector('.ucon-bot')).toBeNull();
+    expect(screen.getByText('🐱')).toBeTruthy();
+  });
+
   it('marks the selected card with aria-pressed and a check, and reports clicks', async () => {
     const onClick = vi.fn();
     const user = userEvent.setup({ pointerEventsCheck: 0 });
@@ -75,7 +102,14 @@ describe('AssistantCard', () => {
     await user.click(screen.getByTestId('card'));
     expect(onClick).toHaveBeenCalledTimes(1);
     rerender(
-      <AssistantCard assistant={assistant} localeKey='en-US' selected testId='card' countsTestId='c' onClick={onClick} />
+      <AssistantCard
+        assistant={assistant}
+        localeKey='en-US'
+        selected
+        testId='card'
+        countsTestId='c'
+        onClick={onClick}
+      />
     );
     expect(screen.getByTestId('card')).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByTestId('card')).toHaveClass('assistant-card--selected');
